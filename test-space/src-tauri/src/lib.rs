@@ -16,8 +16,8 @@ fn adb_shell(serial: String, command: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn adb_install(serial: String, apk_path: String) -> Result<String, String> {
-    adb::install_apk(&serial, &apk_path)
+fn adb_install(serial: String, apk_path: String, reinstall: bool) -> Result<String, String> {
+    adb::install_apk(&serial, &apk_path, reinstall)
 }
 
 #[tauri::command]
@@ -43,6 +43,121 @@ fn adb_reboot(serial: String) -> Result<String, String> {
 #[tauri::command]
 fn adb_screenshot(serial: String, save_path: String) -> Result<String, String> {
     adb::screenshot(&serial, &save_path)
+}
+
+#[tauri::command]
+fn adb_connect(address: String) -> Result<String, String> {
+    adb::connect_device(&address)
+}
+
+#[tauri::command]
+fn adb_disconnect(serial: String) -> Result<String, String> {
+    adb::disconnect_device(&serial)
+}
+
+#[tauri::command]
+fn adb_reboot_recovery(serial: String) -> Result<String, String> {
+    adb::reboot_recovery(&serial)
+}
+
+#[tauri::command]
+fn adb_reboot_bootloader(serial: String) -> Result<String, String> {
+    adb::reboot_bootloader(&serial)
+}
+
+#[tauri::command]
+fn adb_root(serial: String) -> Result<String, String> {
+    adb::root_device(&serial)
+}
+
+#[tauri::command]
+fn adb_remount(serial: String) -> Result<String, String> {
+    adb::remount_device(&serial)
+}
+
+#[tauri::command]
+fn adb_get_properties(serial: String) -> Result<adb::DeviceProperties, String> {
+    adb::get_device_properties(&serial)
+}
+
+#[tauri::command]
+fn adb_input_keyevent(serial: String, keycode: String) -> Result<String, String> {
+    adb::input_keyevent(&serial, &keycode)
+}
+
+#[tauri::command]
+fn adb_input_text(serial: String, text: String) -> Result<String, String> {
+    adb::input_text(&serial, &text)
+}
+
+#[tauri::command]
+fn adb_input_tap(serial: String, x: i32, y: i32) -> Result<String, String> {
+    adb::input_tap(&serial, x, y)
+}
+
+#[tauri::command]
+fn adb_input_swipe(serial: String, x1: i32, y1: i32, x2: i32, y2: i32, duration: i32) -> Result<String, String> {
+    adb::input_swipe(&serial, x1, y1, x2, y2, duration)
+}
+
+#[tauri::command]
+fn adb_list_packages(serial: String, third_party_only: bool) -> Result<Vec<String>, String> {
+    adb::list_packages(&serial, third_party_only)
+}
+
+#[tauri::command]
+fn adb_start_app(serial: String, package: String) -> Result<String, String> {
+    adb::start_app(&serial, &package)
+}
+
+#[tauri::command]
+fn adb_stop_app(serial: String, package: String) -> Result<String, String> {
+    adb::stop_app(&serial, &package)
+}
+
+#[tauri::command]
+fn adb_clear_app_data(serial: String, package: String) -> Result<String, String> {
+    adb::clear_app_data(&serial, &package)
+}
+
+#[tauri::command]
+fn adb_get_current_app(serial: String) -> Result<String, String> {
+    adb::get_current_app(&serial)
+}
+
+#[tauri::command]
+fn adb_logcat_clear(serial: String) -> Result<String, String> {
+    adb::logcat_clear(&serial)
+}
+
+#[tauri::command]
+fn adb_logcat(serial: String, buffer: String, lines: i32) -> Result<String, String> {
+    adb::logcat(&serial, &buffer, lines)
+}
+
+#[tauri::command]
+fn adb_get_battery(serial: String) -> Result<String, String> {
+    adb::get_battery_info(&serial)
+}
+
+#[tauri::command]
+fn adb_list_directory(serial: String, path: String) -> Result<String, String> {
+    adb::list_directory(&serial, &path)
+}
+
+#[tauri::command]
+fn adb_get_app_info(serial: String, package: String) -> Result<String, String> {
+    adb::get_app_info(&serial, &package)
+}
+
+#[tauri::command]
+fn adb_get_cpu(serial: String) -> Result<String, String> {
+    adb::get_cpu_info(&serial)
+}
+
+#[tauri::command]
+fn adb_get_memory(serial: String) -> Result<String, String> {
+    adb::get_memory_info(&serial)
 }
 
 #[tauri::command]
@@ -129,6 +244,29 @@ pub fn run() {
             adb_pull,
             adb_reboot,
             adb_screenshot,
+            adb_connect,
+            adb_disconnect,
+            adb_reboot_recovery,
+            adb_reboot_bootloader,
+            adb_root,
+            adb_remount,
+            adb_get_properties,
+            adb_input_keyevent,
+            adb_input_text,
+            adb_input_tap,
+            adb_input_swipe,
+            adb_list_packages,
+            adb_start_app,
+            adb_stop_app,
+            adb_clear_app_data,
+            adb_get_current_app,
+            adb_logcat_clear,
+            adb_logcat,
+            adb_get_battery,
+            adb_get_cpu,
+            adb_get_memory,
+            adb_list_directory,
+            adb_get_app_info,
             serial_list_ports,
             serial_connect,
             serial_disconnect,

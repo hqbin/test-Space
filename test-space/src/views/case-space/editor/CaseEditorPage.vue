@@ -352,43 +352,116 @@
       {{ importStatus }}
     </div>
 
-    <!-- Mind Map View -->
-    <div v-else-if="viewMode === 'mindmap' && activeFile" class="flex-1 relative overflow-hidden bg-white/10">
-      <div ref="mindmapContainer" class="w-full h-full cursor-grab" @wheel.prevent="onMindMapWheel">
+    <!-- Mind Map View (Tree Layout) -->
+    <div v-else-if="viewMode === 'mindmap' && activeFile" class="flex-1 relative overflow-hidden bg-white/10 m-3 rounded-xl border border-white/40 shadow-sm">
+      <div class="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-3 py-1.5 bg-white/20 backdrop-blur-sm border-b border-white/20 rounded-t-xl">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-[14px] text-on-surface-variant/50">account_tree</span>
+          <span class="font-caption text-caption text-on-surface-variant/70">{{ activeFile.name }}</span>
+          <span class="font-caption text-caption text-on-surface-variant/40">{{ contentRows().length }} cases</span>
+        </div>
+      </div>
+      <div ref="mindmapContainer" class="w-full h-full cursor-grab pt-8" @wheel.prevent="onMindMapWheel">
         <div class="absolute inset-0" :style="mindMapTransform" @mousedown="onMindMapPanStart" @mousemove="onMindMapPan" @mouseup="onMindMapPanEnd" @mouseleave="onMindMapPanEnd">
-          <svg class="absolute inset-0 pointer-events-none" style="width: 100%; height: 100%">
-            <path v-for="(line, idx) in mindMapLines" :key="'l' + idx" :d="line.path" stroke="rgba(100,120,255,0.2)" stroke-width="1.5" fill="none" />
+          <!-- SVG Layer: Bézier connection curves -->
+          <svg class="absolute inset-0 pointer-events-none" style="width: 100%; height: 100%; overflow: visible">
+            <path v-for="(line, idx) in mmLines" :key="'l' + idx" :d="line.path" stroke="rgba(120,130,250,0.25)" stroke-width="2" fill="none" />
           </svg>
 
-          <div
-            v-for="(mod, mIdx) in mindMapModules"
-            :key="'mod' + mIdx"
-            class="absolute glass-panel rounded-xl px-4 py-2.5 min-w-[140px] cursor-pointer select-none z-10 border-l-[3px] border-secondary/40 glass-hover"
-            :style="{ left: mod.x + 'px', top: mod.y + 'px' }"
-            @dblclick="startRenameModule(mod)"
+          <!-- Root node -->
+          <div v-if="mmRoot"
+            class="absolute glass-panel rounded-xl px-5 py-3 min-w-[160px] select-none z-10 border-l-[4px] border-primary/50 shadow-sm"
+            :style="{ left: mmRoot.root.x + 'px', top: mmRoot.root.y + 'px', width: mmRoot.root.w + 'px' }"
           >
-            <div class="flex items-center gap-2">
-              <span class="material-symbols-outlined text-[16px] text-secondary/60" style="font-variation-settings: 'FILL' 1">folder</span>
-              <span v-if="mod.renaming" class="bg-transparent border-b border-secondary/40 text-body-md text-[13px] text-on-surface font-medium outline-none" contenteditable @blur="finishRenameModule(mod, $event)" @keydown.enter.prevent="finishRenameModule(mod, $event)" ref="renameInput"></span>
-              <span v-else class="font-body-md text-[13px] text-on-surface font-medium">{{ mod.name || '(No Module)' }}</span>
-              <span class="font-caption text-[10px] text-on-surface-variant/50 ml-1">{{ mod.count }}</span>
+            <div class="flex items-center gap-2.5">
+              <span class="material-symbols-outlined text-[22px] text-primary/50" style="font-variation-settings:'FILL'1">account_tree</span>
+              <span class="font-label-md text-label-md text-on-surface font-semibold truncate">{{ mmRoot.root.label }}</span>
             </div>
-            <div v-for="c in mod.cases" :key="c.id" class="mt-2 ml-2 pl-2 border-l-2 border-white/20">
-              <div class="mm-case-node glass-hover rounded-lg" @click="navigateToCase(c.id)">
-                <div class="flex items-start gap-1.5">
-                  <span class="w-4 h-4 rounded-full bg-secondary-fixed/40 text-[9px] font-bold flex items-center justify-center text-secondary shrink-0 mt-0.5">{{ activeFile.cases.indexOf(c) + 1 }}</span>
-                  <div class="min-w-0">
-                    <div class="font-body-md text-[12px] text-on-surface font-medium leading-snug">{{ c.title || '(No Title)' }}</div>
-                    <div v-if="c.steps" class="text-[11px] text-on-surface-variant/60 mt-0.5 line-clamp-2">{{ c.steps }}</div>
-                  </div>
-                </div>
-              </div>
+          </div>
+
+          <!-- Module nodes -->
+          <div v-for="mod in mmModules" :key="mod.id"
+            class="absolute glass-panel rounded-lg px-3 py-2 select-none z-10 glass-hover cursor-pointer"
+            :class="[mod.moduleDepth === 0 ? 'border-l-[4px]' : 'border-l-[3px] border-secondary/30', { 'ring-2 ring-secondary/50': selectedMmNodeId === mod.id, 'opacity-50': mmDrag?.isDragging && mmDrag.node.id === mod.id }]"
+            :style="{ left: mod.x + 'px', top: mod.y + 'px', width: mod.w + 'px', minHeight: mod.h + 'px', borderLeftColor: mod.data?.colorIdx != null ? MODULE_PALETTE[mod.data.colorIdx % MODULE_PALETTE.length] : undefined }"
+            @mousedown.stop="onMmMouseDown($event, mod)"
+            @dblclick.stop="startEditing(mod)"
+            @contextmenu.prevent="openMmCtx($event, mod)"
+          >
+            <div class="flex items-start gap-1.5">
+              <span class="text-[9px] font-medium px-1.5 py-0.5 rounded-full shrink-0 mt-0.5" :style="{ background: mod.data?.colorIdx != null ? MODULE_PALETTE[mod.data.colorIdx % MODULE_PALETTE.length] + '22' : '#88822', color: mod.data?.colorIdx != null ? MODULE_PALETTE[mod.data.colorIdx % MODULE_PALETTE.length] : '#888' }">{{ mod.fieldLabel }}</span>
+              <textarea v-if="editingNodeId === mod.id" v-model="editingValue" data-mm-editor
+                class="flex-1 min-w-0 bg-transparent border-b border-secondary/40 text-[13px] text-on-surface font-medium outline-none resize-none leading-snug"
+                :style="{ minHeight: '24px', height: 'auto' }"
+                @input="autoResizeTextarea($event)"
+                @blur="confirmEditing(mod)" @keydown.enter.prevent="confirmEditing(mod)" @keydown.escape.prevent="cancelEditing()"
+                @mousedown.stop
+              ></textarea>
+              <span v-else class="text-[13px] text-on-surface font-medium flex-1 whitespace-pre-wrap break-words leading-snug">{{ mod.label }}</span>
+              <span class="text-[10px] text-on-surface-variant/50 bg-white/30 rounded-full px-1.5 py-0.5 shrink-0 mt-0.5 whitespace-nowrap">{{ mod.data?.count }}</span>
+              <button class="p-0.5 rounded hover:bg-white/30 shrink-0 mt-0.5" @click.stop="toggleCollapse(mod)">
+                <span class="material-symbols-outlined text-[14px] text-on-surface-variant/40">{{ mod.collapsed ? 'chevron_right' : 'expand_more' }}</span>
+              </button>
             </div>
-            <button v-if="mod.cases.length > 3" class="text-[11px] text-secondary/60 mt-1 ml-2 glass-button px-2 py-0.5 rounded-full" @click.stop="mod.collapsed = !mod.collapsed">
-              {{ mod.collapsed ? 'Expand' : 'Collapse' }}
-            </button>
+          </div>
+
+          <!-- Case nodes -->
+          <div v-for="c in mmCases" :key="c.id"
+            class="absolute glass-panel rounded-lg px-3 py-1.5 select-none z-10 cursor-pointer border-l-[4px] transition-shadow hover:shadow-md"
+            :class="[caseBorderClass(c.data?.priority), { 'ring-2 ring-secondary/50': selectedMmNodeId === c.id, 'opacity-50': mmDrag?.isDragging && mmDrag.node.id === c.id }]"
+            :style="{ left: c.x + 'px', top: c.y + 'px', width: c.w + 'px', minHeight: c.h + 'px' }"
+            @mousedown.stop="onMmMouseDown($event, c)"
+            @dblclick.stop="startEditing(c)"
+            @contextmenu.prevent="openMmCtx($event, c)"
+          >
+            <div class="flex items-start gap-1.5">
+              <span class="w-2 h-2 rounded-full shrink-0 mt-[5px]" :class="caseDotClass(c.data?.priority)"></span>
+              <span class="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-secondary/10 text-secondary/70 shrink-0 mt-[1px]">{{ c.fieldLabel }}</span>
+              <textarea v-if="editingNodeId === c.id" v-model="editingValue" data-mm-editor
+                class="flex-1 min-w-0 bg-transparent border-b border-secondary/40 text-[12px] text-on-surface font-medium outline-none resize-none leading-snug"
+                :style="{ minHeight: '20px', height: 'auto' }"
+                @input="autoResizeTextarea($event)"
+                @blur="confirmEditing(c)" @keydown.enter.prevent="confirmEditing(c)" @keydown.escape.prevent="cancelEditing()"
+                @mousedown.stop
+              ></textarea>
+              <span v-else class="text-[12px] text-on-surface font-medium flex-1 whitespace-pre-wrap break-words leading-snug">{{ c.label }}</span>
+              <button v-if="c.children.length > 0" class="p-0.5 rounded hover:bg-white/30 shrink-0 self-start mt-[1px]" @click.stop="toggleCollapse(c)">
+                <span class="material-symbols-outlined text-[12px] text-on-surface-variant/40">{{ c.collapsed ? 'chevron_right' : 'expand_more' }}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Field nodes (precondition, steps, expected, priority, remarks) -->
+          <div v-for="d in mmFields" :key="d.id"
+            class="absolute rounded-lg px-2.5 py-1.5 select-none z-10 text-[11px] leading-snug cursor-pointer flex items-start gap-1.5 border"
+            :class="[selectedMmNodeId === d.id ? 'ring-2 ring-secondary/50 bg-white/70 border-secondary/40' : 'bg-white/50 border-secondary/20']"
+            :style="{ left: d.x + 'px', top: d.y + 'px', width: d.w + 'px', minHeight: d.h + 'px' }"
+            @mousedown.stop="onMmMouseDown($event, d)"
+            @dblclick.stop="startEditing(d)"
+            @contextmenu.prevent="openMmCtx($event, d)"
+          >
+            <span class="text-[9px] font-medium px-1.5 py-0.5 rounded-full shrink-0 mt-[1px] text-white"
+              :style="{ background: d.field === 'steps' ? '#3b82f6' : d.field === 'expected' ? '#10b981' : d.field === 'precondition' ? '#8b5cf6' : d.field === 'priority' ? '#f59e0b' : '#6b7280' }"
+            >{{ d.fieldLabel }}</span>
+            <textarea v-if="editingNodeId === d.id" v-model="editingValue" data-mm-editor
+              class="flex-1 min-w-0 bg-transparent border-b border-secondary/40 text-[11px] text-on-surface font-medium outline-none resize-none leading-snug"
+              :style="{ minHeight: '40px', height: 'auto' }"
+              @input="autoResizeTextarea($event)"
+              @blur="confirmEditing(d)" @keydown.escape.prevent="cancelEditing()"
+              @mousedown.stop
+            ></textarea>
+            <span v-else class="whitespace-pre-wrap break-words flex-1 leading-snug" :class="d.label ? 'text-on-surface-variant/70' : 'text-on-surface-variant/30 italic'">{{ d.label || '点击编辑...' }}</span>
           </div>
         </div>
+      </div>
+
+      <!-- Drag ghost -->
+      <div v-if="mmDrag?.isDragging"
+        class="fixed pointer-events-none z-[60] opacity-80 bg-white/90 backdrop-blur-md rounded-lg px-3 py-1.5 text-[12px] text-on-surface font-medium shadow-lg border border-secondary/30 whitespace-nowrap"
+        :style="{ left: (mmDrag.cursorX + 12) + 'px', top: (mmDrag.cursorY + 12) + 'px' }"
+      >
+        <span class="material-symbols-outlined text-[12px] text-secondary/50 mr-1 align-middle" style="font-variation-settings:'FILL'1">drag_indicator</span>
+        {{ mmDrag.node.label }}
       </div>
 
       <div class="absolute bottom-4 left-4 glass-panel rounded-lg p-1 flex items-center gap-1 z-20 shadow-sm">
@@ -400,6 +473,69 @@
         <div class="w-px h-4 bg-white/20"></div>
         <span class="w-10 h-7 flex items-center justify-center font-caption text-caption text-on-surface-variant">{{ Math.round(mmZoom * 100) }}%</span>
       </div>
+
+      <!-- Mind Map toolbar -->
+      <div class="absolute top-4 right-4 flex items-center gap-2 z-20">
+        <button class="glass-button px-3 py-1.5 rounded-lg text-caption flex items-center gap-1 shadow-sm" @click="mmAddNewCase">
+          <span class="material-symbols-outlined text-[14px]">add</span>
+          Case
+        </button>
+      </div>
+
+      <!-- Mind Map Context Menu -->
+      <Teleport to="body">
+        <div v-if="mmCtx.show" data-menu="mm-ctx"
+          class="fixed z-50 glass-panel rounded-xl py-1 shadow-lg border border-white/50 min-w-[180px]"
+          :style="{ left: mmCtx.x + 'px', top: mmCtx.y + 'px' }"
+          @mousedown.stop
+        >
+          <div class="px-3 py-1.5 font-caption text-caption text-on-surface-variant/60 border-b border-white/20">
+            {{ mmCtx.node?.fieldLabel || (mmCtx.node?.type === 'root' ? 'Root' : mmCtx.node?.type) }}
+          </div>
+          <template v-if="mmCtx.node?.type === 'module'">
+            <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left" @click="mmCtxAddCase">
+              <span class="material-symbols-outlined text-[16px]">add</span> Add Case
+            </button>
+            <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left" @click="mmCtxAddSibling">
+              <span class="material-symbols-outlined text-[16px]">add</span> Add Sibling Module
+            </button>
+            <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left" @click="mmCtxRename">
+              <span class="material-symbols-outlined text-[16px]">edit</span> Rename
+            </button>
+          </template>
+          <template v-if="mmCtx.node?.type === 'case'">
+            <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left" @click="mmCtxAddSibling">
+              <span class="material-symbols-outlined text-[16px]">add</span> Add Sibling
+            </button>
+            <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left" @click="mmCtxRename">
+              <span class="material-symbols-outlined text-[16px]">edit</span> Rename
+            </button>
+            <div class="border-t border-white/10"></div>
+            <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-error glass-hover text-left" @click="mmCtxDelete">
+              <span class="material-symbols-outlined text-[16px]">delete</span> Delete
+            </button>
+          </template>
+        </div>
+      </Teleport>
+
+      <!-- Tab Prompt -->
+      <Teleport to="body">
+        <div v-if="mmTabPrompt.show" data-menu="mm-tab-prompt"
+          class="fixed z-50 glass-panel rounded-xl py-1 shadow-lg border border-white/50 min-w-[160px]"
+          :style="{ left: mmTabPrompt.x + 'px', top: mmTabPrompt.y + 'px' }"
+          @mousedown.stop
+        >
+          <div class="px-3 py-1.5 font-caption text-caption text-on-surface-variant/60 border-b border-white/20">添加子节点</div>
+          <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left" @click="mmTabAddModule">
+            <span class="material-symbols-outlined text-[16px]">create_new_folder</span> 子模块
+          </button>
+          <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left" @click="mmTabAddCase">
+            <span class="material-symbols-outlined text-[16px]">description</span> 用例标题
+          </button>
+        </div>
+      </Teleport>
+
+      <!-- end mindmap -->
     </div>
   </div>
 
@@ -446,7 +582,6 @@ const store = useCaseFileStore()
 const viewMode = ref<'excel' | 'mindmap'>('excel')
 const selectedIds = ref<string[]>([])
 const contextMenu = ref<{ show: boolean; x: number; y: number; targetType: 'table' | 'row' | 'header'; targetId?: string; targetCol?: string }>({ show: false, x: 0, y: 0, targetType: 'table' })
-const renameInput = ref<HTMLElement>()
 const showColumnDialog = ref(false)
 const editingColumnKey = ref('')
 const tagInputs = ref<Record<string, string>>({})
@@ -1041,72 +1176,696 @@ const displayRows = computed<(CaseItem | { id: string; _virtual: true })[]>(() =
   return [...content, ...pads]
 })
 
-// Mind Map
+// ============= Mind Map (Tree Layout) =============
+
+interface MNode {
+  id: string
+  type: string
+  label: string
+  fieldLabel: string
+  x: number
+  y: number
+  w: number
+  h: number
+  children: MNode[]
+  collapsed: boolean
+  field?: string
+  moduleDepth?: number
+  data?: Record<string, any>
+}
+
+interface ModuleTree {
+  name: string
+  children: Record<string, ModuleTree>
+  cases: CaseItem[]
+}
+
 const mindmapContainer = ref<HTMLElement>()
 const mmZoom = ref(0.65)
-const mmPan = ref({ x: 40, y: 40 })
+const mmPan = ref({ x: 40, y: 60 })
 const mmPanning = ref(false)
 const mmPanStart = ref({ x: 0, y: 0 })
 const mmPanOrigin = ref({ x: 0, y: 0 })
+
+const mmCollapsedMods = ref<Set<string>>(new Set())
+
+const MODULE_PALETTE = [
+  '#6366f1', '#f59e0b', '#10b981', '#ef4444',
+  '#8b5cf6', '#06b6d4', '#f97316', '#ec4899',
+  '#84cc16', '#14b8a6',
+]
+
+function toggleCollapse(node: MNode) {
+  const s = new Set(mmCollapsedMods.value)
+  if (s.has(node.id)) s.delete(node.id)
+  else s.add(node.id)
+  mmCollapsedMods.value = s
+}
+
+const MM_H: Record<string, number> = { root: 120, module: 140, case: 100, field: 80 }
+const MM_V: Record<string, number> = { root: 0, module: 20, case: 8, field: 6 }
+
+interface MindMapResult {
+  root: MNode
+  modules: MNode[]
+  cases: MNode[]
+  fields: MNode[]
+  lines: { path: string }[]
+}
+
+const mmRoot = computed<MindMapResult | null>(() => {
+  const f = activeFile.value
+  if (!f) return null
+  return buildMindMap(f)
+})
+
+const mmModules = computed(() => mmRoot.value?.modules ?? [])
+const mmCases = computed(() => mmRoot.value?.cases ?? [])
+const mmFields = computed(() => mmRoot.value?.fields ?? [])
+const mmLines = computed(() => mmRoot.value?.lines ?? [])
 
 const mindMapTransform = computed(() => ({
   transform: `translate(${mmPan.value.x}px, ${mmPan.value.y}px) scale(${mmZoom.value})`,
   transformOrigin: '0 0',
 }))
 
-const spacing = 320
-
-const mindMapModules = computed(() => {
-  const f = activeFile.value
-  if (!f) return []
-  const groups: Record<string, CaseItem[]> = {}
-  contentRows().forEach(c => {
-    const key = c.module || '(No Module)'
-    if (!groups[key]) groups[key] = []
-    groups[key].push(c)
-  })
-  return Object.entries(groups).map(([name, cases], idx) => ({
-    name, cases, count: cases.length, x: 0, y: idx * spacing, collapsed: false, renaming: false,
-  }))
-})
-
-const mindMapLines = computed(() => {
-  const paths: { path: string }[] = []
-  mindMapModules.value.forEach((mod, idx) => {
-    const my = idx * spacing + 30
-    paths.push({ path: `M0,${my} Q80,${my} 160,${my}` })
-    mod.cases.forEach((_c, cIdx) => {
-      const cy = idx * spacing + 30 + (cIdx + 1) * 50
-      paths.push({ path: `M160,${cy} Q240,${cy} 320,${cy}` })
-    })
-  })
-  return paths
-})
-
-function navigateToCase(caseId: string) {
-  viewMode.value = 'excel'
-  selectedIds.value = [caseId]
+function computeNodeHeight(text: string, width: number, fontSize: number, minH: number): number {
+  if (!text) return minH
+  const charW = fontSize >= 13 ? 14 : fontSize >= 12 ? 12 : 10
+  const availWidth = width - 24
+  const charsPerLine = Math.max(1, Math.floor(availWidth / charW))
+  let totalLines = 0
+  for (const line of text.split('\n')) {
+    totalLines += Math.max(1, Math.ceil(line.length / charsPerLine))
+  }
+  return Math.max(minH, totalLines * (fontSize * 1.4) + 14)
 }
 
-function startRenameModule(mod: any) {
-  mod.renaming = true
+function computeFieldHeight(text: string): number {
+  if (!text) return 28
+  const charW = 10
+  const badgeW = 42
+  const paddingW = 20
+  const availWidth = 300 - paddingW - badgeW
+  const charsPerLine = Math.max(1, Math.floor(availWidth / charW))
+  let totalLines = 0
+  for (const line of text.split('\n')) {
+    totalLines += Math.max(1, Math.ceil(line.length / charsPerLine))
+  }
+  return Math.max(28, totalLines * 15 + 14)
+}
+
+function buildMindMap(f: CaseFile): MindMapResult {
+  const root: MNode = {
+    id: 'root', type: 'root',
+    label: f.name || 'Untitled',
+    fieldLabel: '',
+    x: 0, y: 0, w: 220, h: 50,
+    children: [], collapsed: false,
+  }
+
+  // Build module tree by splitting module paths on '/'
+  const moduleRoot: ModuleTree = { name: '', children: {}, cases: [] }
+  for (const c of contentRows()) {
+    const parts = (c.module || '').split('/').filter(Boolean)
+    let current = moduleRoot
+    for (const part of parts) {
+      if (!current.children[part]) {
+        current.children[part] = { name: part, children: {}, cases: [] }
+      }
+      current = current.children[part]
+    }
+    current.cases.push(c)
+  }
+
+  function treeToNodes(tree: ModuleTree, depth: number, parentPath: string): MNode[] {
+    const nodes: MNode[] = []
+    const entries = Object.entries(tree.children)
+    for (let i = 0; i < entries.length; i++) {
+      const [name, child] = entries[i]
+      const path = parentPath ? parentPath + '/' + name : name
+      const modId = 'mod_' + path
+      const modNode: MNode = {
+        id: modId,
+        type: 'module',
+        label: name,
+        fieldLabel: depth === 0 ? '模块' : '子模块',
+        x: 0, y: 0, w: 240, h: computeNodeHeight(name, 240, 13, 42),
+        children: [],
+        collapsed: mmCollapsedMods.value.has(modId),
+        moduleDepth: depth,
+        data: { path, count: child.cases.length, colorIdx: depth === 0 ? i : -1 },
+      }
+
+      modNode.children.push(...treeToNodes(child, depth + 1, path))
+
+      for (const c of child.cases) {
+        const caseId = 'case_' + c.id
+        const caseNode: MNode = {
+          id: caseId,
+          type: 'case',
+          label: c.title || '(No Title)',
+          fieldLabel: '用例',
+          x: 0, y: 0, w: 300, h: computeNodeHeight(c.title || '(No Title)', 300, 12, 36),
+          children: [],
+          collapsed: mmCollapsedMods.value.has(caseId),
+          data: { caseId: c.id, priority: c.priority, casePath: path },
+        }
+
+        const fieldDefs: [string, string, string][] = [
+          ['precondition', '前置条件', c.precondition],
+          ['steps', '操作步骤', c.steps],
+          ['expected', '预期结果', c.expected],
+          ['priority', '用例等级', c.priority],
+          ['remarks', '备注', c.remarks],
+        ]
+
+        let lastFieldParent = caseNode
+        for (const [fieldKey, fieldLabel, value] of fieldDefs) {
+          const fieldNode: MNode = {
+            id: fieldKey + '_' + c.id,
+            type: 'field',
+            label: value?.trim() || '',
+            fieldLabel,
+            x: 0, y: 0, w: 300, h: Math.max(28, computeFieldHeight(value || '')),
+            children: [], collapsed: false,
+            field: fieldKey,
+            data: { caseId: c.id },
+          }
+          lastFieldParent.children.push(fieldNode)
+          lastFieldParent = fieldNode
+        }
+
+        modNode.children.push(caseNode)
+      }
+
+      nodes.push(modNode)
+    }
+    return nodes
+  }
+
+  root.children = treeToNodes(moduleRoot, 0, '')
+
+  computeSubtreeHeights(root)
+  positionNode(root, 40, 80)
+
+  const modules: MNode[] = []
+  const cases: MNode[] = []
+  const fields: MNode[] = []
+  collectNodes(root, modules, cases, fields)
+
+  const lines: { path: string }[] = []
+  generateLines(root, lines)
+
+  return { root, modules, cases, fields, lines }
+}
+
+function computeSubtreeHeights(node: MNode) {
+  if (node.children.length === 0 || node.collapsed) {
+    ;(node as any)._sh = node.h
+    return
+  }
+  node.children.forEach(computeSubtreeHeights)
+  let total = 0
+  for (const ch of node.children) {
+    total += (ch as any)._sh
+  }
+  const gaps = (node.children.length - 1) * (MM_V[node.children[0].type] || 10)
+  ;(node as any)._sh = Math.max(node.h, total + gaps)
+}
+
+function positionNode(node: MNode, x: number, topY: number) {
+  node.x = x
+  const sh = (node as any)._sh
+
+  if (node.children.length === 0 || node.collapsed) {
+    node.y = topY
+    return
+  }
+
+  node.y = topY + (sh - node.h) / 2
+
+  const childX = x + node.w + (MM_H[node.type] || 200)
+  let cy = topY
+
+  for (const child of node.children) {
+    positionNode(child, childX, cy)
+    cy += (child as any)._sh + (MM_V[child.type] || 10)
+  }
+}
+
+function collectNodes(node: MNode, modules: MNode[], cases: MNode[], fields: MNode[]) {
+  if (node.type === 'module') modules.push(node)
+  else if (node.type === 'case') cases.push(node)
+  else if (node.type === 'field') fields.push(node)
+  if (!node.collapsed) {
+    node.children.forEach(ch => collectNodes(ch, modules, cases, fields))
+  }
+}
+
+function generateLines(node: MNode, lines: { path: string }[]) {
+  if (node.children.length === 0 || node.collapsed) return
+
+  const sx = node.x + node.w
+  const sy = node.y + node.h / 2
+
+  for (const child of node.children) {
+    const ex = child.x
+    const ey = child.y + child.h / 2
+    const dx = Math.max(60, ex - sx)
+    lines.push({
+      path: `M${sx},${sy} C${sx + dx * 0.4},${sy} ${ex - dx * 0.4},${ey} ${ex},${ey}`,
+    })
+    generateLines(child, lines)
+  }
+}
+
+// ============= Mind Map Interaction =============
+
+const selectedMmNodeId = ref<string | null>(null)
+const editingNodeId = ref<string | null>(null)
+const editingValue = ref('')
+const mmCtx = ref<{ show: boolean; x: number; y: number; node: MNode | null }>({ show: false, x: 0, y: 0, node: null })
+const mmTabPrompt = ref<{ show: boolean; x: number; y: number; node: MNode | null }>({ show: false, x: 0, y: 0, node: null })
+
+const mmDrag = ref<{ node: MNode; startX: number; startY: number; cursorX: number; cursorY: number; ghostX: number; ghostY: number; isDragging: boolean } | null>(null)
+
+let _mmCtxHandler: ((e: MouseEvent) => void) | null = null
+let _mmTabPromptHandler: ((e: MouseEvent) => void) | null = null
+let _mmDragMoveHandler: ((e: MouseEvent) => void) | null = null
+let _mmDragEndHandler: ((e: MouseEvent) => void) | null = null
+
+const mmAllNodes = computed(() => {
+  const result: MNode[] = []
+  if (!mmRoot.value) return result
+  result.push(mmRoot.value.root)
+  result.push(...mmRoot.value.modules)
+  result.push(...mmRoot.value.cases)
+  result.push(...mmRoot.value.fields)
+  return result
+})
+
+const pendingMmFocusId = ref<string | null>(null)
+
+watch(mmAllNodes, () => {
+  const targetId = pendingMmFocusId.value
+  if (!targetId) return
+  const targetNode = mmAllNodes.value.find(n => n.id === targetId)
+  if (targetNode) {
+    pendingMmFocusId.value = null
+    editingNodeId.value = targetId
+    editingValue.value = targetNode.label
+    selectedMmNodeId.value = targetId
+    nextTick(() => {
+      nextTick(() => {
+        const el = document.querySelector('[data-mm-editor]') as HTMLTextAreaElement
+        if (el) { el.focus(); el.select(); autoResizeTextarea({ target: el } as any) }
+      })
+    })
+  }
+})
+
+function modIdToName(id: string): string {
+  return id.startsWith('mod_') ? id.slice(4) : id
+}
+
+function selectMmNode(node: MNode) {
+  if (editingNodeId.value) return
+  selectedMmNodeId.value = node.id
+}
+
+function getSelectedMmNode(): MNode | undefined {
+  return mmAllNodes.value.find(n => n.id === selectedMmNodeId.value)
+}
+
+function getSelectedMmIdx(): number {
+  return mmAllNodes.value.findIndex(n => n.id === selectedMmNodeId.value)
+}
+
+// ===== Inline Editing =====
+
+function startEditing(node: MNode) {
+  editingNodeId.value = node.id
+  editingValue.value = node.label
+  selectedMmNodeId.value = node.id
   nextTick(() => {
-    if (renameInput.value) {
-      renameInput.value.focus()
-      renameInput.value.textContent = mod.name
+    const el = document.querySelector('[data-mm-editor]') as HTMLTextAreaElement
+    if (el) {
+      el.focus()
+      el.select()
+      autoResizeTextarea({ target: el } as any)
     }
   })
 }
 
-function finishRenameModule(mod: any, event: Event) {
-  const newName = (event.target as HTMLElement).textContent?.trim() || mod.name
-  const f = activeFile.value
-  if (f && newName !== mod.name) {
-    f.cases.forEach(c => {
-      if ((c.module || '(No Module)') === mod.name) c.module = newName
-    })
+function autoResizeTextarea(e: Event) {
+  const el = e.target as HTMLTextAreaElement
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = el.scrollHeight + 'px'
+}
+
+function confirmEditing(node: MNode) {
+  if (editingNodeId.value !== node.id) return
+  const newVal = editingValue.value
+  if (newVal !== node.label) {
+    if (node.type === 'module') {
+      const f = activeFile.value
+      if (f && node.data?.path) {
+        const oldPath = node.data.path
+        f.cases.forEach(c => {
+          if (c.module === oldPath) c.module = newVal
+          else if (c.module?.startsWith(oldPath + '/')) {
+            c.module = newVal + c.module.slice(oldPath.length)
+          }
+        })
+      }
+    } else if (node.type === 'case') {
+      const id = node.data?.caseId
+      if (id) store.updateCaseField(id, 'title', newVal)
+    } else if (node.type === 'field') {
+      const id = node.data?.caseId
+      if (id && node.field) store.updateCaseField(id, node.field, newVal)
+    }
   }
-  mod.renaming = false
+  editingNodeId.value = null
+  editingValue.value = ''
+}
+
+function cancelEditing() {
+  editingNodeId.value = null
+  editingValue.value = ''
+}
+
+// ===== Tab Prompt =====
+
+function showTabPrompt(node: MNode) {
+  const rect = mindmapContainer.value?.getBoundingClientRect()
+  if (!rect) return
+  const x = rect.left + (node.x + node.w) * mmZoom.value + mmPan.value.x
+  const y = rect.top + (node.y + node.h / 2) * mmZoom.value + mmPan.value.y
+  mmTabPrompt.value = { show: true, x, y, node }
+  if (_mmTabPromptHandler) document.removeEventListener('mousedown', _mmTabPromptHandler)
+  _mmTabPromptHandler = (ev: MouseEvent) => {
+    const el = document.querySelector('[data-menu="mm-tab-prompt"]')
+    if (el && !el.contains(ev.target as Node)) {
+      mmTabPrompt.value.show = false
+      document.removeEventListener('mousedown', _mmTabPromptHandler!)
+      _mmTabPromptHandler = null
+    }
+  }
+  setTimeout(() => document.addEventListener('mousedown', _mmTabPromptHandler!), 0)
+}
+
+function mmTabAddModule() {
+  const node = mmTabPrompt.value.node
+  if (node?.type === 'module' && node.data?.path) {
+    const newPath = node.data.path + '/New Module'
+    const id = addCaseToFile(newPath)
+    if (id) selectedMmNodeId.value = 'case_' + id
+  }
+  mmTabPrompt.value.show = false
+}
+
+function mmTabAddCase() {
+  const node = mmTabPrompt.value.node
+  if (node?.type === 'module' && node.data?.path) {
+    const id = addCaseToFile(node.data.path)
+    if (id) selectedMmNodeId.value = 'case_' + id
+  }
+  mmTabPrompt.value.show = false
+}
+
+// ===== Drag & Drop =====
+
+function getNodeAtPoint(cx: number, cy: number): MNode | null {
+  for (const node of mmAllNodes.value) {
+    if (node.type === 'root') continue
+    if (cx >= node.x && cx <= node.x + node.w &&
+        cy >= node.y && cy <= node.y + node.h) {
+      return node
+    }
+  }
+  return null
+}
+
+function onMmMouseDown(e: MouseEvent, node: MNode) {
+  if (e.button !== 0 || editingNodeId.value) return
+  selectMmNode(node)
+  if (node.type !== 'case') return
+
+  const rect = mindmapContainer.value?.getBoundingClientRect()
+  if (!rect) return
+
+  mmDrag.value = {
+    node,
+    startX: e.clientX,
+    startY: e.clientY,
+    cursorX: e.clientX,
+    cursorY: e.clientY,
+    ghostX: node.x,
+    ghostY: node.y,
+    isDragging: false,
+  }
+
+  _mmDragMoveHandler = (ev: MouseEvent) => {
+    if (!mmDrag.value) return
+    mmDrag.value.cursorX = ev.clientX
+    mmDrag.value.cursorY = ev.clientY
+    const dx = Math.abs(ev.clientX - mmDrag.value.startX)
+    const dy = Math.abs(ev.clientY - mmDrag.value.startY)
+    if (!mmDrag.value.isDragging && (dx > 5 || dy > 5)) {
+      mmDrag.value.isDragging = true
+    }
+    if (mmDrag.value.isDragging) {
+      mmDrag.value.ghostX = (ev.clientX - rect.left - mmPan.value.x) / mmZoom.value - mmDrag.value.node.w / 2
+      mmDrag.value.ghostY = (ev.clientY - rect.top - mmPan.value.y) / mmZoom.value - mmDrag.value.node.h / 2
+    }
+  }
+
+  _mmDragEndHandler = (ev: MouseEvent) => {
+    if (!mmDrag.value) return
+    const wasDragging = mmDrag.value.isDragging
+    if (wasDragging && mmDrag.value.node.type === 'case') {
+      const cx = (ev.clientX - rect.left - mmPan.value.x) / mmZoom.value
+      const cy = (ev.clientY - rect.top - mmPan.value.y) / mmZoom.value
+      const target = getNodeAtPoint(cx, cy)
+      if (target && target.id !== mmDrag.value.node.id) {
+        const caseId = mmDrag.value.node.data?.caseId
+        if (target.type === 'module' && caseId) {
+          const newPath = target.data?.path || ''
+          store.updateCaseField(caseId, 'module', newPath)
+        } else if (target.type === 'case' && caseId) {
+          const f = activeFile.value
+          if (f) {
+            const srcIdx = f.cases.findIndex(c => c.id === caseId)
+            const tgtIdx = f.cases.findIndex(c => c.id === target.data?.caseId)
+            if (srcIdx >= 0 && tgtIdx >= 0) {
+              const [moved] = f.cases.splice(srcIdx, 1)
+              f.cases.splice(tgtIdx, 0, moved)
+            }
+          }
+        }
+      }
+    }
+    mmDrag.value = null
+    document.removeEventListener('mousemove', _mmDragMoveHandler!)
+    document.removeEventListener('mouseup', _mmDragEndHandler!)
+    _mmDragMoveHandler = null
+    _mmDragEndHandler = null
+  }
+
+  document.addEventListener('mousemove', _mmDragMoveHandler)
+  document.addEventListener('mouseup', _mmDragEndHandler)
+}
+
+// ===== Context Menu =====
+
+function openMmCtx(e: MouseEvent, node: MNode) {
+  if (editingNodeId.value) return
+  selectedMmNodeId.value = node.id
+  mmCtx.value = { show: true, x: e.clientX, y: e.clientY, node }
+  if (_mmCtxHandler) document.removeEventListener('mousedown', _mmCtxHandler)
+  _mmCtxHandler = (ev: MouseEvent) => {
+    const el = document.querySelector('[data-menu="mm-ctx"]')
+    if (el && !el.contains(ev.target as Node)) {
+      mmCtx.value.show = false
+      document.removeEventListener('mousedown', _mmCtxHandler!)
+      _mmCtxHandler = null
+    }
+  }
+  setTimeout(() => document.addEventListener('mousedown', _mmCtxHandler!), 0)
+}
+
+function addCaseToFile(moduleName: string = ''): string | null {
+  const f = activeFile.value
+  if (!f) return null
+  const id = genId()
+  const c: CaseItem = {
+    id, module: moduleName,
+    title: '', precondition: '', steps: '', expected: '',
+    priority: '', tags: [], assignee: '', remarks: '',
+  };
+  (c as any)._activated = true
+  f.cases.push(c)
+  f.updatedAt = new Date().toISOString()
+  return id
+}
+
+function createCaseAndEdit(moduleName: string) {
+  const id = addCaseToFile(moduleName)
+  if (!id) return
+  const nodeId = 'case_' + id
+  selectedMmNodeId.value = nodeId
+  nextTick(() => {
+    const node = getSelectedMmNode()
+    if (node) startEditing(node)
+  })
+}
+
+function mmAddNewCase() {
+  const id = addCaseToFile()
+  if (id) selectedMmNodeId.value = 'case_' + id
+}
+
+function mmCtxAddCase() {
+  const mod = mmCtx.value.node
+  if (mod?.type === 'module') {
+    const path = mod.data?.path || ''
+    const id = addCaseToFile(path)
+    if (id) selectedMmNodeId.value = 'case_' + id
+  }
+  mmCtx.value.show = false
+}
+
+function mmCtxAddSibling() {
+  const n = mmCtx.value.node
+  if (n?.type === 'case') {
+    const id = addCaseToFile(n.data?.casePath || '')
+    if (id) selectedMmNodeId.value = 'case_' + id
+  } else if (n?.type === 'module') {
+    const id = addCaseToFile(n.data?.path || '')
+    if (id) selectedMmNodeId.value = 'case_' + id
+  }
+  mmCtx.value.show = false
+}
+
+function mmCtxRename() {
+  if (mmCtx.value.node) startEditing(mmCtx.value.node)
+  mmCtx.value.show = false
+}
+
+function mmCtxDelete() {
+  const n = mmCtx.value.node
+  if (n?.type === 'case') {
+    const id = n.data?.caseId
+    if (id) store.deleteCase(id)
+    selectedMmNodeId.value = null
+  }
+  mmCtx.value.show = false
+}
+
+function mmNavUp() {
+  const idx = getSelectedMmIdx()
+  if (idx > 0) selectedMmNodeId.value = mmAllNodes.value[idx - 1].id
+}
+
+function mmNavDown() {
+  const idx = getSelectedMmIdx()
+  if (idx >= 0 && idx < mmAllNodes.value.length - 1) selectedMmNodeId.value = mmAllNodes.value[idx + 1].id
+}
+
+function onMindMapKeydown(e: KeyboardEvent) {
+  if (editingNodeId.value) return
+
+  const node = getSelectedMmNode()
+  if (!node) return
+
+  switch (e.key) {
+    case 'Enter':
+      e.preventDefault()
+      if (node.type === 'root') {
+        createCaseAndEdit('New Module')
+      } else if (node.type === 'module') {
+        const path = node.data?.path || ''
+        const parts = path.split('/')
+        const parentPath = parts.slice(0, -1).join('/')
+        const siblingPath = parentPath ? parentPath + '/New Module' : 'New Module'
+        createCaseAndEdit(siblingPath)
+      } else if (node.type === 'case') {
+        const f = activeFile.value
+        const c = f?.cases.find(oc => oc.id === node.data?.caseId)
+        createCaseAndEdit(c?.module || '')
+      }
+      break
+    case 'Tab':
+      e.preventDefault()
+      if (node.type === 'root') {
+        createCaseAndEdit('New Module')
+      } else if (node.type === 'module') {
+        showTabPrompt(node)
+      } else if (node.type === 'case') {
+        const f = activeFile.value
+        const c = f?.cases.find(oc => oc.id === node.data?.caseId)
+        if (c) {
+          const order = ['precondition', 'steps', 'expected', 'priority', 'remarks'] as const
+          for (const field of order) {
+            if (!c[field]?.trim()) {
+              selectedMmNodeId.value = field + '_' + c.id
+              editingNodeId.value = field + '_' + c.id
+              editingValue.value = c[field] || ''
+              nextTick(() => {
+                const el = document.querySelector('[data-mm-editor]') as HTMLTextAreaElement
+                if (el) { el.focus(); el.select(); autoResizeTextarea({ target: el } as any) }
+              })
+              return
+            }
+          }
+          selectedMmNodeId.value = 'precondition_' + c.id
+        }
+      } else if (node.type === 'field') {
+        const caseId = node.data?.caseId
+        if (caseId && node.field) {
+          const order = ['precondition', 'steps', 'expected', 'priority', 'remarks']
+          const idx = order.indexOf(node.field)
+          if (idx >= 0 && idx < order.length - 1) {
+            const nextField = order[idx + 1]
+            const nextId = nextField + '_' + caseId
+            selectedMmNodeId.value = nextId
+            editingNodeId.value = nextId
+            const f = activeFile.value
+            const c = f?.cases.find(oc => oc.id === caseId)
+            editingValue.value = c ? ((c as any)[nextField] || '') : ''
+            nextTick(() => {
+              const el = document.querySelector('[data-mm-editor]') as HTMLTextAreaElement
+              if (el) { el.focus(); el.select(); autoResizeTextarea({ target: el } as any) }
+            })
+          }
+        }
+      }
+      break
+    case 'Delete':
+    case 'Backspace':
+      if (node.type === 'case') {
+        const id = node.data?.caseId
+        if (id) { store.deleteCase(id); selectedMmNodeId.value = null }
+      }
+      break
+    case 'F2':
+      e.preventDefault()
+      startEditing(node)
+      break
+    case 'ArrowUp': e.preventDefault(); mmNavUp(); break
+    case 'ArrowDown': e.preventDefault(); mmNavDown(); break
+    case 'ArrowRight':
+      e.preventDefault()
+      if (node.type === 'module' && node.collapsed) toggleCollapse(node)
+      break
+    case 'ArrowLeft':
+      e.preventDefault()
+      if (node.type === 'module' && !node.collapsed) toggleCollapse(node)
+      break
+  }
 }
 
 function onMindMapWheel(event: WheelEvent) {
@@ -1140,7 +1899,27 @@ function onMindMapPanEnd() {
 
 function mmZoomIn() { mmZoom.value = Math.min(2, mmZoom.value + 0.15) }
 function mmZoomOut() { mmZoom.value = Math.max(0.2, mmZoom.value - 0.15) }
-function mmFit() { mmZoom.value = 0.65; mmPan.value = { x: 40, y: 40 } }
+function mmFit() { mmZoom.value = 0.65; mmPan.value = { x: 40, y: 60 } }
+
+function caseBorderClass(p: string): string {
+  const map: Record<string, string> = {
+    P0: 'border-red-400/60',
+    P1: 'border-orange-400/60',
+    P2: 'border-blue-400/60',
+    P3: 'border-gray-400/40',
+  }
+  return map[p] || 'border-gray-400/40'
+}
+
+function caseDotClass(p: string): string {
+  const map: Record<string, string> = {
+    P0: 'bg-red-400',
+    P1: 'bg-orange-400',
+    P2: 'bg-blue-400',
+    P3: 'bg-gray-400',
+  }
+  return map[p] || 'bg-gray-300'
+}
 
 let handlingKey = false
 
@@ -1162,6 +1941,11 @@ function onKeydown(e: KeyboardEvent) {
       }
       if (id) duplicateSingle(id)
     } finally { setTimeout(() => { handlingKey = false }, 100) }
+    return
+  }
+  if (viewMode.value === 'mindmap') {
+    e.stopPropagation()
+    onMindMapKeydown(e)
   }
 }
 
@@ -1317,8 +2101,6 @@ watch(viewMode, (v) => {
 .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.08); border-radius: 3px; }
-.mm-case-node { padding: 4px 8px; transition: background 0.15s; }
-.line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
 .cell-editor {
   width: 100%;
