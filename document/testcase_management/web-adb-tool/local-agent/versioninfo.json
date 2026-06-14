@@ -1,0 +1,43 @@
+{
+    "FixedFileInfo":  {
+                          "FileVersion":  {
+                                              "Major":  1,
+                                              "Minor":  0,
+                                              "Patch":  2,
+                                              "Build":  0
+                                          },
+                          "ProductVersion":  {
+                                                 "Major":  1,
+                                                 "Minor":  0,
+                                                 "Patch":  2,
+                                                 "Build":  0
+                                             },
+                          "FileFlagsMask":  "3f",
+                          "FileFlags":  "00",
+                          "FileOS":  "040004",
+                          "FileType":  "01",
+                          "FileSubType":  "00"
+                      },
+    "StringFileInfo":  {
+                           "Comments":  "ADB Local Agent for Web ADB Tool",
+                           "CompanyName":  "WhaleTV",
+                           "FileDescription":  "ADB Local Agent - Provides local ADB command execution for Web ADB Tool",
+                           "FileVersion":  "1.0.2.0",
+                           "InternalName":  "adb-agent",
+                           "LegalCopyright":  "Copyright (C) 2026 WhaleTV. All rights reserved.",
+                           "LegalTrademarks":  "",
+                           "OriginalFilename":  "adb-agent-windows.exe",
+                           "PrivateBuild":  "",
+                           "ProductName":  "ADB Local Agent",
+                           "ProductVersion":  "1.0.2.0",
+                           "SpecialBuild":  ""
+                       },
+    "VarFileInfo":  {
+                        "Translation":  {
+                                            "LangID":  "0409",
+                                            "CharsetID":  "04B0"
+                                        }
+                    },
+    "IconPath":  "",
+    "ManifestPath":  ""
+}

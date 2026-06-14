@@ -1,0 +1,400 @@
+/* 表格优化样式 - 解决2560*1440分辨率显示问题 */
+
+/* 表格容器宽度优化 */
+.el-table {
+  width: 100% !important;
+}
+
+/* 表格列宽度自适应 */
+.el-table__body-wrapper {
+  width: 100%;
+}
+
+.el-table__header-wrapper {
+  width: 100%;
+}
+
+/* 表头文字可换行，支持长文本显示 */
+.el-table th .cell {
+  white-space: normal !important;
+  word-break: break-word;
+  line-height: 1.5;
+  padding: 8px 0;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 表格单元格内容优化 */
+.el-table td .cell {
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.6;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+/* 表格单元格内容过长时的处理 */
+.el-table .cell.is-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 为表格添加 tooltip 支持 */
+.el-table .cell .el-tooltip {
+  width: 100%;
+  display: block;
+}
+
+/* 表格列最小宽度设置 */
+.el-table .el-table__cell {
+  min-width: 80px;
+}
+
+/* 操作列宽度优化 */
+.el-table .el-table__cell.is-center {
+  text-align: center;
+}
+
+/* 表格内按钮组优化 */
+.el-table .cell .el-button-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.el-table .cell .el-button + .el-button {
+  margin-left: 4px;
+}
+
+/* 表格内标签优化 */
+.el-table .cell .el-tag {
+  margin: 2px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 表格行高优化 */
+.el-table .el-table__row {
+  height: auto;
+  min-height: 48px;
+}
+
+.el-table .el-table__cell {
+  padding: 12px 0;
+}
+
+/* 2560分辨率优化 */
+@media (min-width: 2560px) {
+  .el-table .el-table__row {
+    min-height: 56px;
+  }
+  
+  .el-table .el-table__cell {
+    padding: 16px 0;
+  }
+  
+  .el-table th .cell {
+    min-height: 48px;
+    padding: 10px 0;
+    font-size: 16px;
+  }
+  
+  .el-table td .cell {
+    font-size: 16px;
+  }
+  
+  /* 操作按钮放大 */
+  .el-table .cell .el-button--small {
+    padding: 8px 16px;
+    font-size: 15px;
+  }
+  
+  /* 标签放大 */
+  .el-table .cell .el-tag {
+    padding: 0 14px;
+    height: 30px;
+    line-height: 28px;
+    font-size: 15px;
+  }
+}
+
+/* 4K分辨率优化 */
+@media (min-width: 3840px) {
+  .el-table .el-table__row {
+    min-height: 64px;
+  }
+  
+  .el-table .el-table__cell {
+    padding: 20px 0;
+  }
+  
+  .el-table th .cell {
+    min-height: 56px;
+    padding: 12px 0;
+    font-size: 18px;
+  }
+  
+  .el-table td .cell {
+    font-size: 18px;
+  }
+}
+
+/* 表格内容区域宽度优化 */
+.el-table__body,
+.el-table__header {
+  width: 100% !important;
+}
+
+/* 固定列优化 */
+.el-table__fixed,
+.el-table__fixed-right {
+  height: auto !important;
+}
+
+/* 表格空数据状态 */
+.el-table__empty-block {
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 表格加载状态 */
+.el-table__body-wrapper.is-scrolling-none {
+  overflow: visible;
+}
+
+/* 表格滚动条优化 */
+.el-table__body-wrapper::-webkit-scrollbar {
+  height: 10px;
+}
+
+.el-table__body-wrapper::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 5px;
+}
+
+.el-table__body-wrapper::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+@media (min-width: 2560px) {
+  .el-table__body-wrapper::-webkit-scrollbar {
+    height: 12px;
+  }
+}
+
+/* 表格展开行优化 */
+.el-table__expanded-cell {
+  padding: 20px !important;
+}
+
+.el-table__expanded-cell .cell {
+  white-space: normal;
+}
+
+/* 表格排序图标优化 */
+.el-table .caret-wrapper {
+  height: 24px;
+  width: 20px;
+}
+
+@media (min-width: 2560px) {
+  .el-table .caret-wrapper {
+    height: 28px;
+    width: 24px;
+  }
+}
+
+/* 表格筛选优化 */
+.el-table__column-filter-trigger {
+  line-height: 24px;
+}
+
+@media (min-width: 2560px) {
+  .el-table__column-filter-trigger {
+    line-height: 28px;
+  }
+}
+
+/* 表格内输入框优化 */
+.el-table .cell .el-input {
+  width: 100%;
+}
+
+.el-table .cell .el-input__inner {
+  padding: 0 8px;
+}
+
+@media (min-width: 2560px) {
+  .el-table .cell .el-input__inner {
+    padding: 0 12px;
+    height: 38px;
+    line-height: 38px;
+  }
+}
+
+/* 表格内选择器优化 */
+.el-table .cell .el-select {
+  width: 100%;
+}
+
+/* 表格内日期选择器优化 */
+.el-table .cell .el-date-editor {
+  width: 100%;
+}
+
+/* 表格复选框优化 */
+.el-table .el-checkbox {
+  display: inline-flex;
+  align-items: center;
+}
+
+@media (min-width: 2560px) {
+  .el-table .el-checkbox__inner {
+    width: 16px;
+    height: 16px;
+  }
+  
+  .el-table .el-checkbox__inner::after {
+    height: 9px;
+    left: 5px;
+  }
+}
+
+/* 表格单选框优化 */
+.el-table .el-radio {
+  display: inline-flex;
+  align-items: center;
+}
+
+@media (min-width: 2560px) {
+  .el-table .el-radio__inner {
+    width: 16px;
+    height: 16px;
+  }
+  
+  .el-table .el-radio__inner::after {
+    width: 6px;
+    height: 6px;
+  }
+}
+
+/* 表格内链接优化 */
+.el-table .cell a {
+  color: #409eff;
+  text-decoration: none;
+  transition: color 0.3s;
+}
+
+.el-table .cell a:hover {
+  color: #66b1ff;
+  text-decoration: underline;
+}
+
+/* 表格内图片优化 */
+.el-table .cell img {
+  max-width: 100%;
+  height: auto;
+  vertical-align: middle;
+}
+
+/* 表格内进度条优化 */
+.el-table .cell .el-progress {
+  width: 100%;
+}
+
+/* 表格斑马纹优化 */
+.el-table--striped .el-table__body tr.el-table__row--striped td {
+  background: #fafafa;
+}
+
+/* 表格悬停效果优化 */
+.el-table--enable-row-hover .el-table__body tr:hover > td {
+  background-color: #f5f7fa;
+}
+
+/* 表格边框优化 */
+.el-table--border .el-table__cell {
+  border-right: 1px solid #ebeef5;
+}
+
+.el-table--border th.el-table__cell {
+  border-bottom: 1px solid #ebeef5;
+}
+
+/* 表格内容对齐优化 */
+.el-table .cell.text-left {
+  text-align: left;
+  justify-content: flex-start;
+}
+
+.el-table .cell.text-center {
+  text-align: center;
+  justify-content: center;
+}
+
+.el-table .cell.text-right {
+  text-align: right;
+  justify-content: flex-end;
+}
+
+/* 表格内容截断工具类 */
+.el-table .cell.ellipsis-1 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.el-table .cell.ellipsis-2 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.el-table .cell.ellipsis-3 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 表格响应式优化 */
+@media (max-width: 1440px) {
+  .el-table .el-table__cell {
+    padding: 10px 0;
+  }
+  
+  .el-table th .cell {
+    min-height: 36px;
+    font-size: 14px;
+  }
+  
+  .el-table td .cell {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .el-table .el-table__cell {
+    padding: 8px 0;
+  }
+  
+  .el-table th .cell {
+    min-height: 32px;
+    font-size: 13px;
+  }
+  
+  .el-table td .cell {
+    font-size: 13px;
+  }
+}

@@ -1,0 +1,943 @@
+/* 全局样式优化 */
+
+/* 全局主题配色方案 */
+:root {
+  /* 主色调 */
+  --primary-100: #4f46e5;
+  --primary-200: #6366f1;
+  --primary-300: #eef2ff;
+  
+  /* 强调色 */
+  --accent-100: #ef4444;
+  --accent-200: #fecaca;
+  
+  /* 文本色 */
+  --text-100: #0f172a;
+  --text-200: #64748b;
+  
+  /* 背景色 */
+  --bg-100: #ffffff;
+  --bg-200: #f8fafc;
+  --bg-300: #e2e8f0;
+  
+  /* Element Plus 主题变量 */
+  --el-color-primary: #4f46e5;
+  --el-color-primary-light-3: #6366f1;
+  --el-color-primary-light-5: #a5b4fc;
+  --el-color-primary-light-7: #c7d2fe;
+  --el-color-primary-light-8: #e0e7ff;
+  --el-color-primary-light-9: #eef2ff;
+  --el-color-primary-dark-2: #4338ca;
+  --el-color-danger: #ef4444;
+  --el-color-danger-light-3: #fca5a5;
+  --el-color-danger-light-5: #fecaca;
+  --el-text-color-primary: #0f172a;
+  --el-text-color-regular: #64748b;
+  --el-bg-color: #ffffff;
+  --el-bg-color-page: #f8fafc;
+  --el-bg-color-overlay: #ffffff;
+}
+
+/* 基础样式重置 */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  /* 使用相对单位，便于缩放 */
+  font-size: 14px;
+}
+
+/* 高分辨率屏幕字体缩放 */
+@media (min-width: 1920px) {
+  html {
+    font-size: 15px;
+  }
+}
+
+@media (min-width: 2560px) {
+  html {
+    font-size: 16px;
+  }
+}
+
+@media (min-width: 3840px) {
+  html {
+    font-size: 18px;
+  }
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: var(--text-100);
+  background-color: var(--bg-200);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* 主容器样式 */
+#app {
+  min-height: 100%;
+}
+
+/* 内容区域最大宽度限制 - 根据分辨率自适应，充分利用屏幕空间 */
+.main-container {
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 20px;
+  width: 100%;
+}
+
+@media (min-width: 1920px) {
+  .main-container {
+    max-width: 100%;
+    padding: 24px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .main-container {
+    max-width: 100%;
+    padding: 28px;
+  }
+}
+
+@media (min-width: 3840px) {
+  .main-container {
+    max-width: 100%;
+    padding: 32px;
+  }
+}
+
+/* Element Plus 组件全局优化 */
+
+/* 按钮 */
+.el-button {
+  font-weight: 400;
+  transition: background-color 0.3s, border-color 0.3s, color 0.3s;
+}
+
+/* 强制移除按钮点击后的焦点边框和背景色 */
+.el-button:focus,
+.el-button:active,
+.el-button:focus-visible,
+.el-button.is-focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* 移除Element Plus按钮的焦点背景色 - 使用更高优先级 */
+.el-button.el-button--primary:not(.is-link):not(.is-text):not(.is-plain):focus,
+.el-button.el-button--primary:not(.is-link):not(.is-text):not(.is-plain):active,
+.el-button.el-button--primary:not(.is-link):not(.is-text):not(.is-plain).is-focus {
+  background-color: var(--el-color-primary) !important;
+  border-color: var(--el-color-primary) !important;
+  color: #ffffff !important;
+}
+
+.el-button.el-button--default:focus,
+.el-button.el-button--default:active,
+.el-button.el-button--default.is-focus {
+  background-color: #ffffff !important;
+  border-color: #dcdfe6 !important;
+  color: #606266 !important;
+}
+
+/* info按钮焦点状态 */
+.el-button.el-button--info:not(.is-link):not(.is-text):focus,
+.el-button.el-button--info:not(.is-link):not(.is-text):active,
+.el-button.el-button--info:not(.is-link):not(.is-text).is-focus {
+  background-color: var(--el-color-info, #909399) !important;
+  border-color: var(--el-color-info, #909399) !important;
+  color: #ffffff !important;
+}
+
+/* warning按钮焦点状态 */
+.el-button.el-button--warning:not(.is-link):not(.is-text):focus,
+.el-button.el-button--warning:not(.is-link):not(.is-text):active,
+.el-button.el-button--warning:not(.is-link):not(.is-text).is-focus {
+  background-color: var(--el-color-warning, #e6a23c) !important;
+  border-color: var(--el-color-warning, #e6a23c) !important;
+  color: #ffffff !important;
+}
+
+/* danger按钮焦点状态 */
+.el-button.el-button--danger:not(.is-link):not(.is-text):focus,
+.el-button.el-button--danger:not(.is-link):not(.is-text):active,
+.el-button.el-button--danger:not(.is-link):not(.is-text).is-focus {
+  background-color: var(--el-color-danger, #ef4444) !important;
+  border-color: var(--el-color-danger, #ef4444) !important;
+  color: #ffffff !important;
+}
+
+/* success按钮焦点状态 */
+.el-button.el-button--success:not(.is-link):not(.is-text):focus,
+.el-button.el-button--success:not(.is-link):not(.is-text):active,
+.el-button.el-button--success:not(.is-link):not(.is-text).is-focus {
+  background-color: var(--el-color-success, #67c23a) !important;
+  border-color: var(--el-color-success, #67c23a) !important;
+  color: #ffffff !important;
+}
+
+/* 移除link类型按钮的焦点样式 */
+.el-button.el-button--primary.is-link:focus,
+.el-button.el-button--primary.is-link:active {
+  color: var(--el-color-primary) !important;
+  background-color: transparent !important;
+  border-color: transparent !important;
+}
+
+.el-button.el-button--danger.is-link:focus,
+.el-button.el-button--danger.is-link:active {
+  color: var(--el-color-danger) !important;
+  background-color: transparent !important;
+  border-color: transparent !important;
+}
+
+.el-button--small {
+  padding: 7px 15px;
+  font-size: 13px;
+}
+
+@media (min-width: 1920px) {
+  .el-button--small {
+    padding: 8px 16px;
+    font-size: 14px;
+  }
+}
+
+/* 输入框 */
+.el-input__inner,
+.el-textarea__inner {
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+/* 表格 */
+.el-table {
+  width: 100%;
+}
+
+/* ==================== 全局表格样式优化 ==================== */
+
+/* 1. 统一单元格高度为 48px - 使用最高优先级 */
+.el-table td.el-table__cell,
+.el-table th.el-table__cell {
+  height: 48px !important;
+  padding: 0 12px !important;
+  line-height: 48px !important;
+}
+
+/* 单元格内部内容垂直居中 */
+.el-table td.el-table__cell .cell,
+.el-table th.el-table__cell .cell {
+  line-height: 48px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 48px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+/* 2. 超出长度显示省略号 */
+.el-table .cell {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+}
+
+/* 确保单元格内的所有元素都遵循省略号规则 */
+.el-table .cell > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* 操作列特殊处理 - 允许按钮正常显示 */
+.el-table .cell .operation-buttons,
+.el-table .cell .el-button,
+.el-table .cell .el-dropdown {
+  overflow: visible !important;
+  white-space: nowrap !important;
+  flex-shrink: 0;
+}
+
+/* 操作按钮容器 */
+.el-table .operation-buttons {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px !important;
+  flex-wrap: nowrap !important;
+}
+
+/* 3. 去除表格竖线（列边框） */
+.el-table .el-table__header th.el-table__cell {
+  border-right: none !important;
+}
+
+.el-table .el-table__body td.el-table__cell {
+  border-right: none !important;
+}
+
+/* 去除固定列的边框 */
+.el-table .el-table__fixed-right {
+  border-left: none !important;
+}
+
+.el-table .el-table__fixed {
+  border-right: none !important;
+}
+
+/* 4. 鼠标悬停显示完整内容 - 通过 show-overflow-tooltip 属性实现 */
+/* Element Plus 会自动为设置了 show-overflow-tooltip 的列添加 tooltip */
+
+/* 表格单元格基础样式 */
+.el-table .cell {
+  word-break: break-word;
+  line-height: 1.6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 移除Element Plus默认的padding,让表头和内容使用相同的padding */
+.el-table .el-table__header .el-table__cell .cell,
+.el-table .el-table__body .el-table__cell .cell {
+  padding-left: 10px !important;
+  padding-right: 10px !important;
+}
+
+/* 表头居中显示 */
+.el-table .el-table__header .el-table__cell .cell {
+  text-align: center !important;
+  justify-content: center !important;
+}
+
+/* 表格内容也居中显示,这样就能和表头对齐 */
+.el-table .el-table__body .el-table__cell .cell {
+  text-align: center !important;
+  justify-content: center !important;
+}
+
+/* 对于明确设置了 align="left" 的列,表头和内容都左对齐 */
+.el-table .el-table__header .el-table__cell.is-left .cell,
+.el-table .el-table__body .el-table__cell.is-left .cell {
+  text-align: left !important;
+  justify-content: flex-start !important;
+}
+
+/* 对于明确设置了 align="right" 的列,表头和内容都右对齐 */
+.el-table .el-table__header .el-table__cell.is-right .cell,
+.el-table .el-table__body .el-table__cell.is-right .cell {
+  text-align: right !important;
+  justify-content: flex-end !important;
+}
+
+/* 固定列也应用相同规则 */
+.el-table .el-table__fixed .el-table__header .el-table__cell .cell,
+.el-table .el-table__fixed .el-table__body .el-table__cell .cell,
+.el-table .el-table__fixed-right .el-table__header .el-table__cell .cell,
+.el-table .el-table__fixed-right .el-table__body .el-table__cell .cell {
+  padding-left: 10px !important;
+  padding-right: 10px !important;
+  text-align: center !important;
+  justify-content: center !important;
+}
+
+.el-table .el-table__fixed .el-table__cell.is-left .cell,
+.el-table .el-table__fixed-right .el-table__cell.is-left .cell {
+  text-align: left !important;
+  justify-content: flex-start !important;
+}
+
+.el-table .el-table__fixed .el-table__cell.is-right .cell,
+.el-table .el-table__fixed-right .el-table__cell.is-right .cell {
+  text-align: right !important;
+  justify-content: flex-end !important;
+}
+
+/* 表格列宽度自适应 */
+.el-table__body-wrapper {
+  overflow-x: auto;
+}
+
+/* 表头文字可换行 */
+.el-table th .cell {
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+/* 表格单元格内容过长时显示省略号，hover显示完整内容 */
+.el-table .el-tooltip {
+  width: 100%;
+}
+
+.el-table .cell.el-tooltip {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 表格行高优化 */
+@media (min-width: 1920px) {
+  .el-table .el-table__cell {
+    padding: 14px 0;
+  }
+}
+
+@media (min-width: 2560px) {
+  .el-table .el-table__cell {
+    padding: 16px 0;
+  }
+}
+
+/* 卡片 */
+.el-card {
+  border-radius: 4px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.3s;
+  width: 100%;
+}
+
+.el-card:hover {
+  box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.15);
+}
+
+/* 卡片内容区域宽度优化 */
+.el-card__body {
+  width: 100%;
+}
+
+@media (min-width: 2560px) {
+  .el-card__body {
+    padding: 24px;
+  }
+}
+
+/* 对话框 */
+.el-dialog {
+  border-radius: 8px;
+  max-width: 90vw;
+}
+
+/* 对话框宽度根据分辨率自适应 */
+@media (min-width: 1920px) {
+  .el-dialog {
+    min-width: 600px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .el-dialog {
+    min-width: 800px;
+  }
+  
+  .el-dialog.is-fullscreen {
+    width: 95vw !important;
+  }
+}
+
+.el-dialog__header {
+  border-bottom: 1px solid #ebeef5;
+}
+
+.el-dialog__footer {
+  border-top: 1px solid #ebeef5;
+}
+
+/* 表单 */
+.el-form-item {
+  margin-bottom: 22px;
+}
+
+@media (min-width: 1920px) {
+  .el-form-item {
+    margin-bottom: 24px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .el-form-item {
+    margin-bottom: 26px;
+  }
+}
+
+/* 分页 */
+.el-pagination {
+  margin-top: 20px;
+  text-align: right;
+}
+
+@media (min-width: 1920px) {
+  .el-pagination {
+    margin-top: 24px;
+  }
+}
+
+/* 面包屑 */
+.el-breadcrumb {
+  margin-bottom: 20px;
+}
+
+@media (min-width: 1920px) {
+  .el-breadcrumb {
+    margin-bottom: 24px;
+  }
+}
+
+/* 标签 */
+.el-tag {
+  margin-right: 8px;
+  margin-bottom: 8px;
+}
+
+/* 工具栏 */
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+@media (min-width: 1920px) {
+  .toolbar {
+    margin-bottom: 24px;
+    gap: 16px;
+  }
+}
+
+/* 搜索表单 */
+.search-form {
+  background: #fff;
+  padding: 20px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
+
+@media (min-width: 1920px) {
+  .search-form {
+    padding: 24px;
+    margin-bottom: 24px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .search-form {
+    padding: 28px;
+    margin-bottom: 28px;
+  }
+}
+
+/* 操作按钮组 */
+.action-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+@media (min-width: 1920px) {
+  .action-buttons {
+    gap: 12px;
+  }
+}
+
+/* 统计卡片 */
+.stat-card {
+  background: #fff;
+  padding: 20px;
+  border-radius: 4px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.15);
+}
+
+@media (min-width: 1920px) {
+  .stat-card {
+    padding: 24px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .stat-card {
+    padding: 28px;
+  }
+}
+
+/* 空状态 */
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #909399;
+}
+
+.empty-state-icon {
+  font-size: 64px;
+  margin-bottom: 20px;
+}
+
+.empty-state-text {
+  font-size: 14px;
+}
+
+@media (min-width: 1920px) {
+  .empty-state {
+    padding: 80px 20px;
+  }
+  
+  .empty-state-icon {
+    font-size: 72px;
+  }
+  
+  .empty-state-text {
+    font-size: 15px;
+  }
+}
+
+/* 加载状态 */
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 200px;
+}
+
+/* 滚动条美化 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-200);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bg-300);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-200);
+}
+
+@media (min-width: 1920px) {
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+}
+
+/* 文本省略 */
+.text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-ellipsis-2 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  /* stylelint-disable-next-line property-no-vendor-prefix */
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.text-ellipsis-3 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  /* stylelint-disable-next-line property-no-vendor-prefix */
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 间距工具类 */
+.mt-10 { margin-top: 10px; }
+.mt-20 { margin-top: 20px; }
+.mt-30 { margin-top: 30px; }
+.mb-10 { margin-bottom: 10px; }
+.mb-20 { margin-bottom: 20px; }
+.mb-30 { margin-bottom: 30px; }
+.ml-10 { margin-left: 10px; }
+.ml-20 { margin-left: 20px; }
+.mr-10 { margin-right: 10px; }
+.mr-20 { margin-right: 20px; }
+
+.pt-10 { padding-top: 10px; }
+.pt-20 { padding-top: 20px; }
+.pb-10 { padding-bottom: 10px; }
+.pb-20 { padding-bottom: 20px; }
+.pl-10 { padding-left: 10px; }
+.pl-20 { padding-left: 20px; }
+.pr-10 { padding-right: 10px; }
+.pr-20 { padding-right: 20px; }
+
+/* Flex 工具类 */
+.flex { display: flex; }
+.flex-center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.flex-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.flex-wrap { flex-wrap: wrap; }
+.flex-1 { flex: 1; }
+
+/* 文本对齐 */
+.text-left { text-align: left; }
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+
+/* 颜色工具类 */
+.text-primary { color: var(--primary-100); }
+.text-success { color: var(--primary-200); }
+.text-warning { color: var(--accent-200); }
+.text-danger { color: var(--accent-100); }
+.text-info { color: var(--text-200); }
+
+/* 背景色 */
+.bg-primary { background-color: var(--primary-100); }
+.bg-success { background-color: var(--primary-200); }
+.bg-warning { background-color: var(--accent-200); }
+.bg-danger { background-color: var(--accent-100); }
+.bg-info { background-color: var(--text-200); }
+
+/* 级联选择器（项目选择器）下拉面板样式 */
+.project-selector-popper .el-cascader-panel {
+  border-radius: 6px;
+}
+
+.project-selector-popper .el-cascader-menu {
+  min-width: 260px;
+  border-right: 1px solid #e4e7ed;
+}
+
+.project-selector-popper .el-cascader-menu:last-child {
+  border-right: none;
+}
+
+/* 节点基础样式 */
+.project-selector-popper .el-cascader-node {
+  height: 38px;
+  line-height: 38px;
+  padding: 0 12px;
+}
+
+/* 隐藏单选框/复选框 */
+.project-selector-popper .el-cascader-node__prefix {
+  display: none;
+}
+
+/* 节点标签容器 */
+.project-selector-popper .el-cascader-node__label {
+  padding: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* 自定义节点内容 - 清晰的flex布局 */
+.project-selector-popper .cascader-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 100%;
+}
+
+.project-selector-popper .node-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  color: #909399;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.project-selector-popper .node-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  color: #303133;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-selector-popper .node-type {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #a8abb2;
+  white-space: nowrap;
+}
+
+/* 节点悬停效果 */
+.project-selector-popper .el-cascader-node:hover {
+  background-color: #f1f5f9;
+}
+
+/* 节点选中效果 */
+.project-selector-popper .el-cascader-node.is-active {
+  color: #4f46e5;
+  font-weight: 500;
+  background-color: #eef2ff;
+}
+
+.project-selector-popper .el-cascader-node.is-active .node-icon {
+  color: #4f46e5;
+}
+
+.project-selector-popper .el-cascader-node.is-active .node-label {
+  color: #4f46e5;
+}
+
+.project-selector-popper .el-cascader-node.is-active .node-type {
+  color: #6366f1;
+}
+
+.project-selector-popper .el-cascader-node.in-active-path {
+  color: #4f46e5;
+}
+
+/* 打印样式 */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  body {
+    background: #fff;
+  }
+  
+  .el-card {
+    box-shadow: none;
+    border: 1px solid #ebeef5;
+  }
+}
+
+/* 模块下拉框样式优化 */
+.module-select-dropdown {
+  width: auto !important;
+  min-width: 200px !important;
+  max-width: 400px !important;
+  padding: 6px !important;
+  box-sizing: border-box !important;
+}
+
+.module-select-dropdown .el-select-dropdown__wrap {
+  max-width: 400px !important;
+}
+
+.module-select-dropdown .el-select-dropdown__list {
+  padding: 0 !important;
+}
+
+.module-select-dropdown .el-select-dropdown__item {
+  padding: 0 14px !important;
+  margin: 0 !important;
+  white-space: nowrap !important;
+  outline: 0 !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  box-sizing: border-box !important;
+}
+
+.module-select-dropdown .el-select-dropdown__item:hover,
+.module-select-dropdown .el-select-dropdown__item.hover,
+.module-select-dropdown .el-select-dropdown__item:focus,
+.module-select-dropdown .el-select-dropdown__item:focus-visible,
+.module-select-dropdown .el-select-dropdown__item:active {
+  background-color: #f1f5f9 !important;
+  outline: 0 !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.module-select-dropdown .el-select-dropdown__item.selected {
+  color: #4f46e5 !important;
+  font-weight: 500 !important;
+  background-color: #eef2ff !important;
+  outline: 0 !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+/* 强制移除所有可能的焦点样式 */
+.module-select-dropdown .el-select-dropdown__item::before,
+.module-select-dropdown .el-select-dropdown__item::after {
+  display: none !important;
+}
+
+.module-select-dropdown .el-select-dropdown__item * {
+  outline: 0 !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+/* ==================== 下拉框选项宽度限制 ==================== */
+.el-select-dropdown__item {
+  max-width: 100% !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  box-sizing: border-box !important;
+}
+
+.el-select-dropdown__wrap {
+  max-width: 100% !important;
+  overflow-x: hidden !important;
+}
+
+.el-select-dropdown__list {
+  max-width: 100% !important;
+}
+
+/* 选中状态的选项也要限制宽度 */
+.el-select-dropdown__item.selected {
+  max-width: 100% !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+/* 悬停状态的选项 */
+.el-select-dropdown__item.hover {
+  max-width: 100% !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+/* PR链接样式 - v-html动态内容需要非scoped全局样式 */
+.pr-link-inline {
+  color: #409EFF !important;
+  text-decoration: underline !important;
+  cursor: pointer !important;
+  position: relative;
+  z-index: 1;
+}
+.pr-link-inline:hover {
+  color: #66b1ff !important;
+}

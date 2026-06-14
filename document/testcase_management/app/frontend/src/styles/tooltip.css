@@ -1,0 +1,140 @@
+/* Element Plus Tooltip 样式完全覆盖 */
+/* 直接覆盖 Element Plus 的 CSS 变量 */
+
+/* 覆盖 Element Plus 的颜色变量 */
+html.dark,
+html {
+  --el-bg-color-overlay: #ffffff;
+  --el-text-color-primary: #303133;
+}
+
+/* 强制覆盖所有 tooltip 样式 */
+.el-popper.is-dark,
+.el-tooltip__popper.is-dark {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  color: #303133 !important;
+  border: 1px solid #e4e7ed !important;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1) !important;
+  padding: 10px 12px !important;
+  font-size: 13px !important;
+  line-height: 1.6 !important;
+  border-radius: 4px !important;
+  max-width: 400px !important;
+  /* 关键：保留换行符和空格 */
+  white-space: pre-wrap !important;
+  word-wrap: break-word !important;
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+}
+
+/* steps-tooltip 需要更大宽度和滚动支持 */
+.el-popper.is-dark.steps-tooltip,
+.el-tooltip__popper.is-dark.steps-tooltip,
+.el-popper.is-light.steps-tooltip,
+.el-tooltip__popper.is-light.steps-tooltip,
+.steps-tooltip {
+  max-width: 600px !important;
+  max-height: 400px !important;
+  overflow-y: auto !important;
+}
+
+/* 强制 tooltip 内部所有元素也保留换行 */
+.el-popper.is-dark *,
+.el-tooltip__popper.is-dark * {
+  white-space: pre-wrap !important;
+}
+
+.el-popper.is-light,
+.el-tooltip__popper.is-light {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  color: #303133 !important;
+  border: 1px solid #e4e7ed !important;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1) !important;
+  padding: 10px 12px !important;
+  font-size: 13px !important;
+  line-height: 1.6 !important;
+  border-radius: 4px !important;
+  max-width: 400px !important;
+  white-space: pre-wrap !important;
+  word-wrap: break-word !important;
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+}
+
+.el-popper.is-light *,
+.el-tooltip__popper.is-light * {
+  white-space: pre-wrap !important;
+}
+
+/* 箭头样式 */
+.el-popper.is-dark .el-popper__arrow::before,
+.el-tooltip__popper.is-dark .el-popper__arrow::before {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  border: 1px solid #e4e7ed !important;
+}
+
+.el-popper.is-light .el-popper__arrow::before,
+.el-tooltip__popper.is-light .el-popper__arrow::before {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  border: 1px solid #e4e7ed !important;
+}
+
+/* 箭头边框 - Top */
+.el-popper.is-dark[data-popper-placement^='top'] .el-popper__arrow::before,
+.el-tooltip__popper.is-dark[data-popper-placement^='top'] .el-popper__arrow::before {
+  border-top-color: #e4e7ed !important;
+  border-left-color: #e4e7ed !important;
+}
+
+/* 箭头边框 - Bottom */
+.el-popper.is-dark[data-popper-placement^='bottom'] .el-popper__arrow::before,
+.el-tooltip__popper.is-dark[data-popper-placement^='bottom'] .el-popper__arrow::before {
+  border-bottom-color: #e4e7ed !important;
+  border-right-color: #e4e7ed !important;
+}
+
+/* 箭头边框 - Left */
+.el-popper.is-dark[data-popper-placement^='left'] .el-popper__arrow::before,
+.el-tooltip__popper.is-dark[data-popper-placement^='left'] .el-popper__arrow::before {
+  border-left-color: #e4e7ed !important;
+  border-bottom-color: #e4e7ed !important;
+}
+
+/* 箭头边框 - Right */
+.el-popper.is-dark[data-popper-placement^='right'] .el-popper__arrow::before,
+.el-tooltip__popper.is-dark[data-popper-placement^='right'] .el-popper__arrow::before {
+  border-right-color: #e4e7ed !important;
+  border-top-color: #e4e7ed !important;
+}
+
+/* 位置调整 */
+.el-popper[data-popper-placement^='top'],
+.el-tooltip__popper[data-popper-placement^='top'] {
+  margin-bottom: 12px !important;
+}
+
+.el-popper[data-popper-placement^='bottom'],
+.el-tooltip__popper[data-popper-placement^='bottom'] {
+  margin-top: 12px !important;
+}
+
+.el-popper[data-popper-placement^='left'],
+.el-tooltip__popper[data-popper-placement^='left'] {
+  margin-right: 12px !important;
+}
+
+.el-popper[data-popper-placement^='right'],
+.el-tooltip__popper[data-popper-placement^='right'] {
+  margin-left: 12px !important;
+}
+
+
+
+
+
+
+

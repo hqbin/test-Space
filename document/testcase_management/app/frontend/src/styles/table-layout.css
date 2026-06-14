@@ -1,0 +1,89 @@
+/**
+ * 表格页面统一布局 - 表格根据可用空间自动撑满
+ * 使用方式：在包裹表格的容器上加 class="table-layout"
+ * 表格外包一层 <div class="table-wrapper">，再内层 <div class="table-container" ref="tableContainerRef">
+ * 分页用 class="pagination-container"
+ */
+
+/* 表格页面根布局（用于 .main-container 下的内容区或 el-card） */
+.table-layout {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+/* 带卡片时：卡片 body 占满并参与 flex */
+.table-card.table-layout :deep(.el-card__body),
+.table-layout .table-card-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+}
+
+/* 表头工具栏不收缩 */
+.table-layout .table-header {
+  flex-shrink: 0;
+}
+
+/* 表格外层：占满剩余空间 */
+.table-layout .table-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 表格容器：用于 ref 测量高度 */
+.table-layout .table-container {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 分页器在文档流中，不固定定位 */
+.table-layout .pagination-container {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 12px 20px;
+  background: #fff;
+  border-top: 1px solid #ebeef5;
+}
+
+/* 统一表头样式（与 header-cell-style 一致，供无内联样式的表格） */
+.table-layout .el-table th.el-table__cell {
+  background: rgba(139, 154, 238, 0.08) !important;
+  color: #606266;
+  font-weight: 600;
+}
+
+/* 表格滚动条统一 */
+.table-layout .el-table__body-wrapper {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 154, 238, 0.35) rgba(139, 154, 238, 0.08);
+}
+
+.table-layout .el-table__body-wrapper::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.table-layout .el-table__body-wrapper::-webkit-scrollbar-track {
+  background: rgba(139, 154, 238, 0.05);
+  border-radius: 4px;
+}
+
+.table-layout .el-table__body-wrapper::-webkit-scrollbar-thumb {
+  background: rgba(139, 154, 238, 0.35);
+  border-radius: 4px;
+}
+
+.table-layout .el-table__body-wrapper::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 154, 238, 0.5);
+}

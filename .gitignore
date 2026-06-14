@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Rust / Tauri build artifacts
+test-space/src-tauri/target/
+
+# Build output
+test-space/dist/
+
+# Python bytecode
+*.pyc
+__pycache__/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+
+# Compiled binaries
+*.exe
+*.dll
+*.dylib
+*.so
