@@ -7,12 +7,7 @@ const router = createRouter({
       path: "/",
       component: () => import("@/layouts/AppLayout.vue"),
       children: [
-        { path: "", redirect: "/workspace" },
-        {
-          path: "workspace",
-          name: "workspace",
-          component: () => import("@/views/workspace/WorkspacePage.vue"),
-        },
+        { path: "", redirect: "/case-space" },
         {
           path: "case-space",
           component: () => import("@/layouts/CaseSpaceLayout.vue"),

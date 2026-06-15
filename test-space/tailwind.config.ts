@@ -82,7 +82,7 @@ export default {
       },
       fontSize: {
         caption: [
-          "11px",
+          "15px",
           {
             lineHeight: "1.2",
             letterSpacing: "0.02em",
@@ -130,7 +130,7 @@ export default {
           },
         ],
         "label-md": [
-          "13px",
+          "16px",
           {
             lineHeight: "1.2",
             letterSpacing: "0.01em",

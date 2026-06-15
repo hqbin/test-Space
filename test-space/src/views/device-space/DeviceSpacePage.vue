@@ -2105,3 +2105,8 @@ onUnmounted(() => {
   // Note: log sessions are saved to DB; user can see "running" sessions on next visit
 });
 </script>
+
+<style scoped>
+.text-caption { font-size: 15px !important; }
+.text-label-md { font-size: 16px !important; }
+</style>

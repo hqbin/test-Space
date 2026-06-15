@@ -4,7 +4,7 @@
     :style="bgStyle"
   >
     <Sidebar />
-    <main class="md:ml-[256px] px-margin-page pb-20 md:pb-12 box-border w-full md:w-[calc(100%-256px)] min-h-screen">
+    <main class="px-margin-page pb-20 md:pb-12 box-border min-h-screen">
       <router-view />
     </main>
   </div>
@@ -19,9 +19,6 @@ const route = useRoute();
 
 const bgStyle = computed(() => {
   const path = route.path;
-  if (path.startsWith("/workspace")) {
-    return { background: "radial-gradient(circle at 50% 0%, #DAE1FF 0%, #F9F9FB 50%)" };
-  }
   if (path.startsWith("/case-space")) {
     return {
       background:

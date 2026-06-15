@@ -1,11 +1,6 @@
 ﻿<template>
   <div class="flex flex-col h-full">
-    <div class="mb-8">
-      <h1 class="font-display-lg text-display-lg font-semibold text-on-surface tracking-tight">Case Space</h1>
-      <p class="font-body-md text-body-md text-on-surface-variant/70 mt-1">Create and edit test case files. Immersive editor experience.</p>
-    </div>
-
-    <div class="flex items-center gap-3 mb-8">
+    <div class="flex items-center gap-3 mb-8 mt-8">
       <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2" @click="showNewDialog = true">
         <span class="material-symbols-outlined text-[20px]">add</span>
         New Case File
