@@ -7,8 +7,9 @@
       <input v-model="connectAddress"
         class="flex-1 bg-transparent border-none outline-none font-body-md text-body-md text-on-surface placeholder:text-on-surface-variant/50"
         placeholder="输入 IP 地址连接设备，例如: 192.168.1.100:5555" @keyup.enter="connectToDevice" />
-      <button class="glass-button px-4 py-1.5 rounded-full font-label-md text-label-md flex items-center gap-1" @click="connectToDevice">
-        <span class="material-symbols-outlined text-[16px]">add_link</span>连接
+      <button class="glass-button px-4 py-1.5 rounded-full font-label-md text-label-md flex items-center gap-1" @click="connectToDevice" :disabled="connecting">
+        <span v-if="connecting" class="w-3.5 h-3.5 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
+        <span v-else class="material-symbols-outlined text-[16px]">add_link</span>{{ connecting ? '连接中...' : '连接' }}
       </button>
       <div class="h-5 w-[1px] bg-glass-border-dark"></div>
       <div class="flex gap-2 flex-wrap items-center">
@@ -23,8 +24,9 @@
         </button>
         <span v-if="devices.length === 0" class="font-caption text-caption text-on-surface-variant/50">无设备连接</span>
       </div>
-      <button class="glass-button px-2.5 py-1 rounded-full font-caption text-caption flex items-center gap-1" @click="scanDevices">
-        <span class="material-symbols-outlined text-[14px]">refresh</span>
+      <button class="glass-button px-2.5 py-1 rounded-full font-caption text-caption flex items-center gap-1" @click="scanDevices()" :disabled="scanLoading">
+        <span v-if="scanLoading" class="w-3 h-3 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
+        <span v-else class="material-symbols-outlined text-[14px]">refresh</span>
       </button>
     </div>
 
@@ -77,8 +79,8 @@
                 <input ref="textInputRef" v-model="inputTextValue"
                   class="w-full bg-white border border-outline-variant rounded-lg px-3 py-1 font-body-sm text-body-sm text-on-surface focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all"
                   placeholder="输入要发送到设备的文本..." @keyup.enter="sendText" @focus="showTextHistory = true" @blur="hideTextHistoryDelayed" />
-                <div v-if="showTextHistory && textHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 glass-panel rounded-lg p-1 max-h-32 overflow-y-auto">
-                  <button v-for="(h, i) in textHistory" :key="i" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-white/30 truncate"
+                <div v-if="showTextHistory && textHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-outline-variant rounded-lg p-1 max-h-32 overflow-y-auto shadow-lg">
+                  <button v-for="(h, i) in textHistory" :key="i" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100"
                     @mousedown.prevent @click="selectTextHistory(h)">{{ h }}</button>
                 </div>
               </div>
@@ -90,9 +92,10 @@
               </button>
               <button class="glass-button px-2 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1"
                 :class="isRecording ? 'bg-error/10 text-error border border-error/20' : ''"
-                @click="toggleRecording">
-                <span class="material-symbols-outlined text-[12px]">{{ isRecording ? 'stop' : 'videocam' }}</span>
-                {{ isRecording ? '停止' : '录屏' }}
+                :disabled="recordingLoading" @click="toggleRecording">
+                <span v-if="recordingLoading" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+                <span v-else class="material-symbols-outlined text-[12px]">{{ isRecording ? 'stop' : 'videocam' }}</span>
+                {{ recordingLoading ? (isRecording ? '停止中...' : '启动中...') : (isRecording ? '停止' : '录屏') }}
               </button>
               <button class="glass-button px-2 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1"
                 :disabled="!selectedDevice || logPrepActive" @click="clearLogcatLogs">
@@ -169,8 +172,9 @@
                 <span class="font-caption text-caption text-on-surface-variant/60 font-normal">({{ sortedApps.length }})</span>
               </h3>
               <div class="flex gap-2 items-center flex-wrap">
-                <button class="glass-button px-2 py-0.5 rounded-full font-caption text-caption flex items-center gap-1 text-[11px]" @click="refreshPackageList">
-                  <span class="material-symbols-outlined text-[12px]">refresh</span>刷新
+                <button class="glass-button px-2 py-0.5 rounded-full font-caption text-caption flex items-center gap-1 text-[11px]" @click="refreshPackageList" :disabled="pkgLoading">
+                  <span v-if="pkgLoading" class="w-3 h-3 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
+                  <span v-else class="material-symbols-outlined text-[12px]">refresh</span>刷新
                 </button>
                 <label class="flex items-center gap-1 font-caption text-caption text-on-surface-variant cursor-pointer text-[11px]">
                   <input type="checkbox" v-model="showThirdParty" class="accent-secondary" @change="refreshPackageList" />第三方应用
@@ -252,173 +256,15 @@
     </div>
 
     <!-- Tab 2: 其他命令 -->
-    <div v-show="activeTab === 'other'" class="grid grid-cols-12 gap-4 flex-grow min-h-0 overflow-y-auto">
-      <!-- Left Column -->
-      <div class="col-span-12 lg:col-span-4 flex flex-col gap-4">
+    <div v-show="activeTab === 'other'" class="flex flex-col gap-4 flex-grow min-h-0 overflow-y-auto">
 
-        <!-- Remote Control -->
+      <!-- Screen Mirror - full width top row -->
+      <div class="shrink-0">
         <div class="glass-panel rounded-xl p-3">
-          <h3 class="font-label-md text-label-md text-on-surface mb-2 flex items-center gap-1.5">
-            <span class="material-symbols-outlined text-[16px]">gamepad</span>遥控器
+          <h3 class="font-label-md text-label-md text-on-surface mb-2 flex items-center gap-2">
+            <span class="material-symbols-outlined text-[16px]">screenshot_monitor</span>屏幕镜像
           </h3>
-          <div class="relative w-36 h-36 mx-auto mb-3">
-            <button class="absolute top-0 left-1/2 -translate-x-1/2 w-10 h-10 glass-button rounded-full flex items-center justify-center" @click="sendKey('19')">
-              <span class="material-symbols-outlined text-[18px]">keyboard_arrow_up</span>
-            </button>
-            <button class="absolute bottom-0 left-1/2 -translate-x-1/2 w-10 h-10 glass-button rounded-full flex items-center justify-center" @click="sendKey('20')">
-              <span class="material-symbols-outlined text-[18px]">keyboard_arrow_down</span>
-            </button>
-            <button class="absolute left-0 top-1/2 -translate-y-1/2 w-10 h-10 glass-button rounded-full flex items-center justify-center" @click="sendKey('21')">
-              <span class="material-symbols-outlined text-[18px]">keyboard_arrow_left</span>
-            </button>
-            <button class="absolute right-0 top-1/2 -translate-y-1/2 w-10 h-10 glass-button rounded-full flex items-center justify-center" @click="sendKey('22')">
-              <span class="material-symbols-outlined text-[18px]">keyboard_arrow_right</span>
-            </button>
-            <button class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 glass-button rounded-full flex items-center justify-center bg-secondary/10" @click="sendKey('23')">
-              <span class="material-symbols-outlined text-secondary text-[20px]">check</span>
-            </button>
-          </div>
-          <div class="grid grid-cols-5 gap-1.5 mb-2">
-            <button class="glass-button py-1 rounded-lg font-caption text-caption flex flex-col items-center gap-0.5" @click="sendKey('3')">
-              <span class="material-symbols-outlined text-[14px]">home</span>Home
-            </button>
-            <button class="glass-button py-1 rounded-lg font-caption text-caption flex flex-col items-center gap-0.5" @click="sendKey('4')">
-              <span class="material-symbols-outlined text-[14px]">arrow_back</span>返回
-            </button>
-            <button class="glass-button py-1 rounded-lg font-caption text-caption flex flex-col items-center gap-0.5" @click="sendKey('26')">
-              <span class="material-symbols-outlined text-[14px]">power_settings_new</span>电源
-            </button>
-            <button class="glass-button py-1 rounded-lg font-caption text-caption flex flex-col items-center gap-0.5" @click="sendKey('82')">
-              <span class="material-symbols-outlined text-[14px]">menu</span>菜单
-            </button>
-            <button class="glass-button py-1 rounded-lg font-caption text-caption flex flex-col items-center gap-0.5" @click="sendKey('187')">
-              <span class="material-symbols-outlined text-[14px]">apps</span>最近
-            </button>
-          </div>
-          <div class="grid grid-cols-3 gap-1.5 mb-2">
-            <button class="glass-button py-1.5 rounded-lg font-caption text-caption flex items-center justify-center gap-1" @click="sendKey('24')">
-              <span class="material-symbols-outlined text-[14px]">volume_up</span>Vol+
-            </button>
-            <button class="glass-button py-1.5 rounded-lg font-caption text-caption flex items-center justify-center gap-1" @click="sendKey('25')">
-              <span class="material-symbols-outlined text-[14px]">volume_down</span>Vol-
-            </button>
-            <button class="glass-button py-1.5 rounded-lg font-caption text-caption flex items-center justify-center gap-1" @click="sendKey('164')">
-              <span class="material-symbols-outlined text-[14px]">volume_off</span>静音
-            </button>
-          </div>
-          <div class="grid grid-cols-5 gap-1">
-            <button v-for="n in 9" :key="n" class="glass-button py-1.5 rounded-lg font-caption text-caption" @click="sendKey(String(7 + n))">{{ n }}</button>
-            <button class="glass-button py-1.5 rounded-lg font-caption text-caption" @click="sendKey('0')">0</button>
-            <button class="glass-button py-1.5 rounded-lg font-caption text-caption flex items-center justify-center gap-0.5" @click="sendKey('176')">
-              <span class="material-symbols-outlined text-[12px]">settings</span>设置
-            </button>
-            <button class="glass-button py-1.5 rounded-lg font-caption text-caption" @click="sendKey('66')">回车</button>
-            <button class="glass-button py-1.5 rounded-lg font-caption text-caption" @click="sendKey('67')">退格</button>
-            <button class="glass-button py-1.5 rounded-lg font-caption text-caption" @click="sendKey('61')">Tab</button>
-          </div>
-        </div>
-
-        <!-- Custom Commands -->
-        <div class="glass-panel rounded-xl p-3">
-          <div class="flex justify-between items-center mb-2">
-            <h3 class="font-label-md text-label-md text-on-surface flex items-center gap-1.5">
-              <span class="material-symbols-outlined text-[16px]">terminal</span>快捷命令
-            </h3>
-            <button class="glass-button p-1 rounded" @click="addCustomCommand">
-              <span class="material-symbols-outlined text-[16px]">add</span>
-            </button>
-          </div>
-          <div v-if="editingCmdIndex !== null" class="mb-2 space-y-1.5 p-2 bg-white/10 rounded-xl">
-            <input v-model="editingCmdName" class="w-full bg-white/80 border border-outline-variant rounded-lg px-2 py-1 font-caption text-caption text-on-surface focus:ring-2 focus:ring-secondary/30" placeholder="命令名称" />
-            <input v-model="editingCmdValue" class="w-full bg-white/80 border border-outline-variant rounded-lg px-2 py-1 font-caption text-caption text-on-surface font-mono focus:ring-2 focus:ring-secondary/30" placeholder="shell 命令" @keyup.enter="saveCustomCommand" />
-            <div class="flex gap-2 justify-end">
-              <button class="glass-button px-2 py-0.5 rounded-lg font-caption text-caption" @click="cancelEditCommand">取消</button>
-              <button class="glass-button px-2 py-0.5 rounded-lg font-caption text-caption" @click="saveCustomCommand">保存</button>
-            </div>
-          </div>
-          <div class="grid grid-cols-2 gap-1.5">
-            <button v-for="(cmd, idx) in customCommands" :key="idx"
-              class="glass-button py-1.5 px-2 rounded-lg font-caption text-caption text-left truncate group flex items-center gap-1" @click="executeCustomCommand(cmd.command)">
-              <span class="material-symbols-outlined text-[14px] shrink-0">play_arrow</span>
-              <span class="truncate">{{ cmd.name }}</span>
-              <span class="ml-auto material-symbols-outlined text-[12px] opacity-0 group-hover:opacity-100 text-on-surface-variant hover:text-error shrink-0"
-                @click.stop="removeCustomCommand(idx)">close</span>
-            </button>
-            <p v-if="customCommands.length === 0" class="col-span-2 font-caption text-caption text-on-surface-variant/50 text-center py-2">点击 + 添加快捷命令</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Right Column -->
-      <div class="col-span-12 lg:col-span-8 flex flex-col gap-4">
-
-        <!-- File Browser -->
-        <div class="glass-panel rounded-xl p-3">
-          <h3 class="font-label-md text-label-md text-on-surface mb-2 flex items-center gap-1.5">
-            <span class="material-symbols-outlined text-[16px]">folder_open</span>文件管理
-          </h3>
-          <div class="flex gap-2 mb-2">
-            <div class="flex-1 relative">
-              <input v-model="remotePath" ref="remotePathInputRef"
-                class="w-full bg-white border border-outline-variant rounded-lg px-3 py-1.5 font-body-sm text-body-sm text-on-surface font-mono focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all"
-                placeholder="远程路径，如 /sdcard/" @focus="showRemotePathHistory = true" @blur="hideRemotePathHistoryDelayed" />
-              <div v-if="showRemotePathHistory && remotePathHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 glass-panel rounded-lg p-1 max-h-32 overflow-y-auto">
-                <button v-for="(h, i) in remotePathHistory" :key="i" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-white/30 truncate"
-                  @mousedown.prevent @click="selectRemotePathHistory(h)">{{ h }}</button>
-              </div>
-            </div>
-            <button class="glass-button px-3 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1" @click="listRemoteDir">
-              <span class="material-symbols-outlined text-[14px]">list</span>列出
-            </button>
-            <button class="glass-button px-3 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1" @click="pushToCurrentDir">
-              <span class="material-symbols-outlined text-[14px]">upload</span>上传
-            </button>
-            <button class="glass-button px-3 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1" @click="pullFromCurrentDir">
-              <span class="material-symbols-outlined text-[14px]">download</span>下载
-            </button>
-          </div>
-          <div class="max-h-40 overflow-y-auto custom-scrollbar bg-[#1a1c1d]/5 rounded-xl font-mono text-[11px] leading-relaxed">
-            <div class="p-2">
-              <div v-if="directoryListing" class="text-on-surface-variant whitespace-pre-wrap">{{ directoryListing }}</div>
-              <div v-else class="text-on-surface-variant/30 text-center py-3">输入路径后点击列出</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Device Config -->
-        <div class="glass-panel rounded-xl p-3">
-          <h3 class="font-label-md text-label-md text-on-surface mb-2 flex items-center gap-1.5">
-            <span class="material-symbols-outlined text-[16px]">tune</span>设备配置
-          </h3>
-          <div class="flex gap-2 mb-2 flex-wrap">
-            <button v-for="cfg in commonConfigs" :key="cfg.path"
-              class="glass-button px-2.5 py-1 rounded-lg font-caption text-caption flex items-center gap-1" @click="fetchConfig(cfg.path)">
-              <span class="material-symbols-outlined text-[14px]">file_copy</span>{{ cfg.name }}
-            </button>
-            <button class="glass-button px-2.5 py-1 rounded-lg font-caption text-caption flex items-center gap-1" @click="configDialogOpen = true">
-              <span class="material-symbols-outlined text-[14px]">edit</span>修改配置
-            </button>
-          </div>
-          <div v-if="configContent !== null" class="space-y-1.5">
-            <div class="flex justify-between items-center">
-              <span class="font-caption text-caption text-on-surface-variant font-mono">{{ configPath }}</span>
-              <div class="flex gap-1">
-                <button class="glass-button px-2.5 py-1 rounded-lg font-caption text-caption" @click="saveConfig">保存到设备</button>
-                <button class="glass-button px-2.5 py-1 rounded-lg font-caption text-caption" @click="saveConfigLocally">保存到本地</button>
-              </div>
-            </div>
-            <textarea v-model="configContent"
-              class="w-full h-40 bg-[#1a1c1d]/5 rounded-xl p-2 font-mono text-[11px] text-on-surface border-0 focus:ring-2 focus:ring-secondary/30 resize-y"
-              spellcheck="false"></textarea>
-          </div>
-        </div>
-
-        <!-- Screen Mirror -->
-        <div class="glass-panel rounded-xl p-4">
-          <h3 class="font-headline-md text-headline-md text-on-surface mb-3 flex items-center gap-2">
-            <span class="material-symbols-outlined text-[20px]">screenshot_monitor</span>屏幕镜像
-          </h3>
-          <div class="flex gap-3 items-center mb-3">
+          <div class="flex gap-3 items-center mb-2">
             <div class="flex items-center gap-1.5">
               <span class="font-caption text-caption text-on-surface-variant">帧率:</span>
               <input v-model.number="mirrorFps" type="range" min="1" max="10" step="1" class="w-20 accent-secondary" />
@@ -443,68 +289,219 @@
               {{ mirrorFrameCount }}帧 · {{ currentMirrorFps.toFixed(1) }} FPS
             </span>
           </div>
-          <div class="flex items-center justify-center min-h-[240px] bg-black/5 rounded-xl overflow-hidden relative">
+          <div class="flex items-center justify-center min-h-[300px] bg-black/5 rounded-xl overflow-hidden relative">
             <canvas v-show="isMirroring && mirrorFrameCount > 0" ref="mirrorCanvas" class="max-w-full max-h-[400px]"></canvas>
             <div v-if="!isMirroring" class="text-center">
-              <span class="material-symbols-outlined text-5xl text-on-surface-variant/30">screenshot_monitor</span>
-              <p class="font-body-md text-body-md text-on-surface-variant/50 mt-2">启动屏幕镜像查看设备实时画面</p>
+              <span class="material-symbols-outlined text-4xl text-on-surface-variant/30">screenshot_monitor</span>
+              <p class="font-body-sm text-body-sm text-on-surface-variant/50 mt-1">启动屏幕镜像查看设备实时画面</p>
             </div>
             <div v-if="isMirroring && mirrorFrameCount === 0" class="absolute inset-0 flex items-center justify-center bg-black/20">
               <span class="font-body-md text-body-md text-white/80">等待接收图像数据...</span>
             </div>
           </div>
-          <div class="flex gap-2 mt-2">
-            <button class="glass-button px-3 py-1 rounded-full font-caption text-caption flex items-center gap-1" @click="takeScreenshotFromMirror">
-              <span class="material-symbols-outlined text-[14px]">screenshot_monitor</span>截图
-            </button>
-            <button class="px-3 py-1 rounded-full font-caption text-caption flex items-center gap-1"
-              :class="isRecording ? 'bg-error/10 text-error border border-error/20' : 'glass-button'"
-              @click="toggleRecording">
-              <span class="material-symbols-outlined text-[14px]">{{ isRecording ? 'stop' : 'videocam' }}</span>
-              {{ isRecording ? '停止录屏' : '开始录屏' }}
-            </button>
+        </div>
+      </div>
+
+      <!-- Grid for remote + commands + file manager -->
+      <div class="grid grid-cols-12 gap-4 min-h-0 flex-1">
+        <!-- Left Column -->
+        <div class="col-span-12 lg:col-span-5 flex flex-col gap-4">
+
+          <!-- Remote Control -->
+          <div class="glass-panel rounded-xl p-3 shrink-0">
+            <h3 class="font-label-md text-label-md text-on-surface mb-2 flex items-center gap-1.5">
+              <span class="material-symbols-outlined text-[16px]">gamepad</span>遥控器
+            </h3>
+            <div class="relative w-36 h-36 mx-auto mb-3">
+              <div class="absolute top-0 left-1/2 -translate-x-1/2">
+                <button class="w-10 h-10 glass-button rounded-full flex items-center justify-center" @click="sendKey('19')">
+                  <span class="material-symbols-outlined text-[18px]">keyboard_arrow_up</span>
+                </button>
+              </div>
+              <div class="absolute bottom-0 left-1/2 -translate-x-1/2">
+                <button class="w-10 h-10 glass-button rounded-full flex items-center justify-center" @click="sendKey('20')">
+                  <span class="material-symbols-outlined text-[18px]">keyboard_arrow_down</span>
+                </button>
+              </div>
+              <div class="absolute left-0 top-1/2 -translate-y-1/2">
+                <button class="w-10 h-10 glass-button rounded-full flex items-center justify-center" @click="sendKey('21')">
+                  <span class="material-symbols-outlined text-[18px]">keyboard_arrow_left</span>
+                </button>
+              </div>
+              <div class="absolute right-0 top-1/2 -translate-y-1/2">
+                <button class="w-10 h-10 glass-button rounded-full flex items-center justify-center" @click="sendKey('22')">
+                  <span class="material-symbols-outlined text-[18px]">keyboard_arrow_right</span>
+                </button>
+              </div>
+              <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+                <button class="w-12 h-12 glass-button rounded-full flex items-center justify-center bg-secondary/10" @click="sendKey('23')">
+                  <span class="material-symbols-outlined text-secondary text-[20px]">check</span>
+                </button>
+              </div>
+            </div>
+            <div class="grid grid-cols-4 gap-1.5 mb-2">
+              <button class="glass-button py-1 rounded-lg font-caption text-caption flex flex-col items-center gap-0.5" @click="sendKey('4')">
+                <span class="material-symbols-outlined text-[14px]">arrow_back</span>返回
+              </button>
+              <button class="glass-button py-1 rounded-lg font-caption text-caption flex flex-col items-center gap-0.5" @click="sendKey('3')">
+                <span class="material-symbols-outlined text-[14px]">home</span>Home
+              </button>
+              <button class="glass-button py-1 rounded-lg font-caption text-caption flex flex-col items-center gap-0.5" @click="sendKey('176')">
+                <span class="material-symbols-outlined text-[12px]">settings</span>设置
+              </button>
+              <button class="glass-button py-1 rounded-lg font-caption text-caption flex flex-col items-center gap-0.5" @click="sendKey('26')">
+                <span class="material-symbols-outlined text-[14px]">power_settings_new</span>电源
+              </button>
+            </div>
+            <div class="grid grid-cols-3 gap-1.5 mb-2">
+              <button class="glass-button py-1.5 rounded-lg font-caption text-caption flex items-center justify-center gap-1" @click="sendKey('24')">
+                <span class="material-symbols-outlined text-[14px]">volume_up</span>Vol+
+              </button>
+              <button class="glass-button py-1.5 rounded-lg font-caption text-caption flex items-center justify-center gap-1" @click="sendKey('25')">
+                <span class="material-symbols-outlined text-[14px]">volume_down</span>Vol-
+              </button>
+              <button class="glass-button py-1.5 rounded-lg font-caption text-caption flex items-center justify-center gap-1" @click="sendKey('164')">
+                <span class="material-symbols-outlined text-[14px]">volume_off</span>静音
+              </button>
+            </div>
+            <div class="grid grid-cols-5 gap-1">
+              <button v-for="n in 9" :key="n" class="glass-button py-1.5 rounded-lg font-caption text-caption" @click="sendKey(String(7 + n))">{{ n }}</button>
+              <button class="glass-button py-1.5 rounded-lg font-caption text-caption" @click="sendKey('0')">0</button>
+            </div>
+          </div>
+
+          <!-- Custom Commands -->
+          <div class="glass-panel rounded-xl p-3 flex flex-col flex-1 min-h-0">
+            <h3 class="font-label-md text-label-md text-on-surface mb-2 flex items-center gap-1.5">
+              <span class="material-symbols-outlined text-[16px]">terminal</span>快捷指令
+            </h3>
+            <div class="flex gap-2 mb-2">
+              <button class="glass-button px-3 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1" @click="addCustomCommand">
+                <span class="material-symbols-outlined text-[14px]">add</span>新建
+              </button>
+            </div>
+            <div v-if="customCommands.length === 0" class="text-center py-4">
+              <p class="font-caption text-caption text-on-surface-variant/50">暂无自定义指令，点击"新建"添加</p>
+            </div>
+            <div class="grid grid-cols-2 gap-2 flex-1 min-h-0 overflow-y-auto custom-scrollbar content-start">
+              <div v-for="(cmd, idx) in customCommands" :key="idx"
+                class="flex flex-col gap-0.5 p-2 bg-white/20 rounded-xl group hover:bg-white/30 transition-colors">
+                <div class="font-label-md text-label-md text-on-surface truncate leading-tight">{{ cmd.name }}</div>
+                <div class="font-caption text-caption text-on-surface-variant/70 font-mono truncate text-[10px]">$ {{ cmd.command }}</div>
+                <div class="flex gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button class="glass-button p-0.5 rounded flex-1 flex items-center justify-center gap-0.5 text-[11px]" title="执行" @click="executeCustomCommand(cmd.command)">
+                    <span class="material-symbols-outlined text-[12px]">play_arrow</span>
+                  </button>
+                  <button class="glass-button p-0.5 rounded flex-1 flex items-center justify-center gap-0.5 text-[11px]" title="编辑" @click="startEditCustomCommand(idx)">
+                    <span class="material-symbols-outlined text-[12px]">edit</span>
+                  </button>
+                  <button class="glass-button p-0.5 rounded flex-1 flex items-center justify-center gap-0.5 text-[11px]" title="删除" @click="removeCustomCommand(idx)">
+                    <span class="material-symbols-outlined text-[12px] text-error">delete</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div v-if="editingCmdIndex !== null" class="mt-2 p-2 bg-white/20 rounded-xl">
+              <div class="flex flex-col gap-1.5">
+                <input v-model="editingCmdName" class="bg-white/80 border border-outline-variant rounded-lg px-2 py-1 font-caption text-caption text-[11px] text-on-surface font-mono focus:ring-2 focus:ring-secondary/30"
+                  placeholder="指令名称" @keyup.enter="saveCustomCommand" />
+                <input v-model="editingCmdValue" class="bg-white/80 border border-outline-variant rounded-lg px-2 py-1 font-caption text-caption text-[11px] text-on-surface font-mono focus:ring-2 focus:ring-secondary/30"
+                  placeholder="输入命令，如: dumpsys battery / adb devices / ipconfig" @keyup.enter="saveCustomCommand" />
+                <div class="flex gap-2 justify-end">
+                  <button class="glass-button px-2 py-1 rounded-lg font-caption text-caption" @click="cancelEditCommand">取消</button>
+                  <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md" @click="saveCustomCommand">保存</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column -->
+        <div class="col-span-12 lg:col-span-7 flex flex-col gap-4">
+
+          <!-- File Manager -->
+          <div class="glass-panel rounded-xl p-3 flex flex-col flex-1 min-h-0">
+            <h3 class="font-label-md text-label-md text-on-surface mb-2 flex items-center gap-1.5">
+              <span class="material-symbols-outlined text-[16px]">folder_open</span>文件管理
+            </h3>
+            <div class="flex gap-2 mb-2">
+              <div class="flex-1 relative">
+                <input v-model="remotePath" ref="remotePathInputRef"
+                  class="w-full bg-white border border-outline-variant rounded-lg px-3 py-1.5 font-body-sm text-body-sm text-on-surface font-mono focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all"
+                  placeholder="远程路径，如 /sdcard/" @focus="showRemotePathHistory = true" @blur="hideRemotePathHistoryDelayed" @keyup.enter="navigateToPath" />
+                <div v-if="showRemotePathHistory && remotePathHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-outline-variant rounded-lg p-1 max-h-32 overflow-y-auto shadow-lg">
+                  <button v-for="(h, i) in remotePathHistory" :key="i" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100"
+                    @mousedown.prevent @click="selectRemotePathHistory(h)">{{ h }}</button>
+                </div>
+              </div>
+              <button class="glass-button px-2.5 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1" @click="navigateToParent">
+                <span class="material-symbols-outlined text-[14px]">arrow_upward</span>上级
+              </button>
+              <button class="glass-button px-2.5 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1" @click="uploadFile">
+                <span class="material-symbols-outlined text-[14px]">upload</span>上传
+              </button>
+            </div>
+            <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar bg-[#1a1c1d]/5 rounded text-[12px] leading-relaxed">
+              <div v-if="fileEntries.length === 0" class="text-center py-8 text-on-surface-variant/40">
+                <span class="material-symbols-outlined text-3xl">folder_open</span>
+                <p class="font-body-sm text-body-sm mt-1">输入路径后回车导航</p>
+              </div>
+              <div v-for="(entry, idx) in fileEntries" :key="idx"
+                class="flex items-center gap-1.5 px-2 py-1 hover:bg-white/20 cursor-pointer border-b border-outline-variant/10 last:border-0 group"
+                @dblclick="entry.isDir ? navigateToDir(entry.name) : editFile(entry.name)">
+                <span class="material-symbols-outlined text-[16px] shrink-0"
+                  :class="entry.isDir ? 'text-secondary' : 'text-on-surface-variant/60'">{{ entry.isDir ? 'folder' : 'description' }}</span>
+                <span class="flex-1 truncate font-mono text-[11px] text-on-surface">{{ entry.name }}</span>
+                <span class="font-caption text-caption text-on-surface-variant/50 text-[10px] whitespace-nowrap">{{ entry.size }}</span>
+                <div class="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                  <button class="glass-button p-0.5 rounded" title="下载" @click.stop="entry.isDir ? downloadDir(entry.name) : downloadFile(entry.name)">
+                    <span class="material-symbols-outlined text-[14px]">download</span>
+                  </button>
+                  <button v-if="!entry.isDir" class="glass-button p-0.5 rounded" title="编辑" @click.stop="editFile(entry.name)">
+                    <span class="material-symbols-outlined text-[14px]">edit</span>
+                  </button>
+                  <button class="glass-button p-0.5 rounded" title="删除" @click.stop="confirmThen(`删除 ${entry.name}?`, () => deleteFile(entry.name))">
+                    <span class="material-symbols-outlined text-[14px] text-error">delete</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </div>
-    </div>
 
-    <!-- Config Modify Dialog -->
+    <!-- File Edit Dialog -->
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="configDialogOpen" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="configDialogOpen = false">
+        <div v-if="fileEditDialog.show" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="fileEditDialog.show = false">
           <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
-          <div class="glass-panel rounded-[2rem] p-6 w-full max-w-md relative z-10 bg-white/60">
-            <div class="flex justify-between items-center mb-4">
-              <h3 class="font-headline-md text-headline-md text-on-surface font-semibold">修改配置</h3>
-              <button class="glass-button p-1 rounded" @click="configDialogOpen = false">
-                <span class="material-symbols-outlined text-[18px]">close</span>
-              </button>
+          <div class="glass-panel rounded-[2rem] p-6 w-full max-w-3xl max-h-[85vh] relative z-10 bg-white/60 flex flex-col">
+            <div class="flex justify-between items-center mb-3">
+              <div class="flex items-center gap-2 min-w-0">
+                <h3 class="font-label-lg text-label-lg text-on-surface font-semibold truncate">{{ fileEditDialog.filePath }}</h3>
+                <span v-if="fileEditDialog.loading" class="w-3.5 h-3.5 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
+              </div>
+              <div class="flex gap-2 shrink-0">
+                <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md flex items-center gap-1" :disabled="fileEditDialog.loading" @click="saveEditedFile">
+                  <span class="material-symbols-outlined text-[14px]">save</span>保存到设备
+                </button>
+                <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md flex items-center gap-1" @click="downloadFileFromEdit">
+                  <span class="material-symbols-outlined text-[14px]">download</span>下载到本地
+                </button>
+                <button class="glass-button p-1 rounded" @click="fileEditDialog.show = false">
+                  <span class="material-symbols-outlined text-[18px]">close</span>
+                </button>
+              </div>
             </div>
-            <div class="space-y-3">
-              <div>
-                <label class="font-caption text-caption text-on-surface-variant mb-1 block">配置文件路径</label>
-                <input v-model="configModPath" class="w-full bg-white/80 border border-outline-variant rounded-lg px-3 py-2 font-caption text-caption text-on-surface font-mono focus:ring-2 focus:ring-secondary/30"
-                  placeholder="/system/build.prop" />
-              </div>
-              <div>
-                <label class="font-caption text-caption text-on-surface-variant mb-1 block">键名</label>
-                <input v-model="configModKey" class="w-full bg-white/80 border border-outline-variant rounded-lg px-3 py-2 font-caption text-caption text-on-surface font-mono focus:ring-2 focus:ring-secondary/30"
-                  placeholder="ro.product.model" />
-              </div>
-              <div>
-                <label class="font-caption text-caption text-on-surface-variant mb-1 block">值</label>
-                <input v-model="configModValue" class="w-full bg-white/80 border border-outline-variant rounded-lg px-3 py-2 font-caption text-caption text-on-surface font-mono focus:ring-2 focus:ring-secondary/30"
-                  placeholder="新值" @keyup.enter="handleModifyConfig" />
-              </div>
-              <button class="w-full glass-button py-2 rounded-lg font-label-md text-label-md flex items-center justify-center gap-1" :disabled="!configModKey.trim() || !configModValue.trim()" @click="handleModifyConfig">
-                <span class="material-symbols-outlined text-[16px]">save</span>写入配置
-              </button>
-            </div>
+            <textarea v-model="fileEditDialog.content"
+              class="flex-1 w-full bg-[#1a1c1d] text-gray-200 rounded-xl p-3 font-mono text-[12px] border-0 focus:ring-2 focus:ring-secondary/30 resize-none"
+              spellcheck="false"></textarea>
           </div>
         </div>
       </Transition>
     </Teleport>
+    </div>
 
     <!-- Info Query Dialog -->
     <Teleport to="body">
@@ -523,7 +520,7 @@
                 <div class="flex flex-col gap-0.5">
                   <span class="font-label-md text-label-md text-on-surface font-medium text-[13px] break-all">{{ item.key }}</span>
                   <div class="flex items-start gap-1">
-                    <span class="font-body-sm text-body-sm text-on-surface-variant break-all text-[12px]">{{ item.value }}</span>
+                    <span class="font-body-sm text-body-sm text-secondary break-all text-[12px]">{{ item.value }}</span>
                     <button v-if="item.raw" class="shrink-0 text-[11px] text-secondary hover:text-secondary/70" @click="toggleInfoExpand(idx)">
                       <span class="material-symbols-outlined text-[14px]">{{ infoDialogExpanded.has(idx) ? 'expand_less' : 'expand_more' }}</span>
                     </button>
@@ -655,12 +652,17 @@
     <!-- Command Execution Dialog -->
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="cmdExec.show" class="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-[420px] max-w-[90vw]">
+        <div v-if="cmdExec.show" class="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-[420px] max-w-[90vw]" @mouseenter="pauseCmdExecAutoClose" @mouseleave="resumeCmdExecAutoClose">
           <div class="glass-panel rounded-xl px-4 py-3 shadow-xl">
-            <div class="flex items-center gap-2 mb-1">
-              <span v-if="cmdExec.running" class="w-3.5 h-3.5 border-2 border-secondary border-t-transparent rounded-full animate-spin shrink-0"></span>
-              <span v-else class="material-symbols-outlined text-[16px] text-success-indicator">check_circle</span>
-              <span class="font-label-md text-label-md text-on-surface font-medium">{{ cmdExec.title }}</span>
+            <div class="flex items-center justify-between gap-2 mb-1">
+              <div class="flex items-center gap-2 min-w-0">
+                <span v-if="cmdExec.running" class="w-3.5 h-3.5 border-2 border-secondary border-t-transparent rounded-full animate-spin shrink-0"></span>
+                <span v-else class="material-symbols-outlined text-[16px] text-success-indicator shrink-0">check_circle</span>
+                <span class="font-label-md text-label-md text-on-surface font-medium truncate">{{ cmdExec.title }}</span>
+              </div>
+              <button v-if="!cmdExec.running" class="glass-button p-0.5 rounded-full shrink-0" @click="closeCmdExec">
+                <span class="material-symbols-outlined text-[14px]">close</span>
+              </button>
             </div>
             <div v-if="cmdExec.command" class="text-green-600/80 font-mono text-[11px] mb-1.5 pb-1.5 border-b border-outline-variant/20">$ {{ cmdExec.command }}</div>
             <pre class="font-mono text-[11px] text-on-surface-variant max-h-[200px] overflow-y-auto custom-scrollbar whitespace-pre-wrap leading-relaxed">{{ cmdExec.output }}</pre>
@@ -684,15 +686,18 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
+import { invoke } from "@tauri-apps/api/core";
 import { useAdb, type DeviceProperties } from "@/composables/useAdb";
+
+interface ScriptResult { stdout: string; stderr: string; exit_code: number; }
 import { addInputHistory, getInputHistory, saveLogSession, getRunningLogSessions, removeLogSession } from "@/services/database";
 
 const {
   listDevices, shell, installApk, uninstallApk, pushFile, pullFile, reboot, screenshot,
   connectDevice, disconnectDevice, rebootRecovery, rebootBootloader, rootDevice: adbRoot,
   remountDevice: adbRemount, getProperties, inputKeyevent, inputText: adbInputText,
-  listPackages, startApp: adbStartApp, stopApp: adbStopApp, clearAppData, getCurrentApp,
-  logcatClear, logcat, listDirectory, getAppInfo, logcatBufferResize, bugreport, dmesg,
+  listPackages, startApp: adbStartApp, stopApp: adbStopApp, clearAppData,
+  logcatClear, logcat, getAppInfo, logcatBufferResize, bugreport, dmesg,
   startScreenrecord, killServer, startServer, createZip,
 } = useAdb();
 
@@ -763,16 +768,33 @@ function showCmdExec(title: string, command = "") {
 function appendCmdExec(text: string) {
   cmdExec.value.output += text + "\n";
 }
-function finishCmdExec(output: string) {
+function finishCmdExec(summary?: string) {
+  if (summary) cmdExec.value.output += summary + "\n";
   cmdExec.value.running = false;
-  if (output) {
-    const lastLines = cmdExec.value.output.split("\n").filter(Boolean);
-    if (lastLines.length === 0 || lastLines[lastLines.length - 1] !== output) {
-      cmdExec.value.output += output + "\n";
-    }
-  }
+  scheduleCmdExecClose();
+}
+function scheduleCmdExecClose() {
+  if (cmdExecTimeout) clearTimeout(cmdExecTimeout);
   cmdExecTimeout = setTimeout(() => { cmdExec.value.show = false; }, 3000);
 }
+function pauseCmdExecAutoClose() {
+  if (cmdExecTimeout) { clearTimeout(cmdExecTimeout); cmdExecTimeout = null; }
+}
+function resumeCmdExecAutoClose() {
+  if (!cmdExec.value.running && cmdExec.value.show) scheduleCmdExecClose();
+}
+function closeCmdExec() {
+  if (cmdExecTimeout) clearTimeout(cmdExecTimeout);
+  cmdExec.value.show = false;
+}
+
+// ── Loading states ──
+const scanLoading = ref(false);
+const pkgLoading = ref(false);
+const connecting = ref(false);
+const recordingLoading = ref(false);
+const operationInProgress = ref(false);
+let versionGen = 0;
 
 // ── Device state ──
 interface DeviceItem { serial: string; name: string; status: "online" | "offline"; os: string; }
@@ -870,7 +892,10 @@ watch(filteredApps, () => {
   if (key !== lastFilterKey) { lastFilterKey = key; appPage.value = 1; }
   nextTick(recalcAppPageSize);
 });
-watch(activeTab, () => nextTick(recalcAppPageSize));
+watch(activeTab, () => {
+  nextTick(recalcAppPageSize);
+  if (activeTab.value === 'other') loadFileList();
+});
 async function loadAppSearchHistory() {
   const entries = await getInputHistory('app_search');
   appSearchHistory.value = entries.map(e => e.value);
@@ -880,7 +905,6 @@ async function loadAppSearchHistory() {
 // ── File Browser + History ──
 const remotePath = ref("/sdcard/");
 const remotePathInputRef = ref<HTMLInputElement | null>(null);
-const directoryListing = ref("");
 const showRemotePathHistory = ref(false);
 const remotePathHistory = ref<string[]>([]);
 function hideRemotePathHistoryDelayed() { setTimeout(() => { showRemotePathHistory.value = false; }, 200); }
@@ -890,26 +914,234 @@ async function loadRemotePathHistory() {
   remotePathHistory.value = entries.map(e => e.value);
 }
 
-// ── Device Config ──
-interface ConfigItem { name: string; path: string; }
-const commonConfigs: ConfigItem[] = [
-  { name: "build.prop", path: "/system/build.prop" },
-  { name: "default.prop", path: "/default.prop" },
-  { name: "vendor/build.prop", path: "/vendor/build.prop" },
-];
-const configContent = ref<string | null>(null);
-const configPath = ref("");
-const configDialogOpen = ref(false);
-const configModPath = ref("/system/build.prop");
-const configModKey = ref("");
-const configModValue = ref("");
-
-// ── Custom Commands ──
+// ── Custom Commands (auto-detect type, support multi-command chaining) ──
 interface CustomCommand { name: string; command: string; }
 const customCommands = ref<CustomCommand[]>([]);
 const editingCmdIndex = ref<number | null>(null);
 const editingCmdName = ref("");
 const editingCmdValue = ref("");
+function loadCustomCommands() {
+  try {
+    const stored = localStorage.getItem("test-space:adb-custom-commands");
+    if (stored) customCommands.value = JSON.parse(stored);
+  } catch {}
+}
+function saveCustomCommands() {
+  localStorage.setItem("test-space:adb-custom-commands", JSON.stringify(customCommands.value));
+}
+function addCustomCommand() { editingCmdIndex.value = -1; editingCmdName.value = ""; editingCmdValue.value = ""; }
+function startEditCustomCommand(idx: number) {
+  editingCmdIndex.value = idx;
+  editingCmdName.value = customCommands.value[idx].name;
+  editingCmdValue.value = customCommands.value[idx].command;
+}
+function saveCustomCommand() {
+  if (!editingCmdName.value.trim() || !editingCmdValue.value.trim()) return;
+  const cmd = { name: editingCmdName.value.trim(), command: editingCmdValue.value.trim() };
+  if (editingCmdIndex.value === -1) customCommands.value.push(cmd);
+  else if (editingCmdIndex.value !== null) customCommands.value[editingCmdIndex.value] = cmd;
+  saveCustomCommands();
+  editingCmdIndex.value = null;
+}
+function cancelEditCommand() { editingCmdIndex.value = null; }
+function removeCustomCommand(idx: number) { customCommands.value.splice(idx, 1); saveCustomCommands(); }
+
+async function runOneCommand(cmd: string): Promise<string> {
+  if (cmd.startsWith('adb ')) {
+    const r = await invoke<ScriptResult>("script_execute_shell", { command: cmd });
+    return r.stdout + (r.stderr ? '\n' + r.stderr : '');
+  }
+  if (selectedDevice.value) {
+    try { return await shell(selectedDevice.value.serial, cmd); } catch {}
+  }
+  try {
+    const r = await invoke<ScriptResult>("script_execute_shell", { command: cmd });
+    return r.stdout + (r.stderr ? '\n' + r.stderr : '');
+  } catch (e: any) {
+    throw new Error(`执行失败: ${e}`);
+  }
+}
+async function executeCustomCommand(fullCmd: string) {
+  if (!fullCmd.trim()) return;
+  const commands = fullCmd.split(/\s*&&\s*|\s*;\s*|\s*&\s*/).filter(c => c.trim());
+  showCmdExec("执行指令", fullCmd);
+  let ok = true;
+  for (let i = 0; i < commands.length; i++) {
+    const c = commands[i].trim();
+    appendCmdExec(`[${i + 1}/${commands.length}] $ ${c}`);
+    try {
+      const r = await runOneCommand(c);
+      if (r) appendCmdExec(r);
+      else appendCmdExec(`(命令执行完成，无输出)`);
+      if (i < commands.length - 1) appendCmdExec(`--- 命令 ${i + 1}/${commands.length} 完成，继续下一个 ---`);
+    } catch (e: any) {
+      ok = false;
+      appendCmdExec(`错误: ${e}`);
+    }
+  }
+  appendCmdExec(ok ? `─ 所有命令执行完毕 ─` : `─ 部分命令执行失败 ─`);
+  appendCmdExec(`退出状态: ${ok ? '成功' : '失败'}`);
+  cmdExec.value.running = false;
+  scheduleCmdExecClose();
+  if (ok) showToast("指令执行成功");
+  else showToast("部分命令执行失败", "error");
+}
+
+// ── File Manager (tree view) ──
+interface FileEntry { name: string; isDir: boolean; size: string; }
+const fileEntries = ref<FileEntry[]>([]);
+async function navigateToPath() {
+  if (!selectedDevice.value || !remotePath.value.trim()) return;
+  await addInputHistory('remote_path', remotePath.value);
+  await loadFileList();
+}
+async function navigateToDir(name: string) {
+  const base = remotePath.value.replace(/\/?$/, '/');
+  remotePath.value = base + name.trim();
+  await addInputHistory('remote_path', remotePath.value);
+  await loadFileList();
+}
+async function navigateToParent() {
+  const p = remotePath.value.replace(/\/$/, '');
+  const parent = p.substring(0, p.lastIndexOf('/'));
+  remotePath.value = parent || '/';
+  await loadFileList();
+}
+function parseLsLine(line: string): { name: string; isDir: boolean; size: string } | null {
+  const parts = line.split(/\s+/);
+  if (parts.length < 7) return null;
+  const perms = parts[0];
+  if (perms.length < 9 || !/^[drwxlst.+-]/.test(perms[0])) return null;
+  const isDir = perms[0] === 'd';
+  let sizeIdx = 4, nameIdx = 7;
+  if (/^\d+$/.test(parts[3]) && parts.length >= 7 && !/^\d+$/.test(parts[4])) {
+    sizeIdx = 3; nameIdx = 6;
+  } else if (/^\d+$/.test(parts[3]) && parts.length >= 6) {
+    sizeIdx = 3; nameIdx = 6;
+  }
+  const sizeVal = parseInt(parts[sizeIdx]) || 0;
+  const sizeFormatted = sizeVal > 1024 ? Math.round(sizeVal / 1024) + 'KB' : sizeVal + 'B';
+  const name = parts.slice(nameIdx).join(' ').trim();
+  if (!name) return null;
+  return { name, isDir, size: sizeFormatted };
+}
+async function loadFileList() {
+  if (!selectedDevice.value) return;
+  try {
+    const raw = await shell(selectedDevice.value.serial, `ls -la "${remotePath.value}"`);
+    const lines = raw.split('\n').filter(l => l.trim() && !l.startsWith('total'));
+    fileEntries.value = lines.map(l => parseLsLine(l)).filter((e): e is NonNullable<typeof e> => e !== null && e.name !== '.' && e.name !== '..');
+  } catch { fileEntries.value = []; showToast("读取目录失败", "error"); }
+}
+async function uploadFile() {
+  if (!selectedDevice.value || !remotePath.value.trim()) return;
+  try {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const selected = await open({ multiple: false });
+    if (selected) {
+      showCmdExec("上传文件", `adb push ${selected} ${remotePath.value}`);
+      appendCmdExec("正在上传...");
+      await pushFile(selectedDevice.value.serial, selected, remotePath.value);
+      appendCmdExec("上传完成");
+      finishCmdExec("文件已上传");
+      showToast("文件已上传");
+      loadFileList();
+    }
+  } catch { showToast("上传失败", "error"); }
+}
+async function downloadFile(name: string) {
+  if (!selectedDevice.value) return;
+  const remoteFile = remotePath.value.replace(/\/?$/, '/') + name.trim();
+  try {
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    const dest = await save({ defaultPath: name });
+    if (dest) {
+      showCmdExec("下载文件", `adb pull ${remoteFile}`);
+      appendCmdExec("正在下载...");
+      await pullFile(selectedDevice.value.serial, remoteFile, dest);
+      appendCmdExec("下载完成");
+      finishCmdExec("文件已下载");
+      showToast("文件已下载");
+    }
+  } catch { showToast("下载失败", "error"); }
+}
+async function downloadDir(name: string) {
+  if (!selectedDevice.value) return;
+  const parentPath = remotePath.value.replace(/\/?$/, '');
+  const dirPath = parentPath + '/' + name.trim();
+  const tarName = `${name}_${Date.now()}.tar.gz`;
+  const remoteTar = `/sdcard/${tarName}`;
+  try {
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    const dest = await save({ defaultPath: `${name}.tar.gz` });
+    if (!dest) return;
+    showCmdExec("下载文件夹", `tar czf ${remoteTar} -C ${parentPath} ${name}`);
+    appendCmdExec("正在压缩文件夹...");
+    await shell(selectedDevice.value.serial, `tar czf "${remoteTar}" -C "${parentPath}" "${name}"`);
+    appendCmdExec("正在下载...");
+    await pullFile(selectedDevice.value.serial, remoteTar, dest);
+    await shell(selectedDevice.value.serial, `rm "${remoteTar}"`).catch(() => {});
+    appendCmdExec("下载完成");
+    finishCmdExec("文件夹已下载");
+    showToast("文件夹已下载");
+  } catch (e: any) { showToast(`下载失败: ${e}`, "error"); }
+}
+async function deleteFile(name: string) {
+  if (!selectedDevice.value) return;
+  const remoteFile = remotePath.value.replace(/\/?$/, '/') + name.trim();
+  try {
+    await shell(selectedDevice.value.serial, `rm -rf "${remoteFile}"`);
+    showToast("文件已删除");
+    loadFileList();
+  } catch { showToast("删除失败", "error"); }
+}
+
+// ── File Edit ──
+const fileEditDialog = ref({ show: false, filePath: "", content: "", loading: false, originContent: "" });
+async function editFile(name: string) {
+  if (!selectedDevice.value) return;
+  const remoteFile = remotePath.value.replace(/\/?$/, '/') + name.trim();
+  fileEditDialog.value = { show: true, filePath: remoteFile, content: "", loading: true, originContent: "" };
+  try {
+    const content = await shell(selectedDevice.value.serial, `cat "${remoteFile}"`);
+    fileEditDialog.value = { ...fileEditDialog.value, content, originContent: content, loading: false };
+  } catch {
+    fileEditDialog.value = { ...fileEditDialog.value, content: "// 读取文件失败", loading: false };
+    showToast("读取文件失败", "error");
+  }
+}
+async function saveEditedFile() {
+  if (!selectedDevice.value || !fileEditDialog.value.filePath) return;
+  fileEditDialog.value.loading = true;
+  try {
+    const tmpName = `tmp_edit_${Date.now()}`;
+    const { writeTextFile, remove } = await import("@tauri-apps/plugin-fs");
+    const { tempDir, join } = await import("@tauri-apps/api/path");
+    const tmpDir = await tempDir();
+    const tmpPath = await join(tmpDir, tmpName);
+    await writeTextFile(tmpPath, fileEditDialog.value.content);
+    await pushFile(selectedDevice.value.serial, tmpPath, fileEditDialog.value.filePath);
+    try { await remove(tmpPath); } catch {}
+    fileEditDialog.value.loading = false;
+    showToast("文件已保存到设备");
+  } catch (e: any) {
+    fileEditDialog.value.loading = false;
+    showToast(`保存失败: ${e}`, "error");
+  }
+}
+async function downloadFileFromEdit() {
+  if (!selectedDevice.value || !fileEditDialog.value.filePath) return;
+  try {
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    const name = fileEditDialog.value.filePath.split('/').pop() || 'file';
+    const dest = await save({ defaultPath: name });
+    if (dest) {
+      const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+      await writeTextFile(dest, fileEditDialog.value.content);
+      showToast("文件已下载到本地");
+    }
+  } catch { showToast("下载失败", "error"); }
+}
 
 // ── Helper: yield to UI thread ──
 function yieldToUI() { return new Promise(resolve => setTimeout(resolve, 0)); }
@@ -991,39 +1223,16 @@ const mirrorCanvas = ref<HTMLCanvasElement | null>(null);
 // ── Screenshot & Recording ──
 const screenshotDataUrl = ref("");
 const isRecording = ref(false);
+const recordingFilename = ref("");
 
 // ── Device auto-refresh ──
 let autoRefreshId: ReturnType<typeof setInterval> | null = null;
 
-// ── Custom commands ──
-function loadCustomCommands() {
-  try {
-    const stored = localStorage.getItem("test-space:adb-custom-commands");
-    if (stored) customCommands.value = JSON.parse(stored);
-  } catch {}
-}
-function saveCustomCommands() {
-  localStorage.setItem("test-space:adb-custom-commands", JSON.stringify(customCommands.value));
-}
-function addCustomCommand() { editingCmdIndex.value = -1; editingCmdName.value = ""; editingCmdValue.value = ""; }
-function saveCustomCommand() {
-  if (!editingCmdName.value.trim() || !editingCmdValue.value.trim()) return;
-  const cmd = { name: editingCmdName.value.trim(), command: editingCmdValue.value.trim() };
-  if (editingCmdIndex.value === -1) customCommands.value.push(cmd);
-  else if (editingCmdIndex.value !== null) customCommands.value[editingCmdIndex.value] = cmd;
-  saveCustomCommands();
-  editingCmdIndex.value = null;
-}
-function cancelEditCommand() { editingCmdIndex.value = null; }
-function removeCustomCommand(idx: number) { customCommands.value.splice(idx, 1); saveCustomCommands(); }
-async function executeCustomCommand(cmd: string) {
-  if (!selectedDevice.value) return;
-  try { const r = await shell(selectedDevice.value.serial, cmd); showToast(r.substring(0, 200)); }
-  catch (e: any) { showToast(`执行失败: ${e}`, "error"); }
-}
+// ── Custom commands stored in localStorage
 
 // ── Device operations ──
-async function scanDevices() {
+async function scanDevices(silent = false) {
+  scanLoading.value = true;
   try {
     const adbDevices = await listDevices();
     devices.value = adbDevices.map(d => ({
@@ -1036,7 +1245,9 @@ async function scanDevices() {
       deviceProps.value = null;
     }
     if (devices.value.length > 0 && !selectedDevice.value) selectDevice(devices.value[0]);
-  } catch { showToast("扫描设备失败", "error"); }
+    if (!silent) showToast(`已扫描到 ${devices.value.length} 台设备`);
+  } catch { if (!silent) showToast("扫描设备失败", "error"); }
+  finally { scanLoading.value = false; }
 }
 function selectDevice(device: DeviceItem) {
   selectedDevice.value = device;
@@ -1044,6 +1255,7 @@ function selectDevice(device: DeviceItem) {
 
   loadDeviceProperties();
   refreshPackageList();
+  if (activeTab.value === 'other') loadFileList();
 }
 async function loadDeviceProperties() {
   if (!selectedDevice.value) return;
@@ -1051,7 +1263,11 @@ async function loadDeviceProperties() {
   catch { deviceProps.value = null; }
 }
 async function connectToDevice() {
-  if (!connectAddress.value.trim()) return;
+  if (!connectAddress.value.trim()) {
+    showToast("请输入设备 IP 地址", "error");
+    return;
+  }
+  connecting.value = true;
   try {
     const addr = connectAddress.value.trim();
     const r = await connectDevice(addr);
@@ -1063,6 +1279,7 @@ async function connectToDevice() {
     finishCmdExec("设备已连接");
     showToast("设备已连接");
   } catch (e: any) { showToast(`连接失败: ${e}`, "error"); }
+  finally { connecting.value = false; }
 }
 async function disconnectDeviceHandler(serial: string) {
   try {
@@ -1089,14 +1306,21 @@ async function restartAdbServer() {
     showToast("ADB 服务已重启");
   } catch (e: any) { finishCmdExec(`重启失败: ${e}`); showToast("ADB 重启失败", "error"); }
 }
+function clearDeviceState() {
+  apps.value = [];
+  deviceProps.value = null;
+  selectedDevice.value = null;
+  devices.value = [];
+}
 async function rebootDevice() {
   if (!selectedDevice.value) return;
   showCmdExec("重启设备", "adb reboot");
   try {
     appendCmdExec("正在发送重启命令...");
     await reboot(selectedDevice.value.serial);
-    finishCmdExec("重启命令已发送，设备正在重启...");
-    showToast("重启命令已发送");
+    finishCmdExec("重启命令已发送，等待设备重新连接...");
+    showToast("重启命令已发送，设备断开后自动刷新");
+    clearDeviceState();
   } catch { finishCmdExec("重启失败"); showToast("重启失败", "error"); }
 }
 async function rebootToRecovery() {
@@ -1107,6 +1331,7 @@ async function rebootToRecovery() {
     await rebootRecovery(selectedDevice.value.serial);
     finishCmdExec("正在重启到 Recovery...");
     showToast("正在重启到 Recovery...");
+    clearDeviceState();
   } catch { finishCmdExec("操作失败"); showToast("操作失败", "error"); }
 }
 async function rebootToBootloader() {
@@ -1117,6 +1342,7 @@ async function rebootToBootloader() {
     await rebootBootloader(selectedDevice.value.serial);
     finishCmdExec("正在重启到 Bootloader...");
     showToast("正在重启到 Bootloader...");
+    clearDeviceState();
   } catch { finishCmdExec("操作失败"); showToast("操作失败", "error"); }
 }
 async function rootDevice() {
@@ -1162,6 +1388,7 @@ async function sendText() {
 // ── App Management ──
 async function refreshPackageList() {
   if (!selectedDevice.value) return;
+  pkgLoading.value = true;
   try {
     const raw = await listPackages(selectedDevice.value.serial, showThirdParty.value);
     const oldVersionMap = new Map(apps.value.map(a => [a.package_name, { vn: a.version_name, vc: a.version_code }]));
@@ -1171,18 +1398,23 @@ async function refreshPackageList() {
     });
     appPage.value = 1;
     loadedVersions.value = new Set();
+    showToast(`已加载 ${apps.value.length} 个应用`);
     // Auto-load version info for first page
     nextTick(() => loadVisibleAppVersions());
   } catch { showToast("加载应用列表失败", "error"); }
+  finally { pkgLoading.value = false; }
 }
 async function loadVisibleAppVersions() {
   if (!selectedDevice.value) return;
+  const currentGen = ++versionGen;
   for (const app of currentPageApps.value) {
     if (app.version_name || loadedVersions.value.has(app.package_name)) continue;
     loadedVersions.value = new Set(loadedVersions.value).add(app.package_name);
     versionQueue = versionQueue.then(async () => {
+      if (currentGen !== versionGen) return;
       try {
         const info = await getAppInfo(selectedDevice.value!.serial, app.package_name);
+        if (currentGen !== versionGen) return;
         const vn = info.match(/versionName=([^\s]+)/)?.[1];
         const vc = info.match(/versionCode=(\d+)/)?.[1];
         if (vn || vc) {
@@ -1371,7 +1603,7 @@ async function downloadApk(pkg: string) {
     appendCmdExec(`APK 路径: ${pathMatch[1]}`);
     const { save } = await import("@tauri-apps/plugin-dialog");
     const dest = await save({ defaultPath: `${pkg}.apk`, filters: [{ name: "APK", extensions: ["apk"] }] });
-    if (!dest) { cmdExec.value.show = false; return; }
+    if (!dest) { closeCmdExec(); return; }
     appendCmdExec("正在拉取 APK 文件...");
     await pullFile(selectedDevice.value.serial, pathMatch[1], dest);
     appendCmdExec(`已保存到: ${dest}`);
@@ -1383,7 +1615,11 @@ async function downloadApk(pkg: string) {
 // ── App Path Query ──
 const resultDialog = ref({ show: false, title: "", content: "" });
 async function queryAppPath() {
-  if (!selectedDevice.value || !queryPackageName.value.trim()) return;
+  if (!selectedDevice.value) return;
+  if (!queryPackageName.value.trim()) {
+    showToast("请先输入需要查询的包名", "error");
+    return;
+  }
   try {
     const result = await shell(selectedDevice.value.serial, `pm path ${queryPackageName.value.trim()}`);
     const match = result.match(/package:(.+)/);
@@ -1580,6 +1816,21 @@ async function stopDiagnosticCapture() {
       await yieldToUI();
     }
 
+    // Dumpsys services (matching web-adb-tool)
+    const dumpsysServices = ["package", "SurfaceFlinger", "activity", "input", "window", "settings"];
+    for (const service of dumpsysServices) {
+      appendCmdExec(`  正在收集 dumpsys ${service}...`);
+      try {
+        const result = await shell(serial, `dumpsys ${service}`);
+        addFile(`dumpsys_${service}.txt`, `dumpsys ${service}`, result);
+        appendCmdExec(`  ✓ dumpsys_${service}.txt`);
+      } catch {
+        addFile(`dumpsys_${service}.txt`, `dumpsys ${service}`, "(收集失败)");
+        appendCmdExec(`  ✗ dumpsys_${service}.txt`);
+      }
+      await yieldToUI();
+    }
+
     // Prompt user for save location
     const { save } = await import("@tauri-apps/plugin-dialog");
     const dest = await save({ defaultPath: `diagnostic_${Date.now()}.zip`, filters: [{ name: "ZIP Archive", extensions: ["zip"] }] });
@@ -1590,7 +1841,7 @@ async function stopDiagnosticCapture() {
       finishCmdExec("诊断包已生成");
       showToast("诊断日志已保存");
     } else {
-      cmdExec.value.show = false;
+      closeCmdExec();
     }
   } catch (e: any) {
     finishCmdExec(`保存失败: ${e}`);
@@ -1692,7 +1943,7 @@ async function generateBugreport() {
   try {
     const { save } = await import("@tauri-apps/plugin-dialog");
     const dest = await save({ defaultPath: `bugreport_${Date.now()}.zip`, filters: [{ name: "Bugreport ZIP", extensions: ["zip"] }] });
-    if (!dest) { cmdExec.value.show = false; return; }
+    if (!dest) { closeCmdExec(); return; }
     appendCmdExec("正在生成 bugreport，请耐心等待（可能需要 30-60 秒）...");
     await bugreport(selectedDevice.value.serial, dest);
     appendCmdExec("Bugreport 已保存到: " + dest);
@@ -1701,63 +1952,9 @@ async function generateBugreport() {
   } catch (e: any) { finishCmdExec(`Bugreport 生成失败: ${e}`); showToast(`Bugreport 生成失败: ${e}`, "error"); }
 }
 
-// ── File Browser ──
-async function listRemoteDir() {
-  if (!selectedDevice.value || !remotePath.value.trim()) return;
-  try { directoryListing.value = await listDirectory(selectedDevice.value.serial, remotePath.value.trim()); }
-  catch { directoryListing.value = "获取目录失败"; }
-}
-async function pushToCurrentDir() {
-  if (!selectedDevice.value || !remotePath.value.trim()) return;
-  try {
-    const { open } = await import("@tauri-apps/plugin-dialog");
-    const selected = await open({ multiple: false });
-    if (selected) { await pushFile(selectedDevice.value.serial, selected, remotePath.value.trim()); showToast("文件已推送"); listRemoteDir(); }
-  } catch { showToast("推送失败", "error"); }
-}
-async function pullFromCurrentDir() {
-  if (!selectedDevice.value || !remotePath.value.trim()) return;
-  try {
-    const { save } = await import("@tauri-apps/plugin-dialog");
-    const dest = await save();
-    if (dest) { await pullFile(selectedDevice.value.serial, remotePath.value.trim(), dest); showToast("文件已拉取"); }
-  } catch { showToast("拉取失败", "error"); }
-}
+// ── (removed) old file browser replaced by tree view above
 
-// ── Device Config ──
-async function fetchConfig(path: string) {
-  if (!selectedDevice.value) return;
-  try { configContent.value = await shell(selectedDevice.value.serial, `cat ${path}`) || "(空文件)"; configPath.value = path; }
-  catch { showToast("读取配置文件失败", "error"); }
-}
-async function saveConfig() {
-  if (!selectedDevice.value || !configPath.value || configContent.value === null) return;
-  try {
-    const tmpPath = `${__dirname || ""}/tmp_config_${Date.now()}`;
-    await pullFile(selectedDevice.value.serial, configPath.value, tmpPath);
-    await pushFile(selectedDevice.value.serial, tmpPath, configPath.value);
-    showToast("配置已保存到设备");
-  } catch { showToast("保存失败，可能需要 root 权限", "error"); }
-}
-async function saveConfigLocally() {
-  if (configContent.value === null) return;
-  try {
-    const { save } = await import("@tauri-apps/plugin-dialog");
-    const dest = await save({ defaultPath: configPath.value.split("/").pop() || "config", filters: [{ name: "All Files", extensions: ["*"] }] });
-    if (dest) { const { writeTextFile } = await import("@tauri-apps/plugin-fs"); await writeTextFile(dest, configContent.value); showToast("配置已保存到本地"); }
-  } catch { showToast("保存失败", "error"); }
-}
-async function handleModifyConfig() {
-  if (!selectedDevice.value || !configModKey.value.trim() || !configModValue.value.trim()) return;
-  try {
-    const cmd = `sed -i 's/^${configModKey.value}=.*/${configModKey.value}=${configModValue.value}/' ${configModPath.value} || echo "${configModKey.value}=${configModValue.value}" >> ${configModPath.value}`;
-    await shell(selectedDevice.value.serial, cmd);
-    showToast(`配置已修改: ${configModKey.value}=${configModValue.value}`);
-    configModKey.value = "";
-    configModValue.value = "";
-    configDialogOpen.value = false;
-  } catch (e: any) { showToast(`修改配置失败: ${e}`, "error"); }
-}
+// ── (removed) device config module removed
 
 // ── Screen Mirror ──
 function toggleMirror() {
@@ -1827,36 +2024,46 @@ async function takeScreenshotFromMirror() {
 }
 async function toggleRecording() {
   if (!selectedDevice.value) return;
+  recordingLoading.value = true;
   if (isRecording.value) {
     try {
       showCmdExec("停止录屏", "adb shell pkill -SIGINT screenrecord");
       appendCmdExec("正在停止录屏...");
+      // Send SIGINT first, then pkill -9 as fallback (matching web-adb-tool)
       await shell(selectedDevice.value.serial, "pkill -SIGINT screenrecord");
-      await new Promise(r => setTimeout(r, 1500));
+      await new Promise(r => setTimeout(r, 500));
+      await shell(selectedDevice.value.serial, "pkill -9 screenrecord").catch(() => {});
+      await new Promise(r => setTimeout(r, 1000));
       const { save } = await import("@tauri-apps/plugin-dialog");
       const dest = await save({ defaultPath: `recording_${Date.now()}.mp4`, filters: [{ name: "MP4 Video", extensions: ["mp4"] }] });
       if (dest) {
         appendCmdExec("正在拉取录屏文件...");
-        await pullFile(selectedDevice.value.serial, "/sdcard/recording.mp4", dest);
+        await pullFile(selectedDevice.value.serial, recordingFilename.value, dest);
+        appendCmdExec("正在清理设备端文件...");
+        await shell(selectedDevice.value.serial, `rm ${recordingFilename.value}`).catch(() => {});
         appendCmdExec("录屏已保存到: " + dest);
         finishCmdExec("录屏已保存");
         showToast("录屏已保存");
       } else {
-        cmdExec.value.show = false;
+        closeCmdExec();
       }
     } catch (e: any) { finishCmdExec(`保存录屏失败: ${e}`); showToast(`保存录屏失败: ${e}`, "error"); }
     isRecording.value = false;
+    recordingFilename.value = "";
   } else {
     try {
-      showCmdExec("开始录屏", "screenrecord /sdcard/recording.mp4");
+      const remotePath = `/sdcard/recording_${Date.now()}.mp4`;
+      recordingFilename.value = remotePath;
+      showCmdExec("开始录屏", `screenrecord ${remotePath}`);
       appendCmdExec("正在启动录屏...");
-      await startScreenrecord(selectedDevice.value.serial, "/sdcard/recording.mp4", 1280, 720);
+      await startScreenrecord(selectedDevice.value.serial, remotePath, 1280, 720);
       isRecording.value = true;
       appendCmdExec("录屏已开始（1280x720）");
       finishCmdExec("录屏已开始");
       showToast("录屏开始");
     } catch { finishCmdExec("录屏启动失败"); showToast("录屏启动失败", "error"); }
   }
+  recordingLoading.value = false;
 }
 
 // ── Output Panel ──
@@ -1866,8 +2073,8 @@ onMounted(async () => {
   loadCustomCommands();
   loadTextHistory();
   loadRemotePathHistory();
-  // Auto-refresh devices every 5s
-  autoRefreshId = setInterval(scanDevices, 5000);
+  // Auto-refresh devices every 5s (silent, no toast)
+  autoRefreshId = setInterval(() => { if (!operationInProgress.value) scanDevices(true); }, 5000);
   nextTick(() => {
     recalcAppPageSize();
     let rafId: number;
@@ -1894,6 +2101,7 @@ onUnmounted(() => {
   if (diagTimeoutId) clearTimeout(diagTimeoutId);
   if (bootLogcatTimeoutId) clearTimeout(bootLogcatTimeoutId);
   if (autoRefreshId) clearInterval(autoRefreshId);
+  if (cmdExecTimeout) clearTimeout(cmdExecTimeout);
   // Note: log sessions are saved to DB; user can see "running" sessions on next visit
 });
 </script>

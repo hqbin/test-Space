@@ -48,8 +48,15 @@ pub fn execute_powershell(script_path: &str, args: &[String]) -> Result<ScriptRe
 }
 
 pub fn execute_shell(command: &str) -> Result<ScriptResult, String> {
-    let output = Command::new("cmd")
-        .args(["/c", command])
+    let cmd = if cfg!(windows) {
+        format!("chcp 65001>nul&&{}", command)
+    } else {
+        command.to_string()
+    };
+    let shell_prog = if cfg!(windows) { "cmd" } else { "sh" };
+    let shell_arg = if cfg!(windows) { "/c" } else { "-c" };
+    let output = Command::new(shell_prog)
+        .args([shell_arg, &cmd])
         .output()
         .map_err(|e| format!("Shell execution failed: {}", e))?;
     Ok(ScriptResult {

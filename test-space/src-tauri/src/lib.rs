@@ -27,13 +27,17 @@ fn adb_uninstall(serial: String, package: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn adb_push(serial: String, local: String, remote: String) -> Result<String, String> {
-    adb::push_file(&serial, &local, &remote)
+async fn adb_push(serial: String, local: String, remote: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::push_file(&serial, &local, &remote)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_pull(serial: String, remote: String, local: String) -> Result<String, String> {
-    adb::pull_file(&serial, &remote, &local)
+async fn adb_pull(serial: String, remote: String, local: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::pull_file(&serial, &remote, &local)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
