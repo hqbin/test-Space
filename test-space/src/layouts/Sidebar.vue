@@ -33,6 +33,7 @@ import { useRoute } from "vue-router";
 
 const route = useRoute();
 const showBar = ref(false);
+let showTimeout: ReturnType<typeof setTimeout> | null = null;
 let hideTimeout: ReturnType<typeof setTimeout> | null = null;
 
 interface NavItem {
@@ -53,16 +54,21 @@ function isActive(path: string) {
   return route.path === path;
 }
 
-function clearHide() {
+function clearAll() {
+  if (showTimeout) { clearTimeout(showTimeout); showTimeout = null; }
   if (hideTimeout) { clearTimeout(hideTimeout); hideTimeout = null; }
 }
+function scheduleShow() {
+  clearAll();
+  showTimeout = setTimeout(() => { showBar.value = true; }, 300);
+}
 function scheduleHide() {
-  clearHide();
+  clearAll();
   hideTimeout = setTimeout(() => { showBar.value = false; }, 1500);
 }
-function onTriggerEnter() { clearHide(); showBar.value = true; }
-function onTriggerLeave() { scheduleHide(); }
-function onBarEnter() { clearHide(); }
+function onTriggerEnter() { scheduleShow(); }
+function onTriggerLeave() { clearAll(); if (showBar.value) scheduleHide(); }
+function onBarEnter() { clearAll(); }
 function onBarLeave() { scheduleHide(); }
 </script>
 
