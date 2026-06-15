@@ -51,16 +51,26 @@
           <h3 class="flex items-center gap-2 font-label-md text-label-md text-on-surface">
             <span class="material-symbols-outlined text-[16px] text-on-surface-variant">settings_remote</span> 设备操作
           </h3>
-          <div class="grid grid-cols-2 gap-3">
+          <div class="grid grid-cols-3 gap-3">
             <button class="bg-white/30 border border-white/50 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm"
               :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('basic')">
               <span v-if="infoLoading === 'basic'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
               <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">info</span> 基础信息
             </button>
             <button class="bg-white/30 border border-white/50 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm"
+              :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('mac')">
+              <span v-if="infoLoading === 'mac'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+              <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">wifi</span> MAC 信息
+            </button>
+            <button class="bg-white/30 border border-white/50 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm"
               :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('whaleos')">
               <span v-if="infoLoading === 'whaleos'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
               <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">description</span> 固件信息
+            </button>
+            <button class="bg-white/30 border border-white/50 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm"
+              :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('storage')">
+              <span v-if="infoLoading === 'storage'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+              <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">database</span> 存储信息
             </button>
             <button class="bg-white/30 border border-white/50 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm col-span-2"
               :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('keys')">
@@ -277,15 +287,18 @@
     </div>
 
     <!-- Tab 2: 其他命令 -->
-    <div v-show="activeTab === 'other'" class="flex flex-col gap-4 flex-grow min-h-0 overflow-y-auto">
+    <div v-show="activeTab === 'other'" class="grid grid-cols-1 lg:grid-cols-5 gap-4 flex-grow min-h-0 overflow-hidden">
 
-      <!-- Screen Mirror - full width top row -->
-      <div class="shrink-0">
-        <div class="glass-panel rounded-xl p-3">
-          <h3 class="font-label-md text-label-md text-on-surface mb-2 flex items-center gap-2">
-            <span class="material-symbols-outlined text-[16px]">screenshot_monitor</span>屏幕镜像
-          </h3>
-          <div class="flex gap-3 items-center mb-2">
+      <!-- Left Column: Screen Mirror + Remote Control -->
+      <div class="col-span-1 lg:col-span-3 flex flex-col gap-4 min-h-0 overflow-y-auto">
+
+        <!-- Screen Mirror -->
+        <div class="glass-panel rounded-xl p-3 shrink-0 shadow-md">
+          <div class="flex items-center gap-3 mb-2 flex-wrap">
+            <div class="flex items-center gap-2 shrink-0">
+              <span class="material-symbols-outlined text-[16px]">screenshot_monitor</span>
+              <span class="font-label-md text-label-md text-on-surface">屏幕镜像</span>
+            </div>
             <div class="flex items-center gap-1.5">
               <span class="font-caption text-caption text-on-surface-variant">帧率:</span>
               <input v-model.number="mirrorFps" type="range" min="1" max="10" step="1" class="w-20 accent-secondary" />
@@ -310,108 +323,97 @@
               {{ mirrorFrameCount }}帧 · {{ currentMirrorFps.toFixed(1) }} FPS
             </span>
           </div>
-          <div class="flex items-center justify-center min-h-[300px] bg-black/5 rounded-xl overflow-hidden relative">
+          <div class="flex items-center justify-center min-h-[420px] bg-black/5 rounded-xl overflow-hidden relative border border-dashed border-outline-variant/40">
             <canvas v-show="isMirroring && mirrorFrameCount > 0" ref="mirrorCanvas" class="max-w-full max-h-[400px]"></canvas>
             <div v-if="!isMirroring" class="text-center">
               <span class="material-symbols-outlined text-4xl text-on-surface-variant/30">screenshot_monitor</span>
-              <p class="font-body-sm text-body-sm text-on-surface-variant/50 mt-1">启动屏幕镜像查看设备实时画面</p>
+              <p class="font-body-sm text-body-sm text-on-surface-variant/50 mt-1">Screen mirror inactive</p>
             </div>
             <div v-if="isMirroring && mirrorFrameCount === 0" class="absolute inset-0 flex items-center justify-center bg-black/20">
               <span class="font-body-md text-body-md text-white/80">等待接收图像数据...</span>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- Grid for remote + commands + file manager -->
-      <div class="grid grid-cols-12 gap-4 min-h-0 flex-1">
-        <!-- Left Column -->
-        <div class="col-span-12 lg:col-span-5 flex flex-col gap-4">
-
-          <!-- Remote Control -->
-          <div class="glass-panel rounded-xl p-3 shrink-0">
-            <h3 class="font-label-md text-label-md text-on-surface mb-2 flex items-center gap-1.5">
-              <span class="material-symbols-outlined text-[16px]">gamepad</span>遥控器
-            </h3>
-            <div class="relative w-36 h-36 mx-auto mb-3">
+        <!-- Remote Control -->
+        <div class="glass-panel rounded-xl p-5 shrink-0 shadow-md">
+          <h3 class="font-label-md text-label-md text-on-surface mb-4 flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-[16px]">gamepad</span>遥控器
+          </h3>
+          <div class="flex gap-8 items-start justify-center">
+            <!-- Left: Back, Home, Settings -->
+            <div class="flex flex-col gap-2.5 shrink-0">
+              <button class="glass-button py-2.5 px-6 rounded-lg font-caption text-caption flex items-center gap-2 min-w-[120px]" @click="sendKey('4')">
+                <span class="material-symbols-outlined text-[18px]">arrow_back</span>返回
+              </button>
+              <button class="glass-button py-2.5 px-6 rounded-lg font-caption text-caption flex items-center gap-2 min-w-[120px]" @click="sendKey('3')">
+                <span class="material-symbols-outlined text-[18px]">home</span>Home
+              </button>
+              <button class="glass-button py-2.5 px-6 rounded-lg font-caption text-caption flex items-center gap-2 min-w-[120px]" @click="sendKey('176')">
+                <span class="material-symbols-outlined text-[18px]">settings</span>设置
+              </button>
+            </div>
+            <!-- Center: D-pad -->
+            <div class="relative w-48 h-48 shrink-0">
               <div class="absolute top-0 left-1/2 -translate-x-1/2">
-                <button class="w-10 h-10 glass-button rounded-full flex items-center justify-center" @click="sendKey('19')">
-                  <span class="material-symbols-outlined text-[18px]">keyboard_arrow_up</span>
+                <button class="w-12 h-12 glass-button rounded-full flex items-center justify-center" @click="sendKey('19')">
+                  <span class="material-symbols-outlined text-[22px]">keyboard_arrow_up</span>
                 </button>
               </div>
               <div class="absolute bottom-0 left-1/2 -translate-x-1/2">
-                <button class="w-10 h-10 glass-button rounded-full flex items-center justify-center" @click="sendKey('20')">
-                  <span class="material-symbols-outlined text-[18px]">keyboard_arrow_down</span>
+                <button class="w-12 h-12 glass-button rounded-full flex items-center justify-center" @click="sendKey('20')">
+                  <span class="material-symbols-outlined text-[22px]">keyboard_arrow_down</span>
                 </button>
               </div>
               <div class="absolute left-0 top-1/2 -translate-y-1/2">
-                <button class="w-10 h-10 glass-button rounded-full flex items-center justify-center" @click="sendKey('21')">
-                  <span class="material-symbols-outlined text-[18px]">keyboard_arrow_left</span>
+                <button class="w-12 h-12 glass-button rounded-full flex items-center justify-center" @click="sendKey('21')">
+                  <span class="material-symbols-outlined text-[22px]">keyboard_arrow_left</span>
                 </button>
               </div>
               <div class="absolute right-0 top-1/2 -translate-y-1/2">
-                <button class="w-10 h-10 glass-button rounded-full flex items-center justify-center" @click="sendKey('22')">
-                  <span class="material-symbols-outlined text-[18px]">keyboard_arrow_right</span>
+                <button class="w-12 h-12 glass-button rounded-full flex items-center justify-center" @click="sendKey('22')">
+                  <span class="material-symbols-outlined text-[22px]">keyboard_arrow_right</span>
                 </button>
               </div>
               <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-                <button class="w-12 h-12 glass-button rounded-full flex items-center justify-center bg-secondary/10" @click="sendKey('23')">
-                  <span class="material-symbols-outlined text-secondary text-[20px]">check</span>
+                <button class="w-16 h-16 glass-button rounded-full flex items-center justify-center bg-secondary/10" @click="sendKey('23')">
+                  <span class="material-symbols-outlined text-secondary text-[28px]">check</span>
                 </button>
               </div>
             </div>
-            <div class="grid grid-cols-4 gap-1.5 mb-2">
-              <button class="glass-button py-1 rounded-lg font-caption text-caption flex flex-col items-center gap-0.5" @click="sendKey('4')">
-                <span class="material-symbols-outlined text-[14px]">arrow_back</span>返回
+            <!-- Right: Power, Volume, Numpad -->
+            <div class="flex flex-col gap-2.5 shrink-0">
+              <button class="glass-button py-2.5 px-6 rounded-lg font-caption text-caption flex items-center justify-center gap-2 bg-error/10 text-error border border-error/20 min-w-[120px]" @click="sendKey('26')">
+                <span class="material-symbols-outlined text-[18px]">power_settings_new</span>电源
               </button>
-              <button class="glass-button py-1 rounded-lg font-caption text-caption flex flex-col items-center gap-0.5" @click="sendKey('3')">
-                <span class="material-symbols-outlined text-[14px]">home</span>Home
-              </button>
-              <button class="glass-button py-1 rounded-lg font-caption text-caption flex flex-col items-center gap-0.5" @click="sendKey('176')">
-                <span class="material-symbols-outlined text-[12px]">settings</span>设置
-              </button>
-              <button class="glass-button py-1 rounded-lg font-caption text-caption flex flex-col items-center gap-0.5" @click="sendKey('26')">
-                <span class="material-symbols-outlined text-[14px]">power_settings_new</span>电源
-              </button>
-            </div>
-            <div class="grid grid-cols-3 gap-1.5 mb-2">
-              <button class="glass-button py-1.5 rounded-lg font-caption text-caption flex items-center justify-center gap-1" @click="sendKey('24')">
-                <span class="material-symbols-outlined text-[14px]">volume_up</span>Vol+
-              </button>
-              <button class="glass-button py-1.5 rounded-lg font-caption text-caption flex items-center justify-center gap-1" @click="sendKey('25')">
-                <span class="material-symbols-outlined text-[14px]">volume_down</span>Vol-
-              </button>
-              <button class="glass-button py-1.5 rounded-lg font-caption text-caption flex items-center justify-center gap-1" @click="sendKey('164')">
-                <span class="material-symbols-outlined text-[14px]">volume_off</span>静音
-              </button>
-            </div>
-            <div class="grid grid-cols-5 gap-1">
-              <button v-for="n in 9" :key="n" class="glass-button py-1.5 rounded-lg font-caption text-caption" @click="sendKey(String(7 + n))">{{ n }}</button>
-              <button class="glass-button py-1.5 rounded-lg font-caption text-caption" @click="sendKey('0')">0</button>
+              <div class="grid grid-cols-3 gap-2">
+                <button class="glass-button p-2.5 rounded-lg font-caption text-caption flex items-center justify-center" @click="sendKey('24')">
+                  <span class="material-symbols-outlined text-[18px]">volume_up</span>
+                </button>
+                <button class="glass-button p-2.5 rounded-lg font-caption text-caption flex items-center justify-center" @click="sendKey('25')">
+                  <span class="material-symbols-outlined text-[18px]">volume_down</span>
+                </button>
+                <button class="glass-button p-2.5 rounded-lg font-caption text-caption flex items-center justify-center" @click="sendKey('164')">
+                  <span class="material-symbols-outlined text-[18px]">volume_off</span>
+                </button>
+              </div>
+              <div class="grid grid-cols-5 gap-2">
+                <button v-for="n in 9" :key="n" class="glass-button py-2.5 px-3 rounded-lg font-caption text-caption" @click="sendKey(String(7 + n))">{{ n }}</button>
+                <button class="glass-button py-2.5 px-3 rounded-lg font-caption text-caption" @click="sendKey('0')">0</button>
+              </div>
             </div>
           </div>
-
-
         </div>
+      </div>
 
-        <!-- Right Column -->
-        <div class="col-span-12 lg:col-span-7 flex flex-col gap-4">
-
-          <!-- File Manager -->
-          <div class="glass-panel rounded-xl p-3 flex flex-col flex-1 min-h-0">
-            <h3 class="font-label-md text-label-md text-on-surface mb-2 flex items-center gap-1.5">
+      <!-- Right Column: File Manager -->
+      <div class="col-span-1 lg:col-span-2 flex flex-col min-h-0 mb-3">
+        <div class="glass-panel rounded-xl p-3 flex flex-col flex-1 min-h-0 shadow-md">
+          <div class="flex items-center justify-between mb-2 shrink-0">
+            <h3 class="font-label-md text-label-md text-on-surface flex items-center gap-1.5">
               <span class="material-symbols-outlined text-[16px]">folder_open</span>文件管理
             </h3>
-            <div class="flex gap-2 mb-2">
-              <div class="flex-1 relative">
-                <input v-model="remotePath" ref="remotePathInputRef"
-                  class="w-full bg-white border border-outline-variant rounded-lg px-3 py-1.5 font-body-sm text-body-sm text-on-surface font-mono focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all"
-                  placeholder="远程路径，如 /sdcard/" @focus="showRemotePathHistory = true" @blur="hideRemotePathHistoryDelayed" @keyup.enter="navigateToPath" />
-                <div v-if="showRemotePathHistory && remotePathHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-outline-variant rounded-lg p-1 max-h-32 overflow-y-auto shadow-lg">
-                  <button v-for="(h, i) in remotePathHistory" :key="i" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100"
-                    @mousedown.prevent @click="selectRemotePathHistory(h)">{{ h }}</button>
-                </div>
-              </div>
+            <div class="flex gap-1.5">
               <button class="glass-button px-2.5 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1" @click="navigateToParent">
                 <span class="material-symbols-outlined text-[14px]">arrow_upward</span>上级
               </button>
@@ -419,29 +421,38 @@
                 <span class="material-symbols-outlined text-[14px]">upload</span>上传
               </button>
             </div>
-            <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar bg-[#1a1c1d]/5 rounded text-[12px] leading-relaxed">
-              <div v-if="fileEntries.length === 0" class="text-center py-8 text-on-surface-variant/40">
-                <span class="material-symbols-outlined text-3xl">folder_open</span>
-                <p class="font-body-sm text-body-sm mt-1">输入路径后回车导航</p>
-              </div>
-              <div v-for="(entry, idx) in fileEntries" :key="idx"
-                class="flex items-center gap-1.5 px-2 py-1 hover:bg-white/20 cursor-pointer border-b border-outline-variant/10 last:border-0 group"
-                @dblclick="entry.isDir ? navigateToDir(entry.name) : editFile(entry.name)">
-                <span class="material-symbols-outlined text-[16px] shrink-0"
-                  :class="entry.isDir ? 'text-secondary' : 'text-on-surface-variant/60'">{{ entry.isDir ? 'folder' : 'description' }}</span>
-                <span class="flex-1 truncate font-mono text-[11px] text-on-surface">{{ entry.name }}</span>
-                <span class="font-caption text-caption text-on-surface-variant/50 text-[10px] whitespace-nowrap">{{ entry.size }}</span>
-                <div class="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                  <button class="glass-button p-0.5 rounded" title="下载" @click.stop="entry.isDir ? downloadDir(entry.name) : downloadFile(entry.name)">
-                    <span class="material-symbols-outlined text-[14px]">download</span>
-                  </button>
-                  <button v-if="!entry.isDir" class="glass-button p-0.5 rounded" title="编辑" @click.stop="editFile(entry.name)">
-                    <span class="material-symbols-outlined text-[14px]">edit</span>
-                  </button>
-                  <button class="glass-button p-0.5 rounded" title="删除" @click.stop="confirmThen(`删除 ${entry.name}?`, () => deleteFile(entry.name))">
-                    <span class="material-symbols-outlined text-[14px] text-error">delete</span>
-                  </button>
-                </div>
+          </div>
+          <div class="relative mb-2 shrink-0">
+            <input v-model="remotePath" ref="remotePathInputRef"
+              class="w-full bg-white border border-outline-variant rounded-lg px-3 py-1.5 font-body-sm text-body-sm text-on-surface font-mono focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all"
+              placeholder="远程路径，如 /sdcard/" @focus="showRemotePathHistory = true" @blur="hideRemotePathHistoryDelayed" @keyup.enter="navigateToPath" />
+            <div v-if="showRemotePathHistory && remotePathHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-outline-variant rounded-lg p-1 max-h-32 overflow-y-auto shadow-lg">
+              <button v-for="(h, i) in remotePathHistory" :key="i" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100"
+                @mousedown.prevent @click="selectRemotePathHistory(h)">{{ h }}</button>
+            </div>
+          </div>
+          <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar bg-[#1a1c1d]/5 rounded text-[12px] leading-relaxed">
+            <div v-if="fileEntries.length === 0" class="text-center py-8 text-on-surface-variant/40">
+              <span class="material-symbols-outlined text-3xl">folder_open</span>
+              <p class="font-body-sm text-body-sm mt-1">输入路径后回车导航</p>
+            </div>
+            <div v-for="(entry, idx) in fileEntries" :key="idx"
+              class="flex items-center gap-1.5 px-2 py-1 hover:bg-white/20 cursor-pointer border-b border-outline-variant/10 last:border-0 group"
+              @dblclick="entry.isDir ? navigateToDir(entry.name) : editFile(entry.name)">
+              <span class="material-symbols-outlined text-[16px] shrink-0"
+                :class="entry.isDir ? 'text-secondary' : 'text-on-surface-variant/60'">{{ entry.isDir ? 'folder' : 'description' }}</span>
+              <span class="flex-1 truncate font-mono text-[11px] text-on-surface">{{ entry.name }}</span>
+              <span class="font-caption text-caption text-on-surface-variant/50 text-[10px] whitespace-nowrap">{{ entry.size }}</span>
+              <div class="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                <button class="glass-button p-0.5 rounded" title="下载" @click.stop="entry.isDir ? downloadDir(entry.name) : downloadFile(entry.name)">
+                  <span class="material-symbols-outlined text-[14px]">download</span>
+                </button>
+                <button v-if="!entry.isDir" class="glass-button p-0.5 rounded" title="编辑" @click.stop="editFile(entry.name)">
+                  <span class="material-symbols-outlined text-[14px]">edit</span>
+                </button>
+                <button class="glass-button p-0.5 rounded" title="删除" @click.stop="confirmThen(`删除 ${entry.name}?`, () => deleteFile(entry.name))">
+                  <span class="material-symbols-outlined text-[14px] text-error">delete</span>
+                </button>
               </div>
             </div>
           </div>
@@ -1678,6 +1689,17 @@ async function queryInfo(type: string) {
       title = "基础设备信息";
       const props = await getProperties(serial);
       entries = Object.entries(props).map(([k, v]) => ({ key: k, value: v || "N/A" }));
+    } else if (type === "mac") {
+      title = "MAC 信息";
+      const [wlanMac, ethMac] = await Promise.all([
+        shell(serial, "cat /sys/class/net/wlan0/address 2>/dev/null || ip link show wlan0 2>/dev/null | grep link/ether | awk '{print $2}'").catch(() => ""),
+        shell(serial, "cat /sys/class/net/eth0/address 2>/dev/null || ip link show eth0 2>/dev/null | grep link/ether | awk '{print $2}'").catch(() => ""),
+      ]);
+      const wlan = wlanMac.trim();
+      const eth = ethMac.trim();
+      if (wlan) entries.push({ key: "WiFi MAC", value: wlan });
+      if (eth) entries.push({ key: "物理 MAC", value: eth });
+      if (entries.length === 0) entries.push({ key: "MAC 地址", value: "未获取到 MAC 信息" });
     } else if (type === "whaleos") {
       title = "固件信息";
       const tvKeys = ["ro.product.model", "ro.product.tv.rcu", "ro.product.tv.deviceType", "ro.vendor.product.version",
@@ -1706,6 +1728,64 @@ async function queryInfo(type: string) {
         }).catch((e: any) => ({ key: c.name, value: `❌ 执行错误`, raw: `${e}` }))
       ));
       entries = checkResults;
+    } else if (type === "storage") {
+      title = "存储信息";
+      const toGBMB = (kb: number): string => {
+        const gb = (kb / (1024 * 1024)).toFixed(2);
+        const mb = (kb / 1024).toFixed(2);
+        return `${gb}G(${mb}MB)`;
+      };
+      // 运行内存: adb shell free -h
+      const freeResult = await shell(serial, "free -h").catch(() => "");
+      if (freeResult) {
+        const lines = freeResult.trim().split("\n");
+        if (lines.length > 1) {
+          const memLine = lines[1].split(/\s+/);
+          if (memLine.length > 1) {
+            entries.push({ key: "运行内存", value: memLine[1] });
+          }
+        }
+      }
+      // 物理存储容量: adb shell cat /sys/block/mmcblk0/size
+      const sizeResult = await shell(serial, "cat /sys/block/mmcblk0/size").catch(() => "");
+      if (sizeResult && sizeResult.trim()) {
+        const sectors = parseInt(sizeResult.trim());
+        if (!isNaN(sectors)) {
+          const bytesSize = sectors * 512;
+          const gbSize = (bytesSize / (1024 * 1024 * 1024)).toFixed(2);
+          const mbSize = (bytesSize / (1024 * 1024)).toFixed(2);
+          entries.push({ key: "物理存储容量", value: `${gbSize}G(${mbSize}MB)` });
+        }
+      }
+      // 可使用总存储空间 / 剩余存储空间: adb shell df /data
+      const dfResult = await shell(serial, "df /data").catch(() => "");
+      if (dfResult) {
+        const lines = dfResult.trim().split("\n");
+        if (lines.length > 1) {
+          const parts = lines[1].split(/\s+/);
+          if (parts.length >= 4) {
+            const totalKb = parseFloat(parts[1]);
+            const availKb = parseFloat(parts[3]);
+            if (!isNaN(totalKb)) {
+              entries.push({ key: "可使用总存储空间", value: toGBMB(totalKb) });
+            }
+            if (!isNaN(availKb)) {
+              entries.push({ key: "剩余存储空间", value: toGBMB(availKb) });
+            }
+          }
+        }
+      }
+      // Available: adb shell stat -f /data → Available 值 / 256 = MB
+      const statResult = await shell(serial, "stat -f /data").catch(() => "");
+      if (statResult) {
+        const match = statResult.match(/Available:\s*(\d+)/i);
+        if (match) {
+          const availBlocks = parseInt(match[1]);
+          const availMB = (availBlocks / 256).toFixed(2);
+          const availGB = (availBlocks / 256 / 1024).toFixed(2);
+          entries.push({ key: "Available", value: `${availGB}G(${availMB}MB)` });
+        }
+      }
     }
     infoDialog.value = { show: true, title, entries };
   } catch { showToast("查询失败", "error"); }
