@@ -1,6 +1,6 @@
 <template>
-  <div class="flex gap-4 min-h-[calc(100vh-80px)]">
-    <div class="flex-1 flex flex-col gap-4 min-w-0">
+  <div class="flex gap-4 h-screen overflow-hidden">
+    <div class="flex-1 flex flex-col gap-4 min-w-0 overflow-hidden">
     <!-- Connection Bar - always visible, moved up -->
     <div class="glass-panel rounded-xl p-3 flex items-center gap-3">
       <span class="material-symbols-outlined text-on-surface-variant text-[18px]">link</span>
@@ -40,7 +40,7 @@
     </div>
 
     <!-- Tab 1: 常用命令 -->
-    <div v-show="activeTab === 'common'" class="flex flex-col gap-1 flex-grow">
+    <div v-show="activeTab === 'common'" class="flex flex-col gap-1 flex-grow min-h-0 overflow-hidden">
       <!-- Row 1: Info Query (left) + Text Input & Actions (right) -->
       <div class="grid grid-cols-12 gap-4">
         <div class="col-span-12 lg:col-span-5">
@@ -161,9 +161,8 @@
       </div>
 
       <!-- Row 3: Application Management (full width) -->
-      <div class="grid grid-cols-12 gap-4">
-        <div class="col-span-12">
-          <div class="glass-panel rounded-xl p-3">
+      <div class="flex-1 min-h-0 flex flex-col">
+        <div class="glass-panel rounded-xl p-3 flex flex-col flex-1 min-h-0">
             <div class="flex items-center gap-3 mb-1">
               <h3 class="font-label-md text-label-md text-on-surface flex items-center gap-1.5 shrink-0">
                 <span class="material-symbols-outlined text-[16px]">apps</span>应用管理
@@ -199,15 +198,24 @@
               <button class="glass-button px-1.5 py-1 rounded-lg font-caption text-caption flex items-center gap-1 text-[11px]" @click="queryAppPath">
                 <span class="material-symbols-outlined text-[12px]">search</span>路径
               </button>
-
+              <div class="flex-1"></div>
+              <div v-if="totalPages > 1" class="flex items-center gap-1 shrink-0">
+                <button class="glass-button p-0.5 rounded" :disabled="appPage <= 1" @click="appPage = Math.max(1, appPage - 1); nextTick(loadVisibleAppVersions)">
+                  <span class="material-symbols-outlined text-[14px]">chevron_left</span>
+                </button>
+                <span class="font-caption text-caption text-on-surface-variant text-[11px] whitespace-nowrap">{{ appPage }} / {{ totalPages }}</span>
+                <button class="glass-button p-0.5 rounded" :disabled="appPage >= totalPages" @click="appPage = Math.min(totalPages, appPage + 1); nextTick(loadVisibleAppVersions)">
+                  <span class="material-symbols-outlined text-[14px]">chevron_right</span>
+                </button>
+              </div>
             </div>
 
             <!-- App List -->
-            <div class="max-h-80 overflow-y-auto custom-scrollbar">
+            <div ref="appListContainer" class="flex-1 min-h-0 overflow-y-auto custom-scrollbar" :style="{ maxHeight: appListMaxHeight + 'px' }">
               <div v-if="currentPageApps.length === 0" class="text-center py-3">
                 <p class="font-caption text-caption text-on-surface-variant/50">暂无应用，点击刷新加载</p>
               </div>
-              <div v-for="app in currentPageApps" :key="app.package_name" class="flex items-center gap-1 py-0.5 px-1.5 rounded hover:bg-white/20 transition-colors border-b border-outline-variant/20 last:border-0 group">
+              <div v-for="app in currentPageApps" :key="app.package_name" :ref="(el) => { if (el && !appItemMeasured) measureAppItem(el as HTMLElement) }" class="flex items-center gap-1 py-0 px-1.5 rounded hover:bg-white/20 transition-colors border-b border-outline-variant/20 last:border-0 group">
                 <div class="flex gap-0.5 shrink-0">
                   <button class="glass-button p-1 rounded" title="启动" @click="startApp(app.package_name)">
                     <span class="material-symbols-outlined text-[16px] text-success-indicator">play_arrow</span>
@@ -215,7 +223,7 @@
                   <button class="glass-button p-1 rounded" title="停止" @click="stopApp(app.package_name)">
                     <span class="material-symbols-outlined text-[16px] text-tertiary">stop</span>
                   </button>
-                  <button class="glass-button p-1 rounded" title="版本信息" @click="fetchAppVersion(app.package_name)">
+                  <button class="glass-button p-1 rounded" title="详情" @click="showAppDetail(app.package_name)">
                     <span class="material-symbols-outlined text-[16px]">info</span>
                   </button>
                   <button class="glass-button p-1 rounded" title="下载APK" @click="downloadApk(app.package_name)">
@@ -238,25 +246,13 @@
                 </div>
               </div>
             </div>
-
-            <!-- Pagination -->
-            <div v-if="totalPages > 1" class="flex justify-center items-center gap-1 mt-1.5 pt-1.5 border-t border-outline-variant/20">
-              <button class="glass-button p-0.5 rounded" :disabled="appPage <= 1" @click="appPage = Math.max(1, appPage - 1); nextTick(loadVisibleAppVersions)">
-                <span class="material-symbols-outlined text-[14px]">chevron_left</span>
-              </button>
-              <span class="font-caption text-caption text-on-surface-variant text-[11px]">{{ appPage }} / {{ totalPages }}</span>
-              <button class="glass-button p-0.5 rounded" :disabled="appPage >= totalPages" @click="appPage = Math.min(totalPages, appPage + 1); nextTick(loadVisibleAppVersions)">
-                <span class="material-symbols-outlined text-[14px]">chevron_right</span>
-              </button>
-            </div>
           </div>
         </div>
-      </div>
 
     </div>
 
     <!-- Tab 2: 其他命令 -->
-    <div v-show="activeTab === 'other'" class="grid grid-cols-12 gap-4 flex-grow">
+    <div v-show="activeTab === 'other'" class="grid grid-cols-12 gap-4 flex-grow min-h-0 overflow-y-auto">
       <!-- Left Column -->
       <div class="col-span-12 lg:col-span-4 flex flex-col gap-4">
 
@@ -523,12 +519,12 @@
               </button>
             </div>
             <div class="space-y-1.5">
-              <div v-for="(item, idx) in infoDialog.entries" :key="idx" class="border-b border-outline-variant/20 py-1.5">
-                <div class="flex">
-                  <span class="font-label-md text-label-md text-on-surface font-medium min-w-[140px] text-[13px]">{{ item.key }}</span>
-                  <div class="flex-1 min-w-0">
+              <div v-for="(item, idx) in infoDialog.entries" :key="idx" class="border-b border-outline-variant/20 py-1.5 last:border-0">
+                <div class="flex flex-col gap-0.5">
+                  <span class="font-label-md text-label-md text-on-surface font-medium text-[13px] break-all">{{ item.key }}</span>
+                  <div class="flex items-start gap-1">
                     <span class="font-body-sm text-body-sm text-on-surface-variant break-all text-[12px]">{{ item.value }}</span>
-                    <button v-if="item.raw" class="ml-1 align-middle text-[11px] text-secondary hover:text-secondary/70" @click="toggleInfoExpand(idx)">
+                    <button v-if="item.raw" class="shrink-0 text-[11px] text-secondary hover:text-secondary/70" @click="toggleInfoExpand(idx)">
                       <span class="material-symbols-outlined text-[14px]">{{ infoDialogExpanded.has(idx) ? 'expand_less' : 'expand_more' }}</span>
                     </button>
                   </div>
@@ -556,6 +552,33 @@
               <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md" @click="resultDialog.show = false">关闭</button>
               <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md flex items-center gap-1" @click="copyToClipboard(resultDialog.content); showToast('已复制')">
                 <span class="material-symbols-outlined text-[14px]">content_copy</span>复制
+              </button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+
+      <!-- App Detail Dialog -->
+      <Transition name="fade">
+        <div v-if="appDetailDialog.show" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="appDetailDialog.show = false">
+          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
+          <div class="glass-panel rounded-[2rem] p-6 w-full max-w-lg relative z-10 bg-white/60">
+            <div class="flex justify-between items-center mb-3">
+              <h3 class="font-label-lg text-label-lg text-on-surface font-semibold break-all">{{ appDetailDialog.title }}</h3>
+              <button class="glass-button p-1 rounded shrink-0" @click="appDetailDialog.show = false">
+                <span class="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+            <div class="space-y-1.5">
+              <div v-for="(item, idx) in appDetailDialog.entries" :key="idx" class="flex border-b border-outline-variant/20 py-1.5 last:border-0">
+                <span class="font-label-md text-label-md text-on-surface font-medium min-w-[90px] text-[13px] shrink-0">{{ item.key }}</span>
+                <span class="font-body-sm text-body-sm text-on-surface-variant break-all text-[12px] font-mono">{{ item.value }}</span>
+              </div>
+            </div>
+            <div class="flex gap-2 justify-end mt-4">
+              <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md" @click="appDetailDialog.show = false">关闭</button>
+              <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md flex items-center gap-1" @click="copyToClipboard(appDetailDialog.pkg); showToast('包名已复制')">
+                <span class="material-symbols-outlined text-[14px]">content_copy</span>复制包名
               </button>
             </div>
           </div>
@@ -660,7 +683,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
 import { useAdb, type DeviceProperties } from "@/composables/useAdb";
 import { addInputHistory, getInputHistory, saveLogSession, getRunningLogSessions, removeLogSession } from "@/services/database";
 
@@ -795,10 +818,35 @@ const showThirdParty = ref(false);
 const showAppSearchHistory = ref(false);
 const appSearchHistory = ref<string[]>([]);
 const appPage = ref(1);
-const PAGE_SIZE = 14;
+
 const loadedVersions = ref(new Set<string>());
 let versionQueue: Promise<unknown> = Promise.resolve();
 const appLoadingState = ref<Record<string, Record<string, boolean>>>({});
+const appListContainer = ref<HTMLElement | null>(null);
+const appItemHeight = ref(28);
+const appItemMeasured = ref(false);
+const maxVisibleApps = ref(14);
+const appListMaxHeight = ref(400);
+const queryPackageName = ref("");
+function measureAppItem(el: HTMLElement) {
+  if (appItemMeasured.value) return;
+  const h = el.getBoundingClientRect().height;
+  if (h > 5) { appItemHeight.value = h; appItemMeasured.value = true; recalcAppPageSize(); }
+}
+function recalcAppPageSize() {
+  if (!appListContainer.value) return;
+  const panel = appListContainer.value.closest('.glass-panel') as HTMLElement;
+  if (!panel) return;
+  const panelH = panel.getBoundingClientRect().height;
+  if (panelH < 50) return;
+  const listOffsetTop = appListContainer.value.getBoundingClientRect().top - panel.getBoundingClientRect().top;
+  const avail = panelH - listOffsetTop - 8;
+  const newCount = Math.max(4, Math.floor(avail / appItemHeight.value));
+  if (avail > 5) {
+    maxVisibleApps.value = newCount;
+    appListMaxHeight.value = avail;
+  }
+}
 
 const sortedApps = computed(() => sortApps(apps.value));
 const filteredApps = computed(() => {
@@ -806,8 +854,8 @@ const filteredApps = computed(() => {
   if (!q) return sortedApps.value;
   return sortedApps.value.filter(a => a.package_name.toLowerCase().includes(q));
 });
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredApps.value.length / PAGE_SIZE)));
-const currentPageApps = computed(() => filteredApps.value.slice((appPage.value - 1) * PAGE_SIZE, appPage.value * PAGE_SIZE));
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredApps.value.length / maxVisibleApps.value)));
+const currentPageApps = computed(() => filteredApps.value.slice((appPage.value - 1) * maxVisibleApps.value, appPage.value * maxVisibleApps.value));
 
 function setAppLoading(pkg: string, action: string, loading: boolean) {
   appLoadingState.value = { ...appLoadingState.value, [pkg]: { ...appLoadingState.value[pkg], [action]: loading } };
@@ -816,6 +864,13 @@ function setAppLoading(pkg: string, action: string, loading: boolean) {
 function onAppSearchInput() { appPage.value = 1; }
 function hideAppSearchHistoryDelayed() { setTimeout(() => { showAppSearchHistory.value = false; }, 200); }
 function selectAppSearchHistory(v: string) { queryPackageName.value = v; showAppSearchHistory.value = false; }
+let lastFilterKey = "";
+watch(filteredApps, () => {
+  const key = queryPackageName.value.trim().toLowerCase() + "|" + filteredApps.value.length;
+  if (key !== lastFilterKey) { lastFilterKey = key; appPage.value = 1; }
+  nextTick(recalcAppPageSize);
+});
+watch(activeTab, () => nextTick(recalcAppPageSize));
 async function loadAppSearchHistory() {
   const entries = await getInputHistory('app_search');
   appSearchHistory.value = entries.map(e => e.value);
@@ -1148,22 +1203,107 @@ async function getCurrentForegroundApp() {
     resultDialog.value = { show: true, title: "前台应用", content: result };
   } catch { resultDialog.value = { show: true, title: "前台应用", content: "获取失败" }; }
 }
+const appDetailDialog = ref({ show: false, title: "", pkg: "", entries: [] as { key: string; value: string }[] });
+async function showAppDetail(pkg: string) {
+  if (!selectedDevice.value) return;
+  try {
+    const info = await getAppInfo(selectedDevice.value.serial, pkg);
+    const sizeRaw = await shell(selectedDevice.value.serial, `dumpsys diskstats ${pkg}`).catch(() => "");
+    const entries: { key: string; value: string }[] = [];
+    const patterns: [RegExp, string][] = [
+      [/versionName=([^\s\n]+)/, "当前版本"],
+      [/versionCode=(\d+)/, "当前版本号"],
+      [/codePath=([^\s\n]+)/, "安装路径"],
+      [/nativeLibraryDir=([^\s\n]+)/, "Native 库目录"],
+      [/targetSdkVersion=(\d+)/, "目标 SDK"],
+      [/minSdkVersion=(\d+)/, "最低 SDK"],
+    ];
+    for (const [reg, label] of patterns) {
+      const m = info.match(reg);
+      if (m) entries.push({ key: label, value: m[1] });
+    }
+    const versionMatches = [...info.matchAll(/versionName=([^\s\n]+)/g)];
+    const codeMatches = [...info.matchAll(/versionCode=(\d+)/g)];
+    if (versionMatches.length > 1) {
+      const history: string[] = [];
+      for (let i = 0; i < versionMatches.length; i++) {
+        const vn = versionMatches[i][1];
+        const vc = codeMatches[i]?.[1] || "?";
+        history.push(`${vn} (${vc})`);
+      }
+      entries.push({ key: "版本历史", value: history.join(" → ") });
+    }
+    if (sizeRaw) {
+      const sizeMatch = sizeRaw.match(/(\d[\d,.]+)\s*(KB|MB|GB|bytes?)/i);
+      if (sizeMatch) entries.push({ key: "应用大小", value: sizeMatch[1] + " " + sizeMatch[2] });
+      const cacheMatch = sizeRaw.match(/Cache\s*size:\s*(\d[\d,.]+)\s*(KB|MB|GB|bytes?)/i);
+      if (cacheMatch) entries.push({ key: "缓存大小", value: cacheMatch[1] + " " + cacheMatch[2] });
+      const dataMatch = sizeRaw.match(/Data\s*size:\s*(\d[\d,.]+)\s*(KB|MB|GB|bytes?)/i);
+      if (dataMatch) entries.push({ key: "数据大小", value: dataMatch[1] + " " + dataMatch[2] });
+    }
+    if (entries.length === 0) entries.push({ key: "提示", value: "无法解析应用信息，请确认包名正确" });
+    appDetailDialog.value = { show: true, title: pkg, pkg, entries };
+  } catch { showToast("获取详情失败", "error"); }
+}
+
 async function startApp(pkg: string) {
   if (!selectedDevice.value) return;
-  try { await adbStartApp(selectedDevice.value.serial, pkg); showToast(`已启动 ${pkg}`); } catch { showToast("启动失败", "error"); }
+  showCmdExec("启动应用", `adb shell monkey -p ${pkg} 1`);
+  try {
+    appendCmdExec(`正在启动 ${pkg}...`);
+    await adbStartApp(selectedDevice.value.serial, pkg);
+    appendCmdExec(`已启动 ${pkg}`);
+    finishCmdExec("应用已启动");
+    showToast(`已启动 ${pkg}`);
+  } catch {
+    appendCmdExec("monkey 启动失败，尝试 am start 兜底...");
+    try {
+      const mainAct = await shell(selectedDevice.value.serial, 
+        `cmd package resolve-activity --brief ${pkg} | tail -1`);
+      if (mainAct && mainAct.includes("/")) {
+        await shell(selectedDevice.value.serial, `am start -n ${mainAct.trim()}`);
+        appendCmdExec(`已启动 ${pkg}`);
+        finishCmdExec("应用已启动");
+        showToast(`已启动 ${pkg}`);
+        return;
+      }
+    } catch {}
+    finishCmdExec("启动失败"); showToast("启动失败", "error");
+  }
 }
 async function stopApp(pkg: string) {
   if (!selectedDevice.value) return;
-  try { await adbStopApp(selectedDevice.value.serial, pkg); showToast(`已停止 ${pkg}`); } catch { showToast("停止失败", "error"); }
+  showCmdExec("停止应用", `adb shell am force-stop ${pkg}`);
+  try {
+    appendCmdExec(`正在停止 ${pkg}...`);
+    await adbStopApp(selectedDevice.value.serial, pkg);
+    appendCmdExec(`已停止 ${pkg}`);
+    finishCmdExec("应用已停止");
+    showToast(`已停止 ${pkg}`);
+  } catch { finishCmdExec("停止失败"); showToast("停止失败", "error"); }
 }
 async function clearApp(pkg: string) {
   if (!selectedDevice.value) return;
-  try { await clearAppData(selectedDevice.value.serial, pkg); showToast(`已清除 ${pkg} 数据`); } catch { showToast("清除失败", "error"); }
+  showCmdExec("清除数据", `adb shell pm clear ${pkg}`);
+  try {
+    appendCmdExec(`正在清除 ${pkg} 数据...`);
+    await clearAppData(selectedDevice.value.serial, pkg);
+    appendCmdExec(`已清除 ${pkg} 数据`);
+    finishCmdExec("数据已清除");
+    showToast(`已清除 ${pkg} 数据`);
+  } catch { finishCmdExec("清除失败"); showToast("清除失败", "error"); }
 }
 async function uninstallPkg(pkg: string) {
   if (!selectedDevice.value) return;
-  try { await uninstallApk(selectedDevice.value.serial, pkg); apps.value = apps.value.filter(a => a.package_name !== pkg); showToast(`已卸载 ${pkg}`); }
-  catch { showToast("卸载失败", "error"); }
+  showCmdExec("卸载应用", `adb uninstall ${pkg}`);
+  try {
+    appendCmdExec(`正在卸载 ${pkg}...`);
+    await uninstallApk(selectedDevice.value.serial, pkg);
+    apps.value = apps.value.filter(a => a.package_name !== pkg);
+    appendCmdExec(`已卸载 ${pkg}`);
+    finishCmdExec("应用已卸载");
+    showToast(`已卸载 ${pkg}`);
+  } catch { finishCmdExec("卸载失败"); showToast("卸载失败", "error"); }
 }
 async function selectApkFile() {
   try {
@@ -1222,20 +1362,25 @@ async function copyVersionInfo(pkg: string) {
 }
 async function downloadApk(pkg: string) {
   if (!selectedDevice.value) return;
-  setAppLoading(pkg, 'download', true);
+  showCmdExec("下载 APK", `adb shell dumpsys package ${pkg} | grep path:`);
   try {
+    appendCmdExec("正在查询 APK 路径...");
     const info = await getAppInfo(selectedDevice.value.serial, pkg);
     const pathMatch = info.match(/path:?\s*(\S+)/);
-    if (!pathMatch) { showToast("未找到APK路径", "error"); return; }
+    if (!pathMatch) { finishCmdExec("未找到 APK 路径"); showToast("未找到APK路径", "error"); return; }
+    appendCmdExec(`APK 路径: ${pathMatch[1]}`);
     const { save } = await import("@tauri-apps/plugin-dialog");
     const dest = await save({ defaultPath: `${pkg}.apk`, filters: [{ name: "APK", extensions: ["apk"] }] });
-    if (dest) { await pullFile(selectedDevice.value.serial, pathMatch[1], dest); showToast("APK 已下载"); }
-  } catch { showToast("下载失败", "error"); }
-  finally { setAppLoading(pkg, 'download', false); }
+    if (!dest) { cmdExec.value.show = false; return; }
+    appendCmdExec("正在拉取 APK 文件...");
+    await pullFile(selectedDevice.value.serial, pathMatch[1], dest);
+    appendCmdExec(`已保存到: ${dest}`);
+    finishCmdExec("APK 下载完成");
+    showToast("APK 已下载");
+  } catch { finishCmdExec("下载失败"); showToast("下载失败", "error"); }
 }
 
 // ── App Path Query ──
-const queryPackageName = ref("");
 const resultDialog = ref({ show: false, title: "", content: "" });
 async function queryAppPath() {
   if (!selectedDevice.value || !queryPackageName.value.trim()) return;
@@ -1723,6 +1868,15 @@ onMounted(async () => {
   loadRemotePathHistory();
   // Auto-refresh devices every 5s
   autoRefreshId = setInterval(scanDevices, 5000);
+  nextTick(() => {
+    recalcAppPageSize();
+    let rafId: number;
+    const ro = new ResizeObserver(() => { cancelAnimationFrame(rafId); rafId = requestAnimationFrame(recalcAppPageSize); });
+    const panel = appListContainer.value?.closest('.glass-panel');
+    if (panel) ro.observe(panel);
+    window.addEventListener('resize', recalcAppPageSize);
+    setTimeout(recalcAppPageSize, 500);
+  });
   // Restore running log sessions
   try {
     const sessions = await getRunningLogSessions();
@@ -1733,6 +1887,8 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  window.removeEventListener('resize', recalcAppPageSize);
+  if ((window as any).__appListResizeObserver) (window as any).__appListResizeObserver.disconnect();
   if (mirrorTimeoutId) clearTimeout(mirrorTimeoutId);
   if (logcatTimeoutId) clearTimeout(logcatTimeoutId);
   if (diagTimeoutId) clearTimeout(diagTimeoutId);
