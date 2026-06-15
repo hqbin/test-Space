@@ -26,9 +26,8 @@
         </button>
         <span v-if="devices.length === 0" class="font-caption text-caption text-on-surface-variant/50">无设备连接</span>
       </div>
-      <button class="glass-button p-2 rounded-full border border-outline-variant/60" @click="scanDevices()" :disabled="scanLoading">
-        <span v-if="scanLoading" class="w-3 h-3 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
-        <span v-else class="material-symbols-outlined text-[16px]">refresh</span>
+      <button class="text-on-surface-variant hover:text-secondary hover:scale-105 transition-all" @click="scanDevices()" :disabled="scanLoading">
+        <span class="material-symbols-outlined text-[18px] block" :class="scanLoading ? 'animate-spin' : ''">refresh</span>
       </button>
     </div>
 
@@ -48,22 +47,22 @@
       <!-- Operations & Actions Grid -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 shrink-0">
         <!-- Device Operations Card -->
-        <div class="glass-panel rounded-xl p-5 flex flex-col gap-4">
+        <div class="glass-panel rounded-xl p-5 flex flex-col gap-4 shadow-md">
           <h3 class="flex items-center gap-2 font-label-md text-label-md text-on-surface">
             <span class="material-symbols-outlined text-[16px] text-on-surface-variant">settings_remote</span> 设备操作
           </h3>
           <div class="grid grid-cols-2 gap-3">
-            <button class="bg-white/50 border border-outline-variant/60 py-2 px-4 rounded-lg font-caption text-caption flex items-center justify-center gap-2 hover:bg-white/70 hover:scale-105 transition-all text-sm text-on-surface"
+            <button class="bg-white/30 border border-white/50 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm"
               :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('basic')">
               <span v-if="infoLoading === 'basic'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
               <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">info</span> 基础信息
             </button>
-            <button class="bg-white/50 border border-outline-variant/60 py-2 px-4 rounded-lg font-caption text-caption flex items-center justify-center gap-2 hover:bg-white/70 hover:scale-105 transition-all text-sm text-on-surface"
+            <button class="bg-white/30 border border-white/50 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm"
               :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('whaleos')">
               <span v-if="infoLoading === 'whaleos'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
               <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">description</span> 固件信息
             </button>
-            <button class="bg-white/50 border border-outline-variant/60 py-2 px-4 rounded-lg font-caption text-caption flex items-center justify-center gap-2 hover:bg-white/70 hover:scale-105 transition-all text-sm text-on-surface col-span-2"
+            <button class="bg-white/30 border border-white/50 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm col-span-2"
               :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('keys')">
               <span v-if="infoLoading === 'keys'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
               <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">vpn_key</span> 检查密钥
@@ -71,51 +70,51 @@
           </div>
           <hr class="border-outline-variant/30 my-1">
           <div class="flex flex-wrap gap-2">
-            <button class="glass-button px-3 py-1.5 rounded-md font-caption text-caption flex items-center gap-1 hover:bg-white/50" @click="confirmThen('重启设备?', rebootDevice)">
+            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="confirmThen('重启设备?', rebootDevice)">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">restart_alt</span> 重启
             </button>
-            <button class="glass-button px-3 py-1.5 rounded-md font-caption text-caption flex items-center gap-1 hover:bg-white/50" @click="rootDevice">
+            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="rootDevice">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">shield</span> Root
             </button>
-            <button class="glass-button px-3 py-1.5 rounded-md font-caption text-caption flex items-center gap-1 hover:bg-white/50" @click="confirmThen('Remount 需要 root 权限，继续?', remountDevice)">
+            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="confirmThen('Remount 需要 root 权限，继续?', remountDevice)">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">published_with_changes</span> Remount
             </button>
           </div>
         </div>
         <!-- Quick Actions Card -->
-        <div class="glass-panel rounded-xl p-5 flex flex-col gap-4">
+        <div class="glass-panel rounded-xl p-5 flex flex-col gap-4 shadow-md">
           <h3 class="flex items-center gap-2 font-label-md text-label-md text-on-surface">
             <span class="material-symbols-outlined text-[16px] text-on-surface-variant">keyboard_command_key</span> 快捷操作
           </h3>
           <div class="flex gap-2">
             <div class="flex-1 relative">
               <input ref="textInputRef" v-model="inputTextValue"
-                class="w-full bg-white/50 border border-outline-variant/60 rounded-full px-4 py-2 font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all"
+                class="w-full bg-white/50 border border-outline-variant/60 rounded-full px-3 py-1.5 font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all"
                 placeholder="输入要发送到设备的文本..." @keyup.enter="sendText" @focus="showTextHistory = true" @blur="hideTextHistoryDelayed" />
               <div v-if="showTextHistory && textHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-outline-variant rounded-lg p-1 max-h-32 overflow-y-auto shadow-lg">
                 <button v-for="(h, i) in textHistory" :key="i" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100"
                   @mousedown.prevent @click="selectTextHistory(h)">{{ h }}</button>
               </div>
             </div>
-            <button class="bg-white/50 border border-outline-variant/60 text-on-surface px-5 py-2 rounded-full font-label-md text-label-md hover:bg-white/70 hover:scale-105 transition-all" @click="sendText" :disabled="!inputTextValue.trim()">发送</button>
+            <button class="bg-white/30 border border-white/50 text-on-surface px-4 py-1.5 rounded-xl font-label-md text-label-md hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="sendText" :disabled="!inputTextValue.trim()">发送</button>
           </div>
           <hr class="border-outline-variant/30 my-1">
           <div class="flex flex-wrap gap-2">
-            <button class="glass-button px-3 py-1.5 rounded-md font-caption text-caption flex items-center gap-1 hover:bg-white/50" @click="takeScreenshot" :disabled="!selectedDevice">
+            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="takeScreenshot" :disabled="!selectedDevice">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">image</span> 截图
             </button>
-            <button class="glass-button px-3 py-1.5 rounded-md font-caption text-caption flex items-center gap-1 hover:bg-white/50"
+            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm"
               :class="isRecording ? 'bg-error/10 text-error border border-error/20' : ''"
               :disabled="recordingLoading" @click="toggleRecording">
               <span v-if="recordingLoading" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
               <span v-else class="material-symbols-outlined text-[14px]">{{ isRecording ? 'stop' : 'videocam' }}</span>
               {{ recordingLoading ? (isRecording ? '停止中...' : '启动中...') : (isRecording ? '停止' : '录屏') }}
             </button>
-            <button class="glass-button px-3 py-1.5 rounded-md font-caption text-caption flex items-center gap-1 hover:bg-white/50"
+            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm"
               :disabled="!selectedDevice || logPrepActive" @click="clearLogcatLogs">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">delete_sweep</span> 清空日志
             </button>
-            <button class="glass-button px-3 py-1.5 rounded-md font-caption text-caption flex items-center gap-1 hover:bg-white/50" @click="restartAdbServer">
+            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="restartAdbServer">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">power_settings_new</span> 重启ADB
             </button>
           </div>
@@ -124,28 +123,28 @@
             {{ logPrepMessage }}
           </div>
           <div class="flex flex-wrap gap-2">
-            <button class="bg-white/50 border border-outline-variant/60 px-3 py-1.5 rounded-md font-caption text-caption flex items-center gap-1 hover:bg-white/70 hover:scale-105 transition-all text-xs text-on-surface"
+            <button class="bg-white/30 border border-white/50 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm"
               :class="logcatRunning ? 'bg-error/10 text-error border border-error/20' : ''"
               :disabled="logPrepActive" @click="toggleLogcat">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">{{ logcatRunning ? 'stop' : 'assignment' }}</span>
               实时日志
               <span v-if="logcatRunning" class="font-caption text-caption text-secondary bg-secondary/20 px-1 py-0.5 rounded-full text-[10px] ml-0.5">{{ logcatElapsed }}s</span>
             </button>
-            <button class="bg-white/50 border border-outline-variant/60 px-3 py-1.5 rounded-md font-caption text-caption flex items-center gap-1 hover:bg-white/70 hover:scale-105 transition-all text-xs text-on-surface"
+            <button class="bg-white/30 border border-white/50 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm"
               :class="diagRunning ? 'bg-error/10 text-error border border-error/20' : ''"
               :disabled="logPrepActive" @click="toggleDiagnostic">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">{{ diagRunning ? 'stop' : 'work' }}</span>
               诊断包
               <span v-if="diagRunning" class="font-caption text-caption text-secondary bg-secondary/20 px-1 py-0.5 rounded-full text-[10px] ml-0.5">{{ diagElapsed }}s</span>
             </button>
-            <button class="bg-white/50 border border-outline-variant/60 px-3 py-1.5 rounded-md font-caption text-caption flex items-center gap-1 hover:bg-white/70 hover:scale-105 transition-all text-xs text-on-surface"
+            <button class="bg-white/30 border border-white/50 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm"
               :class="bootLogcatRunning ? 'bg-error/10 text-error border border-error/20' : ''"
               :disabled="logPrepActive" @click="toggleBootLogcat">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">{{ bootLogcatRunning ? 'stop' : 'pest_control' }}</span>
               开机日志
               <span v-if="bootLogcatRunning" class="font-caption text-caption text-secondary bg-secondary/20 px-1 py-0.5 rounded-full text-[10px] ml-0.5">{{ bootLogcatElapsed }}s</span>
             </button>
-            <button class="bg-white/50 border border-outline-variant/60 px-3 py-1.5 rounded-md font-caption text-caption flex items-center gap-1 hover:bg-white/70 hover:scale-105 transition-all text-xs text-on-surface"
+            <button class="bg-white/30 border border-white/50 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm"
               :disabled="!selectedDevice" @click="generateBugreport">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">bug_report</span> Bugreport
             </button>
@@ -154,9 +153,9 @@
       </div>
 
       <!-- Bottom Layout: App Management + 快捷指令 -->
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0 pb-3">
         <!-- App Management -->
-        <div class="lg:col-span-2 glass-panel rounded-xl flex flex-col min-h-0 overflow-hidden">
+        <div class="lg:col-span-2 glass-panel rounded-xl flex flex-col min-h-0 overflow-hidden shadow-md">
             <!-- App Management Header -->
             <div class="p-4 border-b border-outline-variant/30 flex flex-col gap-3">
               <div class="flex items-center justify-between">
@@ -165,20 +164,20 @@
                     <span class="material-symbols-outlined text-[16px] text-on-surface-variant">apps</span>应用管理
                     <span class="font-caption text-caption text-on-surface-variant/60 font-normal text-sm">({{ sortedApps.length }})</span>
                   </h3>
-                  <div class="flex items-center gap-3 text-sm text-on-surface-variant">
-                    <button class="flex items-center hover:text-on-surface hover:bg-white/50 px-1.5 py-0.5 rounded-lg hover:scale-105 transition-all" @click="refreshPackageList" :disabled="pkgLoading">
-                      <span v-if="pkgLoading" class="w-3 h-3 border-2 border-secondary border-t-transparent rounded-full animate-spin mr-1"></span>
-                      <span v-else class="material-symbols-outlined text-[16px] mr-1">refresh</span>刷新
+                  <div class="flex items-center gap-2 text-sm text-on-surface-variant">
+                    <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="refreshPackageList" :disabled="pkgLoading">
+                      <span v-if="pkgLoading" class="w-3 h-3 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
+                      <span v-else class="material-symbols-outlined text-[14px]">refresh</span>刷新
                     </button>
-                    <label class="flex items-center cursor-pointer hover:text-on-surface hover:scale-105 transition-all">
+                    <label class="flex items-center cursor-pointer hover:scale-105 transition-all px-2 py-1 rounded-xl bg-white/30 border border-white/50 backdrop-blur-sm hover:bg-secondary/10 hover:border-secondary/30">
                       <input type="checkbox" v-model="showThirdParty" class="rounded border-outline-variant text-secondary focus:ring-secondary mr-1 w-3.5 h-3.5 accent-secondary" @change="refreshPackageList" />
                       第三方应用
                     </label>
-                    <button class="flex items-center hover:text-on-surface hover:bg-white/50 px-1.5 py-0.5 rounded-lg hover:scale-105 transition-all" @click="apkDialogOpen = true">
-                      <span class="material-symbols-outlined text-[16px] mr-1">file_upload</span> 安装 APK
+                    <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="apkDialogOpen = true">
+                      <span class="material-symbols-outlined text-[14px]">file_upload</span> 安装 APK
                     </button>
-                    <button class="flex items-center hover:text-on-surface hover:bg-white/50 px-1.5 py-0.5 rounded-lg hover:scale-105 transition-all" @click="getCurrentForegroundApp">
-                      <span class="material-symbols-outlined text-[16px] mr-1">center_focus_strong</span> 前台应用
+                    <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="getCurrentForegroundApp">
+                      <span class="material-symbols-outlined text-[14px]">center_focus_strong</span> 前台应用
                     </button>
                   </div>
                 </div>
@@ -195,15 +194,15 @@
                       @mousedown.prevent @click="selectAppSearchHistory(h)">{{ h }}</button>
                   </div>
                 </div>
-                <button class="flex items-center text-sm text-on-surface-variant hover:text-on-surface hover:bg-white/50 px-1.5 py-0.5 rounded-lg hover:scale-105 transition-all" @click="queryAppPath">
-                  <span class="material-symbols-outlined text-[16px] mr-1">folder_open</span> 路径
+                <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="queryAppPath">
+                  <span class="material-symbols-outlined text-[14px]">folder_open</span> 路径
                 </button>
-                <div v-if="totalPages > 1" class="flex items-center gap-2 text-sm text-on-surface bg-white/50 border border-outline-variant/60 rounded-full px-3 py-1 ml-auto">
-                  <button class="hover:bg-white/70 hover:scale-105 rounded-full p-0.5 transition-all disabled:opacity-50" :disabled="appPage <= 1" @click="appPage = Math.max(1, appPage - 1); nextTick(loadVisibleAppVersions)">
+                <div v-if="totalPages > 1" class="flex items-center gap-2 text-sm text-on-surface bg-white/30 border border-white/50 rounded-xl px-3 py-1 ml-auto backdrop-blur-sm">
+                  <button class="hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 rounded-full p-0.5 transition-all disabled:opacity-50" :disabled="appPage <= 1" @click="appPage = Math.max(1, appPage - 1); nextTick(loadVisibleAppVersions)">
                     <span class="material-symbols-outlined text-[16px]">chevron_left</span>
                   </button>
                   <span class="whitespace-nowrap">{{ appPage }} / {{ totalPages }}</span>
-                  <button class="hover:bg-white/70 hover:scale-105 rounded-full p-0.5 transition-all disabled:opacity-50" :disabled="appPage >= totalPages" @click="appPage = Math.min(totalPages, appPage + 1); nextTick(loadVisibleAppVersions)">
+                  <button class="hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 rounded-full p-0.5 transition-all disabled:opacity-50" :disabled="appPage >= totalPages" @click="appPage = Math.min(totalPages, appPage + 1); nextTick(loadVisibleAppVersions)">
                     <span class="material-symbols-outlined text-[16px]">chevron_right</span>
                   </button>
                 </div>
@@ -219,22 +218,22 @@
                 <tbody class="divide-y divide-outline-variant/30">
                   <tr v-for="app in currentPageApps" :key="app.package_name" :ref="(el) => { if (el && !appItemMeasured) measureAppItem(el as HTMLElement) }" class="hover:bg-white/30 transition-colors group">
                     <td class="pl-1 pr-0 py-2">
-                      <span class="material-symbols-outlined text-success-indicator text-[16px] cursor-pointer hover:scale-125 transition-transform" @click="startApp(app.package_name)">play_arrow</span>
+                      <span class="material-symbols-outlined text-success-indicator text-[16px] cursor-pointer hover:scale-125 transition-transform" title="启动" @click="startApp(app.package_name)">play_arrow</span>
                     </td>
                     <td class="px-0 py-2">
-                      <span class="material-symbols-outlined text-error text-[16px] cursor-pointer hover:scale-125 transition-transform" @click="stopApp(app.package_name)">stop_circle</span>
+                      <span class="material-symbols-outlined text-error text-[16px] cursor-pointer hover:scale-125 transition-transform" title="停止" @click="stopApp(app.package_name)">stop_circle</span>
                     </td>
                     <td class="px-0 py-2">
-                      <span class="material-symbols-outlined text-on-surface-variant text-[16px] cursor-pointer hover:scale-125 transition-transform" @click="showAppDetail(app.package_name)">info</span>
+                      <span class="material-symbols-outlined text-on-surface-variant text-[16px] cursor-pointer hover:scale-125 transition-transform" title="详情" @click="showAppDetail(app.package_name)">info</span>
                     </td>
                     <td class="px-0 py-2">
-                      <span class="material-symbols-outlined text-on-surface-variant text-[16px] cursor-pointer hover:scale-125 transition-transform" @click="downloadApk(app.package_name)">download</span>
+                      <span class="material-symbols-outlined text-on-surface-variant text-[16px] cursor-pointer hover:scale-125 transition-transform" title="下载APK" @click="downloadApk(app.package_name)">download</span>
                     </td>
                     <td class="px-0 py-2">
-                      <span class="material-symbols-outlined text-error/70 text-[16px] cursor-pointer hover:scale-125 transition-transform" @click="clearApp(app.package_name)">cleaning_services</span>
+                      <span class="material-symbols-outlined text-error/70 text-[16px] cursor-pointer hover:scale-125 transition-transform" title="清除数据" @click="clearApp(app.package_name)">cleaning_services</span>
                     </td>
                     <td class="pr-1 pl-0 py-2">
-                      <span class="material-symbols-outlined text-error text-[16px] cursor-pointer hover:scale-125 transition-transform" @click="confirmThen(`卸载 ${app.package_name}?`, () => uninstallPkg(app.package_name))">delete</span>
+                      <span class="material-symbols-outlined text-error text-[16px] cursor-pointer hover:scale-125 transition-transform" title="卸载" @click="confirmThen(`卸载 ${app.package_name}?`, () => uninstallPkg(app.package_name))">delete</span>
                     </td>
                     <td class="pl-2 pr-2 py-2 font-medium text-on-surface">
                       <span class="font-mono cursor-pointer hover:text-secondary hover:underline truncate" :title="app.package_name" @click="copyPackageName(app.package_name)">{{ app.package_name }}</span>
@@ -249,14 +248,14 @@
           </div>
         </div>
         <!-- 快捷指令 Sidebar -->
-        <div class="glass-panel rounded-xl p-5 flex flex-col gap-6 overflow-y-auto">
+        <div class="glass-panel rounded-xl p-5 flex flex-col gap-6 overflow-y-auto shadow-md">
           <div class="flex flex-col gap-3">
             <div class="flex items-center justify-between">
               <h3 class="flex items-center gap-2 font-label-md text-label-md text-on-surface">
                 <span class="material-symbols-outlined text-[16px] text-on-surface-variant">bolt</span> 快捷指令
               </h3>
               <div class="flex items-center gap-1">
-                <button class="text-on-surface-variant hover:text-secondary hover:bg-white/50 px-1 py-0.5 rounded-lg hover:scale-105 transition-all" title="管理" @click="showCmdManager = true">
+                <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-on-surface-variant backdrop-blur-sm" title="管理" @click="showCmdManager = true">
                   <span class="material-symbols-outlined text-[18px]">edit_note</span>
                 </button>
               </div>
@@ -268,7 +267,7 @@
             </div>
             <div v-if="customCommands.length > 0" class="grid grid-cols-2 gap-2">
               <div v-for="(cmd, idx) in customCommands" :key="idx"
-                class="flex items-center p-2 bg-white/20 rounded-xl cursor-pointer hover:bg-white/30 transition-colors" @click="executeCustomCommand(cmd.command)">
+                class="flex items-center px-3 py-1.5 bg-white/30 border border-white/50 rounded-xl cursor-pointer hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="executeCustomCommand(cmd.command)">
                 <div class="font-caption text-caption text-on-surface leading-tight break-all">{{ cmd.name }}</div>
               </div>
             </div>
