@@ -2,20 +2,22 @@
   <div class="flex gap-4 h-screen overflow-hidden">
     <div class="flex-1 flex flex-col gap-4 min-w-0 overflow-hidden">
     <!-- Connection Bar - always visible, moved up -->
-    <div class="glass-panel rounded-xl p-3 flex items-center gap-3">
-      <span class="material-symbols-outlined text-on-surface-variant text-[18px]">link</span>
-      <input v-model="connectAddress"
-        class="flex-1 bg-transparent border-none outline-none font-body-md text-body-md text-on-surface placeholder:text-on-surface-variant/50"
-        placeholder="输入 IP 地址连接设备，例如: 192.168.1.100:5555" @keyup.enter="connectToDevice" />
-      <button class="glass-button px-4 py-1.5 rounded-full font-label-md text-label-md flex items-center gap-1" @click="connectToDevice" :disabled="connecting">
+    <div class="glass-panel rounded-xl p-3 px-5 flex items-center gap-4">
+      <div class="flex items-center border border-outline-variant/60 rounded-full px-4 py-2 bg-white/50 max-w-[400px]">
+        <span class="material-symbols-outlined text-on-surface-variant text-[16px] mr-2">link</span>
+        <input v-model="connectAddress"
+          class="flex-1 bg-transparent border-none outline-none font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-0 p-0"
+          placeholder="输入 IP 地址连接设备，例如: 192.168.1.100:5555" @keyup.enter="connectToDevice" />
+      </div>
+      <button class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-1 border border-outline-variant/60" @click="connectToDevice" :disabled="connecting">
         <span v-if="connecting" class="w-3.5 h-3.5 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
         <span v-else class="material-symbols-outlined text-[16px]">add_link</span>{{ connecting ? '连接中...' : '连接' }}
       </button>
       <div class="h-5 w-[1px] bg-glass-border-dark"></div>
       <div class="flex gap-2 flex-wrap items-center">
         <button v-for="device in devices" :key="device.serial"
-          class="px-2.5 py-1 rounded-full font-caption text-caption flex items-center gap-1.5 transition-all group"
-          :class="selectedDevice?.serial === device.serial ? 'glass-button glass-active' : 'glass-button'"
+          class="px-3 py-1.5 rounded-full font-caption text-caption flex items-center gap-1.5 transition-all group border hover:scale-105"
+          :class="selectedDevice?.serial === device.serial ? 'bg-secondary/10 text-secondary border-secondary/30' : 'bg-white/50 border-outline-variant/60 text-on-surface hover:bg-white/70'"
           @click="selectDevice(device)">
           <div class="w-2 h-2 rounded-full" :class="device.status === 'online' ? 'bg-success-indicator' : 'bg-outline-variant'"></div>
           {{ device.name }}
@@ -24,235 +26,255 @@
         </button>
         <span v-if="devices.length === 0" class="font-caption text-caption text-on-surface-variant/50">无设备连接</span>
       </div>
-      <button class="glass-button px-2.5 py-1 rounded-full font-caption text-caption flex items-center gap-1" @click="scanDevices()" :disabled="scanLoading">
+      <button class="glass-button p-2 rounded-full border border-outline-variant/60" @click="scanDevices()" :disabled="scanLoading">
         <span v-if="scanLoading" class="w-3 h-3 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
-        <span v-else class="material-symbols-outlined text-[14px]">refresh</span>
+        <span v-else class="material-symbols-outlined text-[16px]">refresh</span>
       </button>
     </div>
 
     <!-- Tab Switcher -->
     <div class="flex gap-2">
       <button v-for="tab in tabs" :key="tab.key"
-        class="px-5 py-2 rounded-full font-label-md text-label-md transition-all"
-        :class="activeTab === tab.key ? 'glass-active' : 'glass-button'"
+        class="px-6 py-2.5 rounded-full font-label-md text-label-md transition-all flex items-center hover:scale-105"
+        :class="activeTab === tab.key ? 'bg-secondary/10 text-secondary border border-secondary/30' : 'bg-transparent text-on-surface-variant/70 border border-transparent hover:bg-white/30'"
         @click="activeTab = tab.key">
-        <span class="material-symbols-outlined text-[16px] align-middle mr-1">{{ tab.icon }}</span>
+        <span class="material-symbols-outlined text-[16px] align-middle mr-2">{{ tab.icon }}</span>
         {{ tab.label }}
       </button>
     </div>
 
     <!-- Tab 1: 常用命令 -->
-    <div v-show="activeTab === 'common'" class="flex flex-col gap-1 flex-grow min-h-0 overflow-hidden">
-      <!-- Row 1: Info Query (left) + Text Input & Actions (right) -->
-      <div class="grid grid-cols-12 gap-4">
-        <div class="col-span-12 lg:col-span-5">
-          <div class="glass-panel rounded-xl p-3">
-            <h3 class="font-label-md text-label-md text-on-surface mb-2 flex items-center gap-1.5">
-              <span class="material-symbols-outlined text-[16px]">settings_remote</span>设备操作
-            </h3>
-            <div class="grid grid-cols-2 gap-1.5">
-              <button class="glass-button py-1.5 rounded-lg font-caption text-caption flex items-center justify-center gap-1"
-                :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('basic')">
-                <span v-if="infoLoading === 'basic'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
-                <span v-else class="material-symbols-outlined text-[14px]">info</span>基础信息
-              </button>
-              <button class="glass-button py-1.5 rounded-lg font-caption text-caption flex items-center justify-center gap-1"
-                :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('whaleos')">
-                <span v-if="infoLoading === 'whaleos'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
-                <span v-else class="material-symbols-outlined text-[14px]">tv</span>固件信息
-              </button>
-              <button class="glass-button py-1.5 rounded-lg font-caption text-caption flex items-center justify-center gap-1"
-                :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('keys')">
-                <span v-if="infoLoading === 'keys'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
-                <span v-else class="material-symbols-outlined text-[14px]">security</span>检查密钥
-              </button>
-            </div>
+    <div v-show="activeTab === 'common'" class="flex flex-col gap-4 flex-grow min-h-0 overflow-hidden">
+      <!-- Operations & Actions Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 shrink-0">
+        <!-- Device Operations Card -->
+        <div class="glass-panel rounded-xl p-5 flex flex-col gap-4">
+          <h3 class="flex items-center gap-2 font-label-md text-label-md text-on-surface">
+            <span class="material-symbols-outlined text-[16px] text-on-surface-variant">settings_remote</span> 设备操作
+          </h3>
+          <div class="grid grid-cols-2 gap-3">
+            <button class="bg-white/50 border border-outline-variant/60 py-2 px-4 rounded-lg font-caption text-caption flex items-center justify-center gap-2 hover:bg-white/70 hover:scale-105 transition-all text-sm text-on-surface"
+              :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('basic')">
+              <span v-if="infoLoading === 'basic'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+              <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">info</span> 基础信息
+            </button>
+            <button class="bg-white/50 border border-outline-variant/60 py-2 px-4 rounded-lg font-caption text-caption flex items-center justify-center gap-2 hover:bg-white/70 hover:scale-105 transition-all text-sm text-on-surface"
+              :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('whaleos')">
+              <span v-if="infoLoading === 'whaleos'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+              <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">description</span> 固件信息
+            </button>
+            <button class="bg-white/50 border border-outline-variant/60 py-2 px-4 rounded-lg font-caption text-caption flex items-center justify-center gap-2 hover:bg-white/70 hover:scale-105 transition-all text-sm text-on-surface col-span-2"
+              :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('keys')">
+              <span v-if="infoLoading === 'keys'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+              <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">vpn_key</span> 检查密钥
+            </button>
+          </div>
+          <hr class="border-outline-variant/30 my-1">
+          <div class="flex flex-wrap gap-2">
+            <button class="glass-button px-3 py-1.5 rounded-md font-caption text-caption flex items-center gap-1 hover:bg-white/50" @click="confirmThen('重启设备?', rebootDevice)">
+              <span class="material-symbols-outlined text-[14px] text-on-surface-variant">restart_alt</span> 重启
+            </button>
+            <button class="glass-button px-3 py-1.5 rounded-md font-caption text-caption flex items-center gap-1 hover:bg-white/50" @click="rootDevice">
+              <span class="material-symbols-outlined text-[14px] text-on-surface-variant">shield</span> Root
+            </button>
+            <button class="glass-button px-3 py-1.5 rounded-md font-caption text-caption flex items-center gap-1 hover:bg-white/50" @click="confirmThen('Remount 需要 root 权限，继续?', remountDevice)">
+              <span class="material-symbols-outlined text-[14px] text-on-surface-variant">published_with_changes</span> Remount
+            </button>
           </div>
         </div>
-        <div class="col-span-12 lg:col-span-7">
-          <div class="glass-panel rounded-xl p-3">
-            <h3 class="font-label-md text-label-md text-on-surface mb-1.5 flex items-center gap-1.5">
-              <span class="material-symbols-outlined text-[16px]">keyboard</span>快捷操作
-            </h3>
-            <div class="flex gap-2 relative mb-1.5">
-              <div class="flex-1 relative">
-                <input ref="textInputRef" v-model="inputTextValue"
-                  class="w-full bg-white border border-outline-variant rounded-lg px-3 py-1 font-body-sm text-body-sm text-on-surface focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all"
-                  placeholder="输入要发送到设备的文本..." @keyup.enter="sendText" @focus="showTextHistory = true" @blur="hideTextHistoryDelayed" />
-                <div v-if="showTextHistory && textHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-outline-variant rounded-lg p-1 max-h-32 overflow-y-auto shadow-lg">
-                  <button v-for="(h, i) in textHistory" :key="i" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100"
-                    @mousedown.prevent @click="selectTextHistory(h)">{{ h }}</button>
-                </div>
+        <!-- Quick Actions Card -->
+        <div class="glass-panel rounded-xl p-5 flex flex-col gap-4">
+          <h3 class="flex items-center gap-2 font-label-md text-label-md text-on-surface">
+            <span class="material-symbols-outlined text-[16px] text-on-surface-variant">keyboard_command_key</span> 快捷操作
+          </h3>
+          <div class="flex gap-2">
+            <div class="flex-1 relative">
+              <input ref="textInputRef" v-model="inputTextValue"
+                class="w-full bg-white/50 border border-outline-variant/60 rounded-full px-4 py-2 font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all"
+                placeholder="输入要发送到设备的文本..." @keyup.enter="sendText" @focus="showTextHistory = true" @blur="hideTextHistoryDelayed" />
+              <div v-if="showTextHistory && textHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-outline-variant rounded-lg p-1 max-h-32 overflow-y-auto shadow-lg">
+                <button v-for="(h, i) in textHistory" :key="i" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100"
+                  @mousedown.prevent @click="selectTextHistory(h)">{{ h }}</button>
               </div>
-              <button class="glass-button px-3 py-1.5 rounded-lg font-label-md text-label-md" @click="sendText" :disabled="!inputTextValue.trim()">发送</button>
             </div>
-            <div class="flex gap-2 items-center flex-wrap">
-              <button class="glass-button px-3 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1" @click="takeScreenshot" :disabled="!selectedDevice">
-                <span class="material-symbols-outlined text-[12px]">screenshot_monitor</span>截图
-              </button>
-              <button class="glass-button px-2 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1"
-                :class="isRecording ? 'bg-error/10 text-error border border-error/20' : ''"
-                :disabled="recordingLoading" @click="toggleRecording">
-                <span v-if="recordingLoading" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
-                <span v-else class="material-symbols-outlined text-[12px]">{{ isRecording ? 'stop' : 'videocam' }}</span>
-                {{ recordingLoading ? (isRecording ? '停止中...' : '启动中...') : (isRecording ? '停止' : '录屏') }}
-              </button>
-              <button class="glass-button px-2 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1"
-                :disabled="!selectedDevice || logPrepActive" @click="clearLogcatLogs">
-                <span class="material-symbols-outlined text-[12px]">delete</span>清空日志
-              </button>
-              <button class="glass-button px-2 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1" @click="restartAdbServer">
-                <span class="material-symbols-outlined text-[12px]">power_settings_new</span>重启ADB
-              </button>
-            </div>
+            <button class="bg-white/50 border border-outline-variant/60 text-on-surface px-5 py-2 rounded-full font-label-md text-label-md hover:bg-white/70 hover:scale-105 transition-all" @click="sendText" :disabled="!inputTextValue.trim()">发送</button>
+          </div>
+          <hr class="border-outline-variant/30 my-1">
+          <div class="flex flex-wrap gap-2">
+            <button class="glass-button px-3 py-1.5 rounded-md font-caption text-caption flex items-center gap-1 hover:bg-white/50" @click="takeScreenshot" :disabled="!selectedDevice">
+              <span class="material-symbols-outlined text-[14px] text-on-surface-variant">image</span> 截图
+            </button>
+            <button class="glass-button px-3 py-1.5 rounded-md font-caption text-caption flex items-center gap-1 hover:bg-white/50"
+              :class="isRecording ? 'bg-error/10 text-error border border-error/20' : ''"
+              :disabled="recordingLoading" @click="toggleRecording">
+              <span v-if="recordingLoading" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+              <span v-else class="material-symbols-outlined text-[14px]">{{ isRecording ? 'stop' : 'videocam' }}</span>
+              {{ recordingLoading ? (isRecording ? '停止中...' : '启动中...') : (isRecording ? '停止' : '录屏') }}
+            </button>
+            <button class="glass-button px-3 py-1.5 rounded-md font-caption text-caption flex items-center gap-1 hover:bg-white/50"
+              :disabled="!selectedDevice || logPrepActive" @click="clearLogcatLogs">
+              <span class="material-symbols-outlined text-[14px] text-on-surface-variant">delete_sweep</span> 清空日志
+            </button>
+            <button class="glass-button px-3 py-1.5 rounded-md font-caption text-caption flex items-center gap-1 hover:bg-white/50" @click="restartAdbServer">
+              <span class="material-symbols-outlined text-[14px] text-on-surface-variant">power_settings_new</span> 重启ADB
+            </button>
+          </div>
+          <div v-if="logPrepActive" class="flex items-center gap-2 p-2 bg-secondary/5 rounded-lg font-caption text-caption text-secondary">
+            <span class="w-3 h-3 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
+            {{ logPrepMessage }}
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button class="bg-white/50 border border-outline-variant/60 px-3 py-1.5 rounded-md font-caption text-caption flex items-center gap-1 hover:bg-white/70 hover:scale-105 transition-all text-xs text-on-surface"
+              :class="logcatRunning ? 'bg-error/10 text-error border border-error/20' : ''"
+              :disabled="logPrepActive" @click="toggleLogcat">
+              <span class="material-symbols-outlined text-[14px] text-on-surface-variant">{{ logcatRunning ? 'stop' : 'assignment' }}</span>
+              实时日志
+              <span v-if="logcatRunning" class="font-caption text-caption text-secondary bg-secondary/20 px-1 py-0.5 rounded-full text-[10px] ml-0.5">{{ logcatElapsed }}s</span>
+            </button>
+            <button class="bg-white/50 border border-outline-variant/60 px-3 py-1.5 rounded-md font-caption text-caption flex items-center gap-1 hover:bg-white/70 hover:scale-105 transition-all text-xs text-on-surface"
+              :class="diagRunning ? 'bg-error/10 text-error border border-error/20' : ''"
+              :disabled="logPrepActive" @click="toggleDiagnostic">
+              <span class="material-symbols-outlined text-[14px] text-on-surface-variant">{{ diagRunning ? 'stop' : 'work' }}</span>
+              诊断包
+              <span v-if="diagRunning" class="font-caption text-caption text-secondary bg-secondary/20 px-1 py-0.5 rounded-full text-[10px] ml-0.5">{{ diagElapsed }}s</span>
+            </button>
+            <button class="bg-white/50 border border-outline-variant/60 px-3 py-1.5 rounded-md font-caption text-caption flex items-center gap-1 hover:bg-white/70 hover:scale-105 transition-all text-xs text-on-surface"
+              :class="bootLogcatRunning ? 'bg-error/10 text-error border border-error/20' : ''"
+              :disabled="logPrepActive" @click="toggleBootLogcat">
+              <span class="material-symbols-outlined text-[14px] text-on-surface-variant">{{ bootLogcatRunning ? 'stop' : 'pest_control' }}</span>
+              开机日志
+              <span v-if="bootLogcatRunning" class="font-caption text-caption text-secondary bg-secondary/20 px-1 py-0.5 rounded-full text-[10px] ml-0.5">{{ bootLogcatElapsed }}s</span>
+            </button>
+            <button class="bg-white/50 border border-outline-variant/60 px-3 py-1.5 rounded-md font-caption text-caption flex items-center gap-1 hover:bg-white/70 hover:scale-105 transition-all text-xs text-on-surface"
+              :disabled="!selectedDevice" @click="generateBugreport">
+              <span class="material-symbols-outlined text-[14px] text-on-surface-variant">bug_report</span> Bugreport
+            </button>
           </div>
         </div>
       </div>
 
-      <!-- Row 2: Device Control (left) + Log Collection (right) — same row → aligned -->
-      <div class="grid grid-cols-12 gap-4">
-        <div class="col-span-12 lg:col-span-5">
-          <div class="glass-panel rounded-xl p-3">
-            <div class="grid grid-cols-3 gap-1.5">
-              <button class="glass-button py-1.5 rounded-lg font-caption text-caption flex items-center justify-center gap-1 whitespace-nowrap" @click="confirmThen('重启设备?', rebootDevice)">
-                <span class="material-symbols-outlined text-[14px]">restart_alt</span>重启
-              </button>
-              <button class="glass-button py-1.5 rounded-lg font-caption text-caption flex items-center justify-center gap-1 whitespace-nowrap" @click="rootDevice">
-                <span class="material-symbols-outlined text-[14px]">shield</span>Root
-              </button>
-              <button class="glass-button py-1.5 rounded-lg font-caption text-caption flex items-center justify-center gap-1 whitespace-nowrap" @click="confirmThen('Remount 需要 root 权限，继续?', remountDevice)">
-                <span class="material-symbols-outlined text-[14px]">folder_managed</span>Remount
-              </button>
-            </div>
-          </div>
-        </div>
-        <div class="col-span-12 lg:col-span-7">
-          <div class="glass-panel rounded-xl p-3">
-            <div v-if="logPrepActive" class="mb-2 p-1.5 bg-secondary/5 rounded-lg font-caption text-caption text-secondary flex items-center gap-2">
-              <span class="w-3 h-3 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
-              {{ logPrepMessage }}
-            </div>
-            <div class="flex gap-2 items-center flex-wrap">
-              <button class="glass-button px-2.5 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1"
-                :class="logcatRunning ? 'bg-error/10 text-error border border-error/20' : ''"
-                :disabled="logPrepActive" @click="toggleLogcat">
-                <span class="material-symbols-outlined text-[12px]">{{ logcatRunning ? 'stop' : 'terminal' }}</span>
-                实时日志
-                <span v-if="logcatRunning" class="font-caption text-caption text-secondary bg-secondary/20 px-1 py-0.5 rounded-full text-[10px] ml-0.5">{{ logcatElapsed }}s</span>
-              </button>
-              <button class="glass-button px-2.5 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1"
-                :class="diagRunning ? 'bg-error/10 text-error border border-error/20' : ''"
-                :disabled="logPrepActive" @click="toggleDiagnostic">
-                <span class="material-symbols-outlined text-[12px]">{{ diagRunning ? 'stop' : 'diagnosis' }}</span>
-                诊断包
-                <span v-if="diagRunning" class="font-caption text-caption text-secondary bg-secondary/20 px-1 py-0.5 rounded-full text-[10px] ml-0.5">{{ diagElapsed }}s</span>
-              </button>
-              <button class="glass-button px-2.5 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1"
-                :class="bootLogcatRunning ? 'bg-error/10 text-error border border-error/20' : ''"
-                :disabled="logPrepActive" @click="toggleBootLogcat">
-                <span class="material-symbols-outlined text-[12px]">{{ bootLogcatRunning ? 'stop' : 'power' }}</span>
-                开机日志
-                <span v-if="bootLogcatRunning" class="font-caption text-caption text-secondary bg-secondary/20 px-1 py-0.5 rounded-full text-[10px] ml-0.5">{{ bootLogcatElapsed }}s</span>
-              </button>
-              <button class="glass-button px-2.5 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1"
-                :disabled="!selectedDevice" @click="generateBugreport">
-                <span class="material-symbols-outlined text-[12px]">bug_report</span>Bugreport
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Row 3: Application Management (full width) -->
-      <div class="flex-1 min-h-0 flex flex-col">
-        <div class="glass-panel rounded-xl p-3 flex flex-col flex-1 min-h-0">
-            <div class="flex items-center gap-3 mb-1">
-              <h3 class="font-label-md text-label-md text-on-surface flex items-center gap-1.5 shrink-0">
-                <span class="material-symbols-outlined text-[16px]">apps</span>应用管理
-                <span class="font-caption text-caption text-on-surface-variant/60 font-normal">({{ sortedApps.length }})</span>
-              </h3>
-              <div class="flex gap-2 items-center flex-wrap">
-                <button class="glass-button px-2 py-0.5 rounded-full font-caption text-caption flex items-center gap-1 text-[11px]" @click="refreshPackageList" :disabled="pkgLoading">
-                  <span v-if="pkgLoading" class="w-3 h-3 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
-                  <span v-else class="material-symbols-outlined text-[12px]">refresh</span>刷新
-                </button>
-                <label class="flex items-center gap-1 font-caption text-caption text-on-surface-variant cursor-pointer text-[11px]">
-                  <input type="checkbox" v-model="showThirdParty" class="accent-secondary" @change="refreshPackageList" />第三方应用
-                </label>
-                <button class="glass-button px-2.5 py-0.5 rounded-lg font-caption text-caption flex items-center gap-1 text-[11px]" @click="apkDialogOpen = true">
-                  <span class="material-symbols-outlined text-[12px]">upload</span>安装 APK
-                </button>
-                <button class="glass-button px-2.5 py-0.5 rounded-lg font-caption text-caption flex items-center gap-1 text-[11px]" @click="getCurrentForegroundApp">
-                  <span class="material-symbols-outlined text-[12px]">center_focus_strong</span>前台应用
-                </button>
-              </div>
-            </div>
-
-            <!-- App Search + Path Query (dual-purpose) -->
-            <div class="flex gap-2 mb-1.5 p-1.5 bg-white/10 rounded-lg items-center">
-              <div class="relative">
-                <span class="material-symbols-outlined absolute left-1.5 top-1/2 -translate-y-1/2 text-on-surface-variant text-[12px]">search</span>
-                <input v-model="queryPackageName" class="w-72 bg-white/80 border border-outline-variant rounded-lg pl-6 pr-2 py-1 font-caption text-caption text-[11px] text-on-surface font-mono focus:ring-2 focus:ring-secondary/30"
-                  placeholder="搜索应用..." @input="onAppSearchInput" @keyup.enter="queryAppPath" @focus="loadAppSearchHistory" @blur="hideAppSearchHistoryDelayed" />
-                <div v-if="showAppSearchHistory && appSearchHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-outline-variant rounded-lg p-1 max-h-32 overflow-y-auto shadow-lg">
-                  <button v-for="(h, i) in appSearchHistory" :key="i" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100"
-                    @mousedown.prevent @click="selectAppSearchHistory(h)">{{ h }}</button>
+      <!-- Bottom Layout: App Management + 快捷指令 -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
+        <!-- App Management -->
+        <div class="lg:col-span-2 glass-panel rounded-xl flex flex-col min-h-0 overflow-hidden">
+            <!-- App Management Header -->
+            <div class="p-4 border-b border-outline-variant/30 flex flex-col gap-3">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                  <h3 class="font-label-md text-label-md text-on-surface flex items-center gap-2 shrink-0">
+                    <span class="material-symbols-outlined text-[16px] text-on-surface-variant">apps</span>应用管理
+                    <span class="font-caption text-caption text-on-surface-variant/60 font-normal text-sm">({{ sortedApps.length }})</span>
+                  </h3>
+                  <div class="flex items-center gap-3 text-sm text-on-surface-variant">
+                    <button class="flex items-center hover:text-on-surface hover:bg-white/50 px-1.5 py-0.5 rounded-lg hover:scale-105 transition-all" @click="refreshPackageList" :disabled="pkgLoading">
+                      <span v-if="pkgLoading" class="w-3 h-3 border-2 border-secondary border-t-transparent rounded-full animate-spin mr-1"></span>
+                      <span v-else class="material-symbols-outlined text-[16px] mr-1">refresh</span>刷新
+                    </button>
+                    <label class="flex items-center cursor-pointer hover:text-on-surface hover:scale-105 transition-all">
+                      <input type="checkbox" v-model="showThirdParty" class="rounded border-outline-variant text-secondary focus:ring-secondary mr-1 w-3.5 h-3.5 accent-secondary" @change="refreshPackageList" />
+                      第三方应用
+                    </label>
+                    <button class="flex items-center hover:text-on-surface hover:bg-white/50 px-1.5 py-0.5 rounded-lg hover:scale-105 transition-all" @click="apkDialogOpen = true">
+                      <span class="material-symbols-outlined text-[16px] mr-1">file_upload</span> 安装 APK
+                    </button>
+                    <button class="flex items-center hover:text-on-surface hover:bg-white/50 px-1.5 py-0.5 rounded-lg hover:scale-105 transition-all" @click="getCurrentForegroundApp">
+                      <span class="material-symbols-outlined text-[16px] mr-1">center_focus_strong</span> 前台应用
+                    </button>
+                  </div>
                 </div>
               </div>
-              <button class="glass-button px-1.5 py-1 rounded-lg font-caption text-caption flex items-center gap-1 text-[11px]" @click="queryAppPath">
-                <span class="material-symbols-outlined text-[12px]">search</span>路径
-              </button>
-              <div class="flex-1"></div>
-              <div v-if="totalPages > 1" class="flex items-center gap-1 shrink-0">
-                <button class="glass-button p-0.5 rounded" :disabled="appPage <= 1" @click="appPage = Math.max(1, appPage - 1); nextTick(loadVisibleAppVersions)">
-                  <span class="material-symbols-outlined text-[14px]">chevron_left</span>
+              <div class="flex items-center gap-4">
+                <div class="relative">
+                  <div class="flex items-center border border-outline-variant/60 rounded-full px-3 py-1.5 bg-white/50 w-64">
+                    <span class="material-symbols-outlined text-on-surface-variant text-[16px] mr-2">search</span>
+                    <input v-model="queryPackageName" class="bg-transparent border-none outline-none w-full font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-0 p-0"
+                      placeholder="搜索应用..." @input="onAppSearchInput" @keyup.enter="queryAppPath" @focus="loadAppSearchHistory" @blur="hideAppSearchHistoryDelayed" />
+                  </div>
+                  <div v-if="showAppSearchHistory && appSearchHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-outline-variant rounded-lg p-1 max-h-32 overflow-y-auto shadow-lg">
+                    <button v-for="(h, i) in appSearchHistory" :key="i" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100"
+                      @mousedown.prevent @click="selectAppSearchHistory(h)">{{ h }}</button>
+                  </div>
+                </div>
+                <button class="flex items-center text-sm text-on-surface-variant hover:text-on-surface hover:bg-white/50 px-1.5 py-0.5 rounded-lg hover:scale-105 transition-all" @click="queryAppPath">
+                  <span class="material-symbols-outlined text-[16px] mr-1">folder_open</span> 路径
                 </button>
-                <span class="font-caption text-caption text-on-surface-variant text-[11px] whitespace-nowrap">{{ appPage }} / {{ totalPages }}</span>
-                <button class="glass-button p-0.5 rounded" :disabled="appPage >= totalPages" @click="appPage = Math.min(totalPages, appPage + 1); nextTick(loadVisibleAppVersions)">
-                  <span class="material-symbols-outlined text-[14px]">chevron_right</span>
-                </button>
+                <div v-if="totalPages > 1" class="flex items-center gap-2 text-sm text-on-surface bg-white/50 border border-outline-variant/60 rounded-full px-3 py-1 ml-auto">
+                  <button class="hover:bg-white/70 hover:scale-105 rounded-full p-0.5 transition-all disabled:opacity-50" :disabled="appPage <= 1" @click="appPage = Math.max(1, appPage - 1); nextTick(loadVisibleAppVersions)">
+                    <span class="material-symbols-outlined text-[16px]">chevron_left</span>
+                  </button>
+                  <span class="whitespace-nowrap">{{ appPage }} / {{ totalPages }}</span>
+                  <button class="hover:bg-white/70 hover:scale-105 rounded-full p-0.5 transition-all disabled:opacity-50" :disabled="appPage >= totalPages" @click="appPage = Math.min(totalPages, appPage + 1); nextTick(loadVisibleAppVersions)">
+                    <span class="material-symbols-outlined text-[16px]">chevron_right</span>
+                  </button>
+                </div>
               </div>
             </div>
 
             <!-- App List -->
-            <div ref="appListContainer" class="flex-1 min-h-0 overflow-y-auto custom-scrollbar" :style="{ maxHeight: appListMaxHeight + 'px' }">
+            <div ref="appListContainer" class="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-2" :style="{ maxHeight: appListMaxHeight + 'px' }">
               <div v-if="currentPageApps.length === 0" class="text-center py-3">
                 <p class="font-caption text-caption text-on-surface-variant/50">暂无应用，点击刷新加载</p>
               </div>
-              <div v-for="app in currentPageApps" :key="app.package_name" :ref="(el) => { if (el && !appItemMeasured) measureAppItem(el as HTMLElement) }" class="flex items-center gap-1 py-0 px-1.5 rounded hover:bg-white/20 transition-colors border-b border-outline-variant/20 last:border-0 group">
-                <div class="flex gap-0.5 shrink-0">
-                  <button class="glass-button p-1 rounded" title="启动" @click="startApp(app.package_name)">
-                    <span class="material-symbols-outlined text-[16px] text-success-indicator">play_arrow</span>
-                  </button>
-                  <button class="glass-button p-1 rounded" title="停止" @click="stopApp(app.package_name)">
-                    <span class="material-symbols-outlined text-[16px] text-tertiary">stop</span>
-                  </button>
-                  <button class="glass-button p-1 rounded" title="详情" @click="showAppDetail(app.package_name)">
-                    <span class="material-symbols-outlined text-[16px]">info</span>
-                  </button>
-                  <button class="glass-button p-1 rounded" title="下载APK" @click="downloadApk(app.package_name)">
-                    <span class="material-symbols-outlined text-[16px]">download</span>
-                  </button>
-                  <button class="glass-button p-1 rounded" title="清除数据" @click="clearApp(app.package_name)">
-                    <span class="material-symbols-outlined text-[16px] text-error">delete_sweep</span>
-                  </button>
-                  <button class="glass-button p-1 rounded" title="卸载" @click="confirmThen(`卸载 ${app.package_name}?`, () => uninstallPkg(app.package_name))">
-                    <span class="material-symbols-outlined text-[16px] text-error">delete</span>
-                  </button>
-                </div>
-                <div class="flex items-center gap-1.5 min-w-0 flex-1 ml-0.5">
-                  <span class="font-body-sm text-body-sm text-on-surface font-mono cursor-pointer hover:text-secondary hover:underline truncate"
-                    :title="app.package_name" @click="copyPackageName(app.package_name)">{{ app.package_name }}</span>
-                  <span v-if="app.version_name" class="font-caption text-caption text-secondary bg-secondary/10 px-1 py-0.5 rounded-full cursor-pointer shrink-0 text-[10px]"
-                    :title="'点击复制版本信息'" @click="copyVersionInfo(app.package_name)">
-                    v{{ app.version_name }}{{ app.version_code ? ` (${app.version_code})` : '' }}
-                  </span>
-                </div>
+              <table v-else class="w-full text-sm text-left whitespace-nowrap">
+                <tbody class="divide-y divide-outline-variant/30">
+                  <tr v-for="app in currentPageApps" :key="app.package_name" :ref="(el) => { if (el && !appItemMeasured) measureAppItem(el as HTMLElement) }" class="hover:bg-white/30 transition-colors group">
+                    <td class="pl-1 pr-0 py-2">
+                      <span class="material-symbols-outlined text-success-indicator text-[16px] cursor-pointer hover:scale-125 transition-transform" @click="startApp(app.package_name)">play_arrow</span>
+                    </td>
+                    <td class="px-0 py-2">
+                      <span class="material-symbols-outlined text-error text-[16px] cursor-pointer hover:scale-125 transition-transform" @click="stopApp(app.package_name)">stop_circle</span>
+                    </td>
+                    <td class="px-0 py-2">
+                      <span class="material-symbols-outlined text-on-surface-variant text-[16px] cursor-pointer hover:scale-125 transition-transform" @click="showAppDetail(app.package_name)">info</span>
+                    </td>
+                    <td class="px-0 py-2">
+                      <span class="material-symbols-outlined text-on-surface-variant text-[16px] cursor-pointer hover:scale-125 transition-transform" @click="downloadApk(app.package_name)">download</span>
+                    </td>
+                    <td class="px-0 py-2">
+                      <span class="material-symbols-outlined text-error/70 text-[16px] cursor-pointer hover:scale-125 transition-transform" @click="clearApp(app.package_name)">cleaning_services</span>
+                    </td>
+                    <td class="pr-1 pl-0 py-2">
+                      <span class="material-symbols-outlined text-error text-[16px] cursor-pointer hover:scale-125 transition-transform" @click="confirmThen(`卸载 ${app.package_name}?`, () => uninstallPkg(app.package_name))">delete</span>
+                    </td>
+                    <td class="pl-2 pr-2 py-2 font-medium text-on-surface">
+                      <span class="font-mono cursor-pointer hover:text-secondary hover:underline truncate" :title="app.package_name" @click="copyPackageName(app.package_name)">{{ app.package_name }}</span>
+                      <span v-if="app.version_name" class="text-xs bg-secondary/10 text-secondary px-2 py-0.5 rounded ml-2 border border-secondary/20 cursor-pointer"
+                        :title="'点击复制版本信息'" @click="copyVersionInfo(app.package_name)">
+                        v{{ app.version_name }}{{ app.version_code ? ` (${app.version_code})` : '' }}
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+          </div>
+        </div>
+        <!-- 快捷指令 Sidebar -->
+        <div class="glass-panel rounded-xl p-5 flex flex-col gap-6 overflow-y-auto">
+          <div class="flex flex-col gap-3">
+            <div class="flex items-center justify-between">
+              <h3 class="flex items-center gap-2 font-label-md text-label-md text-on-surface">
+                <span class="material-symbols-outlined text-[16px] text-on-surface-variant">bolt</span> 快捷指令
+              </h3>
+              <div class="flex items-center gap-1">
+                <button class="text-on-surface-variant hover:text-secondary hover:bg-white/50 px-1 py-0.5 rounded-lg hover:scale-105 transition-all" title="管理" @click="showCmdManager = true">
+                  <span class="material-symbols-outlined text-[18px]">edit_note</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Normal Mode -->
+            <div v-if="customCommands.length === 0" class="flex flex-col gap-2">
+              <div class="text-xs text-on-surface-variant/50 italic p-3 border border-dashed border-outline-variant/60 rounded-lg text-center">暂无快捷指令</div>
+            </div>
+            <div v-if="customCommands.length > 0" class="grid grid-cols-2 gap-2">
+              <div v-for="(cmd, idx) in customCommands" :key="idx"
+                class="flex items-center p-2 bg-white/20 rounded-xl cursor-pointer hover:bg-white/30 transition-colors" @click="executeCustomCommand(cmd.command)">
+                <div class="font-caption text-caption text-on-surface leading-tight break-all">{{ cmd.name }}</div>
               </div>
             </div>
           </div>
         </div>
-
+      </div>
     </div>
 
     <!-- Tab 2: 其他命令 -->
@@ -370,50 +392,7 @@
             </div>
           </div>
 
-          <!-- Custom Commands -->
-          <div class="glass-panel rounded-xl p-3 flex flex-col flex-1 min-h-0">
-            <h3 class="font-label-md text-label-md text-on-surface mb-2 flex items-center gap-1.5">
-              <span class="material-symbols-outlined text-[16px]">terminal</span>快捷指令
-            </h3>
-            <div class="flex gap-2 mb-2">
-              <button class="glass-button px-3 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1" @click="addCustomCommand">
-                <span class="material-symbols-outlined text-[14px]">add</span>新建
-              </button>
-            </div>
-            <div v-if="customCommands.length === 0" class="text-center py-4">
-              <p class="font-caption text-caption text-on-surface-variant/50">暂无自定义指令，点击"新建"添加</p>
-            </div>
-            <div class="grid grid-cols-2 gap-2 flex-1 min-h-0 overflow-y-auto custom-scrollbar content-start">
-              <div v-for="(cmd, idx) in customCommands" :key="idx"
-                class="flex flex-col gap-0.5 p-2 bg-white/20 rounded-xl group hover:bg-white/30 transition-colors">
-                <div class="font-label-md text-label-md text-on-surface truncate leading-tight">{{ cmd.name }}</div>
-                <div class="font-caption text-caption text-on-surface-variant/70 font-mono truncate text-[10px]">$ {{ cmd.command }}</div>
-                <div class="flex gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button class="glass-button p-0.5 rounded flex-1 flex items-center justify-center gap-0.5 text-[11px]" title="执行" @click="executeCustomCommand(cmd.command)">
-                    <span class="material-symbols-outlined text-[12px]">play_arrow</span>
-                  </button>
-                  <button class="glass-button p-0.5 rounded flex-1 flex items-center justify-center gap-0.5 text-[11px]" title="编辑" @click="startEditCustomCommand(idx)">
-                    <span class="material-symbols-outlined text-[12px]">edit</span>
-                  </button>
-                  <button class="glass-button p-0.5 rounded flex-1 flex items-center justify-center gap-0.5 text-[11px]" title="删除" @click="removeCustomCommand(idx)">
-                    <span class="material-symbols-outlined text-[12px] text-error">delete</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div v-if="editingCmdIndex !== null" class="mt-2 p-2 bg-white/20 rounded-xl">
-              <div class="flex flex-col gap-1.5">
-                <input v-model="editingCmdName" class="bg-white/80 border border-outline-variant rounded-lg px-2 py-1 font-caption text-caption text-[11px] text-on-surface font-mono focus:ring-2 focus:ring-secondary/30"
-                  placeholder="指令名称" @keyup.enter="saveCustomCommand" />
-                <input v-model="editingCmdValue" class="bg-white/80 border border-outline-variant rounded-lg px-2 py-1 font-caption text-caption text-[11px] text-on-surface font-mono focus:ring-2 focus:ring-secondary/30"
-                  placeholder="输入命令，如: dumpsys battery / adb devices / ipconfig" @keyup.enter="saveCustomCommand" />
-                <div class="flex gap-2 justify-end">
-                  <button class="glass-button px-2 py-1 rounded-lg font-caption text-caption" @click="cancelEditCommand">取消</button>
-                  <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md" @click="saveCustomCommand">保存</button>
-                </div>
-              </div>
-            </div>
-          </div>
+
         </div>
 
         <!-- Right Column -->
@@ -630,6 +609,61 @@
       </Transition>
     </Teleport>
 
+    <!-- Cmd Manager Dialog -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div v-if="showCmdManager" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="showCmdManager = false">
+          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
+          <div class="glass-panel rounded-[2rem] p-6 w-full max-w-md relative z-10 bg-white/60 max-h-[80vh] flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-[16px]">edit_note</span>{{ editingCmdIndex !== null ? (editingCmdIndex === -1 ? '添加快捷指令' : '编辑快捷指令') : '管理快捷指令' }}
+              </h3>
+              <button class="glass-button p-1 rounded" @click="showCmdManager = false; cancelEditCommand()">
+                <span class="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <!-- Edit / Add Form -->
+            <div v-if="editingCmdIndex !== null" class="flex flex-col gap-3">
+              <input v-model="editingCmdName" class="bg-white/80 border border-outline-variant rounded-lg px-3 py-2 font-caption text-caption text-on-surface font-mono focus:ring-2 focus:ring-secondary/30 w-full"
+                placeholder="指令名称" @keyup.enter="saveCustomCommand" />
+              <input v-model="editingCmdValue" class="bg-white/80 border border-outline-variant rounded-lg px-3 py-2 font-caption text-caption text-on-surface font-mono focus:ring-2 focus:ring-secondary/30 w-full"
+                placeholder="输入命令，如: dumpsys battery / adb devices / ipconfig" @keyup.enter="saveCustomCommand" />
+              <div class="flex gap-2 justify-end pt-2">
+                <button class="glass-button px-4 py-2 rounded-lg font-label-md text-label-md" @click="cancelEditCommand">取消</button>
+                <button class="glass-button px-4 py-2 rounded-lg font-label-md text-label-md" @click="saveCustomCommand">保存</button>
+              </div>
+            </div>
+
+            <!-- Command List -->
+            <div v-else class="flex flex-col gap-2 flex-1 min-h-0">
+              <div v-if="customCommands.length === 0" class="text-xs text-on-surface-variant/50 italic p-4 text-center">暂无快捷指令</div>
+              <div v-else class="flex-1 overflow-y-auto space-y-2">
+                <div v-for="(cmd, idx) in customCommands" :key="idx"
+                  class="flex items-center justify-between gap-2 p-3 bg-white/30 rounded-xl">
+                  <div class="font-caption text-caption text-on-surface leading-tight truncate min-w-0">{{ cmd.name }}</div>
+                  <div class="flex gap-2 shrink-0">
+                    <button class="glass-button px-2.5 py-1.5 rounded-lg flex items-center gap-1 text-caption font-caption" title="编辑" @click="startEditCustomCommand(idx)">
+                      <span class="material-symbols-outlined text-[14px]">edit</span>编辑
+                    </button>
+                    <button class="glass-button px-2.5 py-1.5 rounded-lg flex items-center gap-1 text-caption font-caption text-error" title="删除" @click="confirmThen('删除快捷指令「' + cmd.name + '」?', async () => removeCustomCommand(idx))">
+                      <span class="material-symbols-outlined text-[14px]">delete</span>删除
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div class="pt-3 border-t border-outline-variant/30">
+                <button class="text-sm text-on-surface-variant hover:text-secondary flex items-center gap-1 transition-colors" @click="addCustomCommand">
+                  <span class="material-symbols-outlined text-[16px]">add</span>添加快捷指令
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
     <!-- Confirm Dialog -->
     <Teleport to="body">
       <Transition name="fade">
@@ -733,7 +767,7 @@ async function copyToClipboard(text: string) {
 
 // ── Tabs ──
 const tabs = [
-  { key: 'common', label: '常用命令', icon: 'terminal' },
+  { key: 'common', label: '常用命令', icon: 'dashboard' },
   { key: 'other', label: '其他命令', icon: 'more_horiz' },
 ];
 const activeTab = ref('common');
@@ -920,6 +954,7 @@ const customCommands = ref<CustomCommand[]>([]);
 const editingCmdIndex = ref<number | null>(null);
 const editingCmdName = ref("");
 const editingCmdValue = ref("");
+const showCmdManager = ref(false);
 function loadCustomCommands() {
   try {
     const stored = localStorage.getItem("test-space:adb-custom-commands");
