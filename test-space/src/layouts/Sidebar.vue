@@ -58,7 +58,7 @@ function clearHide() {
 }
 function scheduleHide() {
   clearHide();
-  hideTimeout = setTimeout(() => { showBar.value = false; }, 400);
+  hideTimeout = setTimeout(() => { showBar.value = false; }, 1500);
 }
 function onTriggerEnter() { clearHide(); showBar.value = true; }
 function onTriggerLeave() { scheduleHide(); }

@@ -2107,6 +2107,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.text-caption { font-size: 15px !important; }
+.text-caption { font-size: 15px !important; font-weight: 400 !important; }
 .text-label-md { font-size: 16px !important; }
+.glass-button { font-weight: 400 !important; }
 </style>
