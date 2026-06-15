@@ -840,3 +840,49 @@ src/services/database.ts  ←── 唯一的数据访问层
 3. **文件导出**（Save/Save As/Open）仍使用 `useFilePersistence` composable（基于 `@tauri-apps/plugin-dialog` + `plugin-fs`，仅供用户手动导出/导入 .tc 文件），不与 SQLite 冲突
 4. **初始化时机**：`CaseSpacePage` 在 `onMounted` 中调用 `store.initStore()` 加载数据；`useTestCaseStore` 在模块加载时自动从 DB 读取 field rule sets
 6. **新功能必须同步更新导出/导入**：每次新增数据表或修改数据结构后，必须同步更新 `database.ts` 中的 `exportAllData()` 和 `importAllData()`，确保新数据能被完整导出和恢复。缺少该步骤的 PR 不予合并。
+
+---
+
+### Phase 9 — Device Space 应用管理优化（进行中）
+
+| 模块 | 说明 | 状态 |
+|------|------|------|
+| 重启 ADB 服务 | 原 `shell echo restart` 替换为真正的 `adb kill-server` + `adb start-server`，新增 Rust 后端 `adb_kill_server` / `adb_start_server` 命令 | ✅ |
+| 命令执行弹窗 | `showCmdExec` 新增 `command` 参数，显示实际执行的 ADB 命令（如 `adb root`、`adb reboot`），去重逻辑防止重复输出 | ✅ |
+| 信息弹窗字体缩小 | 信息查询弹窗标题从 `text-headline-md` 改小为 `text-label-lg`，条目标签 `text-[13px]`，值 `text-[12px]` | ✅ |
+| 密钥检查展开 | 密钥检查弹窗每项显示状态+命令，右侧折叠/展开按钮可查看原始输出 | ✅ |
+| 前台应用获取 | 命令改为 `dumpsys window`（JS 侧过滤），兼容性更好 | ✅ |
+| 设备断开清理 | `disconnectDeviceHandler` 清空 `apps` 列表；`scanDevices` 扫描时已选设备消失则自动清空状态 | ✅ |
+| 前台应用/查询路径弹窗 | 不再内联显示在右侧，改为弹窗显示+复制按钮+手动关闭 | ✅ |
+| 应用详情弹窗 | 去掉无用字段（首次安装/最近更新/安装来源/CPU架构），增加版本历史（多版本 `→` 连接）、应用大小/缓存大小/数据大小 | ✅ |
+| 启动应用兜底 | monkey 失败后自动用 `am start -n` 解析主 Activity 兜底启动 | ✅ |
+| 应用操作 cmdExec | 启动/停止/清除数据/卸载/下载 APK 均显示 cmdExec 命令执行弹窗（命令+进度+结果） | ✅ |
+| 全局布局修复 | 主容器从 `h-[calc(100vh-80px)]` 改为 `h-screen`，消除底部 80px 空白；`html, body` 加 `overflow: hidden` 消除全局滚动条 | ✅ |
+| 应用管理面板高度 | Row 3 从 grid 改为 flex，`flex-1 min-h-0` 填满 Tab 1 剩余空间；Panel `flex-1 min-h-0` 填满 Row 3 | ✅ |
+| 应用列表自适应 | `recalcAppPageSize` 测量面板实际高度计算 `avail`，动态设置 `maxVisibleApps` 和 `maxHeight`；`ResizeObserver` + `window.resize` 监听变化 | ✅ |
+| 应用条目间距 | 条目内边距从 `py-0.5` 减为 `py-0`，每条省 4px，显示更多应用 | ✅ |
+| 翻页不重置 | `filteredApps` watcher 只在搜索关键词或总条数变化时重置页码，纯数据更新（如加载版本号）不重置 | ✅ |
+| 页码位置 | 页码从列表底部移到搜索栏右侧，不影响列表高度计算 | ✅ |
+| ADB 模块扩展 | `useAdb.ts` 新增 `killServer()` / `startServer()` 方法；`adb.rs` 新增 `kill_server()` / `start_server()`；`lib.rs` 注册 `adb_kill_server` / `adb_start_server` | ✅ |
+
+---
+
+### 布局架构说明（Device Space）
+
+页面高度链：
+
+```
+html, body          → overflow: hidden; height: 100%
+主容器              → h-screen (100vh); overflow-hidden; flex
+  内容区            → flex-1; flex flex-col; overflow-hidden
+    Tab 1           → flex-col; flex-grow; min-h-0; overflow-hidden
+      Row 1 (设备操作) → grid; 自适应高度
+      Row 2 (日志采集) → grid; 自适应高度
+      Row 3 (应用管理) → flex-1; min-h-0; flex flex-col
+        Panel       → flex-1; min-h-0; flex flex-col
+          Header    → 固定高度
+          Search    → 固定高度
+          App List  → flex-1; min-h-0; overflow-y-auto; maxHeight (动态)
+```
+
+`recalcAppPageSize` 测量面板实际高度，计算列表可用空间，动态设置 `maxVisibleApps`（分页条数）和 `maxHeight`（列表最大高度）。
