@@ -1,46 +1,3 @@
-export interface UserInfo {
-  id: number;
-  username: string;
-  full_name?: string;
-  email?: string;
-  phone?: string;
-  avatar?: string;
-  role?: string;
-  is_super?: boolean;
-}
-
-export interface LoginCredentials {
-  username: string;
-  password: string;
-  captcha_id: string;
-  captcha_code: string;
-}
-
-export interface LoginResponse {
-  code: number;
-  message?: string;
-  data?: {
-    token: string;
-    signKey?: string;
-    user: UserInfo;
-    must_change_password?: boolean;
-  };
-}
-
-export interface CaptchaResponse {
-  code: number;
-  data?: {
-    captcha_id: string;
-    captcha_image: string;
-  };
-}
-
-export interface ApiResponse<T = unknown> {
-  code: number;
-  message?: string;
-  data?: T;
-}
-
 export interface DeviceInfo {
   id: string;
   name: string;
@@ -71,27 +28,6 @@ export interface LogEntry {
   message: string;
   pid?: number;
   tid?: number;
-}
-
-export interface VersionRelease {
-  id: number;
-  version: string;
-  title: string;
-  changelog: ChangelogItem[];
-  status: "draft" | "published";
-  created_at: string;
-  published_at?: string;
-}
-
-export interface ChangelogItem {
-  type: "new" | "fix" | "improve" | "delete" | "other";
-  content: string;
-}
-
-export interface DatabaseTable {
-  name: string;
-  comment?: string;
-  rows: number;
 }
 
 export interface CaseItem {
@@ -140,4 +76,20 @@ export interface FileTab {
   fileName: string
   isDirty: boolean
   path: string | null
+}
+
+export interface InputHistoryEntry {
+  id: number
+  keyName: string
+  value: string
+  createdAt: string
+}
+
+export interface LogSession {
+  id: string
+  type: 'logcat' | 'diagnostic' | 'boot_logcat'
+  deviceSerial: string
+  status: 'running' | 'stopped'
+  startedAt: string
+  metadata: string
 }

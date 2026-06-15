@@ -4,8 +4,7 @@
     :style="bgStyle"
   >
     <Sidebar />
-    <TopNav />
-    <main class="md:ml-[256px] pt-safe-area-top px-margin-page pb-20 md:pb-12 box-border w-full md:w-[calc(100%-256px)] min-h-screen">
+    <main class="md:ml-[256px] px-margin-page pb-20 md:pb-12 box-border w-full md:w-[calc(100%-256px)] min-h-screen">
       <router-view />
     </main>
   </div>
@@ -15,7 +14,6 @@
 import { computed } from "vue";
 import { useRoute } from "vue-router";
 import Sidebar from "./Sidebar.vue";
-import TopNav from "./TopNav.vue";
 
 const route = useRoute();
 

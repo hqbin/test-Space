@@ -4,15 +4,8 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     {
-      path: "/login",
-      name: "login",
-      component: () => import("@/views/auth/Login.vue"),
-      meta: { public: true },
-    },
-    {
       path: "/",
       component: () => import("@/layouts/AppLayout.vue"),
-      meta: { requiresAuth: true },
       children: [
         { path: "", redirect: "/workspace" },
         {
@@ -40,28 +33,6 @@ const router = createRouter({
           component: () => import("@/views/note-space/NotesSpacePage.vue"),
         },
         {
-          path: "platform-space",
-          component: () => import("@/layouts/PlatformLayout.vue"),
-          children: [
-            { path: "", redirect: "/platform-space/analytics" },
-            {
-              path: "analytics",
-              name: "platform-analytics",
-              component: () => import("@/views/platform-space/analytics/AnalyticsPage.vue"),
-            },
-            {
-              path: "database",
-              name: "platform-database",
-              component: () => import("@/views/platform-space/database/DatabasePage.vue"),
-            },
-            {
-              path: "version-release",
-              name: "platform-version-release",
-              component: () => import("@/views/platform-space/version-release/VersionReleasePage.vue"),
-            },
-          ],
-        },
-        {
           path: "script-space",
           name: "script-space",
           component: () => import("@/views/script-space/ScriptSpacePage.vue"),
@@ -74,17 +45,6 @@ const router = createRouter({
       ],
     },
   ],
-});
-
-router.beforeEach((to, _from, next) => {
-  const token = localStorage.getItem("token");
-  if (to.meta.requiresAuth && !token) {
-    next({ path: "/login", query: { redirect: to.fullPath } });
-  } else if (to.path === "/login" && token) {
-    next({ path: "/workspace" });
-  } else {
-    next();
-  }
 });
 
 export default router;

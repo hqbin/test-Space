@@ -144,15 +144,11 @@ pub fn pull_file(serial: &str, remote: &str, local: &str) -> Result<String, Stri
 }
 
 pub fn reboot(serial: &str) -> Result<String, String> {
-    let output = Command::new("adb")
+    Command::new("adb")
         .args(["-s", serial, "reboot"])
-        .output()
+        .spawn()
         .map_err(|e| format!("ADB reboot failed: {}", e))?;
-    if output.status.success() {
-        Ok("Reboot command sent".to_string())
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
-    }
+    Ok("Reboot command sent".to_string())
 }
 
 pub fn screenshot(serial: &str, save_path: &str) -> Result<String, String> {
@@ -191,12 +187,18 @@ pub fn disconnect_device(serial: &str) -> Result<String, String> {
 }
 
 pub fn reboot_recovery(serial: &str) -> Result<String, String> {
-    run_adb(serial, &["reboot", "recovery"])?;
+    Command::new("adb")
+        .args(["-s", serial, "reboot", "recovery"])
+        .spawn()
+        .map_err(|e| format!("ADB reboot recovery failed: {}", e))?;
     Ok("Rebooting to recovery...".to_string())
 }
 
 pub fn reboot_bootloader(serial: &str) -> Result<String, String> {
-    run_adb(serial, &["reboot", "bootloader"])?;
+    Command::new("adb")
+        .args(["-s", serial, "reboot", "bootloader"])
+        .spawn()
+        .map_err(|e| format!("ADB reboot bootloader failed: {}", e))?;
     Ok("Rebooting to bootloader...".to_string())
 }
 
@@ -318,4 +320,61 @@ pub fn get_cpu_info(serial: &str) -> Result<String, String> {
 
 pub fn get_memory_info(serial: &str) -> Result<String, String> {
     run_adb(serial, &["shell", "cat", "/proc/meminfo"])
+}
+
+pub fn logcat_buffer_resize(serial: &str, size_mb: u32) -> Result<String, String> {
+    run_adb(serial, &["logcat", "-G", &format!("{}M", size_mb)])
+}
+
+pub fn bugreport(serial: &str, save_path: &str) -> Result<String, String> {
+    let output = Command::new("adb")
+        .args(["-s", serial, "bugreport", save_path])
+        .output()
+        .map_err(|e| format!("ADB bugreport failed: {}", e))?;
+    if output.status.success() {
+        Ok(save_path.to_string())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).to_string())
+    }
+}
+
+pub fn dmesg(serial: &str) -> Result<String, String> {
+    run_adb(serial, &["shell", "dmesg"])
+}
+
+pub fn kill_server() -> Result<String, String> {
+    let output = Command::new("adb")
+        .args(["kill-server"])
+        .output()
+        .map_err(|e| format!("ADB kill-server failed: {}", e))?;
+    if output.status.success() {
+        Ok("ADB server killed".to_string())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        if stderr.is_empty() {
+            Ok("ADB server killed".to_string())
+        } else {
+            Err(stderr)
+        }
+    }
+}
+
+pub fn start_server() -> Result<String, String> {
+    let output = Command::new("adb")
+        .args(["start-server"])
+        .output()
+        .map_err(|e| format!("ADB start-server failed: {}", e))?;
+    if output.status.success() {
+        Ok("ADB server started".to_string())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).to_string())
+    }
+}
+
+pub fn start_screenrecord(serial: &str, file_path: &str, width: u32, height: u32) -> Result<String, String> {
+    Command::new("adb")
+        .args(["-s", serial, "shell", &format!("nohup screenrecord --size {}x{} {} > /dev/null 2>&1 &", width, height, file_path)])
+        .spawn()
+        .map_err(|e| format!("Failed to start screenrecord: {}", e))?;
+    Ok("Recording started".to_string())
 }

@@ -113,6 +113,24 @@ export function useAdb() {
   const getAppInfo = (serial: string, packageName: string) =>
     invoke<string>("adb_get_app_info", { serial, package: packageName });
 
+  const logcatBufferResize = (serial: string, sizeMb: number) =>
+    invoke<string>("adb_logcat_buffer_resize", { serial, sizeMb });
+
+  const bugreport = (serial: string, savePath: string) =>
+    invoke<string>("adb_bugreport", { serial, savePath });
+
+  const dmesg = (serial: string) =>
+    invoke<string>("adb_dmesg", { serial });
+
+  const killServer = () => invoke<string>("adb_kill_server");
+  const startServer = () => invoke<string>("adb_start_server");
+
+  const startScreenrecord = (serial: string, filePath: string, width: number, height: number) =>
+    invoke<string>("adb_start_screenrecord", { serial, filePath, width, height });
+
+  const createZip = (files: { filename: string; content: string }[], destPath: string) =>
+    invoke<string>("create_zip", { files, destPath });
+
   return {
     listDevices,
     shell,
@@ -145,6 +163,13 @@ export function useAdb() {
     getMemory,
     listDirectory,
     getAppInfo,
+    logcatBufferResize,
+    bugreport,
+    dmesg,
+    startScreenrecord,
+    killServer,
+    startServer,
+    createZip,
   };
 }
 

@@ -8,21 +8,21 @@
         <h3 class="font-headline-md text-headline-md text-on-surface mb-6">Profile</h3>
         <div class="flex items-center gap-4 mb-6">
           <div class="w-16 h-16 rounded-full bg-primary-fixed flex items-center justify-center text-2xl text-on-primary-fixed font-bold">
-            {{ initials }}
+            T
           </div>
           <div>
-            <p class="font-body-lg text-body-lg text-on-surface font-medium">{{ userStore.displayName }}</p>
-            <p class="font-caption text-caption text-on-surface-variant">{{ userStore.userInfo?.email || "No email" }}</p>
+            <p class="font-body-lg text-body-lg text-on-surface font-medium">Tester</p>
+            <p class="font-caption text-caption text-on-surface-variant">Local Mode</p>
           </div>
         </div>
         <div class="flex flex-col gap-4">
           <div class="flex items-center justify-between py-3 border-b border-glass-border-dark">
             <span class="font-body-md text-body-md text-on-surface-variant">Username</span>
-            <span class="font-body-md text-body-md text-on-surface font-medium">{{ userStore.userInfo?.username }}</span>
+            <span class="font-body-md text-body-md text-on-surface font-medium">tester</span>
           </div>
           <div class="flex items-center justify-between py-3 border-b border-glass-border-dark">
             <span class="font-body-md text-body-md text-on-surface-variant">Role</span>
-            <span class="font-body-md text-body-md text-on-surface font-medium">{{ userStore.userInfo?.role || "Tester" }}</span>
+            <span class="font-body-md text-body-md text-on-surface font-medium">Tester</span>
           </div>
         </div>
       </div>
@@ -51,24 +51,6 @@
         </div>
       </div>
 
-      <!-- Platform Connection -->
-      <div class="glass-card rounded-xl p-padding-card">
-        <h3 class="font-headline-md text-headline-md text-on-surface mb-6">Platform Connection</h3>
-        <div class="flex flex-col gap-4">
-          <div class="flex items-center justify-between py-3 border-b border-glass-border-dark">
-            <span class="font-body-md text-body-md text-on-surface-variant">Server URL</span>
-            <span class="font-body-md text-body-md text-on-surface font-medium font-mono">http://localhost:8000</span>
-          </div>
-          <div class="flex items-center justify-between py-3">
-            <span class="font-body-md text-body-md text-on-surface-variant">Status</span>
-            <span class="flex items-center gap-2 font-body-md text-body-md">
-              <span class="w-2 h-2 rounded-full bg-success-indicator shadow-[0_0_8px_#22C55E]" />
-              Connected
-            </span>
-          </div>
-        </div>
-      </div>
-
       <!-- Data Management -->
       <div class="glass-card rounded-xl p-padding-card">
         <h3 class="font-headline-md text-headline-md text-on-surface mb-6">Data Management</h3>
@@ -89,42 +71,18 @@
         <p v-if="importStatus" class="mt-4 font-body-md text-body-md" :class="importStatus.startsWith('Error') ? 'text-error' : 'text-success-indicator'">{{ importStatus }}</p>
       </div>
 
-      <!-- Logout -->
-      <button
-        class="w-full glass-button rounded-xl p-padding-card text-error font-label-md text-label-md text-center"
-        @click="handleLogout"
-      >
-        Sign Out
-      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref } from "vue";
 import { useRouter } from "vue-router";
-import { useUserStore } from "@/stores/user";
 import * as db from "@/services/database";
 
 const router = useRouter();
-const userStore = useUserStore();
 const theme = ref("light");
 const importStatus = ref("");
-
-const initials = computed(() => {
-  const name = userStore.displayName;
-  return name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
-});
-
-function handleLogout() {
-  userStore.logout();
-  router.push("/login");
-}
 
 async function handleExport() {
   importStatus.value = ""

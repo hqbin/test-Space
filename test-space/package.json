@@ -21,8 +21,6 @@
     "@tiptap/extension-underline": "^2.27.2",
     "@tiptap/starter-kit": "^2.11.2",
     "@tiptap/vue-3": "^2.11.2",
-    "axios": "^1.7.9",
-    "echarts": "^5.6.0",
     "html-to-image": "^1.11.13",
     "monaco-editor": "^0.52.2",
     "pinia": "^2.3.1",

@@ -61,12 +61,11 @@ const navItems: NavItem[] = [
   { path: "/case-space", label: "Case Space", icon: "folder_shared" },
   { path: "/device-space", label: "Device Space", icon: "developer_board" },
   { path: "/notes-space", label: "Notes Space", icon: "description" },
-  { path: "/platform-space", label: "Platform Space", icon: "hub" },
   { path: "/script-space", label: "Script Space", icon: "code" },
 ];
 
 function isActive(path: string) {
-  if (path === "/platform-space" || path === "/case-space") {
+  if (path === "/case-space") {
     return route.path.startsWith(path);
   }
   return route.path === path;

@@ -1,4 +1,5 @@
 import type Database from '@tauri-apps/plugin-sql'
+import type { InputHistoryEntry, LogSession } from '@/types'
 
 let db: Database | null = null
 
@@ -46,6 +47,22 @@ async function migrate() {
   await d.execute(`CREATE TABLE IF NOT EXISTS app_settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
+  )`)
+  await d.execute(`CREATE TABLE IF NOT EXISTS input_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    key_name TEXT NOT NULL,
+    value TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    sort_order INTEGER DEFAULT 0
+  )`)
+  await d.execute(`CREATE INDEX IF NOT EXISTS idx_input_history_key ON input_history(key_name)`)
+  await d.execute(`CREATE TABLE IF NOT EXISTS log_sessions (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    device_serial TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'running',
+    started_at TEXT NOT NULL,
+    metadata TEXT NOT NULL DEFAULT '{}'
   )`)
 }
 
@@ -207,6 +224,72 @@ export async function isFavorite(path: string): Promise<boolean> {
   return rows.length > 0
 }
 
+// ── Input History ────────────────────────────────────────────
+
+export async function addInputHistory(key: string, value: string, maxEntries = 20) {
+  const d = await getDb()
+  const now = new Date().toISOString()
+  // Remove duplicate for same key+value
+  await d.execute(
+    'DELETE FROM input_history WHERE key_name = ? AND value = ?',
+    [key, value]
+  )
+  // Insert new entry at top
+  await d.execute(
+    'INSERT INTO input_history (key_name, value, created_at, sort_order) VALUES (?, ?, ?, ?)',
+    [key, value, now, Date.now()]
+  )
+  // Trim to max entries
+  await d.execute(
+    `DELETE FROM input_history WHERE key_name = ? AND id NOT IN (
+      SELECT id FROM input_history WHERE key_name = ? ORDER BY sort_order DESC LIMIT ?
+    )`,
+    [key, key, maxEntries]
+  )
+}
+
+export async function getInputHistory(key: string, limit = 15): Promise<InputHistoryEntry[]> {
+  const d = await getDb()
+  return await d.select<InputHistoryEntry[]>(
+    'SELECT id, key_name as keyName, value, created_at as createdAt FROM input_history WHERE key_name = ? ORDER BY sort_order DESC LIMIT ?',
+    [key, limit]
+  )
+}
+
+export async function clearInputHistory(key?: string) {
+  const d = await getDb()
+  if (key) {
+    await d.execute('DELETE FROM input_history WHERE key_name = ?', [key])
+  } else {
+    await d.execute('DELETE FROM input_history')
+  }
+}
+
+// ── Log Sessions ─────────────────────────────────────────────
+
+export async function saveLogSession(session: { id: string; type: string; deviceSerial: string; status: string; startedAt: string; metadata?: string }) {
+  const d = await getDb()
+  await d.execute(
+    `INSERT INTO log_sessions (id, type, device_serial, status, started_at, metadata)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET status = excluded.status, metadata = excluded.metadata`,
+    [session.id, session.type, session.deviceSerial, session.status, session.startedAt, session.metadata || '{}']
+  )
+}
+
+export async function getRunningLogSessions(): Promise<LogSession[]> {
+  const d = await getDb()
+  return await d.select<LogSession[]>(
+    `SELECT id, type, device_serial as deviceSerial, status, started_at as startedAt, metadata
+     FROM log_sessions WHERE status = 'running' ORDER BY started_at DESC`
+  )
+}
+
+export async function removeLogSession(id: string) {
+  const d = await getDb()
+  await d.execute('DELETE FROM log_sessions WHERE id = ?', [id])
+}
+
 // ── Export / Import ──────────────────────────────────────────
 
 export interface AppBackup {
@@ -217,6 +300,8 @@ export interface AppBackup {
   recentFiles: any[]
   favorites: string[]
   settings: Record<string, string>
+  inputHistory: InputHistoryEntry[]
+  logSessions: LogSession[]
 }
 
 export async function exportAllData(): Promise<AppBackup> {
@@ -225,14 +310,23 @@ export async function exportAllData(): Promise<AppBackup> {
   const recentFiles = await getRecentFiles()
   const favPaths = await getFavorites()
   const settings = await loadSettings()
+  const d = await getDb()
+  const inputHistory = await d.select<InputHistoryEntry[]>(
+    'SELECT id, key_name as keyName, value, created_at as createdAt FROM input_history ORDER BY sort_order DESC'
+  )
+  const logSessions = await d.select<LogSession[]>(
+    'SELECT id, type, device_serial as deviceSerial, status, started_at as startedAt, metadata FROM log_sessions ORDER BY started_at DESC'
+  )
   return {
-    version: '1.0',
+    version: '1.1',
     exportedAt: new Date().toISOString(),
     fieldRuleSets,
     caseFiles,
     recentFiles,
     favorites: favPaths,
     settings,
+    inputHistory,
+    logSessions,
   }
 }
 
@@ -243,6 +337,8 @@ export async function importAllData(backup: AppBackup) {
   await d.execute('DELETE FROM recent_files')
   await d.execute('DELETE FROM favorites')
   await d.execute('DELETE FROM app_settings')
+  await d.execute('DELETE FROM input_history')
+  await d.execute('DELETE FROM log_sessions')
 
   for (const s of backup.fieldRuleSets || []) {
     await d.execute(
@@ -272,6 +368,18 @@ export async function importAllData(backup: AppBackup) {
     await d.execute(
       'INSERT INTO app_settings (key, value) VALUES (?, ?)',
       [key, value]
+    )
+  }
+  for (const h of backup.inputHistory || []) {
+    await d.execute(
+      'INSERT INTO input_history (key_name, value, created_at, sort_order) VALUES (?, ?, ?, ?)',
+      [h.keyName, h.value, h.createdAt, Date.parse(h.createdAt)]
+    )
+  }
+  for (const s of backup.logSessions || []) {
+    await d.execute(
+      'INSERT INTO log_sessions (id, type, device_serial, status, started_at, metadata) VALUES (?, ?, ?, ?, ?, ?)',
+      [s.id, s.type, s.deviceSerial, s.status, s.startedAt, s.metadata]
     )
   }
 }

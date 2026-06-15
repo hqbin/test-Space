@@ -1,6 +1,7 @@
 mod adb;
 mod script_exec;
 mod serial_port;
+mod zip_util;
 
 use serial_port::SerialState;
 use std::sync::Mutex;
@@ -161,6 +162,51 @@ fn adb_get_memory(serial: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn adb_logcat_buffer_resize(serial: String, size_mb: u32) -> Result<String, String> {
+    adb::logcat_buffer_resize(&serial, size_mb)
+}
+
+#[tauri::command]
+async fn adb_bugreport(serial: String, save_path: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::bugreport(&serial, &save_path)
+    }).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn adb_start_screenrecord(serial: String, file_path: String, width: u32, height: u32) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::start_screenrecord(&serial, &file_path, width, height)
+    }).await.map_err(|e| e.to_string())?
+}
+
+#[derive(serde::Deserialize)]
+struct ZipFileEntry {
+    filename: String,
+    content: String,
+}
+
+#[tauri::command]
+fn create_zip(files: Vec<ZipFileEntry>, dest_path: String) -> Result<String, String> {
+    zip_util::create_zip_from_memory(&files, &dest_path)
+}
+
+#[tauri::command]
+fn adb_dmesg(serial: String) -> Result<String, String> {
+    adb::dmesg(&serial)
+}
+
+#[tauri::command]
+fn adb_kill_server() -> Result<String, String> {
+    adb::kill_server()
+}
+
+#[tauri::command]
+fn adb_start_server() -> Result<String, String> {
+    adb::start_server()
+}
+
+#[tauri::command]
 fn serial_list_ports() -> Vec<String> {
     serial_port::list_ports()
 }
@@ -265,6 +311,13 @@ pub fn run() {
             adb_get_battery,
             adb_get_cpu,
             adb_get_memory,
+            adb_logcat_buffer_resize,
+            adb_bugreport,
+            adb_dmesg,
+            adb_kill_server,
+            adb_start_server,
+            adb_start_screenrecord,
+            create_zip,
             adb_list_directory,
             adb_get_app_info,
             serial_list_ports,
