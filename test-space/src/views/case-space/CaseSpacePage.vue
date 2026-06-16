@@ -5,10 +5,6 @@
         <span class="material-symbols-outlined text-[20px]">add</span>
         New Case File
       </button>
-      <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2" @click="openFile">
-        <span class="material-symbols-outlined text-[20px]">folder_open</span>
-        Open File
-      </button>
       <span class="w-px h-8 bg-white/30 mx-1"></span>
       <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2" @click="goToFieldRules">
         <span class="material-symbols-outlined text-[20px]">fact_check</span>
@@ -100,10 +96,6 @@
           <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2" @click="showNewDialog = true">
             <span class="material-symbols-outlined text-[20px]">add</span>
             Create New
-          </button>
-          <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2" @click="openFile">
-            <span class="material-symbols-outlined text-[20px]">folder_open</span>
-            Open File
           </button>
         </div>
       </div>

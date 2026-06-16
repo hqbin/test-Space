@@ -2,7 +2,7 @@
   <div class="fixed top-0 left-0 right-0 z-50 h-2" @mouseenter="onTriggerEnter" @mouseleave="onTriggerLeave" />
 
   <Transition name="slide-down">
-    <div v-if="showBar" class="fixed top-0 left-0 right-0 z-50 bg-glass-surface/15 backdrop-blur-[60px] border-b border-glass-border-light shadow-sm"
+      <div v-if="showBar" class="fixed top-0 left-0 right-0 z-50 bg-glass-surface/15 backdrop-blur-[60px] border-b border-glass-border-light shadow-sm top-bar"
       @mouseenter="onBarEnter" @mouseleave="onBarLeave">
       <div class="flex items-center justify-between px-6 py-2.5 max-w-screen-2xl mx-auto">
         <div class="flex items-center gap-1">

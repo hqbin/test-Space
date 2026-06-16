@@ -5,10 +5,7 @@
         <button class="glass-button p-2 rounded-xl" @click="goBack">
           <span class="material-symbols-outlined text-[20px]">arrow_back</span>
         </button>
-        <div>
-          <h2 class="font-display-lg text-display-lg font-semibold text-on-surface tracking-tight">Field Rule Sets</h2>
-          <p class="font-body-md text-body-md text-on-surface-variant/70 mt-1">Create and manage field rule sets for test case editing.</p>
-        </div>
+
       </div>
       <button class="glass-button px-5 py-2.5 rounded-full font-label-md text-label-md flex items-center gap-2 transition-all shadow-sm" @click="showCreateDialog = true">
         <span class="material-symbols-outlined text-[18px]">add</span>

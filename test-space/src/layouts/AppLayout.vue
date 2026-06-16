@@ -1,6 +1,6 @@
 <template>
   <div
-    class="min-h-screen font-body-md text-body-md text-on-surface antialiased selection:bg-secondary-fixed selection:text-on-secondary-fixed"
+    class="min-h-screen font-body-md text-body-md text-on-surface antialiased selection:bg-secondary-fixed selection:text-on-secondary-fixed app-content"
     :style="bgStyle"
   >
     <Sidebar />

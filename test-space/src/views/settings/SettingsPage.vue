@@ -1,6 +1,5 @@
 <template>
   <div class="pt-12 max-w-5xl">
-    <h2 class="font-display-lg text-display-lg font-semibold text-on-surface tracking-tight mb-8">Settings</h2>
 
     <div class="flex flex-col gap-6">
       <!-- Appearance -->
@@ -29,14 +28,6 @@
             >
               <span class="material-symbols-outlined text-[18px]">dark_mode</span>
               Dark
-            </button>
-            <button
-              class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-2"
-              :class="theme === 'system' ? 'glass-active' : ''"
-              @click="setTheme('system')"
-            >
-              <span class="material-symbols-outlined text-[18px]">settings_brightness</span>
-              System
             </button>
           </div>
         </div>
@@ -86,12 +77,8 @@ function applyTheme(t: string) {
   const root = document.documentElement;
   if (t === "dark") {
     root.classList.add("dark");
-  } else if (t === "light") {
-    root.classList.remove("dark");
   } else {
-    // system
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    root.classList.toggle("dark", prefersDark);
+    root.classList.remove("dark");
   }
 }
 
