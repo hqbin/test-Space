@@ -450,7 +450,7 @@
               @blur="confirmEditing(d)" @keydown.escape.prevent="cancelEditing()"
               @mousedown.stop
             ></textarea>
-            <span v-else class="whitespace-pre-wrap break-words flex-1 leading-snug" :class="d.label ? 'text-on-surface-variant/70' : 'text-on-surface-variant/30 italic'">{{ d.label || '点击编辑...' }}</span>
+            <span v-else class="whitespace-pre-wrap break-words flex-1 leading-snug" :class="d.label ? 'text-on-surface-variant/70' : 'text-on-surface-variant/30 italic'">{{ d.label || t('case.clickToEdit') }}</span>
           </div>
         </div>
       </div>
@@ -525,12 +525,12 @@
           :style="{ left: mmTabPrompt.x + 'px', top: mmTabPrompt.y + 'px' }"
           @mousedown.stop
         >
-          <div class="px-3 py-1.5 font-caption text-caption text-on-surface-variant/60 border-b border-white/20">添加子节点</div>
+          <div class="px-3 py-1.5 font-caption text-caption text-on-surface-variant/60 border-b border-white/20">{{ t('case.addChild') }}</div>
           <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left" @click="mmTabAddModule">
-            <span class="material-symbols-outlined text-[16px]">create_new_folder</span> 子模块
+            <span class="material-symbols-outlined text-[16px]">create_new_folder</span> {{ t('case.subModule') }}
           </button>
           <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left" @click="mmTabAddCase">
-            <span class="material-symbols-outlined text-[16px]">description</span> 用例标题
+            <span class="material-symbols-outlined text-[16px]">description</span> {{ t('case.caseTitle') }}
           </button>
         </div>
       </Teleport>
@@ -573,11 +573,13 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCaseFileStore } from '@/stores/caseFileStore'
+import { useI18n } from '@/composables/useI18n'
 import type { CaseFile, CaseItem, CustomFieldDef } from '@/types'
 import * as XLSX from 'xlsx'
 
 const router = useRouter()
 const store = useCaseFileStore()
+const { t } = useI18n()
 
 const viewMode = ref<'excel' | 'mindmap'>('excel')
 const selectedIds = ref<string[]>([])
@@ -1309,7 +1311,7 @@ function buildMindMap(f: CaseFile): MindMapResult {
         id: modId,
         type: 'module',
         label: name,
-        fieldLabel: depth === 0 ? '模块' : '子模块',
+        fieldLabel: depth === 0 ? t('case.module') : t('case.subModule'),
         x: 0, y: 0, w: 240, h: computeNodeHeight(name, 240, 13, 42),
         children: [],
         collapsed: mmCollapsedMods.value.has(modId),
@@ -1325,7 +1327,7 @@ function buildMindMap(f: CaseFile): MindMapResult {
           id: caseId,
           type: 'case',
           label: c.title || '(No Title)',
-          fieldLabel: '用例',
+          fieldLabel: t('case.testCase'),
           x: 0, y: 0, w: 300, h: computeNodeHeight(c.title || '(No Title)', 300, 12, 36),
           children: [],
           collapsed: mmCollapsedMods.value.has(caseId),
@@ -1333,11 +1335,11 @@ function buildMindMap(f: CaseFile): MindMapResult {
         }
 
         const fieldDefs: [string, string, string][] = [
-          ['precondition', '前置条件', c.precondition],
-          ['steps', '操作步骤', c.steps],
-          ['expected', '预期结果', c.expected],
-          ['priority', '用例等级', c.priority],
-          ['remarks', '备注', c.remarks],
+          ['precondition', t('case.precondition'), c.precondition],
+          ['steps', t('case.steps'), c.steps],
+          ['expected', t('case.expected'), c.expected],
+          ['priority', t('case.priority'), c.priority],
+          ['remarks', t('case.remarks'), c.remarks],
         ]
 
         let lastFieldParent = caseNode

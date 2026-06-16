@@ -4,6 +4,7 @@ mod script_exec;
 mod serial_port;
 mod zip_util;
 
+use script_exec::{ScriptManager, script_spawn, script_kill};
 use serial_port::SerialState;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -343,8 +344,20 @@ fn write_text_file(path: String, content: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn write_script_file(path: String, content: String, interpreter: String) -> Result<(), String> {
+    if interpreter == "bat" {
+        // Normalize to CRLF for cmd.exe compatibility
+        let crlf = content.replace("\r\n", "\n").replace('\n', "\r\n");
+        std::fs::write(&path, &crlf).map_err(|e| e.to_string())
+    } else {
+        std::fs::write(&path, &content).map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
 fn read_text_file(path: String) -> Result<String, String> {
-    std::fs::read_to_string(&path).map_err(|e| e.to_string())
+    let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+    Ok(String::from_utf8_lossy(&bytes).to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -358,6 +371,7 @@ pub fn run() {
             port: Mutex::new(None),
         })
         .manage(MirrorState(Mutex::new(None)))
+        .manage(ScriptManager::new())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -418,7 +432,10 @@ pub fn run() {
             script_execute_bat,
             script_execute_powershell,
             script_execute_shell,
+            script_spawn,
+            script_kill,
             write_text_file,
+            write_script_file,
             read_text_file,
         ])
         .run(tauri::generate_context!())

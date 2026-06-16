@@ -8,7 +8,7 @@
           <input
             v-model="searchQuery"
             type="text"
-            placeholder="Search notes..."
+            :placeholder="t('notes.search')"
             class="bg-transparent border-none outline-none text-[12px] text-on-surface w-full"
             @input="onSearch"
           />
@@ -18,12 +18,12 @@
         </div>
       </div>
       <div class="px-3 py-1.5 border-b border-glass-border-light/50 flex justify-between items-center">
-        <span class="font-label-md text-label-md text-on-surface font-semibold text-[12px]">Directory</span>
+        <span class="font-label-md text-label-md text-on-surface font-semibold text-[12px]">{{ t('notes.directory') }}</span>
         <div class="flex gap-1">
-          <button class="glass-button p-0.5" title="New Folder" @click="createFolder">
+          <button class="glass-button p-0.5" :title="t('notes.newFolder')" @click="createFolder">
             <span class="material-symbols-outlined text-[14px]">create_new_folder</span>
           </button>
-          <button class="glass-button p-0.5" title="New Note" @click="createNote">
+          <button class="glass-button p-0.5" :title="t('notes.newNoteAction')" @click="createNote">
             <span class="material-symbols-outlined text-[14px]">note_add</span>
           </button>
         </div>
@@ -32,7 +32,7 @@
       <div class="px-2 py-1.5 border-b border-glass-border-light/30">
         <div class="relative" ref="spaceDropdownRef">
           <button class="w-full flex items-center justify-between gap-1 px-2 py-1 rounded-md text-[11px] glass-hover cursor-pointer transition-colors text-on-surface-variant" @click="showSpaceDropdown = !showSpaceDropdown">
-            <span class="truncate font-medium">{{ spaces.find(s => s.id === selectedSpaceId)?.name || 'All Notes' }}</span>
+            <span class="truncate font-medium">{{ spaces.find(s => s.id === selectedSpaceId)?.name || t('notes.allNotes') }}</span>
             <span class="material-symbols-outlined text-[14px]">expand_more</span>
           </button>
           <div v-if="showSpaceDropdown" class="absolute left-0 right-0 top-full mt-1 bg-white rounded-lg shadow-xl border border-gray-200/80 z-50 overflow-hidden">
@@ -46,10 +46,10 @@
               >
                 <span class="truncate flex-1">{{ space.name }}</span>
                 <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100">
-                  <button class="p-0.5 rounded hover:bg-black/5" @click.stop="startRenameSpace(space)" title="Rename">
+                  <button class="p-0.5 rounded hover:bg-black/5" @click.stop="startRenameSpace(space)" :title="t('notes.rename')">
                     <span class="material-symbols-outlined text-[12px]">edit</span>
                   </button>
-                  <button class="p-0.5 rounded hover:bg-red-50 text-red-400" @click.stop="confirmDeleteSpace(space)" title="Delete">
+                  <button class="p-0.5 rounded hover:bg-red-50 text-red-400" @click.stop="confirmDeleteSpace(space)" :title="t('notes.delete')">
                     <span class="material-symbols-outlined text-[12px]">delete</span>
                   </button>
                 </div>
@@ -57,7 +57,7 @@
             </div>
             <div class="border-t border-gray-100 py-1">
               <button class="w-full flex items-center gap-1 px-3 py-1.5 text-[11px] text-on-surface-variant hover:bg-gray-50 transition-colors" @click="createSpace(); showSpaceDropdown = false">
-                <span class="material-symbols-outlined text-[13px]">add</span> New Space
+                <span class="material-symbols-outlined text-[13px]">add</span> {{ t('notes.newSpace') }}
               </button>
             </div>
           </div>
@@ -69,13 +69,13 @@
         @click="toggleFavorites"
       >
         <span class="material-symbols-outlined text-[13px]" :class="showFavorites ? 'text-secondary' : ''">star</span>
-        <span>Favorites</span>
+        <span>{{ t('notes.favorites') }}</span>
         <span class="ml-auto text-[10px] text-on-surface-variant/60">{{ favoriteNotes.length }}</span>
       </div>
       <div class="flex-1 overflow-y-auto p-2 custom-scrollbar">
         <!-- Favorites flat list -->
         <div v-if="showFavorites" class="space-y-0.5">
-          <div class="px-2 py-0.5 text-[10px] text-on-surface-variant/50 uppercase tracking-wider font-medium mb-1">Favorites</div>
+          <div class="px-2 py-0.5 text-[10px] text-on-surface-variant/50 uppercase tracking-wider font-medium mb-1">{{ t('notes.favorites') }}</div>
           <div v-for="note in favoriteNotes" :key="note.id" class="group">
             <div
               draggable="true"
@@ -86,14 +86,14 @@
               @dragend="onDragEnd"
             >
               <span class="material-symbols-outlined text-[13px] text-secondary">description</span>
-              <span class="font-body-md text-body-md text-[12px] flex-1 truncate">{{ note.title || 'Untitled' }}</span>
+              <span class="font-body-md text-body-md text-[12px] flex-1 truncate">{{ note.title || t('notes.untitled') }}</span>
               <span class="material-symbols-outlined text-[12px] text-secondary">star</span>
-              <button class="glass-button p-0.5 opacity-0 group-hover:opacity-100 rounded" title="Delete" @click.stop="confirmDeleteNote(note)">
+              <button class="glass-button p-0.5 opacity-0 group-hover:opacity-100 rounded" :title="t('notes.delete')" @click.stop="confirmDeleteNote(note)">
                 <span class="material-symbols-outlined text-[11px]">delete</span>
               </button>
             </div>
           </div>
-          <div v-if="favoriteNotes.length === 0" class="text-[11px] text-on-surface-variant/40 px-2 py-2">No favorite notes yet</div>
+          <div v-if="favoriteNotes.length === 0" class="text-[11px] text-on-surface-variant/40 px-2 py-2">{{ t('notes.noFavorites') }}</div>
         </div>
 
         <!-- Folder tree -->
@@ -117,10 +117,10 @@
               <button class="glass-button p-0.5 rounded opacity-0 group-hover:opacity-100" title="Add" @click.stop="openFolderAddDropdown(folder.id, $event)">
                 <span class="material-symbols-outlined text-[13px]">add</span>
               </button>
-              <button class="glass-button p-0.5 rounded opacity-0 group-hover:opacity-100" title="Rename" @click.stop="startRenameFolder(folder)">
+              <button class="glass-button p-0.5 rounded opacity-0 group-hover:opacity-100" :title="t('notes.rename')" @click.stop="startRenameFolder(folder)">
                 <span class="material-symbols-outlined text-[12px]">edit</span>
               </button>
-              <button class="glass-button p-0.5 rounded opacity-0 group-hover:opacity-100" title="Delete" @click.stop="deleteFolder(folder.id)">
+              <button class="glass-button p-0.5 rounded opacity-0 group-hover:opacity-100" :title="t('notes.delete')" @click.stop="deleteFolder(folder.id)">
                 <span class="material-symbols-outlined text-[12px]">delete</span>
               </button>
             </div>
@@ -135,9 +135,9 @@
               @dragend="onDragEnd"
                 >
                   <span class="material-symbols-outlined text-[13px] text-secondary">description</span>
-                  <span class="font-body-md text-body-md text-[12px] flex-1 truncate">{{ note.title || 'Untitled' }}</span>
+                  <span class="font-body-md text-body-md text-[12px] flex-1 truncate">{{ note.title || t('notes.untitled') }}</span>
                   <span v-if="note.isFavorite" class="material-symbols-outlined text-[12px] text-secondary">star</span>
-                  <button class="glass-button p-0.5 opacity-0 group-hover:opacity-100 rounded" title="Delete" @click.stop="confirmDeleteNote(note)">
+                  <button class="glass-button p-0.5 opacity-0 group-hover:opacity-100 rounded" :title="t('notes.delete')" @click.stop="confirmDeleteNote(note)">
                     <span class="material-symbols-outlined text-[11px]">delete</span>
                   </button>
                 </div>
@@ -152,7 +152,7 @@
           @dragleave="onDragLeave"
           @drop="onDrop(null)"
         >
-          <div class="px-2 py-0.5 text-[10px] text-on-surface-variant/50 uppercase tracking-wider font-medium">Uncategorized</div>
+          <div class="px-2 py-0.5 text-[10px] text-on-surface-variant/50 uppercase tracking-wider font-medium">{{ t('notes.uncategorized') }}</div>
           <div v-for="note in uncategorizedNotes" :key="note.id" class="group">
             <div
               draggable="true"
@@ -163,8 +163,8 @@
               @dragend="onDragEnd"
             >
               <span class="material-symbols-outlined text-[13px] text-secondary">description</span>
-              <span class="font-body-md text-body-md text-[12px] flex-1 truncate">{{ note.title || 'Untitled' }}</span>
-              <button class="glass-button p-0.5 opacity-0 group-hover:opacity-100 rounded" title="Delete" @click.stop="confirmDeleteNote(note)">
+              <span class="font-body-md text-body-md text-[12px] flex-1 truncate">{{ note.title || t('notes.untitled') }}</span>
+              <button class="glass-button p-0.5 opacity-0 group-hover:opacity-100 rounded" :title="t('notes.delete')" @click.stop="confirmDeleteNote(note)">
                 <span class="material-symbols-outlined text-[11px]">delete</span>
               </button>
             </div>
@@ -180,34 +180,34 @@
       <div v-if="!selectedNoteId" class="flex-1 glass-panel rounded-xl overflow-hidden flex items-center justify-center shadow-md">
         <div class="text-center">
           <span class="material-symbols-outlined text-[48px] text-on-surface-variant/30">note_add</span>
-          <p class="font-body-md text-body-md text-on-surface-variant/50 mt-3">Select a note or create a new one</p>
+          <p class="font-body-md text-body-md text-on-surface-variant/50 mt-3">{{ t('notes.selectNote') }}</p>
         </div>
       </div>
       <div v-else class="flex-1 glass-panel rounded-xl overflow-hidden flex flex-col shadow-md">
         <div class="sticky top-0 z-10 bg-white/60 backdrop-blur-md border-b border-glass-border-light/30 px-4 py-2 flex items-center gap-2">
           <input
             v-model="noteTitle"
-            placeholder="Note title..."
+            :placeholder="t('notes.noteTitle')"
             class="flex-1 bg-transparent border-none outline-none font-headline-sm text-headline-sm text-on-surface font-semibold"
             @input="onTitleChange"
           />
           <div class="flex items-center gap-1">
-            <button class="toolbar-btn !p-1" :class="{ 'toolbar-active': currentNoteData?.isFavorite }" title="Toggle Favorite" @click="toggleFavorite">
+            <button class="toolbar-btn !p-1" :class="{ 'toolbar-active': currentNoteData?.isFavorite }" :title="t('notes.favorites')" @click="toggleFavorite">
               <span class="material-symbols-outlined text-[20px]">{{ currentNoteData?.isFavorite ? 'star' : 'star_border' }}</span>
             </button>
             <div class="relative" ref="exportMenuRef">
-              <button class="toolbar-btn !p-1" title="Export" @click="showExportMenu = !showExportMenu">
+              <button class="toolbar-btn !p-1" :title="t('notes.exportMd')" @click="showExportMenu = !showExportMenu">
                 <span class="material-symbols-outlined text-[20px]">file_download</span>
               </button>
               <div v-if="showExportMenu" class="absolute right-0 top-full mt-1 bg-white rounded-xl py-1 min-w-[220px] z-50 shadow-xl border border-gray-200/80 overflow-hidden" @click.stop>
                 <button class="hover:bg-gray-100 w-full text-left px-4 py-2.5 text-[13px] text-gray-700 flex items-center gap-2 transition-colors" @click="exportAs('docx')">
-                  <span class="material-symbols-outlined text-[16px] text-gray-500">description</span> Word (.docx)
+                  <span class="material-symbols-outlined text-[16px] text-gray-500">description</span> {{ t('notes.exportWord') }}
                 </button>
                 <button class="hover:bg-gray-100 w-full text-left px-4 py-2.5 text-[13px] text-gray-700 flex items-center gap-2 transition-colors" @click="exportAs('md')">
-                  <span class="material-symbols-outlined text-[16px] text-gray-500">code</span> Markdown (.md)
+                  <span class="material-symbols-outlined text-[16px] text-gray-500">code</span> {{ t('notes.exportMd') }}
                 </button>
                 <button class="hover:bg-gray-100 w-full text-left px-4 py-2.5 text-[13px] text-gray-700 flex items-center gap-2 transition-colors" @click="exportAs('pdf')">
-                  <span class="material-symbols-outlined text-[16px] text-gray-500">picture_as_pdf</span> PDF (.pdf)
+                  <span class="material-symbols-outlined text-[16px] text-gray-500">picture_as_pdf</span> {{ t('notes.exportPdf') }}
                 </button>
               </div>
             </div>
@@ -250,7 +250,7 @@
           <button class="toolbar-btn" :class="{ 'toolbar-active': editor?.isActive('blockquote') }" @click="editor?.chain().focus().toggleBlockquote().run()" title="Blockquote">
             <span class="material-symbols-outlined text-[20px]">format_quote</span>
           </button>
-          <button class="toolbar-btn" @click="showLinkDialog = true" title="Insert Link">
+          <button class="toolbar-btn" @click="showLinkDialog = true" :title="t('notes.insertLink')">
             <span class="material-symbols-outlined text-[20px]">link</span>
           </button>
           <button class="toolbar-btn text-on-surface-variant relative overflow-hidden" @click="triggerImageUpload" title="Insert Image">
@@ -278,7 +278,7 @@
     <button
       v-if="selectedNoteId && !showToc"
       class="fixed right-0 top-1/2 -translate-y-1/2 z-50 bg-white/40 backdrop-blur-md border border-white/60 rounded-l-md px-1.5 py-4 shadow-lg hover:bg-white/60 hover:pr-2 transition-all opacity-[85%]"
-      title="目录"
+      :title="t('notes.toc')"
       @click="showToc = true"
     >
       <span class="material-symbols-outlined text-[20px] text-on-surface-variant">toc</span>
@@ -327,10 +327,10 @@
     <Teleport to="body">
       <div v-if="showLinkDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm" @click.self="showLinkDialog = false">
         <div class="glass-panel rounded-2xl p-6 w-96 bg-white/60" @click.stop>
-          <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-4">Insert Link</h3>
+          <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-4">{{ t('notes.insertLink') }}</h3>
           <div class="space-y-3">
             <div>
-              <label class="text-[12px] text-on-surface-variant block mb-1">URL</label>
+              <label class="text-[12px] text-on-surface-variant block mb-1">{{ t('notes.url') }}</label>
               <input
                 v-model="linkUrl"
                 type="url"
@@ -340,7 +340,7 @@
               />
             </div>
             <div>
-              <label class="text-[12px] text-on-surface-variant block mb-1">Display Text (optional)</label>
+              <label class="text-[12px] text-on-surface-variant block mb-1">{{ t('notes.displayText') }}</label>
               <input
                 v-model="linkText"
                 type="text"
@@ -351,8 +351,8 @@
             </div>
           </div>
           <div class="flex justify-end gap-2 mt-6">
-            <button class="glass-button px-4 py-2 rounded-full text-[13px]" @click="showLinkDialog = false">Cancel</button>
-            <button class="glass-button px-4 py-2 rounded-full text-[13px] glass-active" @click="confirmLink" :disabled="!linkUrl.trim()">Apply</button>
+            <button class="glass-button px-4 py-2 rounded-full text-[13px]" @click="showLinkDialog = false">{{ t('notes.cancel') }}</button>
+            <button class="glass-button px-4 py-2 rounded-full text-[13px] glass-active" @click="confirmLink" :disabled="!linkUrl.trim()">{{ t('notes.apply') }}</button>
           </div>
         </div>
       </div>
@@ -362,7 +362,7 @@
     <Teleport to="body">
       <div v-if="renameTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm" @click.self="renameTarget = null">
         <div class="glass-panel rounded-2xl p-6 w-80 bg-white/60">
-          <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-4">Rename</h3>
+          <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-4">{{ t('notes.rename') }}</h3>
           <input
             v-model="renameValue"
             class="glass-input w-full px-3 py-2 rounded-lg text-[14px] outline-none mb-4"
@@ -370,8 +370,8 @@
             ref="renameInputRef"
           />
           <div class="flex justify-end gap-2">
-            <button class="glass-button px-4 py-2 rounded-full text-[13px]" @click="renameTarget = null">Cancel</button>
-            <button class="glass-button px-4 py-2 rounded-full text-[13px] glass-active" @click="confirmRename">Rename</button>
+            <button class="glass-button px-4 py-2 rounded-full text-[13px]" @click="renameTarget = null">{{ t('notes.cancel') }}</button>
+            <button class="glass-button px-4 py-2 rounded-full text-[13px] glass-active" @click="confirmRename">{{ t('notes.rename') }}</button>
           </div>
         </div>
       </div>
@@ -382,10 +382,10 @@
       <div v-if="folderAddDropdownId" ref="folderAddDropdownRef" class="fixed z-50" :style="{ left: folderAddDropdownPos.x + 'px', top: folderAddDropdownPos.y + 'px' }">
         <div class="bg-white rounded-lg shadow-xl border border-gray-200/80 overflow-hidden min-w-[140px]">
           <button class="w-full flex items-center gap-2 px-3 py-2 text-[12px] hover:bg-gray-50 transition-colors text-left" @click="createSubFolder(folderAddDropdownId!)">
-            <span class="material-symbols-outlined text-[14px]">create_new_folder</span> New Folder
+            <span class="material-symbols-outlined text-[14px]">create_new_folder</span> {{ t('notes.newFolderTitle') }}
           </button>
           <button class="w-full flex items-center gap-2 px-3 py-2 text-[12px] hover:bg-gray-50 transition-colors text-left" @click="addNoteToFolder(folderAddDropdownId!)">
-            <span class="material-symbols-outlined text-[14px]">note_add</span> New Note
+            <span class="material-symbols-outlined text-[14px]">note_add</span> {{ t('notes.newNoteTitle') }}
           </button>
         </div>
       </div>
@@ -395,11 +395,11 @@
     <Teleport to="body">
       <div v-if="deleteSpaceTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="deleteSpaceTarget = null">
         <div class="glass-panel rounded-2xl p-6 w-80 bg-white/80">
-          <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-2">Delete Space</h3>
-          <p class="text-[13px] text-on-surface-variant mb-6">Are you sure you want to delete "<strong>{{ deleteSpaceTarget.name }}</strong>"? All folders and notes inside will be permanently removed.</p>
+          <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-2">{{ t('notes.deleteSpace') }}</h3>
+          <p class="text-[13px] text-on-surface-variant mb-6" v-html="t('notes.deleteSpaceDesc', { name: `<strong>${deleteSpaceTarget.name}</strong>` })"></p>
           <div class="flex justify-end gap-2">
-            <button class="glass-button px-4 py-2 rounded-full text-[13px]" @click="deleteSpaceTarget = null">Cancel</button>
-            <button class="px-4 py-2 rounded-full text-[13px] bg-red-500 text-white hover:bg-red-600 transition-colors" @click="doDeleteSpace">Delete</button>
+            <button class="glass-button px-4 py-2 rounded-full text-[13px]" @click="deleteSpaceTarget = null">{{ t('notes.cancel') }}</button>
+            <button class="px-4 py-2 rounded-full text-[13px] bg-red-500 text-white hover:bg-red-600 transition-colors" @click="doDeleteSpace">{{ t('notes.delete') }}</button>
           </div>
         </div>
       </div>
@@ -409,11 +409,11 @@
     <Teleport to="body">
       <div v-if="deleteFolderTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="deleteFolderTarget = null">
         <div class="glass-panel rounded-2xl p-6 w-80 bg-white/80">
-          <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-2">Delete Folder</h3>
-          <p class="text-[13px] text-on-surface-variant mb-6">Delete "<strong>{{ deleteFolderTarget.name }}</strong>"? Notes inside will be moved to Uncategorized.</p>
+          <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-2">{{ t('notes.deleteFolder') }}</h3>
+          <p class="text-[13px] text-on-surface-variant mb-6" v-html="t('notes.deleteFolderDesc', { name: `<strong>${deleteFolderTarget.name}</strong>` })"></p>
           <div class="flex justify-end gap-2">
-            <button class="glass-button px-4 py-2 rounded-full text-[13px]" @click="deleteFolderTarget = null">Cancel</button>
-            <button class="px-4 py-2 rounded-full text-[13px] bg-red-500 text-white hover:bg-red-600 transition-colors" @click="doDeleteFolder">Delete</button>
+            <button class="glass-button px-4 py-2 rounded-full text-[13px]" @click="deleteFolderTarget = null">{{ t('notes.cancel') }}</button>
+            <button class="px-4 py-2 rounded-full text-[13px] bg-red-500 text-white hover:bg-red-600 transition-colors" @click="doDeleteFolder">{{ t('notes.delete') }}</button>
           </div>
         </div>
       </div>
@@ -423,11 +423,11 @@
     <Teleport to="body">
       <div v-if="deleteNoteTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="deleteNoteTarget = null">
         <div class="glass-panel rounded-2xl p-6 w-80 bg-white/80">
-          <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-2">Delete Note</h3>
-          <p class="text-[13px] text-on-surface-variant mb-6">Delete "<strong>{{ deleteNoteTarget.title || 'Untitled' }}</strong>"? This cannot be undone.</p>
+          <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-2">{{ t('notes.deleteNote') }}</h3>
+          <p class="text-[13px] text-on-surface-variant mb-6" v-html="t('notes.deleteNoteDesc', { name: `<strong>${deleteNoteTarget.title || t('notes.untitled')}</strong>` })"></p>
           <div class="flex justify-end gap-2">
-            <button class="glass-button px-4 py-2 rounded-full text-[13px]" @click="deleteNoteTarget = null">Cancel</button>
-            <button class="px-4 py-2 rounded-full text-[13px] bg-red-500 text-white hover:bg-red-600 transition-colors" @click="doDeleteNote">Delete</button>
+            <button class="glass-button px-4 py-2 rounded-full text-[13px]" @click="deleteNoteTarget = null">{{ t('notes.cancel') }}</button>
+            <button class="px-4 py-2 rounded-full text-[13px] bg-red-500 text-white hover:bg-red-600 transition-colors" @click="doDeleteNote">{{ t('notes.delete') }}</button>
           </div>
         </div>
       </div>
@@ -450,6 +450,9 @@ import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, ExternalHyperlink } from "docx";
 import type { NoteSpace, NoteFolder, NoteItem, NoteVersion } from "@/types";
+
+import { useI18n } from "@/composables/useI18n";
+const { t } = useI18n();
 
 import * as db from "@/services/database";
 const turndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
@@ -589,7 +592,7 @@ async function loadData() {
 
 async function createSpace() {
   const id = crypto.randomUUID()
-  const name = "New Space"
+  const name = t('notes.newSpace')
   await db.saveNoteSpace({ id, name })
   const space: NoteSpace = { id, name, sortOrder: spaces.value.length, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
   spaces.value.push(space)
@@ -644,8 +647,8 @@ async function createFolder() {
   const id = crypto.randomUUID()
   const parentId = selectedFolderId.value || null
   const spaceId = selectedSpaceId.value || null
-  await db.saveNoteFolder({ id, name: "New Folder", parentId, spaceId })
-  const folder: NoteFolder = { id, spaceId, name: "New Folder", parentId, sortOrder: folders.value.length, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+  await db.saveNoteFolder({ id, name: t('notes.newFolder'), parentId, spaceId })
+  const folder: NoteFolder = { id, spaceId, name: t('notes.newFolder'), parentId, sortOrder: folders.value.length, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
   folders.value.push(folder)
   expandedFolders.value[id] = true
 }
@@ -653,8 +656,8 @@ async function createFolder() {
 async function createSubFolder(parentId: string) {
   const id = crypto.randomUUID()
   const spaceId = selectedSpaceId.value || null
-  await db.saveNoteFolder({ id, name: "New Folder", parentId, spaceId })
-  const folder: NoteFolder = { id, spaceId, name: "New Folder", parentId, sortOrder: folders.value.length, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+  await db.saveNoteFolder({ id, name: t('notes.newFolder'), parentId, spaceId })
+  const folder: NoteFolder = { id, spaceId, name: t('notes.newFolder'), parentId, sortOrder: folders.value.length, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
   folders.value.push(folder)
   expandedFolders.value[id] = true
   expandedFolders.value[parentId] = true
@@ -769,7 +772,7 @@ async function onDrop(targetFolderId: string | null) {
 async function createNote() {
   const id = crypto.randomUUID()
   const now = new Date().toISOString()
-  const note: NoteItem = { id, folderId: null, title: "Untitled", content: "", tags: [], isFavorite: false, createdAt: now, updatedAt: now }
+  const note: NoteItem = { id, folderId: null, title: t('notes.untitled'), content: "", tags: [], isFavorite: false, createdAt: now, updatedAt: now }
   await db.saveNote(note)
   notes.value.unshift(note)
   selectNoteById(note.id, "")
@@ -778,7 +781,7 @@ async function createNote() {
 async function addNoteToFolder(folderId: string) {
   const id = crypto.randomUUID()
   const now = new Date().toISOString()
-  const note: NoteItem = { id, folderId, title: "Untitled", content: "", tags: [], isFavorite: false, createdAt: now, updatedAt: now }
+  const note: NoteItem = { id, folderId, title: t('notes.untitled'), content: "", tags: [], isFavorite: false, createdAt: now, updatedAt: now }
   await db.saveNote(note)
   notes.value.unshift(note)
   selectNoteById(note.id, "")
@@ -786,7 +789,7 @@ async function addNoteToFolder(folderId: string) {
 
 function selectNoteById(id: string, content: string) {
   selectedNoteId.value = id
-  noteTitle.value = "Untitled"
+  noteTitle.value = t('notes.untitled')
   if (editor.value) {
     editor.value.commands.setContent(content)
   }
@@ -816,7 +819,7 @@ async function selectNote(note: NoteItem) {
 async function saveCurrentNote() {
   if (!selectedNoteId.value || !currentNoteData.value) return
   const note = currentNoteData.value
-  note.title = noteTitle.value || "Untitled"
+  note.title = noteTitle.value || t('notes.untitled')
   if (editor.value) {
     note.content = editor.value.getHTML()
   }
@@ -1037,7 +1040,7 @@ async function exportAs(format: 'docx' | 'md' | 'pdf') {
   showExportMenu.value = false
   if (!editor.value || !currentNoteData.value) return
 
-  const title = currentNoteData.value.title || 'Untitled'
+  const title = currentNoteData.value.title || t('notes.untitled')
   const html = editor.value.getHTML()
 
   if (format === 'pdf') {

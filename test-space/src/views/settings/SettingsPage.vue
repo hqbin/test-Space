@@ -1,16 +1,36 @@
 <template>
   <div class="pt-12 max-w-5xl">
-
     <div class="flex flex-col gap-6">
+      <!-- Language -->
+      <div class="glass-card rounded-xl p-padding-card">
+        <div class="flex items-center justify-between">
+          <div>
+            <span class="font-body-md text-body-md text-on-surface font-medium">{{ t("settings.language") }}</span>
+          </div>
+          <div class="flex gap-2">
+            <button
+              class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-2"
+              :class="lang === 'zh' ? 'glass-active' : ''"
+              @click="setLanguage('zh')"
+            >
+              {{ t("settings.langZh") }}
+            </button>
+            <button
+              class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-2"
+              :class="lang === 'en' ? 'glass-active' : ''"
+              @click="setLanguage('en')"
+            >
+              {{ t("settings.langEn") }}
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- Appearance -->
       <div class="glass-card rounded-xl p-padding-card">
-        <h3 class="font-headline-md text-headline-md text-on-surface mb-6">Appearance</h3>
-
-        <!-- Theme -->
-        <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center justify-between">
           <div>
-            <span class="font-body-md text-body-md text-on-surface font-medium">Theme</span>
-            <p class="font-caption text-caption text-on-surface-variant mt-0.5">Choose your preferred color scheme</p>
+            <span class="font-body-md text-body-md text-on-surface font-medium">{{ t("settings.theme") }}</span>
           </div>
           <div class="flex gap-2">
             <button
@@ -19,7 +39,7 @@
               @click="setTheme('light')"
             >
               <span class="material-symbols-outlined text-[18px]">light_mode</span>
-              Light
+              {{ t("settings.themeLight") }}
             </button>
             <button
               class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-2"
@@ -27,33 +47,32 @@
               @click="setTheme('dark')"
             >
               <span class="material-symbols-outlined text-[18px]">dark_mode</span>
-              Dark
+              {{ t("settings.themeDark") }}
             </button>
           </div>
-        </div>
-
-        <div class="border-t border-glass-border-light/30 pt-6">
-          <div>
-            <span class="font-body-md text-body-md text-on-surface font-medium">Data Backup</span>
-            <p class="font-caption text-caption text-on-surface-variant mt-0.5">
-              Export all data (field templates, case files, notes, history, settings) to a backup file,
-              or restore from a previous backup.
-            </p>
-          </div>
-          <div class="flex gap-4 mt-4">
-            <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2" @click="handleExport">
-              <span class="material-symbols-outlined text-[18px]">file_download</span>
-              Export All Data
-            </button>
-            <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2" @click="handleImport">
-              <span class="material-symbols-outlined text-[18px]">file_upload</span>
-              Import Data
-            </button>
-          </div>
-          <p v-if="importStatus" class="mt-4 font-body-md text-body-md" :class="importStatus.startsWith('Error') ? 'text-error' : 'text-success-indicator'">{{ importStatus }}</p>
         </div>
       </div>
 
+      <!-- Backup & Restore -->
+      <div class="glass-card rounded-xl p-padding-card">
+        <div>
+          <span class="font-body-md text-body-md text-on-surface font-medium">{{ t("settings.backup") }}</span>
+          <p class="font-caption text-caption text-on-surface-variant mt-0.5">
+            {{ t("settings.backupDesc") }}
+          </p>
+        </div>
+        <div class="flex gap-4 mt-4">
+          <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2" @click="handleExport">
+            <span class="material-symbols-outlined text-[18px]">file_upload</span>
+            {{ t("settings.exportAll") }}
+          </button>
+          <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2" @click="handleImport">
+            <span class="material-symbols-outlined text-[18px]">file_download</span>
+            {{ t("settings.importAll") }}
+          </button>
+        </div>
+        <p v-if="importStatus" class="mt-4 font-body-md text-body-md" :class="importStatus.startsWith('Error') ? 'text-error' : 'text-success-indicator'">{{ importStatus }}</p>
+      </div>
     </div>
   </div>
 </template>
@@ -61,6 +80,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
 import * as db from "@/services/database";
+import { useI18n } from "@/composables/useI18n";
+
+const { lang, t, setLanguage, initLanguage } = useI18n();
 
 const theme = ref("light");
 const importStatus = ref("");
@@ -102,7 +124,7 @@ async function handleExport() {
       });
       if (path) {
         await invoke("write_text_file", { path, content: json });
-        importStatus.value = "Exported successfully";
+        importStatus.value = t("settings.exportSuccess");
       }
     } catch {
       const blob = new Blob([json], { type: "application/json" });
@@ -112,10 +134,10 @@ async function handleExport() {
       a.download = "test-space-backup.tsb";
       a.click();
       URL.revokeObjectURL(url);
-      importStatus.value = "Exported successfully (browser download)";
+      importStatus.value = t("settings.exportSuccess");
     }
   } catch (e: any) {
-    importStatus.value = "Export failed: " + (e.message || e);
+    importStatus.value = t("settings.exportFail") + ": " + (e.message || e);
   }
 }
 
@@ -145,15 +167,18 @@ async function handleImport() {
     }
     const backup = JSON.parse(json);
     if (!backup.version) {
-      importStatus.value = "Error: invalid backup file";
+      importStatus.value = t("settings.importFail") + ": invalid backup file";
       return;
     }
     await db.importAllData(backup);
-    importStatus.value = "Import successful. Restart the app to reload data.";
+    importStatus.value = t("settings.importSuccess");
   } catch (e: any) {
-    importStatus.value = "Import failed: " + (e.message || e);
+    importStatus.value = t("settings.importFail") + ": " + (e.message || e);
   }
 }
 
-onMounted(() => loadTheme());
+onMounted(() => {
+  initLanguage();
+  loadTheme();
+});
 </script>

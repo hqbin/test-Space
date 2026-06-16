@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="50%" stop-color="#16213e"/>
+      <stop offset="100%" stop-color="#0f3460"/>
+    </linearGradient>
+    <linearGradient id="star" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e2e8f0"/>
+      <stop offset="40%" stop-color="#cbd5e1"/>
+      <stop offset="100%" stop-color="#94a3b8"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#818cf8"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="12" flood-color="#38bdf8" flood-opacity="0.4"/>
+    </filter>
+    <filter id="innerGlow">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="220" fill="url(#bg)"/>
+
+  <!-- Subtle grid lines -->
+  <g stroke="#ffffff" stroke-opacity="0.04" stroke-width="1">
+    <line x1="0" y1="256" x2="1024" y2="256"/>
+    <line x1="0" y1="512" x2="1024" y2="512"/>
+    <line x1="0" y1="768" x2="1024" y2="768"/>
+    <line x1="256" y1="0" x2="256" y2="1024"/>
+    <line x1="512" y1="0" x2="512" y2="1024"/>
+    <line x1="768" y1="0" x2="768" y2="1024"/>
+  </g>
+
+  <!-- Small decorative dots -->
+  <circle cx="180" cy="180" r="3" fill="#38bdf8" opacity="0.5"/>
+  <circle cx="844" cy="180" r="2" fill="#818cf8" opacity="0.4"/>
+  <circle cx="180" cy="844" r="2" fill="#818cf8" opacity="0.3"/>
+  <circle cx="844" cy="844" r="3" fill="#38bdf8" opacity="0.5"/>
+  <circle cx="512" cy="140" r="2" fill="#e2e8f0" opacity="0.3"/>
+  <circle cx="140" cy="512" r="2" fill="#e2e8f0" opacity="0.2"/>
+
+  <!-- Five-pointed star -->
+  <g filter="url(#shadow)" transform="translate(512, 440)">
+    <!-- Star shape -->
+    <polygon points="
+      0,-220
+      51,-68
+      209,-68
+      83,30
+      123,190
+      0,105
+      -123,190
+      -83,30
+      -209,-68
+      -51,-68
+    " fill="url(#star)" stroke="url(#glow)" stroke-width="2"/>
+
+    <!-- Inner highlight -->
+    <polygon points="
+      0,-140
+      32,-43
+      133,-43
+      52,19
+      78,121
+      0,67
+      -78,121
+      -52,19
+      -133,-43
+      -32,-43
+    " fill="none" stroke="#ffffff" stroke-opacity="0.15" stroke-width="1"/>
+
+    <!-- Center glow -->
+    <circle cx="0" cy="20" r="30" fill="#38bdf8" opacity="0.3"/>
+    <circle cx="0" cy="20" r="12" fill="#ffffff" opacity="0.5"/>
+  </g>
+
+  <!-- Sparkle effects -->
+  <g fill="#ffffff">
+    <!-- Top sparkle -->
+    <path d="M512,120 L515,130 L525,133 L515,136 L512,146 L509,136 L499,133 L509,130 Z" opacity="0.8"/>
+    <!-- Left sparkle -->
+    <path d="M280,350 L282,356 L288,358 L282,360 L280,366 L278,360 L272,358 L278,356 Z" opacity="0.5"/>
+    <!-- Right sparkle -->
+    <path d="M744,380 L746,386 L752,388 L746,390 L744,396 L742,390 L736,388 L742,386 Z" opacity="0.6"/>
+    <!-- Bottom sparkle -->
+    <path d="M440,680 L442,686 L448,688 L442,690 L440,696 L438,690 L432,688 L438,686 Z" opacity="0.4"/>
+  </g>
+
+  <!-- "TS" text -->
+  <text x="512" y="800" text-anchor="middle" font-family="'SF Pro Display', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="180" font-weight="700" letter-spacing="18" fill="url(#glow)" opacity="0.9">TS</text>
+</svg>

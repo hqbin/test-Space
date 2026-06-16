@@ -110,6 +110,14 @@ async function migrate() {
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_note_versions_note ON note_versions(note_id)`)
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_note_links_source ON note_links(source_note_id)`)
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_note_links_target ON note_links(target_note_id)`)
+  await d.execute(`CREATE TABLE IF NOT EXISTS scripts (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'bat',
+    content TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`)
 }
 
 export async function closeDb() {
@@ -561,6 +569,55 @@ export async function getNoteLinks(noteId: string): Promise<{ linkedNoteIds: str
 
 // ── Export / Import ──────────────────────────────────────────
 
+// ── Scripts ────────────────────────────────────────────────────
+
+export interface ScriptItem {
+  id: string
+  name: string
+  type: string
+  content: string
+  createdAt: string
+  updatedAt: string
+}
+
+export async function saveScript(script: { id: string; name: string; type: string; content: string }) {
+  const d = await getDb()
+  const now = new Date().toISOString()
+  const existing = await d.select<any[]>('SELECT id FROM scripts WHERE id = ?', [script.id])
+  if (existing.length === 0) {
+    await d.execute(
+      `INSERT INTO scripts (id, name, type, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+      [script.id, script.name, script.type, script.content, now, now]
+    )
+  } else {
+    await d.execute(
+      `UPDATE scripts SET name = ?, type = ?, content = ?, updated_at = ? WHERE id = ?`,
+      [script.name, script.type, script.content, now, script.id]
+    )
+  }
+}
+
+export async function loadScript(id: string): Promise<ScriptItem | null> {
+  const d = await getDb()
+  const rows = await d.select<any[]>(
+    `SELECT id, name, type, content, created_at as createdAt, updated_at as updatedAt FROM scripts WHERE id = ?`,
+    [id]
+  )
+  return rows.length > 0 ? rows[0] : null
+}
+
+export async function listScripts(): Promise<ScriptItem[]> {
+  const d = await getDb()
+  return await d.select<any[]>(
+    `SELECT id, name, type, content, created_at as createdAt, updated_at as updatedAt FROM scripts ORDER BY updated_at DESC`
+  )
+}
+
+export async function deleteScript(id: string) {
+  const d = await getDb()
+  await d.execute('DELETE FROM scripts WHERE id = ?', [id])
+}
+
 export interface AppBackup {
   version: string
   exportedAt: string
@@ -576,6 +633,7 @@ export interface AppBackup {
   notes: NoteItem[]
   noteVersions: NoteVersion[]
   noteLinks: NoteLink[]
+  scripts: ScriptItem[]
 }
 
 export async function exportAllData(): Promise<AppBackup> {
@@ -591,15 +649,16 @@ export async function exportAllData(): Promise<AppBackup> {
   const logSessions = await d.select<LogSession[]>(
     'SELECT id, type, device_serial as deviceSerial, status, started_at as startedAt, metadata FROM log_sessions ORDER BY started_at DESC'
   )
+  const noteSpaces = await d.select<any[]>('SELECT id, name, sort_order as sortOrder, created_at as createdAt, updated_at as updatedAt FROM note_spaces')
   const noteFolders = await loadNoteFolders()
   const notes = await loadNotes()
   const noteVersions = await d.select<NoteVersion[]>(
     'SELECT id, note_id as noteId, content, saved_at as savedAt FROM note_versions ORDER BY saved_at ASC'
   )
   const noteLinks = await d.select<NoteLink[]>(
-    'SELECT id, source_note_id as sourceNoteId, target_note_id as targetNoteId, created_at as createdAt FROM note_links ORDER BY created_at ASC'
+    'SELECT id, source_note_id as sourceNoteId, target_note_id as targetNoteId, created_at as createdAt FROM note_links'
   )
-  const noteSpaces = await loadNoteSpaces()
+  const scripts = await listScripts()
   return {
     version: '1.3',
     exportedAt: new Date().toISOString(),
@@ -615,6 +674,7 @@ export async function exportAllData(): Promise<AppBackup> {
     notes,
     noteVersions,
     noteLinks,
+    scripts,
   }
 }
 
@@ -632,6 +692,7 @@ export async function importAllData(backup: AppBackup) {
   await d.execute('DELETE FROM note_versions')
   await d.execute('DELETE FROM note_links')
   try { await d.execute('DELETE FROM note_spaces') } catch {}
+  await d.execute('DELETE FROM scripts')
 
   for (const s of backup.fieldRuleSets || []) {
     await d.execute(
@@ -710,6 +771,13 @@ export async function importAllData(backup: AppBackup) {
     await d.execute(
       'INSERT INTO note_links (id, source_note_id, target_note_id, created_at) VALUES (?, ?, ?, ?)',
       [l.id, l.sourceNoteId ?? l.source_note_id, l.targetNoteId ?? l.target_note_id, l.createdAt ?? l.created_at]
+    )
+  }
+  for (const raw of backup.scripts || []) {
+    const s: any = raw
+    await d.execute(
+      'INSERT INTO scripts (id, name, type, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [s.id, s.name, s.type ?? 'bat', s.content ?? '', s.createdAt ?? s.created_at, s.updatedAt ?? s.updated_at ?? s.createdAt]
     )
   }
 }

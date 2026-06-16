@@ -5,8 +5,12 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useI18n } from "@/composables/useI18n";
 
-const pages = ["/device-space", "/notes-space", "/case-space", "/script-space", "/settings"];
+const { initLanguage } = useI18n();
+
+const pages = ["/device-space", "/notes-space", "/script-space", "/case-space", "/settings"];
 
 const router = useRouter();
 
@@ -26,8 +30,13 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  initLanguage();
   window.addEventListener("keydown", onKeydown);
+  try {
+    const appWindow = getCurrentWindow();
+    await appWindow.setIcon("icons/32x32.png");
+  } catch {}
 });
 
 onUnmounted(() => {

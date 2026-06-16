@@ -12,7 +12,7 @@
             :class="isActive(item.path) ? 'glass-active font-semibold' : 'text-on-surface-variant'">
             <span class="material-symbols-outlined text-[18px]"
               :style="{ fontVariationSettings: `'FILL' ${isActive(item.path) ? 1 : 0}` }">{{ item.icon }}</span>
-            <span class="font-label-md text-label-md whitespace-nowrap">{{ item.label }}</span>
+            <span class="font-label-md text-label-md whitespace-nowrap">{{ t(item.labelKey) }}</span>
           </router-link>
         </div>
         <router-link to="/settings"
@@ -20,7 +20,7 @@
           :class="isActive('/settings') ? 'glass-active font-semibold' : ''">
           <span class="material-symbols-outlined text-[18px]"
             :style="{ fontVariationSettings: `'FILL' ${isActive('/settings') ? 1 : 0}` }">settings</span>
-          <span class="font-label-md text-label-md whitespace-nowrap">Settings</span>
+          <span class="font-label-md text-label-md whitespace-nowrap">{{ t("nav.settings") }}</span>
         </router-link>
       </div>
     </div>
@@ -30,7 +30,9 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useRoute } from "vue-router";
+import { useI18n } from "@/composables/useI18n";
 
+const { t } = useI18n();
 const route = useRoute();
 const showBar = ref(false);
 let showTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -38,15 +40,15 @@ let hideTimeout: ReturnType<typeof setTimeout> | null = null;
 
 interface NavItem {
   path: string;
-  label: string;
+  labelKey: string;
   icon: string;
 }
 
 const navItems: NavItem[] = [
-  { path: "/device-space", label: "Device", icon: "developer_board" },
-  { path: "/notes-space", label: "Notes", icon: "description" },
-  { path: "/case-space", label: "Case", icon: "folder_shared" },
-  { path: "/script-space", label: "Scripts", icon: "code" },
+  { path: "/device-space", labelKey: "nav.device", icon: "developer_board" },
+  { path: "/notes-space", labelKey: "nav.notes", icon: "description" },
+  { path: "/script-space", labelKey: "nav.scripts", icon: "code" },
+  { path: "/case-space", labelKey: "nav.case", icon: "folder_shared" },
 ];
 
 function isActive(path: string) {

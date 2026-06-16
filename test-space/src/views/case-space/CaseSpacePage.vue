@@ -3,19 +3,19 @@
     <div class="flex items-center gap-3 mb-8 mt-8">
       <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2" @click="showNewDialog = true">
         <span class="material-symbols-outlined text-[20px]">add</span>
-        New Case File
+        {{ t("case.newFile") }}
       </button>
       <span class="w-px h-8 bg-white/30 mx-1"></span>
       <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2" @click="goToFieldRules">
         <span class="material-symbols-outlined text-[20px]">fact_check</span>
-        Field Templates
+        {{ t("case.fieldTemplates") }}
       </button>
     </div>
 
     <div v-if="store.favoriteFiles.length > 0" class="mb-8">
       <h2 class="font-headline-md text-headline-md text-on-surface font-semibold mb-4 flex items-center gap-2">
         <span class="material-symbols-outlined text-[20px] text-secondary" style="font-variation-settings: 'FILL' 1">star</span>
-        Favorites
+        {{ t("case.favorites") }}
       </h2>
       <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         <div
@@ -36,7 +36,7 @@
           <div class="flex items-center gap-3 text-caption text-on-surface-variant/70 mt-2">
             <span class="flex items-center gap-1">
               <span class="material-symbols-outlined text-[14px]">list_alt</span>
-              {{ file.caseCount }} cases
+              {{ file.caseCount }} {{ t("case.cases") }}
             </span>
             <span>·</span>
             <span>{{ formatDate(file.lastOpened) }}</span>
@@ -48,7 +48,7 @@
     <div v-if="store.recentFilesList.length > 0">
       <h2 class="font-headline-md text-headline-md text-on-surface font-semibold mb-4 flex items-center gap-2">
         <span class="material-symbols-outlined text-[20px] text-on-surface-variant/70">history</span>
-        Recent Files
+        {{ t("case.recentFiles") }}
       </h2>
       <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         <div
@@ -69,7 +69,7 @@
                   :style="{ fontVariationSettings: `'FILL' ${store.favorites.includes(file.path) ? 1 : 0}` }"
                 >star</span>
               </button>
-              <button class="glass-button p-1.5 rounded-lg text-on-surface-variant/40" @click.stop="store.removeFromRecent(file.path)">
+              <button class="glass-button p-1.5 rounded-lg text-on-surface-variant/40" @click.stop="confirmRemoveRecent(file)">
                 <span class="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
@@ -78,7 +78,7 @@
           <div class="flex items-center gap-3 text-caption text-on-surface-variant/70 mt-2">
             <span class="flex items-center gap-1">
               <span class="material-symbols-outlined text-[14px]">list_alt</span>
-              {{ file.caseCount }} cases
+              {{ file.caseCount }} {{ t("case.cases") }}
             </span>
             <span>·</span>
             <span>{{ formatDate(file.lastOpened) }}</span>
@@ -90,12 +90,12 @@
     <div v-if="store.recentFilesList.length === 0 && store.favoriteFiles.length === 0" class="flex-1 flex items-center justify-center">
       <div class="text-center">
         <span class="material-symbols-outlined text-7xl text-on-surface-variant/20">description</span>
-        <p class="font-headline-md text-headline-md text-on-surface-variant mt-6">No files yet</p>
-        <p class="font-body-md text-body-md text-on-surface-variant/60 mt-2 mb-6">Create a new .tc file or open an existing one to start editing.</p>
+        <p class="font-headline-md text-headline-md text-on-surface-variant mt-6">{{ t("case.noFiles") }}</p>
+        <p class="font-body-md text-body-md text-on-surface-variant/60 mt-2 mb-6">{{ t("case.noFilesDesc") }}</p>
         <div class="flex items-center justify-center gap-3">
           <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2" @click="showNewDialog = true">
             <span class="material-symbols-outlined text-[20px]">add</span>
-            Create New
+            {{ t("case.createNew") }}
           </button>
         </div>
       </div>
@@ -107,23 +107,23 @@
         <div class="absolute inset-0 bg-black/10 backdrop-blur-sm" @click="showNewDialog = false"></div>
         <div class="glass-panel rounded-2xl p-8 w-[440px] relative z-10">
           <div class="flex items-center justify-between mb-6">
-            <h3 class="font-headline-md text-headline-md text-on-surface font-semibold">New Test Case File</h3>
+            <h3 class="font-headline-md text-headline-md text-on-surface font-semibold">{{ t("case.newDialogTitle") }}</h3>
             <button class="glass-button p-1 rounded" @click="showNewDialog = false">
               <span class="material-symbols-outlined text-[20px]">close</span>
             </button>
           </div>
           <div class="flex flex-col gap-5">
             <div>
-              <label class="block font-label-md text-caption text-on-surface uppercase tracking-wider mb-1.5">File Name <span class="text-error">*</span></label>
+              <label class="block font-label-md text-caption text-on-surface uppercase tracking-wider mb-1.5">{{ t("case.fileName") }} <span class="text-error">*</span></label>
               <input
                 v-model="newCaseName"
                 class="w-full rounded-xl px-4 py-3 text-body-md text-on-surface bg-white/70 border border-white/60 shadow-sm placeholder:text-on-surface-variant/40 focus:outline-none focus:border-secondary/40 focus:ring-2 focus:ring-secondary/10 transition-all"
-                placeholder="e.g. Login Feature Tests"
+                :placeholder="t('case.fileNamePlaceholder')"
                 @keydown.enter="confirmNew"
               />
             </div>
             <div class="relative" @click.stop>
-              <label class="block font-label-md text-caption text-on-surface uppercase tracking-wider mb-1.5">Field Template</label>
+              <label class="block font-label-md text-caption text-on-surface uppercase tracking-wider mb-1.5">{{ t("case.fieldTemplate") }}</label>
               <div
                 class="w-full rounded-full px-5 py-3 text-body-md text-on-surface bg-glass-surface/15 backdrop-blur-[20px] border border-white/40 flex items-center justify-between cursor-pointer transition-all hover:bg-white/25 hover:border-white/60"
                 @click="showRuleDropdown = !showRuleDropdown"
@@ -147,7 +147,7 @@
                   >
                     <span v-if="newCaseRule === 'default'" class="material-symbols-outlined text-[16px] text-secondary">check</span>
                     <span v-else class="w-4"></span>
-                    Default Fields
+                    {{ t("case.defaultFields") }}
                   </div>
                   <div
                     v-for="set in customRuleSets"
@@ -164,7 +164,7 @@
               </Transition>
             </div>
             <div class="flex justify-end gap-3 mt-2">
-              <button class="glass-button px-6 py-2.5 rounded-full font-label-md text-label-md" @click="showNewDialog = false">Cancel</button>
+              <button class="glass-button px-6 py-2.5 rounded-full font-label-md text-label-md" @click="showNewDialog = false">{{ t("case.cancel") }}</button>
               <button
                 class="glass-button px-6 py-2.5 rounded-full font-label-md text-label-md flex items-center gap-2 transition-all shadow-sm"
                 :disabled="!newCaseName.trim()"
@@ -172,9 +172,29 @@
                 @click="confirmNew"
               >
                 <span class="material-symbols-outlined text-[18px]">edit_note</span>
-                Start Editing
+                {{ t("case.startEditing") }}
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Delete Recent File Confirmation -->
+    <Teleport to="body">
+      <div v-if="showDeleteConfirm" class="fixed inset-0 z-50 flex items-center justify-center">
+        <div class="absolute inset-0 bg-black/10 backdrop-blur-sm" @click="showDeleteConfirm = false"></div>
+        <div class="glass-panel rounded-2xl p-8 w-[400px] relative z-10">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-headline-md text-headline-md text-on-surface font-semibold">{{ t("case.deleteTitle") }}</h3>
+            <button class="glass-button p-1 rounded" @click="showDeleteConfirm = false">
+              <span class="material-symbols-outlined text-[20px]">close</span>
+            </button>
+          </div>
+          <p class="font-body-md text-body-md text-on-surface-variant mb-6">{{ t("case.deleteDesc") }}</p>
+          <div class="flex justify-end gap-3">
+            <button class="glass-button px-6 py-2.5 rounded-full font-label-md text-label-md" @click="showDeleteConfirm = false">{{ t("case.deleteCancel") }}</button>
+            <button class="glass-button px-6 py-2.5 rounded-full font-label-md text-label-md bg-red-500/20 hover:bg-red-500/30 text-red-400" @click="confirmDeleteRecent">{{ t("case.deleteConfirm") }}</button>
           </div>
         </div>
       </div>
@@ -188,12 +208,14 @@ import { useRouter } from 'vue-router'
 import { useCaseFileStore } from '@/stores/caseFileStore'
 import { useFilePersistence } from '@/composables/useFilePersistence'
 import { useTestCaseStore } from '@/composables/useTestCaseStore'
+import { useI18n } from '@/composables/useI18n'
 import type { CaseFile } from '@/types'
 
 const router = useRouter()
 const store = useCaseFileStore()
 const { readFile, pickOpenPath } = useFilePersistence()
 const { fieldRuleSets } = useTestCaseStore()
+const { t } = useI18n()
 
 onMounted(() => {
   store.initStore()
@@ -203,15 +225,17 @@ const showNewDialog = ref(false)
 const showRuleDropdown = ref(false)
 const newCaseName = ref('')
 const newCaseRule = ref('default')
+const showDeleteConfirm = ref(false)
+const pendingDeleteFile = ref<{ path: string } | null>(null)
 
 const customRuleSets = computed(() => {
   return fieldRuleSets.value.filter(s => s.id !== 'default')
 })
 
 const selectedRuleName = computed(() => {
-  if (!newCaseRule.value) return 'Default Fields'
+  if (!newCaseRule.value) return t('case.defaultFields')
   const set = fieldRuleSets.value.find(s => s.id === newCaseRule.value)
-  return set?.name || 'Default Fields'
+  return set?.name || t('case.defaultFields')
 })
 
 function selectRule(id: string) {
@@ -235,7 +259,6 @@ function confirmNew() {
   if (!name) return
   showNewDialog.value = false
   const id = store.createFile(name)
-  // Apply custom fields from selected rule set
   if (newCaseRule.value) {
     const set = fieldRuleSets.value.find(s => s.id === newCaseRule.value)
     if (set) {
@@ -264,6 +287,19 @@ async function openFile() {
 
 async function openRecentFile(file: { path: string }) {
   await openFileByPath(file.path)
+}
+
+function confirmRemoveRecent(file: { path: string }) {
+  pendingDeleteFile.value = file
+  showDeleteConfirm.value = true
+}
+
+async function confirmDeleteRecent() {
+  if (pendingDeleteFile.value) {
+    await store.removeFromRecent(pendingDeleteFile.value.path)
+  }
+  showDeleteConfirm.value = false
+  pendingDeleteFile.value = null
 }
 
 async function openFileByPath(path: string) {

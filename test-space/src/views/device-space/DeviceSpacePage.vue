@@ -18,11 +18,11 @@
         <span class="material-symbols-outlined text-on-surface-variant text-[16px] mr-2">link</span>
         <input v-model="connectAddress"
           class="flex-1 bg-transparent border-none outline-none font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-0 p-0"
-          placeholder="输入 IP 地址连接设备，例如: 192.168.1.100:5555" @keyup.enter="connectToDevice" />
+          :placeholder="t('device.inputHint')" @keyup.enter="connectToDevice" />
       </div>
       <button class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-1 border border-outline-variant/60" @click="connectToDevice" :disabled="connecting">
         <span v-if="connecting" class="w-3.5 h-3.5 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
-        <span v-else class="material-symbols-outlined text-[16px]">add_link</span>{{ connecting ? '连接中...' : '连接' }}
+        <span v-else class="material-symbols-outlined text-[16px]">add_link</span>{{ connecting ? t('device.connecting') : t('device.connect') }}
       </button>
       <div class="h-5 w-[1px] bg-glass-border-dark"></div>
       <div class="flex gap-2 flex-wrap items-center">
@@ -35,7 +35,7 @@
           <span class="material-symbols-outlined text-[12px] opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-error ml-0.5"
             @click.stop="disconnectDeviceHandler(device.serial)">close</span>
         </button>
-        <span v-if="devices.length === 0" class="font-caption text-caption text-on-surface-variant/50">无设备连接</span>
+        <span v-if="devices.length === 0" class="font-caption text-caption text-on-surface-variant/50">{{ t('device.noDevice') }}</span>
       </div>
       <button class="text-on-surface-variant hover:text-secondary hover:scale-105 transition-all" @click="scanDevices()" :disabled="scanLoading">
         <span class="material-symbols-outlined text-[18px] block" :class="scanLoading ? 'animate-spin' : ''">refresh</span>
@@ -49,44 +49,44 @@
         <!-- Device Operations Card -->
         <div class="glass-panel rounded-xl p-5 flex flex-col gap-4 shadow-md">
           <h3 class="flex items-center gap-2 font-label-md text-label-md text-on-surface">
-            <span class="material-symbols-outlined text-[16px] text-on-surface-variant">settings_remote</span> 设备操作
+            <span class="material-symbols-outlined text-[16px] text-on-surface-variant">settings_remote</span> {{ t('device.deviceOps') }}
           </h3>
           <div class="grid grid-cols-3 gap-3">
             <button class="bg-white/30 border border-white/50 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm"
               :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('basic')">
               <span v-if="infoLoading === 'basic'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
-              <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">info</span> 基础信息
+              <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">info</span> {{ t('device.basicInfo') }}
             </button>
             <button class="bg-white/30 border border-white/50 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm"
               :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('mac')">
               <span v-if="infoLoading === 'mac'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
-              <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">wifi</span> MAC 信息
+              <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">wifi</span> {{ t('device.macInfo') }}
             </button>
             <button class="bg-white/30 border border-white/50 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm"
               :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('whaleos')">
               <span v-if="infoLoading === 'whaleos'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
-              <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">description</span> 固件信息
+              <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">description</span> {{ t('device.firmwareInfo') }}
             </button>
             <button class="bg-white/30 border border-white/50 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm"
               :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('storage')">
               <span v-if="infoLoading === 'storage'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
-              <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">database</span> 存储信息
+              <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">database</span> {{ t('device.storageInfo') }}
             </button>
             <button class="bg-white/30 border border-white/50 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm col-span-2"
               :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('keys')">
               <span v-if="infoLoading === 'keys'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
-              <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">vpn_key</span> 检查密钥
+              <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">vpn_key</span> {{ t('device.checkKeys') }}
             </button>
           </div>
           <hr class="border-outline-variant/30 my-1">
           <div class="flex flex-wrap gap-2">
-            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="confirmThen('重启设备?', rebootDevice)">
-              <span class="material-symbols-outlined text-[14px] text-on-surface-variant">restart_alt</span> 重启
+            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="confirmThen(t('device.rebootConfirm2'), rebootDevice)">
+              <span class="material-symbols-outlined text-[14px] text-on-surface-variant">restart_alt</span> {{ t('device.reboot') }}
             </button>
             <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="rootDevice">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">shield</span> Root
             </button>
-            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="confirmThen('Remount 需要 root 权限，继续?', remountDevice)">
+            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="confirmThen(t('device.remountConfirm'), remountDevice)">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">published_with_changes</span> Remount
             </button>
           </div>
@@ -94,38 +94,38 @@
         <!-- Quick Actions Card -->
         <div class="glass-panel rounded-xl p-5 flex flex-col gap-4 shadow-md">
           <h3 class="flex items-center gap-2 font-label-md text-label-md text-on-surface">
-            <span class="material-symbols-outlined text-[16px] text-on-surface-variant">keyboard_command_key</span> 快捷操作
+            <span class="material-symbols-outlined text-[16px] text-on-surface-variant">keyboard_command_key</span> {{ t('device.quickActions') }}
           </h3>
           <div class="flex gap-2">
             <div class="flex-1 relative">
               <input ref="textInputRef" v-model="inputTextValue"
                 class="w-full bg-white/50 border border-outline-variant/60 rounded-full px-3 py-1.5 font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all"
-                placeholder="输入要发送到设备的文本..." @keyup.enter="sendText" @focus="showTextHistory = true" @blur="hideTextHistoryDelayed" />
+                :placeholder="t('device.textHint')" @keyup.enter="sendText" @focus="showTextHistory = true" @blur="hideTextHistoryDelayed" />
               <div v-if="showTextHistory && textHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-outline-variant rounded-lg p-1 max-h-32 overflow-y-auto shadow-lg">
                 <button v-for="(h, i) in textHistory" :key="i" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100"
                   @mousedown.prevent @click="selectTextHistory(h)">{{ h }}</button>
               </div>
             </div>
-            <button class="bg-white/30 border border-white/50 text-on-surface px-4 py-1.5 rounded-xl font-label-md text-label-md hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="sendText" :disabled="!inputTextValue.trim()">发送</button>
+            <button class="bg-white/30 border border-white/50 text-on-surface px-4 py-1.5 rounded-xl font-label-md text-label-md hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="sendText" :disabled="!inputTextValue.trim()">{{ t('device.send') }}</button>
           </div>
           <hr class="border-outline-variant/30 my-1">
           <div class="flex flex-wrap gap-2">
             <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="takeScreenshot" :disabled="!selectedDevice">
-              <span class="material-symbols-outlined text-[14px] text-on-surface-variant">image</span> 截图
+              <span class="material-symbols-outlined text-[14px] text-on-surface-variant">image</span> {{ t('device.screenshot') }}
             </button>
             <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm"
               :class="isRecording ? 'bg-error/10 text-error border border-error/20' : ''"
               :disabled="recordingLoading" @click="toggleRecording">
               <span v-if="recordingLoading" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
               <span v-else class="material-symbols-outlined text-[14px]">{{ isRecording ? 'stop' : 'videocam' }}</span>
-              {{ recordingLoading ? (isRecording ? '停止中...' : '启动中...') : (isRecording ? '停止' : '录屏') }}
+              {{ recordingLoading ? (isRecording ? t('device.stopping') : t('device.starting')) : (isRecording ? t('device.stopRecording') : t('device.screenrec')) }}
             </button>
             <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm"
               :disabled="!selectedDevice || logPrepActive" @click="clearLogcatLogs">
-              <span class="material-symbols-outlined text-[14px] text-on-surface-variant">delete_sweep</span> 清空日志
+              <span class="material-symbols-outlined text-[14px] text-on-surface-variant">delete_sweep</span> {{ t('device.clearLogs') }}
             </button>
             <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="restartAdbServer">
-              <span class="material-symbols-outlined text-[14px] text-on-surface-variant">power_settings_new</span> 重启ADB
+              <span class="material-symbols-outlined text-[14px] text-on-surface-variant">power_settings_new</span> {{ t('device.restartAdb') }}
             </button>
           </div>
           <div v-if="logPrepActive" class="flex items-center gap-2 p-2 bg-secondary/5 rounded-lg font-caption text-caption text-secondary">
@@ -137,21 +137,21 @@
               :class="logcatRunning ? 'bg-error/10 text-error border border-error/20' : ''"
               :disabled="logPrepActive" @click="toggleLogcat">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">{{ logcatRunning ? 'stop' : 'assignment' }}</span>
-              实时日志
+               {{ t('device.realtimeLogs') }}
               <span v-if="logcatRunning" class="font-caption text-caption text-secondary bg-secondary/20 px-1 py-0.5 rounded-full text-[10px] ml-0.5">{{ logcatElapsed }}s</span>
             </button>
             <button class="bg-white/30 border border-white/50 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm"
               :class="diagRunning ? 'bg-error/10 text-error border border-error/20' : ''"
               :disabled="logPrepActive" @click="toggleDiagnostic">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">{{ diagRunning ? 'stop' : 'work' }}</span>
-              诊断包
+               {{ t('device.diagnostics') }}
               <span v-if="diagRunning" class="font-caption text-caption text-secondary bg-secondary/20 px-1 py-0.5 rounded-full text-[10px] ml-0.5">{{ diagElapsed }}s</span>
             </button>
             <button class="bg-white/30 border border-white/50 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm"
               :class="bootLogcatRunning ? 'bg-error/10 text-error border border-error/20' : ''"
               :disabled="logPrepActive" @click="toggleBootLogcat">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">{{ bootLogcatRunning ? 'stop' : 'pest_control' }}</span>
-              开机日志
+               {{ t('device.bootLogs') }}
               <span v-if="bootLogcatRunning" class="font-caption text-caption text-secondary bg-secondary/20 px-1 py-0.5 rounded-full text-[10px] ml-0.5">{{ bootLogcatElapsed }}s</span>
             </button>
             <button class="bg-white/30 border border-white/50 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm"
@@ -171,23 +171,23 @@
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-4">
                   <h3 class="font-label-md text-label-md text-on-surface flex items-center gap-2 shrink-0">
-                    <span class="material-symbols-outlined text-[16px] text-on-surface-variant">apps</span>应用管理
+                    <span class="material-symbols-outlined text-[16px] text-on-surface-variant">apps</span>{{ t('device.appManagement') }}
                     <span class="font-caption text-caption text-on-surface-variant/60 font-normal text-sm">({{ sortedApps.length }})</span>
                   </h3>
                   <div class="flex items-center gap-2 text-sm text-on-surface-variant">
                     <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="refreshPackageList" :disabled="pkgLoading">
                       <span v-if="pkgLoading" class="w-3 h-3 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
-                      <span v-else class="material-symbols-outlined text-[14px]">refresh</span>刷新
+                      <span v-else class="material-symbols-outlined text-[14px]">refresh</span>{{ t('device.refresh') }}
                     </button>
                     <label class="flex items-center cursor-pointer hover:scale-105 transition-all px-2 py-1 rounded-xl bg-white/30 border border-white/50 backdrop-blur-sm hover:bg-secondary/10 hover:border-secondary/30">
                       <input type="checkbox" v-model="showThirdParty" class="rounded border-outline-variant text-secondary focus:ring-secondary mr-1 w-3.5 h-3.5 accent-secondary" @change="refreshPackageList" />
-                      第三方应用
+                      {{ t('device.thirdPartyApps') }}
                     </label>
                     <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="apkDialogOpen = true">
-                      <span class="material-symbols-outlined text-[14px]">file_upload</span> 安装 APK
+                      <span class="material-symbols-outlined text-[14px]">file_upload</span> {{ t('device.installApk') }}
                     </button>
                     <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="getCurrentForegroundApp">
-                      <span class="material-symbols-outlined text-[14px]">center_focus_strong</span> 前台应用
+                      <span class="material-symbols-outlined text-[14px]">center_focus_strong</span> {{ t('device.foregroundApp') }}
                     </button>
                   </div>
                 </div>
@@ -197,7 +197,7 @@
                   <div class="flex items-center border border-outline-variant/60 rounded-full px-3 py-1.5 bg-white/50 w-64">
                     <span class="material-symbols-outlined text-on-surface-variant text-[16px] mr-2">search</span>
                     <input v-model="queryPackageName" class="bg-transparent border-none outline-none w-full font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-0 p-0"
-                      placeholder="搜索应用..." @input="onAppSearchInput" @keyup.enter="queryAppPath" @focus="loadAppSearchHistory" @blur="hideAppSearchHistoryDelayed" />
+                      :placeholder="t('device.searchApp')" @input="onAppSearchInput" @keyup.enter="queryAppPath" @focus="loadAppSearchHistory" @blur="hideAppSearchHistoryDelayed" />
                   </div>
                   <div v-if="showAppSearchHistory && appSearchHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-outline-variant rounded-lg p-1 max-h-32 overflow-y-auto shadow-lg">
                     <button v-for="(h, i) in appSearchHistory" :key="i" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100"
@@ -205,7 +205,7 @@
                   </div>
                 </div>
                 <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="queryAppPath">
-                  <span class="material-symbols-outlined text-[14px]">folder_open</span> 路径
+                  <span class="material-symbols-outlined text-[14px]">folder_open</span> {{ t('device.path') }}
                 </button>
                 <div v-if="totalPages > 1" class="flex items-center gap-2 text-sm text-on-surface bg-white/30 border border-white/50 rounded-xl px-3 py-1 ml-auto backdrop-blur-sm">
                   <button class="hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 rounded-full p-0.5 transition-all disabled:opacity-50" :disabled="appPage <= 1" @click="appPage = Math.max(1, appPage - 1); nextTick(loadVisibleAppVersions)">
@@ -222,33 +222,33 @@
             <!-- App List -->
             <div ref="appListContainer" class="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-2" :style="{ maxHeight: appListMaxHeight + 'px' }">
               <div v-if="currentPageApps.length === 0" class="text-center py-3">
-                <p class="font-caption text-caption text-on-surface-variant/50">暂无应用，点击刷新加载</p>
+                <p class="font-caption text-caption text-on-surface-variant/50">{{ t('device.noApp') }}</p>
               </div>
               <table v-else class="w-full text-sm text-left whitespace-nowrap">
                 <tbody class="divide-y divide-outline-variant/30">
                   <tr v-for="app in currentPageApps" :key="app.package_name" :ref="(el) => { if (el && !appItemMeasured) measureAppItem(el as HTMLElement) }" class="hover:bg-white/30 transition-colors group">
                     <td class="pl-1 pr-0 py-2">
-                      <span class="material-symbols-outlined text-success-indicator text-[16px] cursor-pointer hover:scale-125 transition-transform" title="启动" @click="startApp(app.package_name)">play_arrow</span>
+                      <span class="material-symbols-outlined text-success-indicator text-[16px] cursor-pointer hover:scale-125 transition-transform" :title="t('device.start')" @click="startApp(app.package_name)">play_arrow</span>
                     </td>
                     <td class="px-0 py-2">
-                      <span class="material-symbols-outlined text-error text-[16px] cursor-pointer hover:scale-125 transition-transform" title="停止" @click="stopApp(app.package_name)">stop_circle</span>
+                      <span class="material-symbols-outlined text-error text-[16px] cursor-pointer hover:scale-125 transition-transform" :title="t('device.stop')" @click="stopApp(app.package_name)">stop_circle</span>
                     </td>
                     <td class="px-0 py-2">
-                      <span class="material-symbols-outlined text-on-surface-variant text-[16px] cursor-pointer hover:scale-125 transition-transform" title="详情" @click="showAppDetail(app.package_name)">info</span>
+                      <span class="material-symbols-outlined text-on-surface-variant text-[16px] cursor-pointer hover:scale-125 transition-transform" :title="t('device.detail')" @click="showAppDetail(app.package_name)">info</span>
                     </td>
                     <td class="px-0 py-2">
-                      <span class="material-symbols-outlined text-on-surface-variant text-[16px] cursor-pointer hover:scale-125 transition-transform" title="下载APK" @click="downloadApk(app.package_name)">download</span>
+                      <span class="material-symbols-outlined text-on-surface-variant text-[16px] cursor-pointer hover:scale-125 transition-transform" :title="t('device.downloadApk')" @click="downloadApk(app.package_name)">download</span>
                     </td>
                     <td class="px-0 py-2">
-                      <span class="material-symbols-outlined text-error/70 text-[16px] cursor-pointer hover:scale-125 transition-transform" title="清除数据" @click="clearApp(app.package_name)">cleaning_services</span>
+                      <span class="material-symbols-outlined text-error/70 text-[16px] cursor-pointer hover:scale-125 transition-transform" :title="t('device.clearData')" @click="clearApp(app.package_name)">cleaning_services</span>
                     </td>
                     <td class="pr-1 pl-0 py-2">
-                      <span class="material-symbols-outlined text-error text-[16px] cursor-pointer hover:scale-125 transition-transform" title="卸载" @click="confirmThen(`卸载 ${app.package_name}?`, () => uninstallPkg(app.package_name))">delete</span>
+                      <span class="material-symbols-outlined text-error text-[16px] cursor-pointer hover:scale-125 transition-transform" :title="t('device.uninstall')" @click="confirmThen(`${t('device.uninstallConfirm')} ${app.package_name}?`, () => uninstallPkg(app.package_name))">delete</span>
                     </td>
                     <td class="pl-2 pr-2 py-2 font-medium text-on-surface">
                       <span class="font-mono cursor-pointer hover:text-secondary hover:underline truncate" :title="app.package_name" @click="copyPackageName(app.package_name)">{{ app.package_name }}</span>
                       <span v-if="app.version_name" class="text-xs bg-secondary/10 text-secondary px-2 py-0.5 rounded ml-2 border border-secondary/20 cursor-pointer"
-                        :title="'点击复制版本信息'" @click="copyVersionInfo(app.package_name)">
+                        :title="t('device.copyVersionInfo')" @click="copyVersionInfo(app.package_name)">
                         v{{ app.version_name }}{{ app.version_code ? ` (${app.version_code})` : '' }}
                       </span>
                     </td>
@@ -262,10 +262,10 @@
           <div class="flex flex-col gap-3">
             <div class="flex items-center justify-between">
               <h3 class="flex items-center gap-2 font-label-md text-label-md text-on-surface">
-                <span class="material-symbols-outlined text-[16px] text-on-surface-variant">bolt</span> 快捷指令
+                <span class="material-symbols-outlined text-[16px] text-on-surface-variant">bolt</span> {{ t('device.shortcuts') }}
               </h3>
               <div class="flex items-center gap-1">
-                <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-on-surface-variant backdrop-blur-sm" title="管理" @click="showCmdManager = true">
+                <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-on-surface-variant backdrop-blur-sm" :title="t('device.manage')" @click="showCmdManager = true">
                   <span class="material-symbols-outlined text-[18px]">edit_note</span>
                 </button>
               </div>
@@ -273,7 +273,7 @@
 
             <!-- Normal Mode -->
             <div v-if="customCommands.length === 0" class="flex flex-col gap-2">
-              <div class="text-xs text-on-surface-variant/50 italic p-3 border border-dashed border-outline-variant/60 rounded-lg text-center">暂无快捷指令</div>
+              <div class="text-xs text-on-surface-variant/50 italic p-3 border border-dashed border-outline-variant/60 rounded-lg text-center">{{ t('device.noCommands') }}</div>
             </div>
             <div v-if="customCommands.length > 0" class="grid grid-cols-2 gap-2">
               <div v-for="(cmd, idx) in customCommands" :key="idx"
@@ -297,13 +297,13 @@
           <div class="flex items-center gap-3 mb-2 flex-wrap shrink-0">
             <div class="flex items-center gap-2 shrink-0">
               <span class="material-symbols-outlined text-[16px]">screenshot_monitor</span>
-              <span class="font-label-md text-label-md text-on-surface">屏幕镜像</span>
+              <span class="font-label-md text-label-md text-on-surface">{{ t('device.screenMirror') }}</span>
             </div>
             <button class="glass-button px-4 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1"
               :class="isMirroring ? 'bg-error/10 text-error border border-error/20' : ''"
               @click="toggleMirror">
               <span class="material-symbols-outlined text-[16px]">{{ isMirroring ? 'stop' : 'play_arrow' }}</span>
-              {{ isMirroring ? '停止镜像' : '启动镜像' }}
+              {{ isMirroring ? t('device.stopMirror') : t('device.startMirror') }}
             </button>
           </div>
           <div class="flex-1 min-h-0 bg-black/5 rounded-xl overflow-hidden relative border border-dashed border-outline-variant/40" style="aspect-ratio:16/9;min-height:200px">
@@ -313,7 +313,7 @@
               <p class="font-body-sm text-body-sm text-on-surface-variant/50 mt-1">Screen mirror inactive</p>
             </div>
             <div v-if="isMirroring && mirrorFrameCount === 0" class="absolute inset-0 flex items-center justify-center bg-black/20">
-              <span class="font-body-md text-body-md text-white/80">等待接收图像数据...</span>
+              <span class="font-body-md text-body-md text-white/80">{{ t('device.waitingImage') }}</span>
             </div>
           </div>
         </div>
@@ -321,19 +321,19 @@
         <!-- Remote Control -->
         <div class="glass-panel rounded-xl p-5 shrink-0 shadow-md">
           <h3 class="font-label-md text-label-md text-on-surface mb-4 flex items-center gap-1.5">
-            <span class="material-symbols-outlined text-[16px]">gamepad</span>遥控器
+            <span class="material-symbols-outlined text-[16px]">gamepad</span>{{ t('device.remoteControl') }}
           </h3>
           <div class="flex gap-8 items-start justify-center">
             <!-- Left: Back, Home, Settings -->
             <div class="flex flex-col gap-2.5 shrink-0">
               <button class="glass-button py-2.5 px-6 rounded-lg font-caption text-caption flex items-center gap-2 min-w-[120px]" @click="sendKey('4')">
-                <span class="material-symbols-outlined text-[18px]">arrow_back</span>返回
+                <span class="material-symbols-outlined text-[18px]">arrow_back</span>{{ t('device.back') }}
               </button>
               <button class="glass-button py-2.5 px-6 rounded-lg font-caption text-caption flex items-center gap-2 min-w-[120px]" @click="sendKey('3')">
                 <span class="material-symbols-outlined text-[18px]">home</span>Home
               </button>
               <button class="glass-button py-2.5 px-6 rounded-lg font-caption text-caption flex items-center gap-2 min-w-[120px]" @click="sendKey('176')">
-                <span class="material-symbols-outlined text-[18px]">settings</span>设置
+                <span class="material-symbols-outlined text-[18px]">settings</span>{{ t('device.settings') }}
               </button>
             </div>
             <!-- Center: D-pad -->
@@ -367,7 +367,7 @@
             <!-- Right: Power, Volume, Numpad -->
             <div class="flex flex-col gap-2.5 shrink-0">
               <button class="glass-button py-2.5 px-6 rounded-lg font-caption text-caption flex items-center justify-center gap-2 bg-error/10 text-error border border-error/20 min-w-[120px]" @click="sendKey('26')">
-                <span class="material-symbols-outlined text-[18px]">power_settings_new</span>电源
+                <span class="material-symbols-outlined text-[18px]">power_settings_new</span>{{ t('device.power') }}
               </button>
               <div class="grid grid-cols-3 gap-2">
                 <button class="glass-button p-2.5 rounded-lg font-caption text-caption flex items-center justify-center" @click="sendKey('24')">
@@ -394,21 +394,21 @@
         <div class="glass-panel rounded-xl p-3 flex flex-col flex-1 min-h-0 shadow-md">
           <div class="flex items-center justify-between mb-2 shrink-0">
             <h3 class="font-label-md text-label-md text-on-surface flex items-center gap-1.5">
-              <span class="material-symbols-outlined text-[16px]">folder_open</span>文件管理
+              <span class="material-symbols-outlined text-[16px]">folder_open</span>{{ t('device.fileManager') }}
             </h3>
             <div class="flex gap-1.5">
               <button class="glass-button px-2.5 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1" @click="navigateToParent">
-                <span class="material-symbols-outlined text-[14px]">arrow_upward</span>上级
+                <span class="material-symbols-outlined text-[14px]">arrow_upward</span>{{ t('device.parentDir') }}
               </button>
               <button class="glass-button px-2.5 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1" @click="uploadFile">
-                <span class="material-symbols-outlined text-[14px]">upload</span>上传
+                <span class="material-symbols-outlined text-[14px]">upload</span>{{ t('device.upload') }}
               </button>
             </div>
           </div>
           <div class="relative mb-2 shrink-0">
             <input v-model="remotePath" ref="remotePathInputRef"
               class="w-full bg-white border border-outline-variant rounded-lg px-3 py-1.5 font-body-sm text-body-sm text-on-surface font-mono focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all"
-              placeholder="远程路径，如 /sdcard/" @focus="showRemotePathHistory = true" @blur="hideRemotePathHistoryDelayed" @keyup.enter="navigateToPath" />
+              :placeholder="t('device.remotePathHint')" @focus="showRemotePathHistory = true" @blur="hideRemotePathHistoryDelayed" @keyup.enter="navigateToPath" />
             <div v-if="showRemotePathHistory && remotePathHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-outline-variant rounded-lg p-1 max-h-32 overflow-y-auto shadow-lg">
               <button v-for="(h, i) in remotePathHistory" :key="i" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100"
                 @mousedown.prevent @click="selectRemotePathHistory(h)">{{ h }}</button>
@@ -417,7 +417,7 @@
           <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar bg-[#1a1c1d]/5 rounded text-[12px] leading-relaxed">
             <div v-if="fileEntries.length === 0" class="text-center py-8 text-on-surface-variant/40">
               <span class="material-symbols-outlined text-3xl">folder_open</span>
-              <p class="font-body-sm text-body-sm mt-1">输入路径后回车导航</p>
+              <p class="font-body-sm text-body-sm mt-1">{{ t('device.pathHint') }}</p>
             </div>
             <div v-for="(entry, idx) in fileEntries" :key="idx"
               class="flex items-center gap-1.5 px-2 py-1 hover:bg-white/20 cursor-pointer border-b border-outline-variant/10 last:border-0 group"
@@ -427,13 +427,13 @@
               <span class="flex-1 truncate font-mono text-[11px] text-on-surface">{{ entry.name }}</span>
               <span class="font-caption text-caption text-on-surface-variant/50 text-[10px] whitespace-nowrap">{{ entry.size }}</span>
               <div class="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                <button class="glass-button p-0.5 rounded" title="下载" @click.stop="entry.isDir ? downloadDir(entry.name) : downloadFile(entry.name)">
+                <button class="glass-button p-0.5 rounded" :title="t('device.download')" @click.stop="entry.isDir ? downloadDir(entry.name) : downloadFile(entry.name)">
                   <span class="material-symbols-outlined text-[14px]">download</span>
                 </button>
-                <button v-if="!entry.isDir" class="glass-button p-0.5 rounded" title="编辑" @click.stop="editFile(entry.name)">
+                <button v-if="!entry.isDir" class="glass-button p-0.5 rounded" :title="t('device.edit')" @click.stop="editFile(entry.name)">
                   <span class="material-symbols-outlined text-[14px]">edit</span>
                 </button>
-                <button class="glass-button p-0.5 rounded" title="删除" @click.stop="confirmThen(`删除 ${entry.name}?`, () => deleteFile(entry.name))">
+                <button class="glass-button p-0.5 rounded" :title="t('device.delete')" @click.stop="confirmThen(`${t('device.delete')} ${entry.name}?`, () => deleteFile(entry.name))">
                   <span class="material-symbols-outlined text-[14px] text-error">delete</span>
                 </button>
               </div>
@@ -456,10 +456,10 @@
               </div>
               <div class="flex gap-2 shrink-0">
                 <button class="glass-button px-3 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1" :disabled="fileEditDialog.loading" @click="saveEditedFile">
-                  <span class="material-symbols-outlined text-[16px]">save</span>保存
+                  <span class="material-symbols-outlined text-[16px]">save</span>{{ t('device.save') }}
                 </button>
                 <button class="glass-button px-3 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1" @click="downloadFileFromEdit">
-                  <span class="material-symbols-outlined text-[16px]">download</span>下载
+                  <span class="material-symbols-outlined text-[16px]">download</span>{{ t('device.download') }}
                 </button>
                 <button class="glass-button p-1.5 rounded-lg" @click="fileEditDialog.show = false">
                   <span class="material-symbols-outlined text-[20px]">close</span>
@@ -469,7 +469,7 @@
             <div v-if="fileEditDialog.loading" class="flex-1 flex items-center justify-center bg-[#1a1c1d] rounded-xl">
               <div class="flex flex-col items-center gap-3">
                 <span class="w-6 h-6 border-2 border-white/40 border-t-white rounded-full animate-spin"></span>
-                <span class="font-body-sm text-body-sm text-gray-400">正在从设备读取文件...</span>
+                <span class="font-body-sm text-body-sm text-gray-400">{{ t('device.readingFile') }}</span>
               </div>
             </div>
             <textarea v-show="!fileEditDialog.loading" v-model="fileEditDialog.content"
@@ -524,9 +524,9 @@
             </div>
             <pre class="bg-black/5 rounded-xl p-3 text-[12px] font-mono whitespace-pre-wrap break-all max-h-64 overflow-y-auto mb-3">{{ resultDialog.content }}</pre>
             <div class="flex gap-2 justify-end">
-              <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md" @click="resultDialog.show = false">关闭</button>
-              <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md flex items-center gap-1" @click="copyToClipboard(resultDialog.content); showToast('已复制')">
-                <span class="material-symbols-outlined text-[14px]">content_copy</span>复制
+              <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md" @click="resultDialog.show = false">{{ t('device.close') }}</button>
+              <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md flex items-center gap-1" @click="copyToClipboard(resultDialog.content); showToast(t('device.copied'))">
+                <span class="material-symbols-outlined text-[14px]">content_copy</span>{{ t('device.copy') }}
               </button>
             </div>
           </div>
@@ -551,9 +551,9 @@
               </div>
             </div>
             <div class="flex gap-2 justify-end mt-4">
-              <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md" @click="appDetailDialog.show = false">关闭</button>
-              <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md flex items-center gap-1" @click="copyToClipboard(appDetailDialog.pkg); showToast('包名已复制')">
-                <span class="material-symbols-outlined text-[14px]">content_copy</span>复制包名
+              <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md" @click="appDetailDialog.show = false">{{ t('device.close') }}</button>
+              <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md flex items-center gap-1" @click="copyToClipboard(appDetailDialog.pkg); showToast(t('device.pkgCopied'))">
+                <span class="material-symbols-outlined text-[14px]">content_copy</span>{{ t('device.copyPkgName') }}
               </button>
             </div>
           </div>
@@ -569,7 +569,7 @@
           <div class="glass-panel rounded-[2rem] p-6 w-full max-w-md relative z-10 bg-white/60">
             <div class="flex justify-between items-center mb-4">
               <h3 class="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-1.5">
-                <span class="material-symbols-outlined text-[16px]">upload</span>安装 APK
+                <span class="material-symbols-outlined text-[16px]">upload</span>{{ t('device.installApk') }}
               </h3>
               <button class="glass-button p-1 rounded" @click="apkDialogOpen = false">
                 <span class="material-symbols-outlined text-[18px]">close</span>
@@ -584,22 +584,22 @@
                 @drop.prevent="handleApkDrop"
                 @click="selectApkFile">
                 <span class="material-symbols-outlined text-3xl text-on-surface-variant/40">file_open</span>
-                <p v-if="!apkFilePath" class="font-caption text-caption text-on-surface-variant/60 mt-1">拖拽 APK 文件到此处，或点击选择</p>
+                <p v-if="!apkFilePath" class="font-caption text-caption text-on-surface-variant/60 mt-1">{{ t('device.dragApkHint') }}</p>
                 <p v-else class="font-caption text-caption text-secondary font-mono mt-1 truncate">{{ apkFilePath }}</p>
               </div>
               <!-- Overwrite checkbox -->
               <label class="flex items-center gap-2 font-caption text-caption text-on-surface cursor-pointer px-1">
                 <input type="checkbox" v-model="reinstallApk" class="accent-secondary" />
-                覆盖安装（保留数据）
+                {{ t('device.reinstallApk') }}
               </label>
               <!-- Actions -->
               <div class="flex gap-2 justify-end">
-                <button class="glass-button px-4 py-1.5 rounded-lg font-label-md text-label-md" @click="apkDialogOpen = false">取消</button>
+                <button class="glass-button px-4 py-1.5 rounded-lg font-label-md text-label-md" @click="apkDialogOpen = false">{{ t('device.cancel') }}</button>
                 <button class="glass-button px-4 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1"
                   :disabled="!apkFilePath || apkInstalling" @click="handleApkInstall">
                   <span v-if="apkInstalling" class="w-3.5 h-3.5 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
                   <span v-else class="material-symbols-outlined text-[16px]">upload</span>
-                  {{ apkInstalling ? '安装中...' : '安装' }}
+                  {{ apkInstalling ? t('device.installing') : t('device.install') }}
                 </button>
               </div>
             </div>
@@ -616,7 +616,7 @@
           <div class="glass-panel rounded-[2rem] p-6 w-full max-w-md relative z-10 bg-white/60 max-h-[80vh] flex flex-col">
             <div class="flex justify-between items-center mb-4">
               <h3 class="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-1.5">
-                <span class="material-symbols-outlined text-[16px]">edit_note</span>{{ editingCmdIndex !== null ? (editingCmdIndex === -1 ? '添加快捷指令' : '编辑快捷指令') : '管理快捷指令' }}
+                <span class="material-symbols-outlined text-[16px]">edit_note</span>{{ editingCmdIndex !== null ? (editingCmdIndex === -1 ? t('device.addShortcut') : t('device.editShortcut')) : t('device.manageShortcuts') }}
               </h3>
               <button class="glass-button p-1 rounded" @click="showCmdManager = false; cancelEditCommand()">
                 <span class="material-symbols-outlined text-[18px]">close</span>
@@ -626,35 +626,35 @@
             <!-- Edit / Add Form -->
             <div v-if="editingCmdIndex !== null" class="flex flex-col gap-3">
               <input v-model="editingCmdName" class="bg-white/80 border border-outline-variant rounded-lg px-3 py-2 font-caption text-caption text-on-surface font-mono focus:ring-2 focus:ring-secondary/30 w-full"
-                placeholder="指令名称" @keyup.enter="saveCustomCommand" />
+                :placeholder="t('device.cmdNameHint')" @keyup.enter="saveCustomCommand" />
               <input v-model="editingCmdValue" class="bg-white/80 border border-outline-variant rounded-lg px-3 py-2 font-caption text-caption text-on-surface font-mono focus:ring-2 focus:ring-secondary/30 w-full"
-                placeholder="输入命令，如: dumpsys battery / adb devices / ipconfig" @keyup.enter="saveCustomCommand" />
+                :placeholder="t('device.cmdHint')" @keyup.enter="saveCustomCommand" />
               <div class="flex gap-2 justify-end pt-2">
-                <button class="glass-button px-4 py-2 rounded-lg font-label-md text-label-md" @click="cancelEditCommand">取消</button>
-                <button class="glass-button px-4 py-2 rounded-lg font-label-md text-label-md" @click="saveCustomCommand">保存</button>
+                <button class="glass-button px-4 py-2 rounded-lg font-label-md text-label-md" @click="cancelEditCommand">{{ t('device.cancel') }}</button>
+                <button class="glass-button px-4 py-2 rounded-lg font-label-md text-label-md" @click="saveCustomCommand">{{ t('device.save') }}</button>
               </div>
             </div>
 
             <!-- Command List -->
             <div v-else class="flex flex-col gap-2 flex-1 min-h-0">
-              <div v-if="customCommands.length === 0" class="text-xs text-on-surface-variant/50 italic p-4 text-center">暂无快捷指令</div>
+              <div v-if="customCommands.length === 0" class="text-xs text-on-surface-variant/50 italic p-4 text-center">{{ t('device.noCmds') }}</div>
               <div v-else class="flex-1 overflow-y-auto space-y-2">
                 <div v-for="(cmd, idx) in customCommands" :key="idx"
                   class="flex items-center justify-between gap-2 p-3 bg-white/30 rounded-xl">
                   <div class="font-caption text-caption text-on-surface leading-tight truncate min-w-0">{{ cmd.name }}</div>
                   <div class="flex gap-2 shrink-0">
-                    <button class="glass-button px-2.5 py-1.5 rounded-lg flex items-center gap-1 text-caption font-caption" title="编辑" @click="startEditCustomCommand(idx)">
-                      <span class="material-symbols-outlined text-[14px]">edit</span>编辑
+                    <button class="glass-button px-2.5 py-1.5 rounded-lg flex items-center gap-1 text-caption font-caption" :title="t('device.edit')" @click="startEditCustomCommand(idx)">
+                      <span class="material-symbols-outlined text-[14px]">edit</span>{{ t('device.edit') }}
                     </button>
-                    <button class="glass-button px-2.5 py-1.5 rounded-lg flex items-center gap-1 text-caption font-caption text-error" title="删除" @click="confirmThen('删除快捷指令「' + cmd.name + '」?', async () => removeCustomCommand(idx))">
-                      <span class="material-symbols-outlined text-[14px]">delete</span>删除
+                    <button class="glass-button px-2.5 py-1.5 rounded-lg flex items-center gap-1 text-caption font-caption text-error" :title="t('device.delete')" @click="confirmThen(`${t('device.delete')}「${cmd.name}」?`, async () => removeCustomCommand(idx))">
+                      <span class="material-symbols-outlined text-[14px]">delete</span>{{ t('device.delete') }}
                     </button>
                   </div>
                 </div>
               </div>
               <div class="pt-3 border-t border-outline-variant/30">
                 <button class="text-sm text-on-surface-variant hover:text-secondary flex items-center gap-1 transition-colors" @click="addCustomCommand">
-                  <span class="material-symbols-outlined text-[16px]">add</span>添加快捷指令
+                  <span class="material-symbols-outlined text-[16px]">add</span>{{ t('device.addShortcut') }}
                 </button>
               </div>
             </div>
@@ -674,8 +674,8 @@
               <h3 class="font-headline-md text-headline-md text-on-surface font-semibold">{{ confirmDialog.title }}</h3>
             </div>
             <div class="flex gap-2 justify-end">
-              <button class="glass-button px-4 py-2 rounded-lg font-label-md text-label-md" @click="confirmDialog.show = false">取消</button>
-              <button class="px-4 py-2 rounded-lg font-label-md text-label-md bg-error/10 text-error border border-error/20" @click="confirmDialog.onConfirm()">确认</button>
+              <button class="glass-button px-4 py-2 rounded-lg font-label-md text-label-md" @click="confirmDialog.show = false">{{ t('device.cancel') }}</button>
+              <button class="px-4 py-2 rounded-lg font-label-md text-label-md bg-error/10 text-error border border-error/20" @click="confirmDialog.onConfirm()">{{ t('device.confirm') }}</button>
             </div>
           </div>
         </div>
@@ -721,6 +721,9 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { useAdb, type DeviceProperties } from "@/composables/useAdb";
+import { useI18n } from "@/composables/useI18n";
+
+const { t } = useI18n();
 
 interface ScriptResult { stdout: string; stderr: string; exit_code: number; }
 import { addInputHistory, getInputHistory, saveLogSession, getRunningLogSessions, removeLogSession } from "@/services/database";
@@ -765,10 +768,10 @@ async function copyToClipboard(text: string) {
 }
 
 // ── Tabs ──
-const tabs = [
-  { key: 'common', label: '常用命令', icon: 'dashboard' },
-  { key: 'other', label: '其他命令', icon: 'more_horiz' },
-];
+const tabs = computed(() => [
+  { key: 'common', label: t('device.commonCommands'), icon: 'dashboard' },
+  { key: 'other', label: t('device.otherCommands'), icon: 'more_horiz' },
+]);
 const activeTab = ref('common');
 
 // ── Toast ──
@@ -840,9 +843,9 @@ const devicePropList = computed(() => {
   if (!deviceProps.value) return {};
   const p = deviceProps.value;
   return {
-    "型号": p.model, "品牌": p.brand, "设备名": p.device, "产品": p.product,
+    [t('device.model')]: p.model, [t('device.brand')]: p.brand, [t('device.deviceName')]: p.device, [t('device.product')]: p.product,
     "Android": `Android ${p.android_version} (SDK ${p.sdk_version})`,
-    "分辨率": p.resolution, "DPI": p.density, "Build": p.build_id,
+    [t('device.resolution')]: p.resolution, [t('device.density')]: p.density, "Build": p.build_id,
   };
 });
 
@@ -992,13 +995,13 @@ async function runOneCommand(cmd: string): Promise<string> {
     const r = await invoke<ScriptResult>("script_execute_shell", { command: cmd });
     return r.stdout + (r.stderr ? '\n' + r.stderr : '');
   } catch (e: any) {
-    throw new Error(`执行失败: ${e}`);
+    throw new Error(t('device.execFailed', { e: String(e) }));
   }
 }
 async function executeCustomCommand(fullCmd: string) {
   if (!fullCmd.trim()) return;
   const commands = fullCmd.split(/\s*&&\s*|\s*;\s*|\s*&\s*/).filter(c => c.trim());
-  showCmdExec("执行指令", fullCmd);
+  showCmdExec(t('device.executingCmd'), fullCmd);
   let ok = true;
   for (let i = 0; i < commands.length; i++) {
     const c = commands[i].trim();
@@ -1006,19 +1009,19 @@ async function executeCustomCommand(fullCmd: string) {
     try {
       const r = await runOneCommand(c);
       if (r) appendCmdExec(r);
-      else appendCmdExec(`(命令执行完成，无输出)`);
-      if (i < commands.length - 1) appendCmdExec(`--- 命令 ${i + 1}/${commands.length} 完成，继续下一个 ---`);
+      else appendCmdExec(t('device.cmdNoOutput'));
+      if (i < commands.length - 1) appendCmdExec(`--- ${t('device.cmdProgress', { i: String(i + 1), total: String(commands.length) })} ---`);
     } catch (e: any) {
       ok = false;
-      appendCmdExec(`错误: ${e}`);
+      appendCmdExec(`${t('device.error')}: ${e}`);
     }
   }
-  appendCmdExec(ok ? `─ 所有命令执行完毕 ─` : `─ 部分命令执行失败 ─`);
-  appendCmdExec(`退出状态: ${ok ? '成功' : '失败'}`);
+  appendCmdExec(ok ? `─ ${t('device.allCmdsDone')} ─` : `─ ${t('device.someCmdsFailed')} ─`);
+  appendCmdExec(`${t('device.exitStatus')}: ${ok ? t('device.success') : t('device.failed')}`);
   cmdExec.value.running = false;
   scheduleCmdExecClose();
-  if (ok) showToast("指令执行成功");
-  else showToast("部分命令执行失败", "error");
+  if (ok) showToast(t('device.cmdSuccess'));
+  else showToast(t('device.someCmdsFailed'), "error");
 }
 
 // ── File Manager (tree view) ──
@@ -1065,7 +1068,7 @@ async function loadFileList() {
     const raw = await shell(selectedDevice.value.serial, `ls -la "${remotePath.value}"`);
     const lines = raw.split('\n').filter(l => l.trim() && !l.startsWith('total'));
     fileEntries.value = lines.map(l => parseLsLine(l)).filter((e): e is NonNullable<typeof e> => e !== null && e.name !== '.' && e.name !== '..');
-  } catch { fileEntries.value = []; showToast("读取目录失败", "error"); }
+  } catch { fileEntries.value = []; showToast(t('device.dirReadFail'), "error"); }
 }
 async function uploadFile() {
   if (!selectedDevice.value || !remotePath.value.trim()) return;
@@ -1073,15 +1076,15 @@ async function uploadFile() {
     const { open } = await import("@tauri-apps/plugin-dialog");
     const selected = await open({ multiple: false });
     if (selected) {
-      showCmdExec("上传文件", `adb push ${selected} ${remotePath.value}`);
-      appendCmdExec("正在上传...");
+      showCmdExec(t('device.uploadFile'), `adb push ${selected} ${remotePath.value}`);
+      appendCmdExec(t('device.uploading'));
       await pushFile(selectedDevice.value.serial, selected, remotePath.value);
-      appendCmdExec("上传完成");
-      finishCmdExec("文件已上传");
-      showToast("文件已上传");
+      appendCmdExec(t('device.uploadDone'));
+      finishCmdExec(t('device.fileUploaded'));
+      showToast(t('device.fileUploaded'));
       loadFileList();
     }
-  } catch { showToast("上传失败", "error"); }
+  } catch { showToast(t('device.uploadFailed'), "error"); }
 }
 async function downloadFile(name: string) {
   if (!selectedDevice.value) return;
@@ -1090,14 +1093,14 @@ async function downloadFile(name: string) {
     const { save } = await import("@tauri-apps/plugin-dialog");
     const dest = await save({ defaultPath: name });
     if (dest) {
-      showCmdExec("下载文件", `adb pull ${remoteFile}`);
-      appendCmdExec("正在下载...");
+      showCmdExec(t('device.downloadFile'), `adb pull ${remoteFile}`);
+      appendCmdExec(t('device.downloading'));
       await pullFile(selectedDevice.value.serial, remoteFile, dest);
-      appendCmdExec("下载完成");
-      finishCmdExec("文件已下载");
-      showToast("文件已下载");
+      appendCmdExec(t('device.downloadDone'));
+      finishCmdExec(t('device.fileDownloaded'));
+      showToast(t('device.fileDownloaded'));
     }
-  } catch { showToast("下载失败", "error"); }
+  } catch { showToast(t('device.downloadFailed'), "error"); }
 }
 async function downloadDir(name: string) {
   if (!selectedDevice.value) return;
@@ -1109,25 +1112,25 @@ async function downloadDir(name: string) {
     const { save } = await import("@tauri-apps/plugin-dialog");
     const dest = await save({ defaultPath: `${name}.tar.gz` });
     if (!dest) return;
-    showCmdExec("下载文件夹", `tar czf ${remoteTar} -C ${parentPath} ${name}`);
-    appendCmdExec("正在压缩文件夹...");
+    showCmdExec(t('device.downloadDir'), `tar czf ${remoteTar} -C ${parentPath} ${name}`);
+    appendCmdExec(t('device.compressingDir'));
     await shell(selectedDevice.value.serial, `tar czf "${remoteTar}" -C "${parentPath}" "${name}"`);
-    appendCmdExec("正在下载...");
+    appendCmdExec(t('device.downloading'));
     await pullFile(selectedDevice.value.serial, remoteTar, dest);
     await shell(selectedDevice.value.serial, `rm "${remoteTar}"`).catch(() => {});
-    appendCmdExec("下载完成");
-    finishCmdExec("文件夹已下载");
-    showToast("文件夹已下载");
-  } catch (e: any) { showToast(`下载失败: ${e}`, "error"); }
+    appendCmdExec(t('device.downloadDone'));
+    finishCmdExec(t('device.dirDownloaded'));
+    showToast(t('device.dirDownloaded'));
+  } catch (e: any) { showToast(t('device.downloadFailedWith', { e: String(e) }), "error"); }
 }
 async function deleteFile(name: string) {
   if (!selectedDevice.value) return;
   const remoteFile = remotePath.value.replace(/\/?$/, '/') + name.trim();
   try {
     await shell(selectedDevice.value.serial, `rm -rf "${remoteFile}"`);
-    showToast("文件已删除");
+    showToast(t("device.fileDeleted"));
     loadFileList();
-  } catch { showToast("删除失败", "error"); }
+  } catch { showToast(t("device.deleteFail"), "error"); }
 }
 
 // ── File Edit ──
@@ -1140,8 +1143,8 @@ async function editFile(name: string) {
     const content = await shell(selectedDevice.value.serial, `cat "${remoteFile}"`);
     fileEditDialog.value = { ...fileEditDialog.value, content, originContent: content, loading: false };
   } catch {
-    fileEditDialog.value = { ...fileEditDialog.value, content: "// 读取文件失败", loading: false };
-    showToast("读取文件失败", "error");
+    fileEditDialog.value = { ...fileEditDialog.value, content: `// ${t('device.readFileFailed')}`, loading: false };
+    showToast(t('device.readFileFailed'), "error");
   }
 }
 async function saveEditedFile() {
@@ -1157,10 +1160,10 @@ async function saveEditedFile() {
     await pushFile(selectedDevice.value.serial, tmpPath, fileEditDialog.value.filePath);
     try { await remove(tmpPath); } catch {}
     fileEditDialog.value.loading = false;
-    showToast("文件已保存到设备");
+    showToast(t("device.fileSaved"));
   } catch (e: any) {
     fileEditDialog.value.loading = false;
-    showToast(`保存失败: ${e}`, "error");
+    showToast(`${t("device.saveFail")}: ${e}`, "error");
   }
 }
 async function downloadFileFromEdit() {
@@ -1172,9 +1175,9 @@ async function downloadFileFromEdit() {
     if (dest) {
       const { writeTextFile } = await import("@tauri-apps/plugin-fs");
       await writeTextFile(dest, fileEditDialog.value.content);
-      showToast("文件已下载到本地");
+      showToast(t('device.fileDownloadedToLocal'));
     }
-  } catch { showToast("下载失败", "error"); }
+  } catch { showToast(t('device.downloadFailed'), "error"); }
 }
 
 // ── Helper: yield to UI thread ──
@@ -1190,17 +1193,17 @@ function toggleInfoExpand(idx: number) {
 }
 
 function showDeviceInfoDialog() {
-  if (!selectedDevice.value || !deviceProps.value) { showToast("请先选择设备", "error"); return; }
+  if (!selectedDevice.value || !deviceProps.value) { showToast(t("device.selectDeviceFirst"), "error"); return; }
   const p = deviceProps.value;
-  infoDialog.value = { show: true, title: "设备信息", entries: [
-    { key: "序列号", value: selectedDevice.value.serial },
-    { key: "型号", value: p.model || "—" },
-    { key: "品牌", value: p.brand || "—" },
-    { key: "设备名", value: p.device || "—" },
-    { key: "产品", value: p.product || "—" },
+  infoDialog.value = { show: true, title: t('device.deviceInfo'), entries: [
+    { key: t('device.serial'), value: selectedDevice.value.serial },
+    { key: t('device.model'), value: p.model || "—" },
+    { key: t('device.brand'), value: p.brand || "—" },
+    { key: t('device.deviceName'), value: p.device || "—" },
+    { key: t('device.product'), value: p.product || "—" },
     { key: "Android", value: `${p.android_version || "—"} (SDK ${p.sdk_version || "—"})` },
-    { key: "分辨率", value: p.resolution || "—" },
-    { key: "DPI", value: p.density || "—" },
+    { key: t('device.resolution'), value: p.resolution || "—" },
+    { key: t('device.density'), value: p.density || "—" },
     { key: "Build", value: p.build_id || "—" },
   ]};
 }
@@ -1210,18 +1213,18 @@ const logPrepActive = ref(false);
 const logPrepMessage = ref("");
 
 async function prepareLogCapture() {
-  if (!selectedDevice.value) { showToast("请先选择设备", "error"); return false; }
+  if (!selectedDevice.value) { showToast(t("device.selectDeviceFirst"), "error"); return false; }
   logPrepActive.value = true;
   try {
-    logPrepMessage.value = "正在获取 Root 权限...";
+    logPrepMessage.value = t("device.executingAdbRoot");
     await adbRoot(selectedDevice.value.serial);
     await yieldToUI();
-    logPrepMessage.value = "正在扩大日志缓冲区至 64MB...";
+    logPrepMessage.value = t("device.expandingLogBuffer");
     await logcatBufferResize(selectedDevice.value.serial, 64);
     await yieldToUI();
     return true;
   } catch (e: any) {
-    showToast(`准备日志采集失败: ${e}`, "error");
+    showToast(`${t('device.operationFailed')}: ${e}`, "error");
     return false;
   } finally {
     logPrepActive.value = false;
@@ -1277,8 +1280,8 @@ async function scanDevices(silent = false) {
       deviceProps.value = null;
     }
     if (devices.value.length > 0 && !selectedDevice.value) selectDevice(devices.value[0]);
-    if (!silent) showToast(`已扫描到 ${devices.value.length} 台设备`);
-  } catch { if (!silent) showToast("扫描设备失败", "error"); }
+    if (!silent) showToast(t('device.deviceCount', { count: String(devices.value.length) }));
+  } catch { if (!silent) showToast(t("device.scanFailed"), "error"); }
   finally { scanLoading.value = false; }
 }
 function selectDevice(device: DeviceItem) {
@@ -1296,7 +1299,7 @@ async function loadDeviceProperties() {
 }
 async function connectToDevice() {
   if (!connectAddress.value.trim()) {
-    showToast("请输入设备 IP 地址", "error");
+    showToast(t("device.inputIp"), "error");
     return;
   }
   connecting.value = true;
@@ -1306,11 +1309,11 @@ async function connectToDevice() {
     await addInputHistory('connect_ip', addr);
     connectAddress.value = "";
     await scanDevices();
-    showCmdExec("连接设备", `adb connect ${addr}`);
+    showCmdExec(t("device.connectingDevice"), `adb connect ${addr}`);
     appendCmdExec(r);
-    finishCmdExec("设备已连接");
-    showToast("设备已连接");
-  } catch (e: any) { showToast(`连接失败: ${e}`, "error"); }
+    finishCmdExec(t("device.connected"));
+    showToast(t("device.connected"));
+  } catch (e: any) { showToast(`${t("device.connectFail")}: ${e}`, "error"); }
   finally { connecting.value = false; }
 }
 async function disconnectDeviceHandler(serial: string) {
@@ -1321,22 +1324,22 @@ async function disconnectDeviceHandler(serial: string) {
       selectedDevice.value = devices.value[0] || null;
       apps.value = [];
     }
-    showToast("设备已断开");
-  } catch { showToast("断开失败", "error"); }
+    showToast(t("device.disconnected"));
+  } catch { showToast(t("device.disconnectFailed"), "error"); }
 }
 async function restartAdbServer() {
-  showCmdExec("重启 ADB 服务", "adb kill-server && adb start-server");
+  showCmdExec(t("device.restartAdbService"), "adb kill-server && adb start-server");
   try {
-    appendCmdExec("正在停止 ADB 服务...");
+    appendCmdExec(t("device.stoppingAdb"));
     await killServer();
-    appendCmdExec("ADB 服务已停止");
-    appendCmdExec("正在启动 ADB 服务...");
+    appendCmdExec(t("device.adbStopped"));
+    appendCmdExec(t("device.startingAdb"));
     await startServer();
-    appendCmdExec("ADB 服务已启动");
+    appendCmdExec(t("device.adbStarted"));
     await scanDevices();
-    finishCmdExec("ADB 服务已重启");
-    showToast("ADB 服务已重启");
-  } catch (e: any) { finishCmdExec(`重启失败: ${e}`); showToast("ADB 重启失败", "error"); }
+    finishCmdExec(t("device.adbRestarted"));
+    showToast(t("device.adbRestarted"));
+  } catch (e: any) { finishCmdExec(t('device.restartFailedWith', { e: String(e) })); showToast(t("device.adbRestartFailed"), "error"); }
 }
 function clearDeviceState() {
   apps.value = [];
@@ -1346,58 +1349,58 @@ function clearDeviceState() {
 }
 async function rebootDevice() {
   if (!selectedDevice.value) return;
-  showCmdExec("重启设备", "adb reboot");
+  showCmdExec(t("device.rebootDevice"), "adb reboot");
   try {
-    appendCmdExec("正在发送重启命令...");
+    appendCmdExec(t("device.sendingRebootCmd"));
     await reboot(selectedDevice.value.serial);
-    finishCmdExec("重启命令已发送，等待设备重新连接...");
-    showToast("重启命令已发送，设备断开后自动刷新");
+    finishCmdExec(t("device.restarting"));
+    showToast(t("device.rebootSent"));
     clearDeviceState();
-  } catch { finishCmdExec("重启失败"); showToast("重启失败", "error"); }
+  } catch { finishCmdExec(t("device.rebootFailed")); showToast(t("device.rebootFailed"), "error"); }
 }
 async function rebootToRecovery() {
   if (!selectedDevice.value) return;
-  showCmdExec("重启到 Recovery", "adb reboot recovery");
+  showCmdExec(t("device.rebootToRecovery"), "adb reboot recovery");
   try {
-    appendCmdExec("正在发送重启命令...");
+    appendCmdExec(t("device.sendingRebootCmd"));
     await rebootRecovery(selectedDevice.value.serial);
-    finishCmdExec("正在重启到 Recovery...");
-    showToast("正在重启到 Recovery...");
+    finishCmdExec(t("device.rebootingToRecovery"));
+    showToast(t("device.rebootingToRecovery"));
     clearDeviceState();
-  } catch { finishCmdExec("操作失败"); showToast("操作失败", "error"); }
+  } catch { finishCmdExec(t("device.operationFailed")); showToast(t("device.operationFailed"), "error"); }
 }
 async function rebootToBootloader() {
   if (!selectedDevice.value) return;
-  showCmdExec("重启到 Bootloader", "adb reboot bootloader");
+  showCmdExec(t("device.rebootToBootloader"), "adb reboot bootloader");
   try {
-    appendCmdExec("正在发送重启命令...");
+    appendCmdExec(t("device.sendingRebootCmd"));
     await rebootBootloader(selectedDevice.value.serial);
-    finishCmdExec("正在重启到 Bootloader...");
-    showToast("正在重启到 Bootloader...");
+    finishCmdExec(t("device.rebootingToBootloader"));
+    showToast(t("device.rebootingToBootloader"));
     clearDeviceState();
-  } catch { finishCmdExec("操作失败"); showToast("操作失败", "error"); }
+  } catch { finishCmdExec(t("device.operationFailed")); showToast(t("device.operationFailed"), "error"); }
 }
 async function rootDevice() {
   if (!selectedDevice.value) return;
-  showCmdExec("Root 设备", "adb root");
+  showCmdExec(t("device.rootDevice"), "adb root");
   try {
-    appendCmdExec("正在执行 adb root...");
+    appendCmdExec(t("device.executingAdbRoot"));
     const r = await adbRoot(selectedDevice.value.serial);
     appendCmdExec(r);
     finishCmdExec("");
     showToast(r);
-  } catch (e: any) { finishCmdExec(`Root 失败: ${e}`); showToast(`Root 失败: ${e}`, "error"); }
+  } catch (e: any) { finishCmdExec(t('device.rootFailedWith', { e: String(e) })); showToast(t('device.rootFailedWith', { e: String(e) }), "error"); }
 }
 async function remountDevice() {
   if (!selectedDevice.value) return;
-  showCmdExec("Remount 设备", "adb remount");
+  showCmdExec(t("device.remountDevice"), "adb remount");
   try {
-    appendCmdExec("正在执行 adb remount...");
+    appendCmdExec(t("device.executingRemount"));
     const r = await adbRemount(selectedDevice.value.serial);
     appendCmdExec(r);
     finishCmdExec("");
     showToast(r);
-  } catch (e: any) { finishCmdExec(`Remount 失败: ${e}`); showToast(`Remount 失败: ${e}`, "error"); }
+  } catch (e: any) { finishCmdExec(t('device.remountFailedWith', { e: String(e) })); showToast(t('device.remountFailedWith', { e: String(e) }), "error"); }
 }
 async function sendKey(keycode: string) {
   if (!selectedDevice.value) return;
@@ -1407,14 +1410,14 @@ async function sendText() {
   if (!selectedDevice.value || !inputTextValue.value.trim()) return;
   const text = inputTextValue.value;
   inputTextValue.value = "";
-  showCmdExec("发送文本", `adb shell input text ${text}`);
+  showCmdExec(t("device.sendTextAction"), `adb shell input text ${text}`);
   try {
     await adbInputText(selectedDevice.value.serial, text);
     await addInputHistory('input_text', text);
-    appendCmdExec(`已发送: ${text}`);
-    finishCmdExec("文本已发送");
-    showToast("文本已发送");
-  } catch { finishCmdExec("发送失败"); showToast("发送失败", "error"); }
+    appendCmdExec(t('device.textSentWith', { text }));
+    finishCmdExec(t("device.textSent"));
+    showToast(t("device.textSent"));
+  } catch { finishCmdExec(t("device.sendFailed")); showToast(t("device.sendFailed"), "error"); }
 }
 
 // ── App Management ──
@@ -1430,10 +1433,10 @@ async function refreshPackageList() {
     });
     appPage.value = 1;
     loadedVersions.value = new Set();
-    showToast(`已加载 ${apps.value.length} 个应用`);
+    showToast(t('device.loadedApps', { count: String(apps.value.length) }));
     // Auto-load version info for first page
     nextTick(() => loadVisibleAppVersions());
-  } catch { showToast("加载应用列表失败", "error"); }
+  } catch { showToast(t("device.loadAppsFailed"), "error"); }
   finally { pkgLoading.value = false; }
 }
 async function loadVisibleAppVersions() {
@@ -1463,9 +1466,9 @@ async function getCurrentForegroundApp() {
     const lines = raw.split("\n").filter(l => l.includes("mCurrentFocus") || l.includes("mFocusedApp"));
     const raw2 = lines.length > 0 ? lines.join("\n") : raw;
     const m = raw2.match(/([\w.]+\/[\w.]+)/);
-    const result = m ? m[1] : "无前台应用";
-    resultDialog.value = { show: true, title: "前台应用", content: result };
-  } catch { resultDialog.value = { show: true, title: "前台应用", content: "获取失败" }; }
+    const result = m ? m[1] : t("device.noForegroundApp");
+    resultDialog.value = { show: true, title: t("device.foregroundApp"), content: result };
+  } catch { resultDialog.value = { show: true, title: t("device.foregroundApp"), content: t("device.getFailed") }; }
 }
 const appDetailDialog = ref({ show: false, title: "", pkg: "", entries: [] as { key: string; value: string }[] });
 async function showAppDetail(pkg: string) {
@@ -1475,12 +1478,12 @@ async function showAppDetail(pkg: string) {
     const sizeRaw = await shell(selectedDevice.value.serial, `dumpsys diskstats ${pkg}`).catch(() => "");
     const entries: { key: string; value: string }[] = [];
     const patterns: [RegExp, string][] = [
-      [/versionName=([^\s\n]+)/, "当前版本"],
-      [/versionCode=(\d+)/, "当前版本号"],
-      [/codePath=([^\s\n]+)/, "安装路径"],
-      [/nativeLibraryDir=([^\s\n]+)/, "Native 库目录"],
-      [/targetSdkVersion=(\d+)/, "目标 SDK"],
-      [/minSdkVersion=(\d+)/, "最低 SDK"],
+      [/versionName=([^\s\n]+)/, t("device.currentVersion")],
+      [/versionCode=(\d+)/, t("device.currentVersionCode")],
+      [/codePath=([^\s\n]+)/, t("device.installPath")],
+      [/nativeLibraryDir=([^\s\n]+)/, t("device.nativeLibDir")],
+      [/targetSdkVersion=(\d+)/, t("device.targetSdk")],
+      [/minSdkVersion=(\d+)/, t("device.minSdk")],
     ];
     for (const [reg, label] of patterns) {
       const m = info.match(reg);
@@ -1495,79 +1498,79 @@ async function showAppDetail(pkg: string) {
         const vc = codeMatches[i]?.[1] || "?";
         history.push(`${vn} (${vc})`);
       }
-      entries.push({ key: "版本历史", value: history.join(" → ") });
+      entries.push({ key: t("device.versionHistory"), value: history.join(" → ") });
     }
     if (sizeRaw) {
       const sizeMatch = sizeRaw.match(/(\d[\d,.]+)\s*(KB|MB|GB|bytes?)/i);
-      if (sizeMatch) entries.push({ key: "应用大小", value: sizeMatch[1] + " " + sizeMatch[2] });
+      if (sizeMatch) entries.push({ key: t("device.appSize"), value: sizeMatch[1] + " " + sizeMatch[2] });
       const cacheMatch = sizeRaw.match(/Cache\s*size:\s*(\d[\d,.]+)\s*(KB|MB|GB|bytes?)/i);
-      if (cacheMatch) entries.push({ key: "缓存大小", value: cacheMatch[1] + " " + cacheMatch[2] });
+      if (cacheMatch) entries.push({ key: t("device.cacheSize"), value: cacheMatch[1] + " " + cacheMatch[2] });
       const dataMatch = sizeRaw.match(/Data\s*size:\s*(\d[\d,.]+)\s*(KB|MB|GB|bytes?)/i);
-      if (dataMatch) entries.push({ key: "数据大小", value: dataMatch[1] + " " + dataMatch[2] });
+      if (dataMatch) entries.push({ key: t("device.dataSize"), value: dataMatch[1] + " " + dataMatch[2] });
     }
-    if (entries.length === 0) entries.push({ key: "提示", value: "无法解析应用信息，请确认包名正确" });
+    if (entries.length === 0) entries.push({ key: t("device.hint"), value: t("device.parseFail") });
     appDetailDialog.value = { show: true, title: pkg, pkg, entries };
-  } catch { showToast("获取详情失败", "error"); }
+  } catch { showToast(t("device.getDetailFailed"), "error"); }
 }
 
 async function startApp(pkg: string) {
   if (!selectedDevice.value) return;
-  showCmdExec("启动应用", `adb shell monkey -p ${pkg} 1`);
+  showCmdExec(t("device.startAppAction"), `adb shell monkey -p ${pkg} 1`);
   try {
-    appendCmdExec(`正在启动 ${pkg}...`);
+    appendCmdExec(t('device.startingApp', { pkg }));
     await adbStartApp(selectedDevice.value.serial, pkg);
-    appendCmdExec(`已启动 ${pkg}`);
-    finishCmdExec("应用已启动");
-    showToast(`已启动 ${pkg}`);
+    appendCmdExec(t('device.startedApp', { pkg }));
+    finishCmdExec(t("device.appStarted"));
+    showToast(t('device.startedApp', { pkg }));
   } catch {
-    appendCmdExec("monkey 启动失败，尝试 am start 兜底...");
+    appendCmdExec(t("device.monkeyFailedFallback"));
     try {
       const mainAct = await shell(selectedDevice.value.serial, 
         `cmd package resolve-activity --brief ${pkg} | tail -1`);
       if (mainAct && mainAct.includes("/")) {
         await shell(selectedDevice.value.serial, `am start -n ${mainAct.trim()}`);
-        appendCmdExec(`已启动 ${pkg}`);
-        finishCmdExec("应用已启动");
-        showToast(`已启动 ${pkg}`);
+        appendCmdExec(t('device.startedApp', { pkg }));
+        finishCmdExec(t("device.appStarted"));
+        showToast(t('device.startedApp', { pkg }));
         return;
       }
     } catch {}
-    finishCmdExec("启动失败"); showToast("启动失败", "error");
+    finishCmdExec(t("device.startFailed")); showToast(t("device.startFailed"), "error");
   }
 }
 async function stopApp(pkg: string) {
   if (!selectedDevice.value) return;
-  showCmdExec("停止应用", `adb shell am force-stop ${pkg}`);
+  showCmdExec(t("device.stopAppAction"), `adb shell am force-stop ${pkg}`);
   try {
-    appendCmdExec(`正在停止 ${pkg}...`);
+    appendCmdExec(t('device.stoppingApp', { pkg }));
     await adbStopApp(selectedDevice.value.serial, pkg);
-    appendCmdExec(`已停止 ${pkg}`);
-    finishCmdExec("应用已停止");
-    showToast(`已停止 ${pkg}`);
-  } catch { finishCmdExec("停止失败"); showToast("停止失败", "error"); }
+    appendCmdExec(t('device.stoppedApp', { pkg }));
+    finishCmdExec(t("device.appStopped"));
+    showToast(t('device.stoppedApp', { pkg }));
+  } catch { finishCmdExec(t("device.stopFailed")); showToast(t("device.stopFailed"), "error"); }
 }
 async function clearApp(pkg: string) {
   if (!selectedDevice.value) return;
-  showCmdExec("清除数据", `adb shell pm clear ${pkg}`);
+  showCmdExec(t("device.clearDataAction"), `adb shell pm clear ${pkg}`);
   try {
-    appendCmdExec(`正在清除 ${pkg} 数据...`);
+    appendCmdExec(t('device.clearingData', { pkg }));
     await clearAppData(selectedDevice.value.serial, pkg);
-    appendCmdExec(`已清除 ${pkg} 数据`);
-    finishCmdExec("数据已清除");
-    showToast(`已清除 ${pkg} 数据`);
-  } catch { finishCmdExec("清除失败"); showToast("清除失败", "error"); }
+    appendCmdExec(t('device.clearedData', { pkg }));
+    finishCmdExec(t("device.dataCleared"));
+    showToast(t('device.clearedData', { pkg }));
+  } catch { finishCmdExec(t("device.clearDataFailed")); showToast(t("device.clearDataFailed"), "error"); }
 }
 async function uninstallPkg(pkg: string) {
   if (!selectedDevice.value) return;
-  showCmdExec("卸载应用", `adb uninstall ${pkg}`);
+  showCmdExec(t("device.uninstallAction"), `adb uninstall ${pkg}`);
   try {
-    appendCmdExec(`正在卸载 ${pkg}...`);
+    appendCmdExec(t('device.uninstallingApp', { pkg }));
     await uninstallApk(selectedDevice.value.serial, pkg);
     apps.value = apps.value.filter(a => a.package_name !== pkg);
-    appendCmdExec(`已卸载 ${pkg}`);
-    finishCmdExec("应用已卸载");
-    showToast(`已卸载 ${pkg}`);
-  } catch { finishCmdExec("卸载失败"); showToast("卸载失败", "error"); }
+    appendCmdExec(t('device.uninstalledApp', { pkg }));
+    finishCmdExec(t("device.appUninstalled"));
+    showToast(t('device.uninstalledApp', { pkg }));
+  } catch { finishCmdExec(t("device.uninstallFailed")); showToast(t("device.uninstallFailed"), "error"); }
 }
 async function selectApkFile() {
   try {
@@ -1581,9 +1584,9 @@ function handleApkDrop(e: DragEvent) {
   const file = e.dataTransfer?.files?.[0];
   if (file?.name.endsWith(".apk")) {
     apkFilePath.value = file.name;
-    showToast("请在安装弹窗中点击选择 APK 文件路径（浏览器拖拽暂不支持）", "error");
+    showToast(t("device.apkDragHintBrowser"), "error");
   } else {
-    showToast("请拖入 .apk 文件", "error");
+    showToast(t("device.apkDragHintFile"), "error");
   }
 }
 async function handleApkInstall() {
@@ -1591,11 +1594,11 @@ async function handleApkInstall() {
   apkInstalling.value = true;
   try {
     await installApk(selectedDevice.value.serial, apkFilePath.value, reinstallApk.value);
-    showToast("APK 安装成功");
+    showToast(t("device.apkInstallSuccess"));
     apkDialogOpen.value = false;
     apkFilePath.value = "";
   } catch (e: any) {
-    showToast(`安装失败: ${e}`, "error");
+    showToast(t('device.installFailedWith', { e: String(e) }), "error");
   } finally {
     apkInstalling.value = false;
   }
@@ -1608,40 +1611,40 @@ async function fetchAppVersion(pkg: string) {
     const vn = info.match(/versionName=([^\s]+)/)?.[1];
     const vc = info.match(/versionCode=(\d+)/)?.[1];
     apps.value = apps.value.map(a => a.package_name === pkg ? { ...a, version_name: vn, version_code: vc } : a);
-    showToast(`版本: ${vn || "N/A"} (${vc || "?"})`);
-  } catch { showToast("获取版本失败", "error"); }
+    showToast(t("device.versionDisplay", { vn: vn || "N/A", vc: vc || "?" }));
+  } catch { showToast(t("device.getVersionFailed"), "error"); }
   finally { setAppLoading(pkg, 'version', false); }
 }
 
 async function copyPackageName(pkg: string) {
   const ok = await copyToClipboard(pkg);
-  showToast(ok ? "包名已复制" : "复制失败", ok ? "success" : "error");
+  showToast(ok ? t("device.pkgCopied") : t("device.copyFailed"), ok ? "success" : "error");
 }
 async function copyVersionInfo(pkg: string) {
   const app = apps.value.find(a => a.package_name === pkg);
-  if (!app?.version_name) { showToast("暂无版本信息", "error"); return; }
+  if (!app?.version_name) { showToast(t("device.noVersion"), "error"); return; }
   const text = `${app.version_name}${app.version_code ? ` (${app.version_code})` : ''}`;
   const ok = await copyToClipboard(text);
-  showToast(ok ? "版本信息已复制" : "复制失败", ok ? "success" : "error");
+  showToast(ok ? t("device.versionInfoCopied") : t("device.copyFailed"), ok ? "success" : "error");
 }
 async function downloadApk(pkg: string) {
   if (!selectedDevice.value) return;
-  showCmdExec("下载 APK", `adb shell dumpsys package ${pkg} | grep path:`);
+  showCmdExec(t("device.downloadApkTitle"), `adb shell dumpsys package ${pkg} | grep path:`);
   try {
-    appendCmdExec("正在查询 APK 路径...");
+    appendCmdExec(t("device.queryingApkPath"));
     const info = await getAppInfo(selectedDevice.value.serial, pkg);
     const pathMatch = info.match(/path:?\s*(\S+)/);
-    if (!pathMatch) { finishCmdExec("未找到 APK 路径"); showToast("未找到APK路径", "error"); return; }
-    appendCmdExec(`APK 路径: ${pathMatch[1]}`);
+    if (!pathMatch) { finishCmdExec(t("device.apkPathNotFound")); showToast(t("device.apkPathNotFound"), "error"); return; }
+    appendCmdExec(`${t("device.apkPathKey")}: ${pathMatch[1]}`);
     const { save } = await import("@tauri-apps/plugin-dialog");
     const dest = await save({ defaultPath: `${pkg}.apk`, filters: [{ name: "APK", extensions: ["apk"] }] });
     if (!dest) { closeCmdExec(); return; }
-    appendCmdExec("正在拉取 APK 文件...");
+    appendCmdExec(t("device.pullingApk"));
     await pullFile(selectedDevice.value.serial, pathMatch[1], dest);
-    appendCmdExec(`已保存到: ${dest}`);
-    finishCmdExec("APK 下载完成");
-    showToast("APK 已下载");
-  } catch { finishCmdExec("下载失败"); showToast("下载失败", "error"); }
+    appendCmdExec(t("device.savedTo", { path: dest }));
+    finishCmdExec(t("device.apkDownloadDone"));
+    showToast(t("device.apkDownloaded"));
+  } catch { finishCmdExec(t("device.downloadFailed")); showToast(t("device.downloadFailed"), "error"); }
 }
 
 // ── App Path Query ──
@@ -1649,7 +1652,7 @@ const resultDialog = ref({ show: false, title: "", content: "" });
 async function queryAppPath() {
   if (!selectedDevice.value) return;
   if (!queryPackageName.value.trim()) {
-    showToast("请先输入需要查询的包名", "error");
+    showToast(t("device.inputPkg"), "error");
     return;
   }
   try {
@@ -1657,11 +1660,11 @@ async function queryAppPath() {
     const match = result.match(/package:(.+)/);
     if (match) {
       await addInputHistory('app_search', queryPackageName.value.trim());
-      resultDialog.value = { show: true, title: `APK 路径 - ${queryPackageName.value.trim()}`, content: match[1].trim() };
+      resultDialog.value = { show: true, title: t("device.apkPathTitle", { pkg: queryPackageName.value.trim() }), content: match[1].trim() };
     } else {
-      showToast("未找到该应用", "error");
+      showToast(t("device.appNotFound"), "error");
     }
-  } catch { showToast("查询失败", "error"); }
+  } catch { showToast(t("device.queryFailed"), "error"); }
 }
 
 // ── Information Query ──
@@ -1673,11 +1676,11 @@ async function queryInfo(type: string) {
     let title = "";
     let entries: { key: string; value: string }[] = [];
     if (type === "basic") {
-      title = "基础设备信息";
+      title = t("device.basicDeviceInfo");
       const props = await getProperties(serial);
       entries = Object.entries(props).map(([k, v]) => ({ key: k, value: v || "N/A" }));
     } else if (type === "mac") {
-      title = "MAC 信息";
+      title = t("device.macInfoTitle");
       const [wlanMac, ethMac] = await Promise.all([
         shell(serial, "cat /sys/class/net/wlan0/address 2>/dev/null || ip link show wlan0 2>/dev/null | grep link/ether | awk '{print $2}'").catch(() => ""),
         shell(serial, "cat /sys/class/net/eth0/address 2>/dev/null || ip link show eth0 2>/dev/null | grep link/ether | awk '{print $2}'").catch(() => ""),
@@ -1685,22 +1688,22 @@ async function queryInfo(type: string) {
       const wlan = wlanMac.trim();
       const eth = ethMac.trim();
       if (wlan) entries.push({ key: "WiFi MAC", value: wlan });
-      if (eth) entries.push({ key: "物理 MAC", value: eth });
-      if (entries.length === 0) entries.push({ key: "MAC 地址", value: "未获取到 MAC 信息" });
+      if (eth) entries.push({ key: t("device.physicalMac"), value: eth });
+      if (entries.length === 0) entries.push({ key: t("device.macAddress"), value: t("device.macInfoNotFound") });
     } else if (type === "whaleos") {
-      title = "固件信息";
+      title = t("device.firmwareInfoTitle");
       const tvKeys = ["ro.product.model", "ro.product.tv.rcu", "ro.product.tv.deviceType", "ro.vendor.product.version",
         "ro.vendor.zeasn.firmwareID", "persist.sys.cur_country", "persist.sys.cur_language", "ro.boot.pid", "ro.boot.mac"];
       const results = await Promise.all(tvKeys.map(k => shell(serial, `getprop ${k}`).catch(() => "")));
       entries = tvKeys.map((key, i) => ({ key, value: results[i].trim() || "" })).filter(e => e.value !== "");
     } else if (type === "aosp") {
-      title = "AOSP 固件信息";
+      title = t("device.aospFirmwareInfo");
       const aospKeys = ["ro.product.model", "ro.build.display.id", "ro.build.description", "ro.vendor.product.version",
         "ro.build.fingerprint", "ro.build.version.sdk", "ro.build.version.security_patch", "ro.product.cpu.abi"];
-      const results = await Promise.all(aospKeys.map(k => shell(serial, `getprop ${k}`).catch(() => "(空)")));
-      entries = aospKeys.map((key, i) => ({ key, value: results[i].trim() || "(空)" }));
+      const results = await Promise.all(aospKeys.map(k => shell(serial, `getprop ${k}`).catch(() => t("device.empty"))));
+      entries = aospKeys.map((key, i) => ({ key, value: results[i].trim() || t("device.empty") }));
     } else if (type === "keys") {
-      title = "密钥检查结果";
+      title = t("device.keyCheckResult");
       const checks = [
         { name: "HDCP 1.4", cmd: "tee_provision -qt 0x31" },
         { name: "HDCP 2.2", cmd: "tee_provision -qt 0x32" },
@@ -1711,12 +1714,12 @@ async function queryInfo(type: string) {
       const checkResults = await Promise.all(checks.map(c =>
         shell(serial, c.cmd).then(r => {
           const success = !r.toLowerCase().includes("not provisioned") && !r.toLowerCase().includes("error");
-          return { key: c.name, value: `${success ? "✅ 通过" : "❌ 失败"}\n> ${c.cmd}`, raw: r };
-        }).catch((e: any) => ({ key: c.name, value: `❌ 执行错误`, raw: `${e}` }))
+          return { key: c.name, value: `${success ? t("device.keyPassed") : t("device.keyFailed")}\n> ${c.cmd}`, raw: r };
+        }).catch((e: any) => ({ key: c.name, value: t("device.keyExecError"), raw: `${e}` }))
       ));
       entries = checkResults;
     } else if (type === "storage") {
-      title = "存储信息";
+      title = t("device.storageInfoTitle");
       const toGBMB = (kb: number): string => {
         const gb = (kb / (1024 * 1024)).toFixed(2);
         const mb = (kb / 1024).toFixed(2);
@@ -1729,7 +1732,7 @@ async function queryInfo(type: string) {
         if (lines.length > 1) {
           const memLine = lines[1].split(/\s+/);
           if (memLine.length > 1) {
-            entries.push({ key: "运行内存", value: memLine[1] });
+            entries.push({ key: t("device.ram"), value: memLine[1] });
           }
         }
       }
@@ -1741,7 +1744,7 @@ async function queryInfo(type: string) {
           const bytesSize = sectors * 512;
           const gbSize = (bytesSize / (1024 * 1024 * 1024)).toFixed(2);
           const mbSize = (bytesSize / (1024 * 1024)).toFixed(2);
-          entries.push({ key: "物理存储容量", value: `${gbSize}G(${mbSize}MB)` });
+          entries.push({ key: t("device.physicalStorage"), value: `${gbSize}G(${mbSize}MB)` });
         }
       }
       // 可使用总存储空间 / 剩余存储空间: adb shell df /data
@@ -1754,10 +1757,10 @@ async function queryInfo(type: string) {
             const totalKb = parseFloat(parts[1]);
             const availKb = parseFloat(parts[3]);
             if (!isNaN(totalKb)) {
-              entries.push({ key: "可使用总存储空间", value: toGBMB(totalKb) });
+              entries.push({ key: t("device.totalStorage"), value: toGBMB(totalKb) });
             }
             if (!isNaN(availKb)) {
-              entries.push({ key: "剩余存储空间", value: toGBMB(availKb) });
+              entries.push({ key: t("device.availableStorage"), value: toGBMB(availKb) });
             }
           }
         }
@@ -1775,7 +1778,7 @@ async function queryInfo(type: string) {
       }
     }
     infoDialog.value = { show: true, title, entries };
-  } catch { showToast("查询失败", "error"); }
+  } catch { showToast(t("device.queryFailed"), "error"); }
   infoLoading.value = "";
 }
 
@@ -1793,10 +1796,10 @@ async function toggleLogcat() {
     const session = { id: `logcat_${Date.now()}`, type: 'logcat' as const, deviceSerial: selectedDevice.value.serial, status: 'running' as const, startedAt: new Date().toISOString() };
     await saveLogSession(session);
     scheduleLogcatCapture();
-    showCmdExec("实时日志", "adb logcat");
-    appendCmdExec("日志采集已开始");
-    finishCmdExec("日志采集已开始");
-    showToast("日志采集已开始");
+    showCmdExec(t("device.realtimeLogsTitle"), "adb logcat");
+    appendCmdExec(t("device.logCollectStarted"));
+    finishCmdExec(t("device.logCollectStarted"));
+    showToast(t("device.logCollectStarted"));
   }
 }
 async function scheduleLogcatCapture() {
@@ -1832,7 +1835,7 @@ async function stopLogcatCapture() {
     const sessions = await getRunningLogSessions();
     for (const s of sessions) { if (s.type === 'logcat') await removeLogSession(s.id); }
   } catch {}
-  showToast("日志采集已停止");
+  showToast(t("device.logCollectStopped"));
 }
 
 async function toggleDiagnostic() {
@@ -1848,10 +1851,10 @@ async function toggleDiagnostic() {
     const session = { id: `diag_${Date.now()}`, type: 'diagnostic' as const, deviceSerial: selectedDevice.value.serial, status: 'running' as const, startedAt: new Date().toISOString() };
     await saveLogSession(session);
     scheduleDiagTimer();
-    showCmdExec("诊断包");
-    appendCmdExec("采集已开始，点击停止按钮收集并保存");
-    finishCmdExec("诊断日志采集已开始");
-    showToast("诊断日志采集已开始");
+    showCmdExec(t("device.diagnostics"));
+    appendCmdExec(t("device.diagStarted"));
+    finishCmdExec(t("device.diagCollectStarted"));
+    showToast(t("device.diagCollectStarted"));
   }
 }
 function scheduleDiagTimer() {
@@ -1867,8 +1870,8 @@ async function stopDiagnosticCapture() {
   await yieldToUI();
   try {
     const serial = selectedDevice.value!.serial;
-    showCmdExec("收集诊断信息");
-    appendCmdExec("正在收集各类日志...");
+    showCmdExec(t("device.collectingDiag"));
+    appendCmdExec(t("device.collectingLogs"));
 
     const files: { filename: string; content: string }[] = [];
     function addFile(filename: string, label: string, content: string) {
@@ -1877,21 +1880,21 @@ async function stopDiagnosticCapture() {
     }
 
     // Logcat dump
-    appendCmdExec("  正在收集 logcat...");
+    appendCmdExec(`  ${t("device.collectingLogcat")}`);
     try {
       const logcatContent = await logcat(serial, "all", 2000);
       addFile("logcat.txt", "Logcat (all)", logcatContent);
       appendCmdExec("  ✓ logcat.txt");
-    } catch { addFile("logcat.txt", "Logcat (all)", "(收集失败)"); appendCmdExec("  ✗ logcat.txt"); }
+    } catch { addFile("logcat.txt", "Logcat (all)", `(${t("device.collectFailed")})`); appendCmdExec("  ✗ logcat.txt"); }
     await yieldToUI();
 
     // dmesg
-    appendCmdExec("  正在收集 dmesg...");
+    appendCmdExec(`  ${t("device.collectingDmesg")}`);
     try {
       const dmesgContent = await dmesg(serial);
       addFile("dmesg.txt", "dmesg", dmesgContent);
       appendCmdExec("  ✓ dmesg.txt");
-    } catch { addFile("dmesg.txt", "dmesg", "(收集失败)"); appendCmdExec("  ✗ dmesg.txt"); }
+    } catch { addFile("dmesg.txt", "dmesg", `(${t("device.collectFailed")})`); appendCmdExec("  ✗ dmesg.txt"); }
     await yieldToUI();
 
     // System info - each into its own file
@@ -1905,13 +1908,13 @@ async function stopDiagnosticCapture() {
       ["ps.txt", "ps", "ps"],
     ];
     for (const [filename, cmd, label] of infoFiles) {
-      appendCmdExec(`  正在收集 ${label}...`);
+      appendCmdExec(`  ${t("device.collectingLabel", { label })}`);
       try {
         const result = await shell(serial, cmd);
         addFile(filename, label, result);
         appendCmdExec(`  ✓ ${filename}`);
       } catch {
-        addFile(filename, label, "(命令执行失败)");
+        addFile(filename, label, `(${t("device.cmdExecFailed")})`);
         appendCmdExec(`  ✗ ${filename}`);
       }
       await yieldToUI();
@@ -1920,13 +1923,13 @@ async function stopDiagnosticCapture() {
     // Dumpsys services (matching web-adb-tool)
     const dumpsysServices = ["package", "SurfaceFlinger", "activity", "input", "window", "settings"];
     for (const service of dumpsysServices) {
-      appendCmdExec(`  正在收集 dumpsys ${service}...`);
+      appendCmdExec(`  ${t("device.collectingDumpsys", { service })}`);
       try {
         const result = await shell(serial, `dumpsys ${service}`);
         addFile(`dumpsys_${service}.txt`, `dumpsys ${service}`, result);
         appendCmdExec(`  ✓ dumpsys_${service}.txt`);
       } catch {
-        addFile(`dumpsys_${service}.txt`, `dumpsys ${service}`, "(收集失败)");
+        addFile(`dumpsys_${service}.txt`, `dumpsys ${service}`, `(${t("device.collectFailed")})`);
         appendCmdExec(`  ✗ dumpsys_${service}.txt`);
       }
       await yieldToUI();
@@ -1936,17 +1939,17 @@ async function stopDiagnosticCapture() {
     const { save } = await import("@tauri-apps/plugin-dialog");
     const dest = await save({ defaultPath: `diagnostic_${Date.now()}.zip`, filters: [{ name: "ZIP Archive", extensions: ["zip"] }] });
     if (dest) {
-      appendCmdExec("正在生成压缩包...");
+      appendCmdExec(t("device.generatingZip"));
       await createZip(files, dest);
-      appendCmdExec("诊断包已保存到: " + dest);
-      finishCmdExec("诊断包已生成");
-      showToast("诊断日志已保存");
+      appendCmdExec(t("device.diagSaved", { path: dest }));
+      finishCmdExec(t("device.diagGenerated"));
+      showToast(t("device.diagLogSaved"));
     } else {
       closeCmdExec();
     }
   } catch (e: any) {
-    finishCmdExec(`保存失败: ${e}`);
-    showToast("保存失败", "error");
+    finishCmdExec(`${t("device.saveFail")}: ${e}`);
+    showToast(t("device.saveFail"), "error");
   }
   diagBuffer.value = [];
   try {
@@ -1970,8 +1973,8 @@ async function toggleBootLogcat() {
     try {
       await logcatClear(selectedDevice.value.serial);
       await reboot(selectedDevice.value.serial);
-      showToast("设备已重启，等待重新连接...");
-    } catch { showToast("重启失败", "error"); }
+      showToast(t("device.deviceRebooted"));
+    } catch { showToast(t("device.rebootFailed"), "error"); }
     scheduleBootPoll();
   }
 }
@@ -1980,7 +1983,7 @@ async function scheduleBootPoll() {
   bootLogcatElapsed.value += 3;
   // Timeout after 180s
   if (bootLogcatElapsed.value > 180) {
-    showToast("设备重连超时(180s)，请手动检查设备状态", "error");
+    showToast(t("device.reconnectTimeout"), "error");
     bootLogcatRunning.value = false;
     return;
   }
@@ -1988,14 +1991,14 @@ async function scheduleBootPoll() {
     const adbDevices = await listDevices();
     const reconnected = adbDevices.find(d => d.status === "device");
     if (reconnected) {
-      bootLogcatBuffer.value.push(`[设备重新连接: ${reconnected.serial}]`);
+      bootLogcatBuffer.value.push(`[${t("device.deviceReconnected", { serial: reconnected.serial })}]`);
       // Now capture the boot logs
       try {
         const raw = await logcat(reconnected.serial, "all", 2000);
         bootLogcatBuffer.value.push(raw);
       } catch {}
       if (bootLogcatTimeoutId) { clearTimeout(bootLogcatTimeoutId); bootLogcatTimeoutId = null; }
-      showToast("设备已重连，日志已获取");
+      showToast(t("device.deviceReconnectedLogsGot"));
     } else {
       await yieldToUI();
       if (bootLogcatRunning.value) {
@@ -2024,33 +2027,33 @@ async function stopBootLogcatCapture() {
     const sessions = await getRunningLogSessions();
     for (const s of sessions) { if (s.type === 'boot_logcat') await removeLogSession(s.id); }
   } catch {}
-  showToast("开机日志采集已停止");
+  showToast(t("device.bootLogStopped"));
 }
 
 async function clearLogcatLogs() {
   if (!selectedDevice.value) return;
-    showCmdExec("清空日志", "adb logcat -c");
+    showCmdExec(t("device.clearLogsTitle"), "adb logcat -c");
   try {
     await logcatClear(selectedDevice.value.serial);
-    appendCmdExec("设备日志已清空");
-    finishCmdExec("设备日志已清空");
-    showToast("设备日志已清空");
-  } catch { finishCmdExec("清空失败"); showToast("清空失败", "error"); }
+    appendCmdExec(t("device.logsCleared"));
+    finishCmdExec(t("device.logsCleared"));
+    showToast(t("device.logsCleared"));
+  } catch { finishCmdExec(t("device.clearLogsFailed")); showToast(t("device.clearLogsFailed"), "error"); }
 }
 
 async function generateBugreport() {
   if (!selectedDevice.value) return;
-  showCmdExec("生成 Bugreport", "adb bugreport");
+  showCmdExec(t("device.genBugreport"), "adb bugreport");
   try {
     const { save } = await import("@tauri-apps/plugin-dialog");
     const dest = await save({ defaultPath: `bugreport_${Date.now()}.zip`, filters: [{ name: "Bugreport ZIP", extensions: ["zip"] }] });
     if (!dest) { closeCmdExec(); return; }
-    appendCmdExec("正在生成 bugreport，请耐心等待（可能需要 30-60 秒）...");
+    appendCmdExec(t("device.generatingBugreport"));
     await bugreport(selectedDevice.value.serial, dest);
-    appendCmdExec("Bugreport 已保存到: " + dest);
-    finishCmdExec("Bugreport 已生成");
-    showToast("Bugreport 已生成");
-  } catch (e: any) { finishCmdExec(`Bugreport 生成失败: ${e}`); showToast(`Bugreport 生成失败: ${e}`, "error"); }
+    appendCmdExec(t("device.bugreportSaved", { path: dest }));
+    finishCmdExec(t("device.bugreportGenerated"));
+    showToast(t("device.bugreportGenerated"));
+  } catch (e: any) { finishCmdExec(t('device.bugreportFailedWith', { e: String(e) })); showToast(t('device.bugreportFailedWith', { e: String(e) }), "error"); }
 }
 
 // ── (removed) old file browser replaced by tree view above
@@ -2158,7 +2161,7 @@ async function startMirror() {
 
     listeners.push(await listen("mirror:ready", () => {
       console.log("[mirror] ready event");
-      if (useScrcpy) showToast("scrcpy 镜像已启动", "success");
+      if (useScrcpy) showToast(t("device.mirrorStarted"), "success");
     }));
 
     mirrorUnlisten = listeners;
@@ -2168,7 +2171,7 @@ async function startMirror() {
     console.log("[mirror] invoke returned successfully");
   } catch (e) {
     console.error("[mirror] invoke failed:", e);
-    showToast("镜像启动失败", "error");
+    showToast(t("device.mirrorStartFailed"), "error");
     await stopMirror();
   }
 }
@@ -2193,13 +2196,13 @@ async function takeScreenshot() {
     const { save } = await import("@tauri-apps/plugin-dialog");
     const dest = await save({ defaultPath: `screenshot_${Date.now()}.png`, filters: [{ name: "PNG Image", extensions: ["png"] }] });
     if (!dest) return;
-    showCmdExec("截图", "adb screencap -p");
-    appendCmdExec("正在截图...");
+    showCmdExec(t("device.screenshotAction"), "adb screencap -p");
+    appendCmdExec(t("device.takingScreenshot"));
     const result = await screenshot(selectedDevice.value.serial, dest);
     appendCmdExec(result);
-    finishCmdExec("截图已保存");
-    showToast("截图已保存");
-  } catch (e: any) { showToast(`截图失败: ${e}`, "error"); }
+    finishCmdExec(t("device.screenshotSaved"));
+    showToast(t("device.screenshotSaved"));
+  } catch (e: any) { showToast(t('device.screenshotFailedWith', { e: String(e) }), "error"); }
 }
 async function takeScreenshotFromMirror() {
   await takeScreenshot();
@@ -2209,8 +2212,8 @@ async function toggleRecording() {
   recordingLoading.value = true;
   if (isRecording.value) {
     try {
-      showCmdExec("停止录屏", "adb shell pkill -SIGINT screenrecord");
-      appendCmdExec("正在停止录屏...");
+      showCmdExec(t("device.stopRecordingAction"), "adb shell pkill -SIGINT screenrecord");
+      appendCmdExec(t("device.stoppingRecording"));
       // Send SIGINT first, then pkill -9 as fallback (matching web-adb-tool)
       await shell(selectedDevice.value.serial, "pkill -SIGINT screenrecord");
       await new Promise(r => setTimeout(r, 500));
@@ -2219,31 +2222,31 @@ async function toggleRecording() {
       const { save } = await import("@tauri-apps/plugin-dialog");
       const dest = await save({ defaultPath: `recording_${Date.now()}.mp4`, filters: [{ name: "MP4 Video", extensions: ["mp4"] }] });
       if (dest) {
-        appendCmdExec("正在拉取录屏文件...");
+        appendCmdExec(t("device.pullingRecording"));
         await pullFile(selectedDevice.value.serial, recordingFilename.value, dest);
-        appendCmdExec("正在清理设备端文件...");
+        appendCmdExec(t("device.cleaningDeviceFiles"));
         await shell(selectedDevice.value.serial, `rm ${recordingFilename.value}`).catch(() => {});
-        appendCmdExec("录屏已保存到: " + dest);
-        finishCmdExec("录屏已保存");
-        showToast("录屏已保存");
+        appendCmdExec(t("device.screenrecSaved") + ": " + dest);
+        finishCmdExec(t("device.screenrecSaved"));
+        showToast(t("device.screenrecSaved"));
       } else {
         closeCmdExec();
       }
-    } catch (e: any) { finishCmdExec(`保存录屏失败: ${e}`); showToast(`保存录屏失败: ${e}`, "error"); }
+    } catch (e: any) { finishCmdExec(`${t("device.screenrecFail")}: ${e}`); showToast(`${t("device.screenrecFail")}: ${e}`, "error"); }
     isRecording.value = false;
     recordingFilename.value = "";
   } else {
     try {
       const remotePath = `/sdcard/recording_${Date.now()}.mp4`;
       recordingFilename.value = remotePath;
-      showCmdExec("开始录屏", `screenrecord ${remotePath}`);
-      appendCmdExec("正在启动录屏...");
+      showCmdExec(t("device.startRecordingAction"), `screenrecord ${remotePath}`);
+      appendCmdExec(t("device.startingRecording"));
       await startScreenrecord(selectedDevice.value.serial, remotePath, 1280, 720);
       isRecording.value = true;
-      appendCmdExec("录屏已开始（1280x720）");
-      finishCmdExec("录屏已开始");
-      showToast("录屏开始");
-    } catch { finishCmdExec("录屏启动失败"); showToast("录屏启动失败", "error"); }
+      appendCmdExec(t("device.recordingStartedFull"));
+      finishCmdExec(t("device.recordingStarted"));
+      showToast(t("device.recordingStartedShort"));
+    } catch { finishCmdExec(t("device.recordingStartFailed")); showToast(t("device.recordingStartFailed"), "error"); }
   }
   recordingLoading.value = false;
 }

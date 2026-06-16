@@ -1,5 +1,6 @@
 import { reactive, computed, toRefs } from 'vue'
 import * as db from '@/services/database'
+import { useI18n } from '@/composables/useI18n'
 
 export interface FieldRule {
   key: string
@@ -19,17 +20,19 @@ export interface FieldRuleSet {
   createdAt: string
 }
 
-const defaultFieldRules: FieldRule[] = [
-  { key: 'case_number', label: 'Case #', labelCn: '用例编号', visible: true, required: false, type: 'textarea' },
-  { key: 'module', label: 'Module', labelCn: '所属模块', visible: true, required: false, type: 'textarea' },
-  { key: 'name', label: 'Title', labelCn: '用例标题', visible: true, required: true, type: 'textarea' },
-  { key: 'precondition', label: 'Precondition', labelCn: '前置条件', visible: true, required: false, type: 'textarea' },
-  { key: 'steps', label: 'Steps', labelCn: '操作步骤', visible: true, required: true, type: 'textarea' },
-  { key: 'expected', label: 'Expected', labelCn: '预期结果', visible: true, required: false, type: 'textarea' },
-  { key: 'level', label: 'Level', labelCn: '用例等级', visible: true, required: true, type: 'select', options: ['L1', 'L2', 'L3', 'L4'] },
-  { key: 'automation', label: 'Automation', labelCn: '自动化', visible: true, required: false, type: 'select', options: ['N', 'Y'] },
-  { key: 'remarks', label: 'Remarks', labelCn: '备注', visible: true, required: false, type: 'textarea' },
-]
+function makeDefaultFieldRules(t: (key: string) => string): FieldRule[] {
+  return [
+    { key: 'case_number', label: 'Case #', labelCn: t('case.field.caseNo'), visible: true, required: false, type: 'textarea' },
+    { key: 'module', label: 'Module', labelCn: t('case.field.module'), visible: true, required: false, type: 'textarea' },
+    { key: 'name', label: 'Title', labelCn: t('case.field.title'), visible: true, required: true, type: 'textarea' },
+    { key: 'precondition', label: 'Precondition', labelCn: t('case.field.precondition'), visible: true, required: false, type: 'textarea' },
+    { key: 'steps', label: 'Steps', labelCn: t('case.field.steps'), visible: true, required: true, type: 'textarea' },
+    { key: 'expected', label: 'Expected', labelCn: t('case.field.expected'), visible: true, required: false, type: 'textarea' },
+    { key: 'level', label: 'Level', labelCn: t('case.field.priority'), visible: true, required: true, type: 'select', options: ['L1', 'L2', 'L3', 'L4'] },
+    { key: 'automation', label: 'Automation', labelCn: t('case.field.automation'), visible: true, required: false, type: 'select', options: ['N', 'Y'] },
+    { key: 'remarks', label: 'Remarks', labelCn: t('case.field.remarks'), visible: true, required: false, type: 'textarea' },
+  ]
+}
 
 function genId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
@@ -38,7 +41,7 @@ function genId(): string {
 const defaultSet: FieldRuleSet = {
   id: 'default',
   name: 'Default Fields',
-  rules: [...defaultFieldRules],
+  rules: [],
   createdAt: new Date().toISOString(),
 }
 
@@ -78,6 +81,14 @@ async function saveRuleSetToDb(set: FieldRuleSet) {
 loadRuleSetsFromDb()
 
 export function useTestCaseStore() {
+  const { t } = useI18n()
+  const defaultFieldRules = makeDefaultFieldRules(t)
+
+  const defaultSet = state.fieldRuleSets.find(s => s.id === 'default')
+  if (defaultSet && defaultSet.rules.length === 0) {
+    defaultSet.rules = defaultFieldRules
+  }
+
   const fieldRuleSets = computed(() => state.fieldRuleSets)
   const activeRuleSetId = computed(() => state.activeRuleSetId)
 
