@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "TestSpace",
-  "version": "1.0.0",
+  "version": "1.0.5",
   "identifier": "com.testspace.app",
   "build": {
     "frontendDist": "../dist",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Test Space",
+        "title": "TestSpace",
         "width": 1024,
         "height": 680,
         "minWidth": 1024,
@@ -29,7 +29,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis", "msi"],
     "resources": [
       "bin/scrcpy-server"
     ],
@@ -39,7 +39,16 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "both",
+        "displayLanguageSelector": false
+      },
+      "wix": {
+        "enableElevatedUpdateTask": false
+      }
+    }
   },
   "plugins": {
     "shell": {

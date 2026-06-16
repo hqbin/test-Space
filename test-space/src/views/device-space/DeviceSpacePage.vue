@@ -134,25 +134,31 @@
           </div>
           <div class="flex flex-wrap gap-2">
             <button class="bg-white/30 border border-white/50 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm"
-              :class="logcatRunning ? 'bg-error/10 text-error border border-error/20' : ''"
+              :class="logcatRunning ? 'bg-error/20 text-error border-error/30 hover:bg-error/30' : ''"
               :disabled="logPrepActive" @click="toggleLogcat">
-              <span class="material-symbols-outlined text-[14px] text-on-surface-variant">{{ logcatRunning ? 'stop' : 'assignment' }}</span>
-               {{ t('device.realtimeLogs') }}
-              <span v-if="logcatRunning" class="font-caption text-caption text-secondary bg-secondary/20 px-1 py-0.5 rounded-full text-[10px] ml-0.5">{{ logcatElapsed }}s</span>
+              <span class="material-symbols-outlined text-[14px]" :class="logcatRunning ? 'text-error' : 'text-on-surface-variant'">{{ logcatRunning ? 'stop' : 'assignment' }}</span>
+              <span v-if="logcatRunning" class="flex items-center gap-1.5">
+                {{ t('device.stop') }} <span class="font-mono text-[11px] opacity-80">{{ logcatElapsed }}s</span>
+              </span>
+              <span v-else>{{ t('device.realtimeLogs') }}</span>
             </button>
             <button class="bg-white/30 border border-white/50 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm"
-              :class="diagRunning ? 'bg-error/10 text-error border border-error/20' : ''"
+              :class="diagRunning ? 'bg-error/20 text-error border-error/30 hover:bg-error/30' : ''"
               :disabled="logPrepActive" @click="toggleDiagnostic">
-              <span class="material-symbols-outlined text-[14px] text-on-surface-variant">{{ diagRunning ? 'stop' : 'work' }}</span>
-               {{ t('device.diagnostics') }}
-              <span v-if="diagRunning" class="font-caption text-caption text-secondary bg-secondary/20 px-1 py-0.5 rounded-full text-[10px] ml-0.5">{{ diagElapsed }}s</span>
+              <span class="material-symbols-outlined text-[14px]" :class="diagRunning ? 'text-error' : 'text-on-surface-variant'">{{ diagRunning ? 'stop' : 'work' }}</span>
+              <span v-if="diagRunning" class="flex items-center gap-1.5">
+                {{ t('device.stop') }} <span class="font-mono text-[11px] opacity-80">{{ diagElapsed }}s</span>
+              </span>
+              <span v-else>{{ t('device.diagnostics') }}</span>
             </button>
             <button class="bg-white/30 border border-white/50 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm"
-              :class="bootLogcatRunning ? 'bg-error/10 text-error border border-error/20' : ''"
+              :class="bootLogcatRunning ? 'bg-error/20 text-error border-error/30 hover:bg-error/30' : ''"
               :disabled="logPrepActive" @click="toggleBootLogcat">
-              <span class="material-symbols-outlined text-[14px] text-on-surface-variant">{{ bootLogcatRunning ? 'stop' : 'pest_control' }}</span>
-               {{ t('device.bootLogs') }}
-              <span v-if="bootLogcatRunning" class="font-caption text-caption text-secondary bg-secondary/20 px-1 py-0.5 rounded-full text-[10px] ml-0.5">{{ bootLogcatElapsed }}s</span>
+              <span class="material-symbols-outlined text-[14px]" :class="bootLogcatRunning ? 'text-error' : 'text-on-surface-variant'">{{ bootLogcatRunning ? 'stop' : 'pest_control' }}</span>
+              <span v-if="bootLogcatRunning" class="flex items-center gap-1.5">
+                {{ t('device.stop') }} <span class="font-mono text-[11px] opacity-80">{{ bootLogcatElapsed }}s</span>
+              </span>
+              <span v-else>{{ t('device.bootLogs') }}</span>
             </button>
             <button class="bg-white/30 border border-white/50 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm"
               :disabled="!selectedDevice" @click="generateBugreport">
@@ -734,7 +740,7 @@ const {
   remountDevice: adbRemount, getProperties, inputKeyevent, inputText: adbInputText,
   listPackages, startApp: adbStartApp, stopApp: adbStopApp, clearAppData,
   logcatClear, logcat, getAppInfo, logcatBufferResize, bugreport, dmesg,
-  startScreenrecord, killServer, startServer, createZip,
+  startScreenrecord, killServer, startServer, createZip, listDirectory,
 } = useAdb();
 
 // ── AppInfo interface + sortApps (matches web-adb-tool sort order) ──
@@ -1681,6 +1687,7 @@ async function queryInfo(type: string) {
       entries = Object.entries(props).map(([k, v]) => ({ key: k, value: v || "N/A" }));
     } else if (type === "mac") {
       title = t("device.macInfoTitle");
+      try { await adbRoot(serial); } catch {}
       const [wlanMac, ethMac] = await Promise.all([
         shell(serial, "cat /sys/class/net/wlan0/address 2>/dev/null || ip link show wlan0 2>/dev/null | grep link/ether | awk '{print $2}'").catch(() => ""),
         shell(serial, "cat /sys/class/net/eth0/address 2>/dev/null || ip link show eth0 2>/dev/null | grep link/ether | awk '{print $2}'").catch(() => ""),
@@ -1934,6 +1941,28 @@ async function stopDiagnosticCapture() {
       }
       await yieldToUI();
     }
+
+    // ANR traces
+    appendCmdExec(`  ${t("device.collectingAnr")}`);
+    try {
+      const anrListing = await listDirectory(serial, "/data/anr");
+      const anrFiles = anrListing.split("\n").map(l => l.trim().split(/\s+/).pop()).filter(f => f && f !== "." && f !== "..");
+      for (const anrFile of anrFiles) {
+        try {
+          const anrContent = await shell(serial, `cat "/data/anr/${anrFile}"`);
+          addFile(`anr/${anrFile}`, `ANR: ${anrFile}`, anrContent);
+          appendCmdExec(`  ✓ anr/${anrFile}`);
+        } catch {
+          addFile(`anr/${anrFile}`, `ANR: ${anrFile}`, `(${t("device.collectFailed")})`);
+          appendCmdExec(`  ✗ anr/${anrFile}`);
+        }
+      }
+      if (anrFiles.length === 0) appendCmdExec(`  ${t("device.anrCollectFailed")}`);
+      else appendCmdExec(`  ${t("device.anrCollected")}`);
+    } catch {
+      appendCmdExec(`  ✗ ${t("device.anrCollectFailed")}`);
+    }
+    await yieldToUI();
 
     // Prompt user for save location
     const { save } = await import("@tauri-apps/plugin-dialog");

@@ -61,6 +61,7 @@ const messages: Record<Lang, Record<string, string>> = {
     "settings.exportFail": "导出失败",
     "settings.importSuccess": "导入成功，重启应用以加载新数据",
     "settings.importFail": "导入失败",
+    "settings.version": "版本",
 
     // Device page
     "device.connect": "连接",
@@ -323,6 +324,9 @@ const messages: Record<Lang, Record<string, string>> = {
     "device.collectFailed": "收集失败",
     "device.cmdExecFailed": "命令执行失败",
     "device.collectingDumpsys": "正在收集 dumpsys {service}...",
+    "device.collectingAnr": "正在收集 ANR traces...",
+    "device.anrCollected": "ANR traces 已收集",
+    "device.anrCollectFailed": "ANR traces 收集失败",
     "device.generatingZip": "正在生成压缩包...",
     "device.diagGenerated": "诊断包已生成",
     "device.clearLogsTitle": "清空日志",
@@ -522,6 +526,7 @@ const messages: Record<Lang, Record<string, string>> = {
     "settings.exportFail": "Export failed",
     "settings.importSuccess": "Import successful. Restart the app to reload data.",
     "settings.importFail": "Import failed",
+    "settings.version": "Version",
 
     // Device page
     "device.connect": "Connect",
@@ -784,6 +789,9 @@ const messages: Record<Lang, Record<string, string>> = {
     "device.collectFailed": "Collection failed",
     "device.cmdExecFailed": "Command execution failed",
     "device.collectingDumpsys": "Collecting dumpsys {service}...",
+    "device.collectingAnr": "Collecting ANR traces...",
+    "device.anrCollected": "ANR traces collected",
+    "device.anrCollectFailed": "ANR traces collection failed",
     "device.generatingZip": "Generating archive...",
     "device.diagGenerated": "Diagnostic package generated",
     "device.clearLogsTitle": "Clear Logs",
