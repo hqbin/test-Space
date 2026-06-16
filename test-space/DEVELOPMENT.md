@@ -1063,6 +1063,7 @@ src/services/database.ts  ←── 唯一的数据访问层
 | 辅助函数封装 | `adb.rs` + `mirror.rs` 新增 `adb_cmd()` 封装函数，`script_exec.rs` 新增 `silent_cmd(prog)` 封装函数，统一注入 `CREATE_NO_WINDOW` 标志 | ✅ |
 | 条件编译 | `#[cfg(target_os = "windows")]` 条件导入 `std::os::windows::process::CommandExt`，`creation_flags` 仅在 Windows 平台生效 | ✅ |
 | 版本发布 | v0.1.1，作者 Bing，窗口默认 1024×680 | ✅ |
+| productName 去空格 | `productName` 从 `"Test Space"` 改为 `"TestSpace"`（避免 MSI 卸载快捷路径编码异常）；窗口标题保持 `"Test Space"` | ✅ |
 
 ---
 
@@ -1112,7 +1113,8 @@ node scripts/bump-version.mjs major    # 0.1.1 → 1.0.0
 
 ### 清理脚本 (`scripts/clean.mjs`)
 
-删除 `dist/` 和 `src-tauri/target/` 缓存目录，确保打包时完全重新构建，不会打出旧代码。
+删除 `dist/` 前端缓存目录，确保打包时前端代码是最新的。
+Rust 编译缓存（`src-tauri/target/`）通常无需清理，只在 Rust 代码缓存异常时执行 `node scripts/clean.mjs --full`。
 
 ### NPM Scripts
 

@@ -21,6 +21,7 @@
     "@tauri-apps/plugin-fs": "^2.5.1",
     "@tauri-apps/plugin-sql": "^2.4.0",
     "@tiptap/extension-code-block-lowlight": "^2.27.2",
+    "@tiptap/extension-color": "^2.27.2",
     "@tiptap/extension-image": "^2.27.2",
     "@tiptap/extension-link": "^2.27.2",
     "@tiptap/extension-placeholder": "^2.27.2",

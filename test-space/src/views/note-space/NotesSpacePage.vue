@@ -250,10 +250,6 @@
           <button class="toolbar-btn" :class="{ 'toolbar-active': editor?.isActive('blockquote') }" @click="editor?.chain().focus().toggleBlockquote().run()" title="Blockquote">
             <span class="material-symbols-outlined text-[20px]">format_quote</span>
           </button>
-          <button class="toolbar-btn" :class="{ 'toolbar-active': editor?.isActive('codeBlock') }" @click="editor?.chain().focus().toggleCodeBlock().run()" title="Code Block">
-            <span class="material-symbols-outlined text-[20px]">code</span>
-          </button>
-          <div class="w-px h-4 bg-outline-variant/30 mx-1"></div>
           <button class="toolbar-btn" @click="showLinkDialog = true" title="Insert Link">
             <span class="material-symbols-outlined text-[20px]">link</span>
           </button>
@@ -261,30 +257,7 @@
             <span class="material-symbols-outlined text-[20px]">image</span>
           </button>
           <input type="file" accept="image/*" class="hidden" ref="imageInput" @change="addImage" />
-          <button class="toolbar-btn" @click="insertTable" title="Insert Table">
-            <span class="material-symbols-outlined text-[20px]">table</span>
-          </button>
-          <template v-if="isInTable">
-            <div class="w-px h-4 bg-outline-variant/30 mx-1"></div>
-            <button class="toolbar-btn" @click="editor?.chain().focus().addRowBefore().run()" title="Add Row Above">
-              <span class="material-symbols-outlined text-[18px]">add_row_above</span>
-            </button>
-            <button class="toolbar-btn" @click="editor?.chain().focus().addRowAfter().run()" title="Add Row Below">
-              <span class="material-symbols-outlined text-[18px]">add_row_below</span>
-            </button>
-            <button class="toolbar-btn" @click="editor?.chain().focus().addColumnBefore().run()" title="Add Column Left">
-              <span class="material-symbols-outlined text-[18px]">add_column_left</span>
-            </button>
-            <button class="toolbar-btn" @click="editor?.chain().focus().addColumnAfter().run()" title="Add Column Right">
-              <span class="material-symbols-outlined text-[18px]">add_column_right</span>
-            </button>
-            <button class="toolbar-btn" @click="editor?.chain().focus().deleteRow().run()" title="Delete Row">
-              <span class="material-symbols-outlined text-[18px]">delete</span>
-            </button>
-            <button class="toolbar-btn" @click="editor?.chain().focus().deleteColumn().run()" title="Delete Column">
-              <span class="material-symbols-outlined text-[18px]">delete</span>
-            </button>
-          </template>
+          <div class="w-px h-4 bg-outline-variant/30 mx-1"></div>
           <div class="w-px h-4 bg-outline-variant/30 mx-1"></div>
           <button class="toolbar-btn" @click="editor?.chain().focus().undo().run()" title="Undo">
             <span class="material-symbols-outlined text-[20px]">undo</span>
@@ -303,10 +276,10 @@
 
     <!-- TOC Toggle Button (semi-transparent, right side) -->
     <button
-      v-if="selectedNoteId"
-      class="fixed right-0 top-1/2 -translate-y-1/2 z-50 bg-white/40 backdrop-blur-md border border-white/60 rounded-l-md px-1.5 py-4 shadow-lg hover:bg-white/60 hover:pr-2 transition-all"
+      v-if="selectedNoteId && !showToc"
+      class="fixed right-0 top-1/2 -translate-y-1/2 z-50 bg-white/40 backdrop-blur-md border border-white/60 rounded-l-md px-1.5 py-4 shadow-lg hover:bg-white/60 hover:pr-2 transition-all opacity-[85%]"
       title="目录"
-      @click="showToc = !showToc"
+      @click="showToc = true"
     >
       <span class="material-symbols-outlined text-[20px] text-on-surface-variant">toc</span>
     </button>
@@ -314,7 +287,7 @@
     <!-- Right: Table of Contents (slide panel) -->
     <Teleport to="body">
       <div v-if="showToc" class="fixed inset-0 z-20" @click.self="showToc = false">
-        <div class="absolute right-0 top-0 bottom-0 w-72 flex flex-col bg-white/20 backdrop-blur-[30px] border-l border-white/30 overflow-hidden shadow-2xl animate-toc-in">
+        <div class="absolute right-0 top-0 bottom-0 w-72 flex flex-col bg-white/20 backdrop-blur-[30px] border-l border-white/30 overflow-hidden shadow-2xl animate-toc-in opacity-[85%]">
           <div class="p-4 border-b border-white/20 flex items-center justify-between">
             <span class="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-2">
               <span class="material-symbols-outlined text-[18px]">toc</span>
@@ -342,7 +315,7 @@
                 </button>
                 <span v-else class="w-5 flex-shrink-0"></span>
                 <span class="text-[10px] text-on-surface-variant/40 font-mono flex-shrink-0">H{{ item.level }}</span>
-                <span class="truncate">{{ item.text }}</span>
+                <span class="truncate font-bold">{{ item.text }}</span>
               </div>
             </div>
           </div>
@@ -471,36 +444,14 @@ import LinkExtension from "@tiptap/extension-link";
 import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
 import Typography from "@tiptap/extension-typography";
-import Table from "@tiptap/extension-table";
-import TableRow from "@tiptap/extension-table-row";
-import TableCell from "@tiptap/extension-table-cell";
-import TableHeader from "@tiptap/extension-table-header";
+
 import TurndownService from "turndown";
 import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Table as DocxTable, TableRow as DocxTableRow, TableCell as DocxTableCell, WidthType, BorderStyle, ExternalHyperlink } from "docx";
-import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
-import { createLowlight } from "lowlight";
-import javascript from "highlight.js/lib/languages/javascript";
-import python from "highlight.js/lib/languages/python";
-import typescript from "highlight.js/lib/languages/typescript";
-import css from "highlight.js/lib/languages/css";
-import xml from "highlight.js/lib/languages/xml";
-import bash from "highlight.js/lib/languages/bash";
-import json from "highlight.js/lib/languages/json";
-import markdown from "highlight.js/lib/languages/markdown";
-import sql from "highlight.js/lib/languages/sql";
-import cpp from "highlight.js/lib/languages/cpp";
-import java from "highlight.js/lib/languages/java";
-import php from "highlight.js/lib/languages/php";
-import ruby from "highlight.js/lib/languages/ruby";
-import rust from "highlight.js/lib/languages/rust";
-import go from "highlight.js/lib/languages/go";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, ExternalHyperlink } from "docx";
 import type { NoteSpace, NoteFolder, NoteItem, NoteVersion } from "@/types";
 
-const lowlight = createLowlight({ javascript, python, typescript, css, xml, bash, json, markdown, sql, cpp, java, php, ruby, rust, go })
 import * as db from "@/services/database";
-
 const turndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
 
 // ── State ────────────────────────────────────────────────────
@@ -540,12 +491,13 @@ const deleteNoteTarget = ref<NoteItem | null>(null)
 const activeHeadingIndex = ref(-1)
 const showToc = ref(false)
 const tocCollapsed = ref<Set<number>>(new Set())
+
 let dragNoteId: string | null = null
 const dragOverFolderId = ref<string | null>(null)
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 let versionTimer: ReturnType<typeof setTimeout> | null = null
-const selectionVersion = ref(0)
+
 
 // ── Computed ─────────────────────────────────────────────────
 
@@ -839,7 +791,6 @@ function selectNoteById(id: string, content: string) {
     editor.value.commands.setContent(content)
   }
   saved.value = true
-  nextTick(() => addCopyButtons())
 }
 
 async function selectNote(note: NoteItem) {
@@ -860,8 +811,6 @@ async function selectNote(note: NoteItem) {
   try {
     noteVersions.value = await db.loadNoteVersions(note.id)
   } catch { noteVersions.value = [] }
-
-  nextTick(() => addCopyButtons())
 }
 
 async function saveCurrentNote() {
@@ -1041,10 +990,10 @@ function parseInline(node: ChildNode): (TextRun | ExternalHyperlink)[] {
   return runs
 }
 
-function htmlToDocxChildren(html: string): (Paragraph | DocxTable)[] {
+function htmlToDocxChildren(html: string): Paragraph[] {
   const parser = new DOMParser()
   const doc = parser.parseFromString(html, 'text/html')
-  const result: (Paragraph | DocxTable)[] = []
+  const result: Paragraph[] = []
 
   for (const node of Array.from(doc.body.childNodes)) {
     if (node.nodeType !== Node.ELEMENT_NODE) continue
@@ -1059,14 +1008,6 @@ function htmlToDocxChildren(html: string): (Paragraph | DocxTable)[] {
       result.push(new Paragraph({ heading: HeadingLevel.HEADING_3, children: parseInline(node), spacing: { after: 200 } }))
     } else if (tag === 'p') {
       result.push(new Paragraph({ children: parseInline(node), spacing: { after: 200 } }))
-    } else if (tag === 'pre') {
-      const code = el.querySelector('code')
-      const text = code ? code.textContent || '' : el.textContent || ''
-      const lines = text.split('\n')
-      for (const line of lines) {
-        result.push(new Paragraph({ children: [new TextRun({ text: line, font: 'Consolas', size: 20 })], spacing: { after: 0 } }))
-      }
-      result.push(new Paragraph({ children: [], spacing: { after: 200 } }))
     } else if (tag === 'blockquote') {
       for (const child of Array.from(el.childNodes)) {
         if (child.nodeType === Node.ELEMENT_NODE) {
@@ -1083,23 +1024,6 @@ function htmlToDocxChildren(html: string): (Paragraph | DocxTable)[] {
         result.push(new Paragraph({ children: [new TextRun({ text: `${idx}. `, font: 'Calibri' }), ...parseInline(li)], indent: { left: 720 }, spacing: { after: 100 } }))
         idx++
       }
-    } else if (tag === 'table') {
-      const rows: DocxTableRow[] = []
-      for (const tr of Array.from(el.querySelectorAll('tr'))) {
-        const cells: DocxTableCell[] = []
-        for (const td of Array.from(tr.querySelectorAll('th, td'))) {
-          const isHeader = td.tagName.toLowerCase() === 'th'
-          cells.push(new DocxTableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: td.textContent || '', bold: isHeader, font: 'Calibri', size: 20 })] })],
-            shading: isHeader ? { fill: 'f1f2f5' } : undefined,
-          }))
-        }
-        rows.push(new DocxTableRow({ children: cells }))
-      }
-      if (rows.length > 0) {
-        result.push(new DocxTable({ rows, width: { size: 100, type: WidthType.PERCENTAGE } }))
-      }
-      result.push(new Paragraph({ children: [], spacing: { after: 200 } }))
     } else if (tag === 'hr') {
       result.push(new Paragraph({ children: [], thematicBreak: true }))
     } else {
@@ -1263,37 +1187,7 @@ function addImage(e: Event) {
   input.value = ""
 }
 
-function insertTable() {
-  if (!editor.value) return
-  editor.value.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
-}
 
-function addCopyButtons() {
-  const tryAdd = () => {
-    if (!editorRef.value) return
-    editorRef.value.querySelectorAll('pre').forEach(pre => {
-      if (pre.querySelector('.code-copy-btn')) return
-      const btn = document.createElement('button')
-      btn.className = 'code-copy-btn'
-      btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:14px">content_copy</span>'
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation()
-        const code = pre.querySelector('code')
-        if (code) {
-          navigator.clipboard.writeText(code.textContent || '')
-          btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:14px">check</span>'
-          setTimeout(() => {
-            btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:14px">content_copy</span>'
-          }, 2000)
-        }
-      })
-      pre.appendChild(btn)
-    })
-  }
-  tryAdd()
-  setTimeout(tryAdd, 300)
-  setTimeout(tryAdd, 800)
-}
 
 // ── Editor ────────────────────────────────────────────────────
 
@@ -1302,26 +1196,16 @@ const editor = useEditor({
   extensions: [
     StarterKit.configure({
       heading: { levels: [1, 2, 3] },
-      codeBlock: false,
     }),
-    CodeBlockLowlight.configure({ lowlight }),
     Underline,
     LinkExtension.configure({ openOnClick: false }),
     Image.configure({ inline: true, allowBase64: true }),
     Placeholder.configure({ placeholder: "Start writing..." }),
     Typography,
-    Table.configure({ resizable: true }),
-    TableRow,
-    TableCell,
-    TableHeader,
   ],
   onUpdate: () => {
     saved.value = false
     triggerSave()
-    addCopyButtons()
-  },
-  onSelectionUpdate: () => {
-    selectionVersion.value++
   },
   editorProps: {
     attributes: {
@@ -1348,11 +1232,6 @@ const editor = useEditor({
       return false
     },
   },
-})
-
-const isInTable = computed(() => {
-  void selectionVersion.value
-  return editor.value?.isActive('table') ?? false
 })
 
 const tocItems = computed(() => {
@@ -1453,7 +1332,7 @@ onBeforeUnmount(async () => {
   pointer-events: none;
   height: 0;
 }
-:deep(.prose-editor h1) { font-family: 'Inter', sans-serif; font-weight: 700; color: #1a1c1d; font-size: 2.5rem; line-height: 1.2; margin-bottom: 1.5rem; letter-spacing: -0.04em; }
+:deep(.prose-editor h1) { font-family: 'Inter', sans-serif; font-weight: 700; color: #1a1c1d; font-size: 2rem; line-height: 1.3; margin-bottom: 1.25rem; letter-spacing: -0.02em; }
 :deep(.prose-editor h2) { font-family: 'Inter', sans-serif; font-weight: 600; color: #1a1c1d; font-size: 1.75rem; line-height: 1.3; margin-top: 2rem; margin-bottom: 1rem; letter-spacing: -0.02em; }
 :deep(.prose-editor h3) { font-family: 'Inter', sans-serif; font-weight: 600; color: #1a1c1d; font-size: 1.375rem; line-height: 1.4; margin-top: 1.5rem; margin-bottom: 0.75rem; letter-spacing: -0.01em; }
 :deep(.prose-editor p) { font-family: 'Inter', sans-serif; font-weight: 400; color: #424656; font-size: 1.0625rem; line-height: 1.6; margin-bottom: 1.25rem; }
@@ -1461,64 +1340,7 @@ onBeforeUnmount(async () => {
 :deep(.prose-editor ol) { list-style-type: decimal; padding-left: 1.5rem; color: #424656; margin-bottom: 1.25rem; }
 :deep(.prose-editor li) { margin-bottom: 0.5rem; font-size: 1.0625rem; line-height: 1.6; }
 :deep(.prose-editor blockquote) { border-left: 3px solid #c2c1ff; padding-left: 1rem; margin-left: 0; color: #6b6f82; font-style: italic; }
-:deep(.prose-editor code) {
-  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'SF Mono', 'Cascadia Code', monospace;
-  background: #f1f2f5;
-  border-radius: 4px;
-  padding: 2px 6px;
-  font-size: 0.85em;
-  color: #d63384;
-}
-:deep(.prose-editor pre) {
-  background: #1e1f22;
-  border-radius: 8px;
-  padding: 1rem;
-  overflow-x: auto;
-  margin-bottom: 1.25rem;
-  border: 1px solid rgba(255,255,255,0.06);
-  position: relative;
-}
-:deep(.prose-editor pre .code-copy-btn) {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  background: rgba(255,255,255,0.08);
-  border: none;
-  border-radius: 4px;
-  color: #9ea0a8;
-  cursor: pointer;
-  padding: 4px;
-  line-height: 1;
-  opacity: 0;
-  transition: opacity 0.15s, background 0.15s;
-}
-:deep(.prose-editor pre:hover .code-copy-btn) {
-  opacity: 1;
-}
-:deep(.prose-editor pre .code-copy-btn:hover) {
-  background: rgba(255,255,255,0.15);
-  color: #e4e5e7;
-}
-:deep(.prose-editor pre code) {
-  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'SF Mono', 'Cascadia Code', monospace;
-  background: none;
-  color: #e4e5e7;
-  padding: 0;
-  font-size: 0.85em;
-  line-height: 1.5;
-  tab-size: 2;
-}
-:deep(.prose-editor pre code .hljs-keyword),
-:deep(.prose-editor pre code .hljs-selector-tag) { color: #c792ea; }
-:deep(.prose-editor pre code .hljs-string) { color: #c3e88d; }
-:deep(.prose-editor pre code .hljs-number) { color: #f78c6c; }
-:deep(.prose-editor pre code .hljs-comment) { color: #676e95; font-style: italic; }
-:deep(.prose-editor pre code .hljs-function) { color: #82aaff; }
-:deep(.prose-editor pre code .hljs-built_in) { color: #ffcb6b; }
 :deep(.prose-editor a) { color: #0050cb; text-decoration: underline; cursor: pointer; }
-:deep(.prose-editor table) { width: 100%; border-collapse: collapse; margin-bottom: 1.25rem; }
-:deep(.prose-editor th) { background: #f1f2f5; font-weight: 600; text-align: left; padding: 8px 12px; border: 1px solid #e0e1e5; }
-:deep(.prose-editor td) { padding: 8px 12px; border: 1px solid #e0e1e5; }
 
 .toolbar-btn {
   background: transparent;
