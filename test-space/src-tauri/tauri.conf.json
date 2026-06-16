@@ -13,13 +13,14 @@
     "windows": [
       {
         "title": "Test Space",
-        "width": 1400,
-        "height": 900,
+        "width": 1024,
+        "height": 680,
         "minWidth": 1024,
         "minHeight": 680,
         "resizable": true,
         "fullscreen": false,
-        "center": true
+        "center": true,
+        "dragDropEnabled": false
       }
     ],
     "security": {
@@ -29,6 +30,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": [
+      "bin/scrcpy-server"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

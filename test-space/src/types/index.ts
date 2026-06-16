@@ -93,3 +93,48 @@ export interface LogSession {
   startedAt: string
   metadata: string
 }
+
+// ── Notes Space ──────────────────────────────────────────────
+
+export interface NoteSpace {
+  id: string
+  name: string
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface NoteFolder {
+  id: string
+  spaceId: string | null
+  name: string
+  parentId: string | null
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface NoteItem {
+  id: string
+  folderId: string | null
+  title: string
+  content: string
+  tags: string[]
+  isFavorite: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface NoteVersion {
+  id: string
+  noteId: string
+  content: string
+  savedAt: string
+}
+
+export interface NoteLink {
+  id: string
+  sourceNoteId: string
+  targetNoteId: string
+  createdAt: string
+}

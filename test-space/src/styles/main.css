@@ -166,3 +166,63 @@
     border-radius: 10px;
   }
 }
+
+/* ========== Dark Mode ========== */
+html.dark {
+  color-scheme: dark;
+}
+html.dark body {
+  background: #1a1a2e;
+  color: #e0e0e0;
+}
+html.dark .glass-panel {
+  background: rgba(30, 30, 50, 0.85);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+html.dark .glass-card {
+  background: rgba(30, 30, 50, 0.7);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+html.dark .glass-card:hover {
+  background: rgba(40, 40, 65, 0.8);
+}
+html.dark .glass-button {
+  background: linear-gradient(135deg, rgba(50, 50, 80, 0.6) 10%, rgba(30, 30, 50, 0.4) 100%);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #e0e0e0;
+}
+html.dark .glass-button:hover {
+  background: linear-gradient(135deg, rgba(70, 70, 120, 0.6) 10%, rgba(50, 50, 90, 0.4) 100%);
+}
+html.dark .glass-active {
+  background: linear-gradient(135deg, rgba(76, 74, 202, 0.4) 10%, rgba(60, 58, 180, 0.3) 100%);
+  border-color: rgba(76, 74, 202, 0.5);
+  color: #fff;
+}
+html.dark .glass-input {
+  background: rgba(30, 30, 50, 0.6);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #e0e0e0;
+}
+html.dark .glass-input:focus {
+  border-color: rgba(100, 130, 255, 0.4);
+}
+html.dark .glass-card-active {
+  background: rgba(76, 74, 202, 0.25);
+  border-color: rgba(76, 74, 202, 0.4);
+}
+html.dark ::selection {
+  background-color: rgba(76, 74, 202, 0.4);
+  color: #fff;
+}
+html.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(100, 100, 140, 0.4);
+}
+html.dark input,
+html.dark textarea,
+html.dark select {
+  color: #e0e0e0;
+}
+html.dark .text-on-surface { color: #e0e0e0; }
+html.dark .text-on-surface-variant { color: #a0a0b0; }
+html.dark .text-on-primary-fixed { color: #fff; }

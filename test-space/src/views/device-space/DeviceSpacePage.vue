@@ -3,6 +3,17 @@
     <div class="flex-1 flex flex-col gap-4 min-w-0 overflow-hidden">
     <!-- Connection Bar - always visible, moved up -->
     <div class="glass-panel rounded-xl p-3 px-5 flex items-center gap-4">
+      <!-- Tab Switcher (leftmost) -->
+      <div class="flex gap-2 shrink-0">
+        <button v-for="tab in tabs" :key="tab.key"
+          class="px-5 py-2 rounded-full font-label-md text-label-md transition-all flex items-center hover:scale-105"
+          :class="activeTab === tab.key ? 'bg-secondary/10 text-secondary border border-secondary/30' : 'bg-transparent text-on-surface-variant/70 border border-transparent hover:bg-white/30'"
+          @click="activeTab = tab.key">
+          <span class="material-symbols-outlined text-[16px] align-middle mr-1.5">{{ tab.icon }}</span>
+          {{ tab.label }}
+        </button>
+      </div>
+      <div class="h-5 w-[1px] bg-glass-border-dark shrink-0 ml-auto"></div>
       <div class="flex items-center border border-outline-variant/60 rounded-full px-4 py-2 bg-white/50 max-w-[400px]">
         <span class="material-symbols-outlined text-on-surface-variant text-[16px] mr-2">link</span>
         <input v-model="connectAddress"
@@ -28,17 +39,6 @@
       </div>
       <button class="text-on-surface-variant hover:text-secondary hover:scale-105 transition-all" @click="scanDevices()" :disabled="scanLoading">
         <span class="material-symbols-outlined text-[18px] block" :class="scanLoading ? 'animate-spin' : ''">refresh</span>
-      </button>
-    </div>
-
-    <!-- Tab Switcher -->
-    <div class="flex gap-2">
-      <button v-for="tab in tabs" :key="tab.key"
-        class="px-6 py-2.5 rounded-full font-label-md text-label-md transition-all flex items-center hover:scale-105"
-        :class="activeTab === tab.key ? 'bg-secondary/10 text-secondary border border-secondary/30' : 'bg-transparent text-on-surface-variant/70 border border-transparent hover:bg-white/30'"
-        @click="activeTab = tab.key">
-        <span class="material-symbols-outlined text-[16px] align-middle mr-2">{{ tab.icon }}</span>
-        {{ tab.label }}
       </button>
     </div>
 
@@ -290,28 +290,14 @@
     <div v-show="activeTab === 'other'" class="grid grid-cols-1 lg:grid-cols-5 gap-4 flex-grow min-h-0 overflow-hidden">
 
       <!-- Left Column: Screen Mirror + Remote Control -->
-      <div class="col-span-1 lg:col-span-3 flex flex-col gap-4 min-h-0 overflow-y-auto">
+      <div class="col-span-1 lg:col-span-3 flex flex-col gap-4 min-h-0 overflow-hidden">
 
         <!-- Screen Mirror -->
-        <div class="glass-panel rounded-xl p-3 shrink-0 shadow-md">
-          <div class="flex items-center gap-3 mb-2 flex-wrap">
+        <div class="glass-panel rounded-xl p-3 flex-1 min-h-0 flex flex-col shadow-md">
+          <div class="flex items-center gap-3 mb-2 flex-wrap shrink-0">
             <div class="flex items-center gap-2 shrink-0">
               <span class="material-symbols-outlined text-[16px]">screenshot_monitor</span>
               <span class="font-label-md text-label-md text-on-surface">屏幕镜像</span>
-            </div>
-            <div class="flex items-center gap-1.5">
-              <span class="font-caption text-caption text-on-surface-variant">帧率:</span>
-              <input v-model.number="mirrorFps" type="range" min="1" max="10" step="1" class="w-20 accent-secondary" />
-              <span class="font-caption text-caption text-on-surface font-mono w-5">{{ mirrorFps }}</span>
-            </div>
-            <div class="flex items-center gap-1.5">
-              <span class="font-caption text-caption text-on-surface-variant">分辨率:</span>
-              <select v-model="mirrorResolution"
-                class="bg-white/80 border border-outline-variant rounded-lg px-2 py-1 font-caption text-caption text-on-surface focus:ring-2 focus:ring-secondary/30">
-                <option value="720">720p</option>
-                <option value="1080">1080p</option>
-                <option value="1280">1280p</option>
-              </select>
             </div>
             <button class="glass-button px-4 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1"
               :class="isMirroring ? 'bg-error/10 text-error border border-error/20' : ''"
@@ -319,13 +305,10 @@
               <span class="material-symbols-outlined text-[16px]">{{ isMirroring ? 'stop' : 'play_arrow' }}</span>
               {{ isMirroring ? '停止镜像' : '启动镜像' }}
             </button>
-            <span v-if="isMirroring" class="font-caption text-caption text-secondary">
-              {{ mirrorFrameCount }}帧 · {{ currentMirrorFps.toFixed(1) }} FPS
-            </span>
           </div>
-          <div class="flex items-center justify-center min-h-[420px] bg-black/5 rounded-xl overflow-hidden relative border border-dashed border-outline-variant/40">
-            <canvas v-show="isMirroring && mirrorFrameCount > 0" ref="mirrorCanvas" class="max-w-full max-h-[400px]"></canvas>
-            <div v-if="!isMirroring" class="text-center">
+          <div class="flex-1 min-h-0 bg-black/5 rounded-xl overflow-hidden relative border border-dashed border-outline-variant/40" style="aspect-ratio:16/9;min-height:200px">
+            <canvas v-show="isMirroring && mirrorFrameCount > 0" ref="mirrorCanvas" class="w-full h-full object-contain block"></canvas>
+            <div v-if="!isMirroring" class="absolute inset-0 flex items-center justify-center">
               <span class="material-symbols-outlined text-4xl text-on-surface-variant/30">screenshot_monitor</span>
               <p class="font-body-sm text-body-sm text-on-surface-variant/50 mt-1">Screen mirror inactive</p>
             </div>
@@ -465,26 +448,32 @@
       <Transition name="fade">
         <div v-if="fileEditDialog.show" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="fileEditDialog.show = false">
           <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
-          <div class="glass-panel rounded-[2rem] p-6 w-full max-w-3xl max-h-[85vh] relative z-10 bg-white/60 flex flex-col">
-            <div class="flex justify-between items-center mb-3">
+          <div class="glass-panel rounded-[2rem] p-4 w-full max-w-6xl h-[85vh] relative z-10 bg-white/60 flex flex-col">
+            <div class="flex justify-between items-center mb-2 shrink-0">
               <div class="flex items-center gap-2 min-w-0">
-                <h3 class="font-label-lg text-label-lg text-on-surface font-semibold truncate">{{ fileEditDialog.filePath }}</h3>
+                <h3 class="font-label-md text-label-md text-on-surface font-semibold truncate">{{ fileEditDialog.filePath }}</h3>
                 <span v-if="fileEditDialog.loading" class="w-3.5 h-3.5 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
               </div>
               <div class="flex gap-2 shrink-0">
-                <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md flex items-center gap-1" :disabled="fileEditDialog.loading" @click="saveEditedFile">
-                  <span class="material-symbols-outlined text-[14px]">save</span>保存到设备
+                <button class="glass-button px-3 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1" :disabled="fileEditDialog.loading" @click="saveEditedFile">
+                  <span class="material-symbols-outlined text-[16px]">save</span>保存
                 </button>
-                <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md flex items-center gap-1" @click="downloadFileFromEdit">
-                  <span class="material-symbols-outlined text-[14px]">download</span>下载到本地
+                <button class="glass-button px-3 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1" @click="downloadFileFromEdit">
+                  <span class="material-symbols-outlined text-[16px]">download</span>下载
                 </button>
-                <button class="glass-button p-1 rounded" @click="fileEditDialog.show = false">
-                  <span class="material-symbols-outlined text-[18px]">close</span>
+                <button class="glass-button p-1.5 rounded-lg" @click="fileEditDialog.show = false">
+                  <span class="material-symbols-outlined text-[20px]">close</span>
                 </button>
               </div>
             </div>
-            <textarea v-model="fileEditDialog.content"
-              class="flex-1 w-full bg-[#1a1c1d] text-gray-200 rounded-xl p-3 font-mono text-[12px] border-0 focus:ring-2 focus:ring-secondary/30 resize-none"
+            <div v-if="fileEditDialog.loading" class="flex-1 flex items-center justify-center bg-[#1a1c1d] rounded-xl">
+              <div class="flex flex-col items-center gap-3">
+                <span class="w-6 h-6 border-2 border-white/40 border-t-white rounded-full animate-spin"></span>
+                <span class="font-body-sm text-body-sm text-gray-400">正在从设备读取文件...</span>
+              </div>
+            </div>
+            <textarea v-show="!fileEditDialog.loading" v-model="fileEditDialog.content"
+              class="flex-1 w-full bg-[#1a1c1d] text-gray-200 rounded-xl p-4 font-mono text-[14px] leading-relaxed border-0 focus:ring-2 focus:ring-secondary/30 resize-none"
               spellcheck="false"></textarea>
           </div>
         </div>
@@ -947,7 +936,7 @@ async function loadAppSearchHistory() {
 }
 
 // ── File Browser + History ──
-const remotePath = ref("/sdcard/");
+const remotePath = ref("/");
 const remotePathInputRef = ref<HTMLInputElement | null>(null);
 const showRemotePathHistory = ref(false);
 const remotePathHistory = ref<string[]>([]);
@@ -1256,13 +1245,11 @@ const bootLogcatElapsed = ref(0);
 let bootLogcatTimeoutId: ReturnType<typeof setTimeout> | null = null;
 const bootLogcatBuffer = ref<string[]>([]);
 
-// ── Screen Mirror (recursive setTimeout) ──
+// ── Screen Mirror (adb screencap polling) ──
 const isMirroring = ref(false);
-const mirrorFps = ref(3);
-const mirrorResolution = ref("1080");
 const mirrorFrameCount = ref(0);
-const currentMirrorFps = ref(0);
-let mirrorTimeoutId: ReturnType<typeof setTimeout> | null = null;
+let mirrorCtx: CanvasRenderingContext2D | null = null;
+let mirrorUnlisten: (() => void)[] = [];
 const mirrorCanvas = ref<HTMLCanvasElement | null>(null);
 
 // ── Screenshot & Recording ──
@@ -1719,7 +1706,7 @@ async function queryInfo(type: string) {
         { name: "HDCP 2.2", cmd: "tee_provision -qt 0x32" },
         { name: "MGKID", cmd: "tee_provision -qt 0xa2" },
         { name: "Widevine", cmd: "drminfo -d" },
-        { name: "Dolby", cmd: "dolby_fw_dolbyms12 /oem/lib/ms12/libdolbyms12.so /data/test.so" },
+        { name: "Dolby", cmd: "dolby_fw_dolbyms12 /smart/etc/ms12/libdolbyms12.so /data/test.so" },
       ];
       const checkResults = await Promise.all(checks.map(c =>
         shell(serial, c.cmd).then(r => {
@@ -2070,53 +2057,134 @@ async function generateBugreport() {
 
 // ── (removed) device config module removed
 
-// ── Screen Mirror ──
-function toggleMirror() {
-  if (isMirroring.value) { stopMirror(); }
-  else { startMirror(); }
+// ── Screen Mirror (scrcpy-server H.264 + WebCodecs, fallback to screencap) ──
+async function toggleMirror() {
+  if (isMirroring.value) { await stopMirror(); }
+  else { await startMirror(); }
 }
-function startMirror() {
-  if (!selectedDevice.value) return;
+function base64ToBytes(b64: string): Uint8Array {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+async function startMirror() {
+  console.log("[mirror] startMirror called");
+  if (!selectedDevice.value) { console.log("[mirror] no device selected, abort"); return; }
   isMirroring.value = true;
   mirrorFrameCount.value = 0;
-  currentMirrorFps.value = 0;
-  scheduleMirrorFrame();
-}
-async function scheduleMirrorFrame() {
-  if (!isMirroring.value || !selectedDevice.value) return;
-  const startTime = performance.now();
+  mirrorCtx = mirrorCanvas.value?.getContext("2d") || null;
+  console.log("[mirror] mirrorCtx:", !!mirrorCtx, "canvas:", !!mirrorCanvas.value);
+
+  let useScrcpy = false;
+  let videoDecoder: VideoDecoder | null = null;
+  let decoderConfigured = false;
+
   try {
-    const result = await screenshot(selectedDevice.value.serial, "");
-    const dataUrl = result.startsWith("data:") ? result : `data:image/png;base64,${result}`;
-    const canvas = mirrorCanvas.value;
-    if (canvas) {
+    const { listen } = await import("@tauri-apps/api/event");
+    const { invoke } = await import("@tauri-apps/api/core");
+    console.log("[mirror] tauri APIs imported");
+
+    const listeners: (() => void)[] = [];
+
+    listeners.push(await listen<string>("mirror:mode", (event) => {
+      console.log("[mirror] mode event received:", event.payload);
+      useScrcpy = event.payload === "scrcpy";
+      if (useScrcpy) {
+        console.log("[mirror] creating VideoDecoder for scrcpy");
+        videoDecoder = new VideoDecoder({
+          output: (frame: VideoFrame) => {
+            if (!mirrorCtx || !mirrorCanvas.value) { frame.close(); return; }
+            mirrorCanvas.value.width = frame.displayWidth;
+            mirrorCanvas.value.height = frame.displayHeight;
+            mirrorCtx.drawImage(frame, 0, 0);
+            frame.close();
+            mirrorFrameCount.value++;
+          },
+          error: (e: any) => { console.error("[mirror] WebCodecs error:", e); }
+        });
+      }
+    }));
+
+    listeners.push(await listen<string>("mirror:config", (event) => {
+      console.log("[mirror] config event received, payload length:", event.payload.length);
+      if (!useScrcpy || !videoDecoder || decoderConfigured) { console.log("[mirror] config skipped:", { useScrcpy, hasDecoder: !!videoDecoder, decoderConfigured }); return; }
+      try {
+        videoDecoder.configure({
+          codec: "avc1.42E01E",
+          description: base64ToBytes(event.payload),
+          codedWidth: 1280, codedHeight: 720,
+        });
+        decoderConfigured = true;
+        console.log("[mirror] VideoDecoder configured successfully");
+      } catch (e) { console.error("[mirror] Config failed:", e); }
+    }));
+
+    listeners.push(await listen<{ data: string; key: boolean; pts: number }>("mirror:frame", (event) => {
+      if (!useScrcpy || !videoDecoder || !decoderConfigured) return;
+      try {
+        videoDecoder.decode(new EncodedVideoChunk({
+          type: event.payload.key ? "key" : "delta",
+          timestamp: event.payload.pts / 1000,
+          data: base64ToBytes(event.payload.data),
+        }));
+      } catch (e) {}
+    }));
+
+    listeners.push(await listen<string>("mirror:frame_data", (event) => {
+      console.log("[mirror] frame_data received, len:", event.payload.length, "useScrcpy:", useScrcpy);
+      if (useScrcpy) { console.log("[mirror] frame_data dropped - scrcpy mode"); return; }
+      if (!isMirroring.value) { console.log("[mirror] frame_data dropped - not mirroring"); return; }
+      const canvas = mirrorCanvas.value;
+      if (!canvas || !mirrorCtx) { console.log("[mirror] frame_data dropped - no canvas/ctx"); return; }
       const img = new window.Image();
-      await new Promise<void>((resolve) => {
-        img.onload = () => {
-          canvas.width = Math.min(img.width, parseInt(mirrorResolution.value));
-          canvas.height = img.height * (canvas.width / img.width);
-          const ctx = canvas.getContext("2d");
-          if (ctx) ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          mirrorFrameCount.value++;
-          currentMirrorFps.value = 1000 / Math.max(performance.now() - startTime, 1);
-          resolve();
-        };
-        img.onerror = () => resolve();
-        img.src = dataUrl;
-      });
-    }
-  } catch {}
-  await yieldToUI();
-  if (isMirroring.value) {
-    const interval = Math.max(200, Math.round(1000 / mirrorFps.value));
-    mirrorTimeoutId = setTimeout(scheduleMirrorFrame, interval);
+      img.onload = () => {
+        console.log("[mirror] image loaded:", img.width, "x", img.height);
+        if (!canvas || !mirrorCtx) return;
+        canvas.width = img.width;
+        canvas.height = img.height;
+        mirrorCtx.drawImage(img, 0, 0);
+        mirrorFrameCount.value++;
+      };
+      img.onerror = () => { console.error("[mirror] image decode error"); };
+      img.src = `data:image/png;base64,${event.payload}`;
+    }));
+
+    listeners.push(await listen<string>("mirror:error", async (event) => {
+      console.log("[mirror] error event:", event.payload);
+      showToast(event.payload, "error");
+      await stopMirror();
+    }));
+
+    listeners.push(await listen("mirror:ready", () => {
+      console.log("[mirror] ready event");
+      if (useScrcpy) showToast("scrcpy 镜像已启动", "success");
+    }));
+
+    mirrorUnlisten = listeners;
+    mirrorUnlisten.push(() => { if (videoDecoder) { console.log("[mirror] closing decoder"); videoDecoder.close(); } });
+    console.log("[mirror] invoking adb_mirror_start");
+    await invoke("adb_mirror_start", { serial: selectedDevice.value.serial });
+    console.log("[mirror] invoke returned successfully");
+  } catch (e) {
+    console.error("[mirror] invoke failed:", e);
+    showToast("镜像启动失败", "error");
+    await stopMirror();
   }
 }
-function stopMirror() {
-  if (mirrorTimeoutId) { clearTimeout(mirrorTimeoutId); mirrorTimeoutId = null; }
+async function stopMirror() {
+  console.log("[mirror] stopMirror called");
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("adb_mirror_stop");
+    console.log("[mirror] adb_mirror_stop called");
+  } catch (e) { console.error("[mirror] stop error:", e); }
+  for (const u of mirrorUnlisten) { u(); }
+  mirrorUnlisten = [];
+  mirrorCtx = null;
   isMirroring.value = false;
-  currentMirrorFps.value = 0;
   mirrorFrameCount.value = 0;
+  console.log("[mirror] stopped");
 }
 
 async function takeScreenshot() {
@@ -2183,7 +2251,7 @@ async function toggleRecording() {
 // ── Output Panel ──
 // ── Lifecycle ──
 onMounted(async () => {
-  scanDevices();
+  scanDevices(true);
   loadCustomCommands();
   loadTextHistory();
   loadRemotePathHistory();
@@ -2210,7 +2278,9 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener('resize', recalcAppPageSize);
   if ((window as any).__appListResizeObserver) (window as any).__appListResizeObserver.disconnect();
-  if (mirrorTimeoutId) clearTimeout(mirrorTimeoutId);
+  for (const u of mirrorUnlisten) { u(); }
+  mirrorUnlisten = [];
+  import("@tauri-apps/api/core").then(m => m.invoke("adb_mirror_stop")).catch(() => {});
   if (logcatTimeoutId) clearTimeout(logcatTimeoutId);
   if (diagTimeoutId) clearTimeout(diagTimeoutId);
   if (bootLogcatTimeoutId) clearTimeout(bootLogcatTimeoutId);

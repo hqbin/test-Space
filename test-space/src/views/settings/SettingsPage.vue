@@ -3,72 +3,64 @@
     <h2 class="font-display-lg text-display-lg font-semibold text-on-surface tracking-tight mb-8">Settings</h2>
 
     <div class="flex flex-col gap-6">
-      <!-- Profile -->
-      <div class="glass-card rounded-xl p-padding-card">
-        <h3 class="font-headline-md text-headline-md text-on-surface mb-6">Profile</h3>
-        <div class="flex items-center gap-4 mb-6">
-          <div class="w-16 h-16 rounded-full bg-primary-fixed flex items-center justify-center text-2xl text-on-primary-fixed font-bold">
-            T
-          </div>
-          <div>
-            <p class="font-body-lg text-body-lg text-on-surface font-medium">Tester</p>
-            <p class="font-caption text-caption text-on-surface-variant">Local Mode</p>
-          </div>
-        </div>
-        <div class="flex flex-col gap-4">
-          <div class="flex items-center justify-between py-3 border-b border-glass-border-dark">
-            <span class="font-body-md text-body-md text-on-surface-variant">Username</span>
-            <span class="font-body-md text-body-md text-on-surface font-medium">tester</span>
-          </div>
-          <div class="flex items-center justify-between py-3 border-b border-glass-border-dark">
-            <span class="font-body-md text-body-md text-on-surface-variant">Role</span>
-            <span class="font-body-md text-body-md text-on-surface font-medium">Tester</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Theme -->
+      <!-- Appearance -->
       <div class="glass-card rounded-xl p-padding-card">
         <h3 class="font-headline-md text-headline-md text-on-surface mb-6">Appearance</h3>
-        <div class="flex items-center justify-between">
-          <span class="font-body-md text-body-md text-on-surface-variant">Theme</span>
+
+        <!-- Theme -->
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <span class="font-body-md text-body-md text-on-surface font-medium">Theme</span>
+            <p class="font-caption text-caption text-on-surface-variant mt-0.5">Choose your preferred color scheme</p>
+          </div>
           <div class="flex gap-2">
             <button
-              class="glass-button px-4 py-2 rounded-full font-label-md text-label-md"
+              class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-2"
               :class="theme === 'light' ? 'glass-active' : ''"
-              @click="theme = 'light'"
+              @click="setTheme('light')"
             >
+              <span class="material-symbols-outlined text-[18px]">light_mode</span>
               Light
             </button>
             <button
-              class="glass-button px-4 py-2 rounded-full font-label-md text-label-md"
+              class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-2"
               :class="theme === 'dark' ? 'glass-active' : ''"
-              @click="theme = 'dark'"
+              @click="setTheme('dark')"
             >
+              <span class="material-symbols-outlined text-[18px]">dark_mode</span>
               Dark
+            </button>
+            <button
+              class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-2"
+              :class="theme === 'system' ? 'glass-active' : ''"
+              @click="setTheme('system')"
+            >
+              <span class="material-symbols-outlined text-[18px]">settings_brightness</span>
+              System
             </button>
           </div>
         </div>
-      </div>
 
-      <!-- Data Management -->
-      <div class="glass-card rounded-xl p-padding-card">
-        <h3 class="font-headline-md text-headline-md text-on-surface mb-6">Data Management</h3>
-        <p class="font-body-md text-body-md text-on-surface-variant mb-6">
-          Export all data (field templates, case files, history, settings) to a backup file,
-          or import from a previous backup.
-        </p>
-        <div class="flex gap-4">
-          <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2" @click="handleExport">
-            <span class="material-symbols-outlined text-[18px]">file_download</span>
-            Export All Data
-          </button>
-          <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2" @click="handleImport">
-            <span class="material-symbols-outlined text-[18px]">file_upload</span>
-            Import Data
-          </button>
+        <div class="border-t border-glass-border-light/30 pt-6">
+          <div>
+            <span class="font-body-md text-body-md text-on-surface font-medium">Data Backup</span>
+            <p class="font-caption text-caption text-on-surface-variant mt-0.5">
+              Export all data (field templates, case files, notes, history, settings) to a backup file,
+              or restore from a previous backup.
+            </p>
+          </div>
+          <div class="flex gap-4 mt-4">
+            <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2" @click="handleExport">
+              <span class="material-symbols-outlined text-[18px]">file_download</span>
+              Export All Data
+            </button>
+            <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2" @click="handleImport">
+              <span class="material-symbols-outlined text-[18px]">file_upload</span>
+              Import Data
+            </button>
+          </div>
+          <p v-if="importStatus" class="mt-4 font-body-md text-body-md" :class="importStatus.startsWith('Error') ? 'text-error' : 'text-success-indicator'">{{ importStatus }}</p>
         </div>
-        <p v-if="importStatus" class="mt-4 font-body-md text-body-md" :class="importStatus.startsWith('Error') ? 'text-error' : 'text-success-indicator'">{{ importStatus }}</p>
       </div>
 
     </div>
@@ -76,79 +68,105 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
-import { useRouter } from "vue-router";
+import { ref, onMounted } from "vue";
 import * as db from "@/services/database";
 
-const router = useRouter();
 const theme = ref("light");
 const importStatus = ref("");
 
+async function loadTheme() {
+  const saved = await db.getSetting("theme");
+  if (saved) {
+    theme.value = saved;
+    applyTheme(saved);
+  }
+}
+
+function applyTheme(t: string) {
+  const root = document.documentElement;
+  if (t === "dark") {
+    root.classList.add("dark");
+  } else if (t === "light") {
+    root.classList.remove("dark");
+  } else {
+    // system
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    root.classList.toggle("dark", prefersDark);
+  }
+}
+
+async function setTheme(t: string) {
+  theme.value = t;
+  applyTheme(t);
+  await db.setSetting("theme", t);
+}
+
 async function handleExport() {
-  importStatus.value = ""
+  importStatus.value = "";
   try {
-    const data = await db.exportAllData()
-    const json = JSON.stringify(data, null, 2)
+    const data = await db.exportAllData();
+    const json = JSON.stringify(data, null, 2);
     try {
-      const { save } = await import('@tauri-apps/plugin-dialog')
-      const { invoke } = await import('@tauri-apps/api/core')
+      const { save } = await import("@tauri-apps/plugin-dialog");
+      const { invoke } = await import("@tauri-apps/api/core");
       const path = await save({
-        filters: [{ name: 'Test Space Backup', extensions: ['tsb'] }],
-        defaultPath: 'test-space-backup.tsb',
-      })
+        filters: [{ name: "Test Space Backup", extensions: ["tsb"] }],
+        defaultPath: "test-space-backup.tsb",
+      });
       if (path) {
-        await invoke('write_text_file', { path, content: json })
-        importStatus.value = "Exported successfully"
+        await invoke("write_text_file", { path, content: json });
+        importStatus.value = "Exported successfully";
       }
     } catch {
-      const blob = new Blob([json], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'test-space-backup.tsb'
-      a.click()
-      URL.revokeObjectURL(url)
-      importStatus.value = "Exported successfully (browser download)"
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "test-space-backup.tsb";
+      a.click();
+      URL.revokeObjectURL(url);
+      importStatus.value = "Exported successfully (browser download)";
     }
   } catch (e: any) {
-    importStatus.value = "Export failed: " + (e.message || e)
+    importStatus.value = "Export failed: " + (e.message || e);
   }
 }
 
 async function handleImport() {
-  importStatus.value = ""
+  importStatus.value = "";
   try {
-    let json: string
+    let json: string;
     try {
-      const { open } = await import('@tauri-apps/plugin-dialog')
-      const { invoke } = await import('@tauri-apps/api/core')
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const { invoke } = await import("@tauri-apps/api/core");
       const path = await open({
-        filters: [{ name: 'Test Space Backup', extensions: ['tsb', 'json'] }],
+        filters: [{ name: "Test Space Backup", extensions: ["tsb", "json"] }],
         multiple: false,
-      })
-      if (!path) return
-      json = await invoke<string>('read_text_file', { path: path as string })
+      });
+      if (!path) return;
+      json = await invoke<string>("read_text_file", { path: path as string });
     } catch {
-      // Tauri unavailable, browser fallback
-      const input = document.createElement('input')
-      input.type = 'file'
-      input.accept = '.tsb,.json'
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = ".tsb,.json";
       const file = await new Promise<File | null>((resolve) => {
-        input.onchange = () => resolve(input.files?.[0] || null)
-        input.click()
-      })
-      if (!file) return
-      json = await file.text()
+        input.onchange = () => resolve(input.files?.[0] || null);
+        input.click();
+      });
+      if (!file) return;
+      json = await file.text();
     }
-    const backup = JSON.parse(json)
+    const backup = JSON.parse(json);
     if (!backup.version) {
-      importStatus.value = "Error: invalid backup file"
-      return
+      importStatus.value = "Error: invalid backup file";
+      return;
     }
-    await db.importAllData(backup)
-    importStatus.value = "Import successful. Restart the app to reload data."
+    await db.importAllData(backup);
+    importStatus.value = "Import successful. Restart the app to reload data.";
   } catch (e: any) {
-    importStatus.value = "Import failed: " + (e.message || e)
+    importStatus.value = "Import failed: " + (e.message || e);
   }
 }
+
+onMounted(() => loadTheme());
 </script>

@@ -43,9 +43,9 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { path: "/case-space", label: "Case", icon: "folder_shared" },
   { path: "/device-space", label: "Device", icon: "developer_board" },
   { path: "/notes-space", label: "Notes", icon: "description" },
+  { path: "/case-space", label: "Case", icon: "folder_shared" },
   { path: "/script-space", label: "Scripts", icon: "code" },
 ];
 

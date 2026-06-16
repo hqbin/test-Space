@@ -1,10 +1,18 @@
 mod adb;
+mod mirror;
 mod script_exec;
 mod serial_port;
 mod zip_util;
 
 use serial_port::SerialState;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::sync::Mutex;
+use std::time::Duration;
+use tauri::Emitter;
+use tauri::Manager;
+
+struct MirrorState(Mutex<Option<Arc<AtomicBool>>>);
 
 #[tauri::command]
 fn adb_list_devices() -> Vec<adb::DeviceInfo> {
@@ -48,6 +56,80 @@ fn adb_reboot(serial: String) -> Result<String, String> {
 #[tauri::command]
 fn adb_screenshot(serial: String, save_path: String) -> Result<String, String> {
     adb::screenshot(&serial, &save_path)
+}
+
+#[tauri::command]
+async fn adb_mirror_start(serial: String, app: tauri::AppHandle, state: tauri::State<'_, MirrorState>) -> Result<(), String> {
+    {
+        if let Some(flag) = state.0.lock().unwrap().take() {
+            flag.store(false, Ordering::Relaxed);
+        }
+    }
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    let running = Arc::new(AtomicBool::new(true));
+    *state.0.lock().unwrap() = Some(running.clone());
+
+    // Resolve scrcpy-server path before spawning
+    let jar_str = app.path().resource_dir()
+        .map(|d| d.join("bin/scrcpy-server").to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    let serial_c = serial.clone();
+    let running_c = running.clone();
+    let app_c = app.clone();
+
+    tokio::task::spawn_blocking(move || {
+        // Try scrcpy-server; if any step fails or config not received, fall back to legacy
+        let use_scrcpy = if jar_str.is_empty() {
+            false
+        } else {
+            mirror::push_server(&serial_c, &jar_str).is_ok()
+                && { mirror::remove_forward(&serial_c); mirror::setup_forward(&serial_c).is_ok() }
+                && mirror::start_server(&serial_c).is_ok()
+        };
+
+        if use_scrcpy {
+            let _ = app_c.emit("mirror:mode", "scrcpy");
+            let _ = app_c.emit("mirror:ready", "");
+            let scrcpy_ok = mirror::connect_and_stream(app_c.clone(), running_c.clone()).is_ok();
+            mirror::remove_forward(&serial_c);
+            if scrcpy_ok {
+                running_c.store(false, Ordering::Relaxed);
+                return;
+            }
+            // scrcpy failed – fall through to legacy
+            let _ = app_c.emit("mirror:mode", "legacy");
+        } else {
+            let _ = app_c.emit("mirror:mode", "legacy");
+        }
+
+        while running_c.load(Ordering::Relaxed) {
+            match adb::screenshot(&serial_c, "") {
+                Ok(data_url) => {
+                    let b64 = data_url.strip_prefix("data:image/png;base64,").unwrap_or(&data_url).to_string();
+                    let _ = app_c.emit("mirror:frame_data", &b64);
+                }
+                Err(e) => {
+                    let _ = app_c.emit("mirror:error", &format!("截图失败: {}", e));
+                    break;
+                }
+            }
+            std::thread::sleep(Duration::from_millis(200));
+        }
+
+        running_c.store(false, Ordering::Relaxed);
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+fn adb_mirror_stop(state: tauri::State<'_, MirrorState>) -> Result<(), String> {
+    if let Some(flag) = state.0.lock().unwrap().take() {
+        flag.store(false, Ordering::Relaxed);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -275,6 +357,7 @@ pub fn run() {
         .manage(SerialState {
             port: Mutex::new(None),
         })
+        .manage(MirrorState(Mutex::new(None)))
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -294,6 +377,8 @@ pub fn run() {
             adb_pull,
             adb_reboot,
             adb_screenshot,
+            adb_mirror_start,
+            adb_mirror_stop,
             adb_connect,
             adb_disconnect,
             adb_reboot_recovery,
