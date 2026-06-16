@@ -1085,3 +1085,68 @@ html, body          → overflow: hidden; height: 100%
 ```
 
 `recalcAppPageSize` 测量面板实际高度，计算列表可用空间，动态设置 `maxVisibleApps`（分页条数）和 `maxHeight`（列表最大高度）。
+
+---
+
+## 十二、版本管理与发布流程
+
+### 版本号来源
+
+版本号同时记录在三个文件中，必须保持一致：
+
+| 文件 | 路径 |
+|------|------|
+| `package.json` | `version` 字段 |
+| `tauri.conf.json` | `version` 字段（Tauri 构建时读取） |
+| `Cargo.toml` | `[package] version`（Rust 编译时读取） |
+
+### 自动版本脚本 (`scripts/bump-version.mjs`)
+
+一次性更新上述三个文件的版本号。
+
+```bash
+node scripts/bump-version.mjs patch    # 0.1.1 → 0.1.2
+node scripts/bump-version.mjs minor    # 0.1.1 → 0.2.0
+node scripts/bump-version.mjs major    # 0.1.1 → 1.0.0
+```
+
+### 清理脚本 (`scripts/clean.mjs`)
+
+删除 `dist/` 和 `src-tauri/target/` 缓存目录，确保打包时完全重新构建，不会打出旧代码。
+
+### NPM Scripts
+
+| 命令 | 说明 |
+|------|------|
+| `npm run version:patch` | 仅递增补丁版本号（如 0.1.1 → 0.1.2） |
+| `npm run version:minor` | 仅递增次版本号（如 0.1.1 → 0.2.0） |
+| `npm run version:major` | 仅递增主版本号（如 0.1.1 → 1.0.0） |
+| `npm run release:patch` | **一键发布**：打补丁版本 → 清理缓存 → `tauri build` |
+| `npm run release:minor` | **一键发布**：打次版本 → 清理缓存 → `tauri build` |
+| `npm run release:major` | **一键发布**：打主版本 → 清理缓存 → `tauri build` |
+
+### 发布流程
+
+```bash
+# 一键发布（推荐）
+npm run release:patch
+
+# 或手动分步执行
+node scripts/bump-version.mjs patch
+node scripts/clean.mjs
+npm run tauri build
+```
+
+构建产物位于 `src-tauri/target/release/bundle/msi/`，文件名为 `Test Space_x.y.z_x64.msi`（或 `.exe` NSIS 安装包）。
+
+### 关于覆盖安装
+
+Windows MSI 安装包根据**版本号**判断是否可以覆盖安装：
+
+| 情况 | 结果 |
+|------|------|
+| 新版本号 > 已安装版本 | ✅ 自动升级，保留数据 |
+| 新版本号 == 已安装版本 | ❌ 拒绝安装，提示先卸载 |
+| 新版本号 < 已安装版本 | ❌ 提示"已安装更新版本" |
+
+因此每次发布前必须**递增版本号**（`release:*` 脚本会自动处理）。`identifier`（`com.testspace.app`）保持不变，MSI 的 `UpgradeCode` 通过 identifier 自动生成，确保新旧版本可关联。应用数据存储在 `%APPDATA%/com.testspace.app/test-space.db`，升级安装不会丢失。旧版 MSI 无需手动卸载，新版直接覆盖即可。
