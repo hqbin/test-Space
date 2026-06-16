@@ -1,6 +1,16 @@
 use std::process::Command;
 use serde::Serialize;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+fn silent_cmd(prog: &str) -> Command {
+    let mut cmd = Command::new(prog);
+    #[cfg(target_os = "windows")]
+    { cmd.creation_flags(0x08000000); } // CREATE_NO_WINDOW
+    cmd
+}
+
 #[derive(Serialize)]
 pub struct ScriptResult {
     pub stdout: String,
@@ -9,7 +19,7 @@ pub struct ScriptResult {
 }
 
 pub fn execute_python(script_path: &str, args: &[String]) -> Result<ScriptResult, String> {
-    let output = Command::new("python")
+    let output = silent_cmd("python")
         .arg(script_path)
         .args(args)
         .output()
@@ -22,7 +32,7 @@ pub fn execute_python(script_path: &str, args: &[String]) -> Result<ScriptResult
 }
 
 pub fn execute_bat(script_path: &str, args: &[String]) -> Result<ScriptResult, String> {
-    let output = Command::new("cmd")
+    let output = silent_cmd("cmd")
         .args(["/c", script_path])
         .args(args)
         .output()
@@ -35,7 +45,7 @@ pub fn execute_bat(script_path: &str, args: &[String]) -> Result<ScriptResult, S
 }
 
 pub fn execute_powershell(script_path: &str, args: &[String]) -> Result<ScriptResult, String> {
-    let output = Command::new("powershell")
+    let output = silent_cmd("powershell")
         .args(["-ExecutionPolicy", "Bypass", "-File", script_path])
         .args(args)
         .output()
@@ -55,7 +65,7 @@ pub fn execute_shell(command: &str) -> Result<ScriptResult, String> {
     };
     let shell_prog = if cfg!(windows) { "cmd" } else { "sh" };
     let shell_arg = if cfg!(windows) { "/c" } else { "-c" };
-    let output = Command::new(shell_prog)
+    let output = silent_cmd(shell_prog)
         .args([shell_arg, &cmd])
         .output()
         .map_err(|e| format!("Shell execution failed: {}", e))?;

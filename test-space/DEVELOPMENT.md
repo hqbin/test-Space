@@ -1055,6 +1055,15 @@ src/services/database.ts  ←── 唯一的数据访问层
 | 窗口大小配置 | 移除窗口大小持久化逻辑（`App.vue` 无 `onResized`/`setSize`），`tauri.conf.json` 默认 1024×680 + 最小 1024×680 | ✅ |
 | 导出/导入修复 | `exportAllData` 新增 `noteSpaces` 导出，`importAllData` 新增 `note_spaces` DELETE + INSERT，`note_folders` INSERT 含 `space_id` 列，版本升至 1.3 | ✅ |
 
+### Phase 15 — Windows 黑框修复与版本发布（已完成 ✅）
+
+| 模块 | 说明 | 状态 |
+|------|------|------|
+| CREATE_NO_WINDOW | `adb.rs` / `script_exec.rs` / `mirror.rs` 所有 `Command::new()` 调用添加 `creation_flags(0x08000000)`（Windows `CREATE_NO_WINDOW`），消除执行 adb/shell 命令时弹出的黑色控制台窗口 | ✅ |
+| 辅助函数封装 | `adb.rs` + `mirror.rs` 新增 `adb_cmd()` 封装函数，`script_exec.rs` 新增 `silent_cmd(prog)` 封装函数，统一注入 `CREATE_NO_WINDOW` 标志 | ✅ |
+| 条件编译 | `#[cfg(target_os = "windows")]` 条件导入 `std::os::windows::process::CommandExt`，`creation_flags` 仅在 Windows 平台生效 | ✅ |
+| 版本发布 | v0.1.1，作者 Bing，窗口默认 1024×680 | ✅ |
+
 ---
 
 ### 布局架构说明（Device Space）

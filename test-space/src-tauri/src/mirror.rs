@@ -5,9 +5,19 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
 use base64::Engine;
 use serde::Serialize;
 use tauri::Emitter;
+
+fn adb_cmd() -> Command {
+    let mut cmd = Command::new("adb");
+    #[cfg(target_os = "windows")]
+    { cmd.creation_flags(0x08000000); } // CREATE_NO_WINDOW
+    cmd
+}
 
 #[derive(Serialize)]
 struct FramePayload {
@@ -17,7 +27,7 @@ struct FramePayload {
 }
 
 pub fn push_server(serial: &str, jar_path: &str) -> Result<(), String> {
-    let output = Command::new("adb")
+    let output =     adb_cmd()
         .args(["-s", serial, "push", jar_path, "/data/local/tmp/scrcpy-server.jar"])
         .output()
         .map_err(|e| format!("ADB push failed: {}", e))?;
@@ -34,7 +44,7 @@ pub fn push_server(serial: &str, jar_path: &str) -> Result<(), String> {
 }
 
 pub fn setup_forward(serial: &str) -> Result<(), String> {
-    let output = Command::new("adb")
+    let output =     adb_cmd()
         .args(["-s", serial, "forward", "tcp:27183", "tcp:27183"])
         .output()
         .map_err(|e| format!("ADB forward failed: {}", e))?;
@@ -45,7 +55,7 @@ pub fn setup_forward(serial: &str) -> Result<(), String> {
 }
 
 pub fn remove_forward(serial: &str) {
-    let _ = Command::new("adb")
+    let _ =     adb_cmd()
         .args(["-s", serial, "forward", "--remove", "tcp:27183"])
         .output();
 }
@@ -53,7 +63,7 @@ pub fn remove_forward(serial: &str) {
 pub fn start_server(serial: &str) -> Result<(), String> {
     let args = "CLASSPATH=/data/local/tmp/scrcpy-server.jar app_process / com.genymobile.scrcpy.Server 3.3.4 log_level=info max_size=1280 video_bit_rate=4000000 max_fps=30 i_frame_interval=1 raw_stream=true send_dummy_byte=true send_codec_meta=true audio=false control=false cleanup=true";
 
-    let mut child = Command::new("adb")
+    let mut child =     adb_cmd()
         .args(["-s", serial, "shell", args])
         .stdout(Stdio::null())
         .stderr(Stdio::null())

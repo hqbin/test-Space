@@ -1,6 +1,16 @@
 use std::process::Command;
 use serde::Serialize;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+fn adb_cmd() -> Command {
+    let mut cmd = Command::new("adb");
+    #[cfg(target_os = "windows")]
+    { cmd.creation_flags(0x08000000); } // CREATE_NO_WINDOW
+    cmd
+}
+
 #[derive(Serialize)]
 pub struct DeviceInfo {
     pub serial: String,
@@ -26,7 +36,7 @@ pub struct DeviceProperties {
 fn run_adb(serial: &str, args: &[&str]) -> Result<String, String> {
     let mut full_args = vec!["-s", serial];
     full_args.extend_from_slice(args);
-    let output = Command::new("adb")
+    let output = adb_cmd()
         .args(&full_args)
         .output()
         .map_err(|e| format!("ADB command failed: {}", e))?;
@@ -50,7 +60,7 @@ fn get_prop(serial: &str, key: &str) -> String {
 }
 
 pub fn list_devices() -> Vec<DeviceInfo> {
-    let output = Command::new("adb").args(["devices", "-l"]).output();
+    let output = adb_cmd().args(["devices", "-l"]).output();
     let mut devices = Vec::new();
     if let Ok(out) = output {
         let stdout = String::from_utf8_lossy(&out.stdout);
@@ -79,7 +89,7 @@ pub fn list_devices() -> Vec<DeviceInfo> {
 }
 
 pub fn shell_command(serial: &str, command: &str) -> Result<String, String> {
-    let output = Command::new("adb")
+    let output = adb_cmd()
         .args(["-s", serial, "shell", command])
         .output()
         .map_err(|e| format!("ADB shell failed: {}", e))?;
@@ -96,7 +106,7 @@ pub fn install_apk(serial: &str, apk_path: &str, reinstall: bool) -> Result<Stri
         args.push("-r");
     }
     args.push(apk_path);
-    let output = Command::new("adb")
+    let output = adb_cmd()
         .args(&args)
         .output()
         .map_err(|e| format!("ADB install failed: {}", e))?;
@@ -108,7 +118,7 @@ pub fn install_apk(serial: &str, apk_path: &str, reinstall: bool) -> Result<Stri
 }
 
 pub fn uninstall_apk(serial: &str, package: &str) -> Result<String, String> {
-    let output = Command::new("adb")
+    let output = adb_cmd()
         .args(["-s", serial, "uninstall", package])
         .output()
         .map_err(|e| format!("ADB uninstall failed: {}", e))?;
@@ -120,7 +130,7 @@ pub fn uninstall_apk(serial: &str, package: &str) -> Result<String, String> {
 }
 
 pub fn push_file(serial: &str, local: &str, remote: &str) -> Result<String, String> {
-    let output = Command::new("adb")
+    let output = adb_cmd()
         .args(["-s", serial, "push", local, remote])
         .output()
         .map_err(|e| format!("ADB push failed: {}", e))?;
@@ -132,7 +142,7 @@ pub fn push_file(serial: &str, local: &str, remote: &str) -> Result<String, Stri
 }
 
 pub fn pull_file(serial: &str, remote: &str, local: &str) -> Result<String, String> {
-    let output = Command::new("adb")
+    let output = adb_cmd()
         .args(["-s", serial, "pull", remote, local])
         .output()
         .map_err(|e| format!("ADB pull failed: {}", e))?;
@@ -144,7 +154,7 @@ pub fn pull_file(serial: &str, remote: &str, local: &str) -> Result<String, Stri
 }
 
 pub fn reboot(serial: &str) -> Result<String, String> {
-    Command::new("adb")
+    adb_cmd()
         .args(["-s", serial, "reboot"])
         .spawn()
         .map_err(|e| format!("ADB reboot failed: {}", e))?;
@@ -152,7 +162,7 @@ pub fn reboot(serial: &str) -> Result<String, String> {
 }
 
 pub fn screenshot(serial: &str, save_path: &str) -> Result<String, String> {
-    let output = Command::new("adb")
+    let output = adb_cmd()
         .args(["-s", serial, "exec-out", "screencap", "-p"])
         .output()
         .map_err(|e| format!("ADB screenshot failed: {}", e))?;
@@ -171,7 +181,7 @@ pub fn screenshot(serial: &str, save_path: &str) -> Result<String, String> {
 }
 
 pub fn connect_device(address: &str) -> Result<String, String> {
-    let output = Command::new("adb")
+    let output = adb_cmd()
         .args(["connect", address])
         .output()
         .map_err(|e| format!("ADB connect failed: {}", e))?;
@@ -179,7 +189,7 @@ pub fn connect_device(address: &str) -> Result<String, String> {
 }
 
 pub fn disconnect_device(serial: &str) -> Result<String, String> {
-    let output = Command::new("adb")
+    let output = adb_cmd()
         .args(["disconnect", serial])
         .output()
         .map_err(|e| format!("ADB disconnect failed: {}", e))?;
@@ -187,7 +197,7 @@ pub fn disconnect_device(serial: &str) -> Result<String, String> {
 }
 
 pub fn reboot_recovery(serial: &str) -> Result<String, String> {
-    Command::new("adb")
+    adb_cmd()
         .args(["-s", serial, "reboot", "recovery"])
         .spawn()
         .map_err(|e| format!("ADB reboot recovery failed: {}", e))?;
@@ -195,7 +205,7 @@ pub fn reboot_recovery(serial: &str) -> Result<String, String> {
 }
 
 pub fn reboot_bootloader(serial: &str) -> Result<String, String> {
-    Command::new("adb")
+    adb_cmd()
         .args(["-s", serial, "reboot", "bootloader"])
         .spawn()
         .map_err(|e| format!("ADB reboot bootloader failed: {}", e))?;
@@ -327,7 +337,7 @@ pub fn logcat_buffer_resize(serial: &str, size_mb: u32) -> Result<String, String
 }
 
 pub fn bugreport(serial: &str, save_path: &str) -> Result<String, String> {
-    let output = Command::new("adb")
+    let output = adb_cmd()
         .args(["-s", serial, "bugreport", save_path])
         .output()
         .map_err(|e| format!("ADB bugreport failed: {}", e))?;
@@ -343,7 +353,7 @@ pub fn dmesg(serial: &str) -> Result<String, String> {
 }
 
 pub fn kill_server() -> Result<String, String> {
-    let output = Command::new("adb")
+    let output = adb_cmd()
         .args(["kill-server"])
         .output()
         .map_err(|e| format!("ADB kill-server failed: {}", e))?;
@@ -360,7 +370,7 @@ pub fn kill_server() -> Result<String, String> {
 }
 
 pub fn start_server() -> Result<String, String> {
-    let output = Command::new("adb")
+    let output = adb_cmd()
         .args(["start-server"])
         .output()
         .map_err(|e| format!("ADB start-server failed: {}", e))?;
@@ -372,7 +382,7 @@ pub fn start_server() -> Result<String, String> {
 }
 
 pub fn start_screenrecord(serial: &str, file_path: &str, width: u32, height: u32) -> Result<String, String> {
-    Command::new("adb")
+    adb_cmd()
         .args(["-s", serial, "shell", &format!("nohup screenrecord --size {}x{} {} > /dev/null 2>&1 &", width, height, file_path)])
         .spawn()
         .map_err(|e| format!("Failed to start screenrecord: {}", e))?;
