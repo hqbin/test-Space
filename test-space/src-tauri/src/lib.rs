@@ -14,6 +14,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 use tauri::Emitter;
 use tauri::Manager;
+use tauri_plugin_single_instance::init as single_instance_init;
 
 struct MirrorState(Mutex<Option<Arc<AtomicBool>>>);
 
@@ -365,6 +366,13 @@ fn read_text_file(path: String) -> Result<String, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(single_instance_init(|app, _args, _cwd| {
+            // 当用户再次双击打开应用时，聚焦已有窗口
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
