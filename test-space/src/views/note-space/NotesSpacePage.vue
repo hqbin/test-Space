@@ -1,15 +1,14 @@
 <template>
-  <div class="flex h-screen -mx-margin-page overflow-hidden pb-4 box-border">
+  <div class="flex h-screen -mx-margin-page overflow-hidden pb-4 box-border select-none">
     <!-- Left: Search + File Tree -->
     <div class="flex-shrink-0 flex flex-col w-64 ml-3 overflow-hidden rounded-xl bg-white/10 backdrop-blur-[60px] border border-white/50 shadow-lg">
       <div class="p-3 border-b border-glass-border-light/50">
         <div class="glass-input flex items-center gap-2 px-3 py-2 rounded-lg">
           <span class="material-symbols-outlined text-[14px] text-on-surface-variant">search</span>
-          <input
-            v-model="searchQuery"
+          <input             v-model="searchQuery"
             type="text"
             :placeholder="t('notes.search')"
-            class="bg-transparent border-none outline-none text-[12px] text-on-surface w-full"
+            class="bg-transparent border-none outline-none text-[12px] text-on-surface w-full select-text"
             @input="onSearch"
           />
           <button v-if="searchQuery" class="glass-button p-0.5 select-none" @click="clearSearch">
@@ -185,10 +184,9 @@
       </div>
       <div v-else class="flex-1 glass-panel rounded-xl overflow-hidden flex flex-col shadow-md">
         <div class="sticky top-0 z-10 bg-white/60 backdrop-blur-md border-b border-glass-border-light/30 px-4 py-2 flex items-center gap-2">
-          <input
-            v-model="noteTitle"
+          <input             v-model="noteTitle"
             :placeholder="t('notes.noteTitle')"
-            class="flex-1 bg-transparent border-none outline-none font-headline-sm text-headline-sm text-on-surface font-semibold"
+            class="flex-1 bg-transparent border-none outline-none font-headline-sm text-headline-sm text-on-surface font-semibold select-text"
             @input="onTitleChange"
           />
           <div class="flex items-center gap-1">
@@ -256,7 +254,7 @@
           <button class="toolbar-btn text-on-surface-variant relative overflow-hidden select-none" @click="triggerImageUpload" title="Insert Image">
             <span class="material-symbols-outlined text-[20px]">image</span>
           </button>
-          <input type="file" accept="image/*" class="hidden" ref="imageInput" @change="addImage" />
+          <input type="file" accept="image/*" class="hidden select-text" ref="imageInput" @change="addImage" />
           <div class="w-px h-4 bg-outline-variant/30 mx-1"></div>
           <div class="w-px h-4 bg-outline-variant/30 mx-1"></div>
           <button class="toolbar-btn select-none" @click="editor?.chain().focus().undo().run()" title="Undo">
@@ -331,21 +329,19 @@
           <div class="space-y-3">
             <div>
               <label class="text-[12px] text-on-surface-variant block mb-1">{{ t('notes.url') }}</label>
-              <input
-                v-model="linkUrl"
+              <input                 v-model="linkUrl"
                 type="url"
                 placeholder="https://example.com"
-                class="glass-input w-full px-3 py-2 rounded-lg text-[14px] outline-none"
+                class="glass-input w-full px-3 py-2 rounded-lg text-[14px] outline-none select-text"
                 @keydown.enter="confirmLink"
               />
             </div>
             <div>
               <label class="text-[12px] text-on-surface-variant block mb-1">{{ t('notes.displayText') }}</label>
-              <input
-                v-model="linkText"
+              <input                 v-model="linkText"
                 type="text"
                 placeholder="Selected text or custom"
-                class="glass-input w-full px-3 py-2 rounded-lg text-[14px] outline-none"
+                class="glass-input w-full px-3 py-2 rounded-lg text-[14px] outline-none select-text"
                 @keydown.enter="confirmLink"
               />
             </div>
@@ -363,9 +359,8 @@
       <div v-if="renameTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm" @click.self="renameTarget = null">
         <div class="glass-panel rounded-2xl p-6 w-80 bg-white/60">
           <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-4 select-none">{{ t('notes.rename') }}</h3>
-          <input
-            v-model="renameValue"
-            class="glass-input w-full px-3 py-2 rounded-lg text-[14px] outline-none mb-4"
+          <input             v-model="renameValue"
+            class="glass-input w-full px-3 py-2 rounded-lg text-[14px] outline-none mb-4 select-text"
             @keydown.enter="confirmRename"
             ref="renameInputRef"
           />

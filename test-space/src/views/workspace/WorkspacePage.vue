@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col min-h-full">
+  <div class="flex flex-col min-h-full select-none">
     <!-- Header -->
     <header class="mt-12 mb-16">
       <h2 class="font-display-lg text-display-lg text-on-surface font-black tracking-tighter select-none">
@@ -12,8 +12,7 @@
       <!-- Command Center -->
       <div class="mt-8 relative max-w-4xl glass-panel rounded-full p-2 flex items-center recessed-input bg-white/40">
         <span class="material-symbols-outlined text-primary ml-4 mr-2">search</span>
-        <input
-          class="flex-1 bg-transparent border-none outline-none font-body-lg text-body-lg text-on-surface placeholder:text-on-surface-variant/60 px-2 py-3 focus:ring-0"
+        <input           class="flex-1 bg-transparent border-none outline-none font-body-lg text-body-lg text-on-surface placeholder:text-on-surface-variant/60 px-2 py-3 focus:ring-0 select-text"
           placeholder="Type a command, search projects, or ask a question..."
           type="text"
         />

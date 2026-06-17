@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col h-full">
+  <div class="flex flex-col h-full select-none">
     <div class="flex items-center justify-between mb-6">
       <div class="flex items-center gap-3">
         <button class="glass-button p-2 rounded-xl select-none" @click="goBack">
@@ -20,7 +20,7 @@
           <span class="material-symbols-outlined text-[20px]">arrow_back</span>
         </button>
         <div class="flex-1">
-          <input v-model="editingSetName" class="font-headline-md text-headline-md text-on-surface font-semibold bg-transparent border-b-2 border-transparent focus:border-secondary/40 focus:outline-none px-1 -ml-1 w-64" />
+          <input v-model="editingSetName" class="font-headline-md text-headline-md text-on-surface font-semibold bg-transparent border-b-2 border-transparent focus:border-secondary/40 focus:outline-none px-1 -ml-1 w-64 select-text" />
         </div>
         <span class="font-caption text-caption text-on-surface-variant/60">{{ editingRules.filter(r => r.visible).length }} visible fields</span>
       </div>
@@ -45,7 +45,7 @@
                   <span class="w-6 h-6 rounded-full bg-secondary-fixed/30 text-on-secondary-fixed-variant flex items-center justify-center text-[11px] font-bold select-none cursor-grab" @mousedown.stop>{{ idx + 1 }}</span>
                 </td>
                 <td class="py-2 px-2">
-                  <input v-model="rule.labelCn" class="bg-white/50 border border-outline-variant/40 rounded-lg px-2.5 py-1.5 text-body-md text-on-surface text-[13px] focus:outline-none focus:border-secondary/40 w-full min-w-[120px]" placeholder="Field title" @input="onLabelChange(rule)" />
+                  <input v-model="rule.labelCn" class="bg-white/50 border border-outline-variant/40 rounded-lg px-2.5 py-1.5 text-body-md text-on-surface text-[13px] focus:outline-none focus:border-secondary/40 w-full min-w-[120px] select-text" placeholder="Field title" @input="onLabelChange(rule)" />
                 </td>
                 <td class="py-2 px-2">
                   <select v-model="rule.type" class="bg-white/50 border border-outline-variant/40 rounded-lg px-2.5 py-1.5 text-body-md text-on-surface text-[13px] focus:outline-none focus:border-secondary/40 w-full appearance-none cursor-pointer" @change="onTypeChange(rule)">
@@ -54,7 +54,7 @@
                   </select>
                 </td>
                 <td class="py-2 px-2">
-                  <input v-if="rule.type === 'select'" v-model="rule.optionsStr" class="bg-white/50 border border-outline-variant/40 rounded-lg px-2.5 py-1.5 text-body-md text-on-surface text-[13px] font-mono focus:outline-none focus:border-secondary/40 w-full" placeholder="comma,separated,values" @input="syncOptions(rule)" />
+                  <input v-if="rule.type === 'select'" v-model="rule.optionsStr" class="bg-white/50 border border-outline-variant/40 rounded-lg px-2.5 py-1.5 text-body-md text-on-surface text-[13px] font-mono focus:outline-none focus:border-secondary/40 w-full select-text" placeholder="comma,separated,values" @input="syncOptions(rule)" />
                   <span v-else class="font-caption text-caption text-on-surface-variant/50 px-1">—</span>
                 </td>
                 <td class="py-2 px-2 text-center">
@@ -140,7 +140,7 @@
           </div>
           <div>
             <label class="block font-label-md text-caption text-on-surface uppercase tracking-wider mb-1.5">Rule Set Name <span class="text-error">*</span></label>
-            <input v-model="newSetName" class="w-full bg-white border border-outline-variant/50 rounded-xl px-4 py-3 text-body-md text-on-surface focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all" placeholder="e.g. API Testing Rules" @keydown.enter="createRuleSet" />
+            <input v-model="newSetName" class="w-full bg-white border border-outline-variant/50 rounded-xl px-4 py-3 text-body-md text-on-surface focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all select-text" placeholder="e.g. API Testing Rules" @keydown.enter="createRuleSet" />
           </div>
           <div class="flex justify-end gap-3 mt-8">
             <button class="glass-button px-6 py-2.5 rounded-full font-label-md text-label-md select-none" @click="showCreateDialog = false">Cancel</button>

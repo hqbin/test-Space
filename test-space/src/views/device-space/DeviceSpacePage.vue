@@ -1,5 +1,5 @@
 <template>
-  <div class="flex gap-4 h-screen overflow-hidden">
+  <div class="flex gap-4 h-screen overflow-hidden select-none">
     <div class="flex-1 flex flex-col gap-4 min-w-0 overflow-hidden">
     <!-- Connection Bar - always visible, moved up -->
     <div class="glass-panel rounded-xl p-3 px-5 flex items-center gap-4">
@@ -17,7 +17,7 @@
       <div class="flex items-center border border-outline-variant/60 rounded-full px-4 py-2 bg-white/50 max-w-[400px]">
         <span class="material-symbols-outlined text-on-surface-variant text-[16px] mr-2">link</span>
         <input v-model="connectAddress"
-          class="flex-1 bg-transparent border-none outline-none font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-0 p-0"
+          class="flex-1 bg-transparent border-none outline-none font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-0 p-0 select-text"
           :placeholder="t('device.inputHint')" @keyup.enter="connectToDevice" />
       </div>
       <button class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-1 border border-outline-variant/60 select-none" @click="connectToDevice" :disabled="connecting">
@@ -99,7 +99,7 @@
           <div class="flex gap-2">
             <div class="flex-1 relative">
               <input ref="textInputRef" v-model="inputTextValue"
-                class="w-full bg-white/50 border border-outline-variant/60 rounded-full px-3 py-1.5 font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all"
+                class="w-full bg-white/50 border border-outline-variant/60 rounded-full px-3 py-1.5 font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all select-text"
                 :placeholder="t('device.textHint')" @keyup.enter="sendText" @focus="showTextHistory = true" @blur="hideTextHistoryDelayed" />
               <div v-if="showTextHistory && textHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-outline-variant rounded-lg p-1 max-h-32 overflow-y-auto shadow-lg">
                 <button v-for="(h, i) in textHistory" :key="i" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none"
@@ -186,7 +186,7 @@
                       <span v-else class="material-symbols-outlined text-[14px]">refresh</span>{{ t('device.refresh') }}
                     </button>
                     <label class="flex items-center cursor-pointer hover:scale-105 transition-all px-2 py-1 rounded-xl bg-white/30 border border-white/50 backdrop-blur-sm hover:bg-secondary/10 hover:border-secondary/30">
-                      <input type="checkbox" v-model="showThirdParty" class="rounded border-outline-variant text-secondary focus:ring-secondary mr-1 w-3.5 h-3.5 accent-secondary" @change="refreshPackageList" />
+                      <input type="checkbox" v-model="showThirdParty" class="rounded border-outline-variant text-secondary focus:ring-secondary mr-1 w-3.5 h-3.5 accent-secondary select-text" @change="refreshPackageList" />
                       {{ t('device.thirdPartyApps') }}
                     </label>
                     <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="apkDialogOpen = true">
@@ -202,7 +202,7 @@
                 <div class="relative">
                   <div class="flex items-center border border-outline-variant/60 rounded-full px-3 py-1.5 bg-white/50 w-64">
                     <span class="material-symbols-outlined text-on-surface-variant text-[16px] mr-2">search</span>
-                    <input v-model="queryPackageName" class="bg-transparent border-none outline-none w-full font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-0 p-0"
+                    <input v-model="queryPackageName" class="bg-transparent border-none outline-none w-full font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-0 p-0 select-text"
                       :placeholder="t('device.searchApp')" @input="onAppSearchInput" @keyup.enter="queryAppPath" @focus="loadAppSearchHistory" @blur="hideAppSearchHistoryDelayed" />
                   </div>
                   <div v-if="showAppSearchHistory && appSearchHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-outline-variant rounded-lg p-1 max-h-32 overflow-y-auto shadow-lg">
@@ -410,7 +410,7 @@
           </div>
           <div class="relative mb-2 shrink-0">
             <input v-model="remotePath" ref="remotePathInputRef"
-              class="w-full bg-white border border-outline-variant rounded-lg px-3 py-1.5 font-body-sm text-body-sm text-on-surface font-mono focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all"
+              class="w-full bg-white border border-outline-variant rounded-lg px-3 py-1.5 font-body-sm text-body-sm text-on-surface font-mono focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all select-text"
               :placeholder="t('device.remotePathHint')" @focus="showRemotePathHistory = true" @blur="hideRemotePathHistoryDelayed" @keyup.enter="navigateToPath" />
             <div v-if="showRemotePathHistory && remotePathHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-outline-variant rounded-lg p-1 max-h-32 overflow-y-auto shadow-lg">
               <button v-for="(h, i) in remotePathHistory" :key="i" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none"
@@ -514,7 +514,7 @@
               </div>
             </div>
             <textarea v-show="!fileEditDialog.loading" v-model="fileEditDialog.content"
-              class="flex-1 w-full bg-[#1a1c1d] text-gray-200 rounded-xl p-4 font-mono text-[14px] leading-relaxed border-0 focus:ring-2 focus:ring-secondary/30 resize-none"
+              class="flex-1 w-full bg-[#1a1c1d] text-gray-200 rounded-xl p-4 font-mono text-[14px] leading-relaxed border-0 focus:ring-2 focus:ring-secondary/30 resize-none select-text"
               spellcheck="false"></textarea>
           </div>
         </div>
@@ -545,7 +545,7 @@
                     </button>
                   </div>
                 </div>
-                <pre v-if="item.raw && infoDialogExpanded.has(idx)" class="mt-1 p-1.5 bg-black/5 rounded text-[11px] font-mono whitespace-pre-wrap break-all max-h-32 overflow-y-auto">{{ item.raw }}</pre>
+                <pre v-if="item.raw && infoDialogExpanded.has(idx)" class="mt-1 p-1.5 bg-black/5 rounded text-[11px] font-mono whitespace-pre-wrap break-all max-h-32 overflow-y-auto select-text">{{ item.raw }}</pre>
               </div>
             </div>
           </div>
@@ -563,7 +563,7 @@
                 <span class="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
-            <pre class="bg-black/5 rounded-xl p-3 text-[12px] font-mono whitespace-pre-wrap break-all max-h-64 overflow-y-auto mb-3">{{ resultDialog.content }}</pre>
+            <pre class="bg-black/5 rounded-xl p-3 text-[12px] font-mono whitespace-pre-wrap break-all max-h-64 overflow-y-auto mb-3 select-text">{{ resultDialog.content }}</pre>
             <div class="flex gap-2 justify-end">
               <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md select-none" @click="resultDialog.show = false">{{ t('device.close') }}</button>
               <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md flex items-center gap-1 select-none" @click="copyToClipboard(resultDialog.content); showToast(t('device.copied'))">
@@ -630,7 +630,7 @@
               </div>
               <!-- Overwrite checkbox -->
               <label class="flex items-center gap-2 font-caption text-caption text-on-surface cursor-pointer px-1">
-                <input type="checkbox" v-model="reinstallApk" class="accent-secondary" />
+                <input type="checkbox" v-model="reinstallApk" class="accent-secondary select-text" />
                 {{ t('device.reinstallApk') }}
               </label>
               <!-- Actions -->
@@ -666,9 +666,9 @@
 
             <!-- Edit / Add Form -->
             <div v-if="editingCmdIndex !== null" class="flex flex-col gap-3">
-              <input v-model="editingCmdName" class="bg-white/80 border border-outline-variant rounded-lg px-3 py-2 font-caption text-caption text-on-surface font-mono focus:ring-2 focus:ring-secondary/30 w-full"
+              <input v-model="editingCmdName" class="bg-white/80 border border-outline-variant rounded-lg px-3 py-2 font-caption text-caption text-on-surface font-mono focus:ring-2 focus:ring-secondary/30 w-full select-text"
                 :placeholder="t('device.cmdNameHint')" @keyup.enter="saveCustomCommand" />
-              <input v-model="editingCmdValue" class="bg-white/80 border border-outline-variant rounded-lg px-3 py-2 font-caption text-caption text-on-surface font-mono focus:ring-2 focus:ring-secondary/30 w-full"
+              <input v-model="editingCmdValue" class="bg-white/80 border border-outline-variant rounded-lg px-3 py-2 font-caption text-caption text-on-surface font-mono focus:ring-2 focus:ring-secondary/30 w-full select-text"
                 :placeholder="t('device.cmdHint')" @keyup.enter="saveCustomCommand" />
               <div class="flex gap-2 justify-end pt-2">
                 <button class="glass-button px-4 py-2 rounded-lg font-label-md text-label-md select-none" @click="cancelEditCommand">{{ t('device.cancel') }}</button>
@@ -739,7 +739,7 @@
               </button>
             </div>
             <div v-if="cmdExec.command" class="text-green-600/80 font-mono text-[11px] mb-1.5 pb-1.5 border-b border-outline-variant/20">$ {{ cmdExec.command }}</div>
-            <pre class="font-mono text-[11px] text-on-surface-variant max-h-[200px] overflow-y-auto custom-scrollbar whitespace-pre-wrap leading-relaxed">{{ cmdExec.output }}</pre>
+            <pre class="font-mono text-[11px] text-on-surface-variant max-h-[200px] overflow-y-auto custom-scrollbar whitespace-pre-wrap leading-relaxed select-text">{{ cmdExec.output }}</pre>
           </div>
         </div>
       </Transition>

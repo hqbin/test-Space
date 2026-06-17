@@ -1,5 +1,5 @@
 ﻿<template>
-  <div class="flex flex-col h-full">
+  <div class="flex flex-col h-full select-none">
     <div class="flex items-center gap-3 mb-8 mt-8">
       <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2 select-none" @click="showNewDialog = true">
         <span class="material-symbols-outlined text-[20px]">add</span>
@@ -115,9 +115,8 @@
           <div class="flex flex-col gap-5">
             <div>
               <label class="block font-label-md text-caption text-on-surface uppercase tracking-wider mb-1.5">{{ t("case.fileName") }} <span class="text-error">*</span></label>
-              <input
-                v-model="newCaseName"
-                class="w-full rounded-xl px-4 py-3 text-body-md text-on-surface bg-white/70 border border-white/60 shadow-sm placeholder:text-on-surface-variant/40 focus:outline-none focus:border-secondary/40 focus:ring-2 focus:ring-secondary/10 transition-all"
+              <input                 v-model="newCaseName"
+                class="w-full rounded-xl px-4 py-3 text-body-md text-on-surface bg-white/70 border border-white/60 shadow-sm placeholder:text-on-surface-variant/40 focus:outline-none focus:border-secondary/40 focus:ring-2 focus:ring-secondary/10 transition-all select-text"
                 :placeholder="t('case.fileNamePlaceholder')"
                 @keydown.enter="confirmNew"
               />

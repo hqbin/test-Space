@@ -1,5 +1,5 @@
 <template>
-  <div class="h-screen flex flex-col -mx-margin-page pb-2 box-border">
+  <div class="h-screen flex flex-col -mx-margin-page pb-2 box-border select-none">
     <!-- Toolbar -->
     <div class="flex items-center gap-3 mb-2 flex-shrink-0 ml-3">
       <!-- Type dropdown -->
@@ -45,7 +45,7 @@
         <div class="px-3 py-2 border-b border-white/10 flex items-center gap-2">
           <span class="text-[13px] text-on-surface font-medium flex-shrink-0">{{ t("nav.scripts") }}</span>
           <div class="flex-1 relative">
-            <input v-model="searchQuery" class="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-1 text-[12px] text-on-surface placeholder-on-surface-variant/40 focus:outline-none focus:border-white/20" :placeholder="t('scripts.search')" />
+            <input v-model="searchQuery" class="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-1 text-[12px] text-on-surface placeholder-on-surface-variant/40 focus:outline-none focus:border-white/20 select-text" :placeholder="t('scripts.search')" />
             <span v-if="searchQuery" class="absolute right-1.5 top-1/2 -translate-y-1/2 text-on-surface-variant/40 cursor-pointer hover:text-on-surface-variant/70" @click="searchQuery = ''">
               <span class="material-symbols-outlined text-[14px]">close</span>
             </span>
@@ -90,7 +90,7 @@
         <div class="flex-[3] min-h-0 flex flex-col">
           <!-- Script header bar -->
           <div v-if="currentScript" class="flex items-center gap-3 px-4 py-2 flex-shrink-0 flex-wrap">
-            <input v-model="editingName" class="bg-transparent border-b border-transparent focus:border-secondary/40 focus:outline-none text-[20px] font-bold text-on-surface px-1 -ml-1 min-w-0 max-w-[60%] truncate" :placeholder="t('scripts.namePlaceholder')" />
+            <input v-model="editingName" class="bg-transparent border-b border-transparent focus:border-secondary/40 focus:outline-none text-[20px] font-bold text-on-surface px-1 -ml-1 min-w-0 max-w-[60%] truncate select-text" :placeholder="t('scripts.namePlaceholder')" />
             <div class="flex-1"></div>
             <div class="flex items-center gap-1 flex-wrap justify-end min-w-0">
               <div v-for="(snp, idx) in snippets" :key="snp.label" class="relative"
@@ -120,9 +120,9 @@
                 <div v-for="n in lineCount" :key="n">{{ n }}</div>
               </div>
               <div class="flex-1 relative min-h-0">
-                <pre ref="highlightRef" class="absolute inset-0 p-3 text-[13px] leading-relaxed font-mono whitespace-pre-wrap break-all overflow-y-auto pointer-events-none text-[#e4e5e7]" style="background: #0d0d1a;" aria-hidden="true"><code v-html="highlightedCode"></code></pre>
+                <pre ref="highlightRef" class="absolute inset-0 p-3 text-[13px] leading-relaxed font-mono whitespace-pre-wrap break-all overflow-y-auto pointer-events-none text-[#e4e5e7] select-text" style="background: #0d0d1a;" aria-hidden="true"><code v-html="highlightedCode"></code></pre>
                 <textarea ref="editorRef" v-model="editingContent"
-                  class="absolute inset-0 w-full h-full resize-none outline-none border-none p-3 text-[13px] leading-relaxed font-mono text-transparent caret-white custom-scrollbar"
+                  class="absolute inset-0 w-full h-full resize-none outline-none border-none p-3 text-[13px] leading-relaxed font-mono text-transparent caret-white custom-scrollbar select-text"
                   style="background: transparent; tab-size: 2;"
                   spellcheck="false"
                   @keydown.tab.prevent="insertTab"

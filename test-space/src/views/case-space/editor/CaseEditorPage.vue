@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col h-screen -mx-margin-page">
+  <div class="flex flex-col h-screen -mx-margin-page select-none">
     <!-- Toolbar -->
     <div class="flex items-center gap-1 px-4 py-2 bg-white/20 backdrop-blur-sm border-b border-white/20 shrink-0 overflow-x-auto custom-scrollbar">
       <button class="glass-button px-3 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1 shrink-0 select-none" title="Back to Home" @click="goHome">
@@ -103,7 +103,7 @@
                       <template v-if="col.key === 'module'">
                         <div class="flex items-start gap-1 px-2">
                           <span class="material-symbols-outlined text-[14px] text-on-surface-variant/30 shrink-0 mt-[9px]">folder</span>
-                          <textarea :ref="initTextarea" :value="getCaseValue(entry.item as CaseItem, col.key) || ''" class="cell-editor"
+                          <textarea :ref="initTextarea" :value="getCaseValue(entry.item as CaseItem, col.key) || ''" class="cell-editor select-text"
                             @input="onTextareaInput((entry.item as CaseItem).id, col.key, $event)" @click.stop></textarea>
                         </div>
                       </template>
@@ -123,7 +123,7 @@
                               <span class="material-symbols-outlined text-[12px]">close</span>
                             </button>
                           </span>
-                          <input :value="tagInputs[(entry.item as CaseItem).id] || ''" class="cell-editor min-w-[50px] max-w-[100px]"
+                          <input :value="tagInputs[(entry.item as CaseItem).id] || ''" class="cell-editor min-w-[50px] max-w-[100px] select-text"
                             @click.stop
                             @input="onTagInput((entry.item as CaseItem).id, ($event.target as HTMLInputElement).value)"
                             @keydown.enter.prevent="commitTag((entry.item as CaseItem).id)"
@@ -138,11 +138,11 @@
                         </select>
                       </template>
                       <template v-else-if="col.type === 'text'">
-                        <textarea :ref="initTextarea" :value="getCaseValue(entry.item as CaseItem, col.key) || ''" class="cell-editor"
+                        <textarea :ref="initTextarea" :value="getCaseValue(entry.item as CaseItem, col.key) || ''" class="cell-editor select-text"
                           @input="onTextareaInput((entry.item as CaseItem).id, col.key, $event)" @click.stop></textarea>
                       </template>
                       <template v-else>
-                         <textarea :ref="initTextarea" :value="getCaseValue(entry.item as CaseItem, col.key)" class="cell-editor"
+                         <textarea :ref="initTextarea" :value="getCaseValue(entry.item as CaseItem, col.key)" class="cell-editor select-text"
                           @input="onTextareaInput((entry.item as CaseItem).id, col.key, $event)" @click.stop></textarea>
                       </template>
                     </div>
@@ -272,18 +272,16 @@
               <div class="flex flex-col gap-3">
                 <div>
                   <label class="font-caption text-caption text-on-surface-variant/60 block mb-1">Key</label>
-                  <input
-                    v-model="columnForm.key"
-                    class="w-full bg-white/60 border border-gray-300/50 rounded-lg px-3 py-2 text-[13px] text-on-surface font-mono focus:outline-none focus:border-secondary/40"
+                  <input                     v-model="columnForm.key"
+                    class="w-full bg-white/60 border border-gray-300/50 rounded-lg px-3 py-2 text-[13px] text-on-surface font-mono focus:outline-none focus:border-secondary/40 select-text"
                     placeholder="field_key"
                     :disabled="!!editingColumnKey"
                   />
                 </div>
                 <div>
                   <label class="font-caption text-caption text-on-surface-variant/60 block mb-1">Label</label>
-                  <input
-                    v-model="columnForm.label"
-                    class="w-full bg-white/60 border border-gray-300/50 rounded-lg px-3 py-2 text-[13px] text-on-surface focus:outline-none focus:border-secondary/40"
+                  <input                     v-model="columnForm.label"
+                    class="w-full bg-white/60 border border-gray-300/50 rounded-lg px-3 py-2 text-[13px] text-on-surface focus:outline-none focus:border-secondary/40 select-text"
                     placeholder="Display Name"
                   />
                 </div>
@@ -300,9 +298,8 @@
                 </div>
                 <div v-if="columnForm.type === 'select'">
                   <label class="font-caption text-caption text-on-surface-variant/60 block mb-1">Options (comma separated)</label>
-                  <input
-                    v-model="columnForm.optionsStr"
-                    class="w-full bg-white/60 border border-gray-300/50 rounded-lg px-3 py-2 text-[13px] text-on-surface font-mono focus:outline-none focus:border-secondary/40"
+                  <input                     v-model="columnForm.optionsStr"
+                    class="w-full bg-white/60 border border-gray-300/50 rounded-lg px-3 py-2 text-[13px] text-on-surface font-mono focus:outline-none focus:border-secondary/40 select-text"
                     placeholder="opt1, opt2, opt3"
                   />
                 </div>
@@ -391,7 +388,7 @@
             <div class="flex items-start gap-1.5">
               <span class="text-[9px] font-medium px-1.5 py-0.5 rounded-full shrink-0 mt-0.5" :style="{ background: mod.data?.colorIdx != null ? MODULE_PALETTE[mod.data.colorIdx % MODULE_PALETTE.length] + '22' : '#88822', color: mod.data?.colorIdx != null ? MODULE_PALETTE[mod.data.colorIdx % MODULE_PALETTE.length] : '#888' }">{{ mod.fieldLabel }}</span>
               <textarea v-if="editingNodeId === mod.id" v-model="editingValue" data-mm-editor
-                class="flex-1 min-w-0 bg-transparent border-b border-secondary/40 text-[13px] text-on-surface font-medium outline-none resize-none leading-snug"
+                class="flex-1 min-w-0 bg-transparent border-b border-secondary/40 text-[13px] text-on-surface font-medium outline-none resize-none leading-snug select-text"
                 :style="{ minHeight: '24px', height: 'auto' }"
                 @input="autoResizeTextarea($event)"
                 @blur="confirmEditing(mod)" @keydown.enter.prevent="confirmEditing(mod)" @keydown.escape.prevent="cancelEditing()"
@@ -418,7 +415,7 @@
               <span class="w-2 h-2 rounded-full shrink-0 mt-[5px]" :class="caseDotClass(c.data?.priority)"></span>
               <span class="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-secondary/10 text-secondary/70 shrink-0 mt-[1px]">{{ c.fieldLabel }}</span>
               <textarea v-if="editingNodeId === c.id" v-model="editingValue" data-mm-editor
-                class="flex-1 min-w-0 bg-transparent border-b border-secondary/40 text-[12px] text-on-surface font-medium outline-none resize-none leading-snug"
+                class="flex-1 min-w-0 bg-transparent border-b border-secondary/40 text-[12px] text-on-surface font-medium outline-none resize-none leading-snug select-text"
                 :style="{ minHeight: '20px', height: 'auto' }"
                 @input="autoResizeTextarea($event)"
                 @blur="confirmEditing(c)" @keydown.enter.prevent="confirmEditing(c)" @keydown.escape.prevent="cancelEditing()"
@@ -444,7 +441,7 @@
               :style="{ background: d.field === 'steps' ? '#3b82f6' : d.field === 'expected' ? '#10b981' : d.field === 'precondition' ? '#8b5cf6' : d.field === 'priority' ? '#f59e0b' : '#6b7280' }"
             >{{ d.fieldLabel }}</span>
             <textarea v-if="editingNodeId === d.id" v-model="editingValue" data-mm-editor
-              class="flex-1 min-w-0 bg-transparent border-b border-secondary/40 text-[11px] text-on-surface font-medium outline-none resize-none leading-snug"
+              class="flex-1 min-w-0 bg-transparent border-b border-secondary/40 text-[11px] text-on-surface font-medium outline-none resize-none leading-snug select-text"
               :style="{ minHeight: '40px', height: 'auto' }"
               @input="autoResizeTextarea($event)"
               @blur="confirmEditing(d)" @keydown.escape.prevent="cancelEditing()"
@@ -560,7 +557,7 @@
           <button v-if="isFilterActive(activeFilterCol!)" class="text-[11px] text-secondary hover:underline select-none" @click="clearColumnFilter(activeFilterCol!)">Clear</button>
         </div>
         <label v-for="val in getUniqueValues(activeFilterCol!)" :key="val" class="flex items-center gap-2 px-3 py-1 hover:bg-gray-100 cursor-pointer">
-          <input type="checkbox" :checked="columnFilters[activeFilterCol!]?.has(val)" @change="toggleFilterValue(activeFilterCol!, val)" class="accent-secondary" />
+          <input type="checkbox" :checked="columnFilters[activeFilterCol!]?.has(val)" @change="toggleFilterValue(activeFilterCol!, val)" class="accent-secondary select-text" />
           <span class="truncate">{{ val || '(Empty)' }}</span>
         </label>
         <div v-if="getUniqueValues(activeFilterCol!).length === 0" class="px-3 py-2 text-gray-400 text-[12px] text-center">No values</div>

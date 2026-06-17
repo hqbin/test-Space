@@ -1,5 +1,5 @@
 <template>
-  <div class="pt-12 max-w-5xl">
+  <div class="pt-12 max-w-5xl select-none">
     <div class="glass-panel rounded-xl p-padding-card shadow-md">
       <!-- Language -->
       <div class="flex items-center justify-between">
