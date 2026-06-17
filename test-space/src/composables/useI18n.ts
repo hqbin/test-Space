@@ -355,6 +355,7 @@ const messages: Record<Lang, Record<string, string>> = {
     "device.deviceReconnectedLogsGot": "设备已重连，日志已获取",
     "device.bootLogStopped": "开机日志采集已停止",
     "device.expandingLogBuffer": "正在扩大日志缓冲区至 64MB...",
+    "device.waitingForDevice": "等待设备插入...",
     "device.versionDisplay": "版本: {vn} ({vc})",
     "device.deviceReconnected": "设备重新连接: {serial}",
 
@@ -820,6 +821,7 @@ const messages: Record<Lang, Record<string, string>> = {
     "device.deviceReconnectedLogsGot": "Device reconnected, logs captured",
     "device.bootLogStopped": "Boot log collection stopped",
     "device.expandingLogBuffer": "Expanding log buffer to 64MB...",
+    "device.waitingForDevice": "Waiting for device...",
     "device.versionDisplay": "Version: {vn} ({vc})",
     "device.deviceReconnected": "Device reconnected: {serial}",
 

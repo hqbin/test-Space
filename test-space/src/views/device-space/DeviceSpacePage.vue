@@ -1254,7 +1254,7 @@ const bootLogcatElapsed = ref(0);
 const bootLogcatStartTime = ref(0);
 let bootLogcatTimeoutId: ReturnType<typeof setTimeout> | null = null;
 const bootLogcatBuffer = ref<string[]>([]);
-const bootLogcatPhase = ref<'wait_disconnect' | 'wait_reconnect' | 'capturing'>('wait_disconnect');
+const bootLogcatPhase = ref<'wait_for_device' | 'wait_disconnect' | 'wait_reconnect' | 'capturing'>('wait_disconnect');
 const bootLogcatSerial = ref<string | null>(null);
 
 // ── Screen Mirror (adb screencap polling) ──
@@ -1983,7 +1983,6 @@ async function stopDiagnosticCapture() {
 }
 
 async function toggleBootLogcat() {
-  if (!selectedDevice.value) return;
   if (bootLogcatRunning.value) {
     await stopBootLogcatCapture();
   } else {
@@ -1991,47 +1990,66 @@ async function toggleBootLogcat() {
     bootLogcatRunning.value = true;
     bootLogcatElapsed.value = 0;
     bootLogcatStartTime.value = Date.now();
-    bootLogcatPhase.value = 'wait_disconnect';
-    bootLogcatSerial.value = selectedDevice.value.serial;
-    const session = { id: `boot_${Date.now()}`, type: 'boot_logcat' as const, deviceSerial: selectedDevice.value.serial, status: 'running' as const, startedAt: new Date().toISOString() };
-    await saveLogSession(session);
-    try {
-      await logcatClear(selectedDevice.value.serial);
-      await reboot(selectedDevice.value.serial);
-      showToast(t("device.restarting"));
-    } catch { showToast(t("device.rebootFailed"), "error"); }
+    bootLogcatSerial.value = null;
+    if (selectedDevice.value) {
+      bootLogcatPhase.value = 'wait_disconnect';
+      bootLogcatSerial.value = selectedDevice.value.serial;
+      const session = { id: `boot_${Date.now()}`, type: 'boot_logcat' as const, deviceSerial: selectedDevice.value.serial, status: 'running' as const, startedAt: new Date().toISOString() };
+      await saveLogSession(session);
+      try {
+        await logcatClear(selectedDevice.value.serial);
+        await reboot(selectedDevice.value.serial);
+        showToast(t("device.restarting"));
+      } catch { showToast(t("device.rebootFailed"), "error"); }
+    } else {
+      bootLogcatPhase.value = 'wait_for_device';
+      showToast(t("device.waitingForDevice"));
+    }
     scheduleBootPoll();
   }
 }
 async function scheduleBootPoll() {
   if (!bootLogcatRunning.value) return;
   const serial = bootLogcatSerial.value;
-  if (!serial) { bootLogcatRunning.value = false; return; }
   bootLogcatElapsed.value = Math.floor((Date.now() - bootLogcatStartTime.value) / 1000);
-  // Timeout only applies during reconnection waiting phases
-  if (bootLogcatPhase.value !== 'capturing' && bootLogcatElapsed.value > 180) {
-    showToast(t("device.reconnectTimeout"), "error");
-    bootLogcatRunning.value = false;
-    return;
+  if (bootLogcatPhase.value === 'wait_disconnect' || bootLogcatPhase.value === 'wait_reconnect') {
+    if (bootLogcatElapsed.value > 180) {
+      showToast(t("device.reconnectTimeout"), "error");
+      bootLogcatRunning.value = false;
+      return;
+    }
   }
   try {
     const adbDevices = await listDevices();
-    const isOnline = adbDevices.some(d => d.serial === serial && d.status === "device");
-    if (bootLogcatPhase.value === 'wait_disconnect') {
-      if (!isOnline) {
-        bootLogcatPhase.value = 'wait_reconnect';
-      }
-      bootLogcatTimeoutId = setTimeout(scheduleBootPoll, 2000);
-    } else if (bootLogcatPhase.value === 'wait_reconnect') {
-      if (isOnline) {
+    if (bootLogcatPhase.value === 'wait_for_device') {
+      const found = adbDevices.find(d => d.status === "device");
+      if (found) {
+        bootLogcatSerial.value = found.serial;
+        try { await logcatClear(found.serial); } catch {}
+        try { await adbRoot(found.serial); } catch {}
+        try { await logcatBufferResize(found.serial, 256); } catch {}
         bootLogcatPhase.value = 'capturing';
-        try { await adbRoot(serial); } catch {}
-        try { await logcatBufferResize(serial, 256); } catch {}
         showToast(t("device.deviceReconnectedLogsGot"));
       }
       bootLogcatTimeoutId = setTimeout(scheduleBootPoll, 500);
+    } else if (!serial) {
+      bootLogcatRunning.value = false;
     } else {
-      bootLogcatTimeoutId = setTimeout(scheduleBootPoll, 1000);
+      const isOnline = adbDevices.some(d => d.serial === serial && d.status === "device");
+      if (bootLogcatPhase.value === 'wait_disconnect') {
+        if (!isOnline) bootLogcatPhase.value = 'wait_reconnect';
+        bootLogcatTimeoutId = setTimeout(scheduleBootPoll, 2000);
+      } else if (bootLogcatPhase.value === 'wait_reconnect') {
+        if (isOnline) {
+          bootLogcatPhase.value = 'capturing';
+          try { await adbRoot(serial); } catch {}
+          try { await logcatBufferResize(serial, 256); } catch {}
+          showToast(t("device.deviceReconnectedLogsGot"));
+        }
+        bootLogcatTimeoutId = setTimeout(scheduleBootPoll, 500);
+      } else {
+        bootLogcatTimeoutId = setTimeout(scheduleBootPoll, 1000);
+      }
     }
   } catch {
     if (bootLogcatRunning.value) {
@@ -2044,15 +2062,17 @@ async function stopBootLogcatCapture() {
   bootLogcatRunning.value = false;
   const serial = bootLogcatSerial.value;
   bootLogcatSerial.value = null;
-  try {
-    const raw = serial ? await logcat(serial, "all", 0) : bootLogcatBuffer.value.join("\n");
-    const { save } = await import("@tauri-apps/plugin-dialog");
-    const dest = await save({ defaultPath: `boot_logcat_${Date.now()}.txt`, filters: [{ name: "Text", extensions: ["txt"] }] });
-    if (dest) {
-      const { writeTextFile } = await import("@tauri-apps/plugin-fs");
-      await writeTextFile(dest, raw);
-    }
-  } catch {}
+  if (serial) {
+    try {
+      const raw = await logcat(serial, "all", 0);
+      const { save } = await import("@tauri-apps/plugin-dialog");
+      const dest = await save({ defaultPath: `boot_logcat_${Date.now()}.txt`, filters: [{ name: "Text", extensions: ["txt"] }] });
+      if (dest) {
+        const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+        await writeTextFile(dest, raw);
+      }
+    } catch {}
+  }
   bootLogcatBuffer.value = [];
   try {
     const sessions = await getRunningLogSessions();
