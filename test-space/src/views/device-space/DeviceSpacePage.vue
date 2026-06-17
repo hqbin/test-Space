@@ -417,7 +417,7 @@
                 @mousedown.prevent @click="selectRemotePathHistory(h)">{{ h }}</button>
             </div>
           </div>
-          <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar bg-[#1a1c1d]/5 rounded text-[12px] leading-relaxed relative select-none">
+          <div class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar text-[12px] leading-relaxed relative select-none">
             <div v-if="dragOverFileList" class="absolute inset-0 z-10 flex items-center justify-center bg-white/80 backdrop-blur-sm rounded-lg border-2 border-dashed border-secondary/50">
               <div class="flex flex-col items-center gap-2 text-secondary">
                 <span class="material-symbols-outlined text-3xl">cloud_upload</span>
@@ -429,12 +429,11 @@
               <p class="font-body-sm text-body-sm mt-1">{{ t('device.pathHint') }}</p>
             </div>
             <div v-for="(entry, idx) in fileEntries" :key="idx"
-              class="flex items-center gap-1.5 px-2 py-1 hover:bg-secondary/5 hover:scale-[1.02] cursor-pointer border-b border-outline-variant/10 last:border-0 group transition-transform duration-200 select-none"
+              class="flex items-center gap-1.5 px-2 py-1 hover:bg-secondary/5 hover:scale-[1.02] cursor-pointer border-b border-outline-variant/20 last:border-0 group transition-transform duration-200 rounded select-none"
               @click="handleEntryClick(entry, $event)">
               <span class="material-symbols-outlined text-[16px] shrink-0"
                 :class="entry.name === '..' ? 'text-secondary' : (entry.isDir ? 'text-secondary' : 'text-on-surface-variant/60')">{{ entry.name === '..' ? 'arrow_back' : (entry.isDir ? 'folder' : 'description') }}</span>
-              <span class="flex-1 truncate font-mono text-[11px] text-on-surface" :class="entry.name === '..' ? 'text-secondary' : ''">{{ entry.name }}</span>
-              <span class="font-caption text-caption text-on-surface-variant/50 text-[10px] whitespace-nowrap">{{ entry.name !== '..' ? entry.size : '' }}</span>
+              <span class="flex-1 truncate font-mono text-[12px] text-on-surface" :class="entry.name === '..' ? 'text-secondary' : ''">{{ entry.name }}</span>
               <div v-if="entry.name !== '..'" class="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                 <button class="glass-button p-0.5 rounded select-none" :title="t('device.download')" @click.stop="entry.isDir ? downloadDir(entry.name) : downloadFile(entry.name)">
                   <span class="material-symbols-outlined text-[14px]">download</span>
