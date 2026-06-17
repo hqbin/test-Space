@@ -1362,3 +1362,107 @@ Windows MSI 安装包根据**版本号**判断是否可以覆盖安装：
 | 检查项 | 结果 |
 |--------|------|
 | `npm run build` (vue-tsc + vite) | ✅ 通过 |
+
+### Phase 20 — 全面代码审计与健壮性修复（已完成 ✅）
+
+> 对全软件所有页面进行系统性审计，修复 8 个 CRITICAL + 12 个 HIGH + 15 个 MEDIUM 级别问题。
+
+#### 20.1 数据库层修复（`src/services/database.ts`）
+
+| 问题 | 严重级别 | 修复 |
+|------|----------|------|
+| `getDb()` 并发初始化创建多个连接 | CRITICAL | 改用 `dbPromise` 单例守卫，第二次调用等待第一次完成 |
+| `importAllData()` 无事务保护 | CRITICAL | 包裹 `BEGIN TRANSACTION` / `COMMIT` / `ROLLBACK`，失败时回滚 |
+| `deleteNoteSpace()` SQL 顺序错误 | CRITICAL | 调换顺序：先 `UPDATE notes SET folder_id=NULL` → 再 `DELETE folders` → 最后 `DELETE space` |
+| `JSON.parse` 无保护 | MEDIUM | 新增 `safeJsonParse<T>(raw, fallback)` 辅助函数，所有 JSON 解析包裹 try/catch |
+| SQL `LIKE` 通配符注入 | HIGH | 新增 `escapeLike(s)` 转义 `%` 和 `_`，`searchCaseFiles` / `searchNotes` 使用转义后的查询 |
+| `saveNote` / `saveScript` 先查后写竞态 | MEDIUM | 改用 `INSERT ... ON CONFLICT DO UPDATE`（UPSERT），单条原子语句 |
+| `deleteNote` 非原子 | HIGH | 包裹事务：`BEGIN` → `DELETE versions` → `DELETE links` → `DELETE note` → `COMMIT` |
+| `toggleFavorite` TOCTOU 竞态 | HIGH | `INSERT OR IGNORE` 防止并发重复插入 |
+| `deleteNoteFolder` 不处理子文件夹 | MEDIUM | BFS 收集所有后代文件夹 ID，批量移动笔记到未分类，再批量删除 |
+
+#### 20.2 笔记页面修复（`NotesSpacePage.vue`）
+
+| 问题 | 严重级别 | 修复 |
+|------|----------|------|
+| `onBeforeUnmount` 异步保存丢失 | CRITICAL | 改用 `lastEditorContent` ref 同步保存，不引用已销毁的 editor 实例 |
+| `v-html` 存储型 XSS | CRITICAL | 删除确认对话框中用户输入改用 `escapeHtml()` 转义 |
+| 版本快照捕获错误笔记 ID | HIGH | 定时器创建时捕获当前 `selectedNoteId`，执行时不再读取最新值 |
+| `selectNote` 保存失败阻塞切换 | HIGH | `saveCurrentNote()` 包裹 try/catch，失败时仍允许切换 |
+| 删除函数先关对话框后操作 | HIGH | 目标清空改为 `await` 之后 + try/catch |
+| `uncategorizedNotes` 跨 Space | MEDIUM | 未选择 Space 时返回空数组 |
+| `confirmRename` 无错误处理 | MEDIUM | 包裹 try/catch + 错误 toast |
+| `onDrop` 无错误处理 | MEDIUM | `db.saveNote` 包裹 try/catch |
+| 删除死代码 `deleteSpace` | LOW | 移除未使用的重复函数 |
+
+#### 20.3 用例编辑器修复（`CaseEditorPage.vue`）
+
+| 问题 | 严重级别 | 修复 |
+|------|----------|------|
+| ResizeObserver 未断开 | CRITICAL | `onUnmounted` 中 `_resizeObserver?.disconnect()` |
+| `saveFile` 交换模式数据丢失 | CRITICAL | 添加 `_isSaving` 守卫 + `try/finally` + 深拷贝 filtered content |
+| document 事件监听器泄漏 | HIGH | `onUnmounted` 中清理所有 7 个 document 级监听器（`_docListeners` Map 追踪） |
+| `initTextarea` rAF 泄漏 | MEDIUM | 改用 `WeakMap<HTMLElement, number>` 追踪，新 rAF 前取消旧的 |
+| `clipboard.writeText` 无 catch | LOW | 添加 `.catch(() => {})` |
+
+#### 20.4 设备页面修复（`DeviceSpacePage.vue`）
+
+| 问题 | 严重级别 | 修复 |
+|------|----------|------|
+| Shell 命令注入（`queryPackageName`） | CRITICAL | 新增 `sanitizeShellArg()` 函数，应用于 6 处 shell 命令拼接 |
+| `takeScreenshot` catch 缺 `finishCmdExec` | HIGH | catch 块添加 `finishCmdExec()`，防止弹窗卡死 |
+| `stopDiagnosticCapture` null 断言崩溃 | HIGH | 入口添加 `if (!selectedDevice.value) return` 守卫 |
+| `loadFileList` 竞态条件 | HIGH | 添加 `loadFileListGen` 生成计数器，await 后检查过期 |
+| `infoDialogExpanded` Set 不触发响应式 | HIGH | `toggleInfoExpand` 每次创建新 Set 赋值 |
+| `operationInProgress` 永远为 false | MEDIUM | 移除无用变量，改为内联检查 `pkgLoading`/`scanLoading`/`connecting` |
+| `showToast` 定时器累积 | MEDIUM | 添加 `toastTimer` 变量，新 toast 前清除旧定时器 |
+| 历史下拉不更新新条目 | MEDIUM | `addInputHistory` 后同步更新本地 `textHistory`/`remotePathHistory`/`appSearchHistory` 数组 |
+| 版本加载每条 clone 全数组 | MEDIUM | 改为批量 fetch 完成后单次 `map` 更新 |
+| `versionQueue` 死代码 | LOW | 移除未使用变量 |
+| `v-for` key 使用索引 | LOW | 文件条目改用 `entry.name`，历史改用 `h` |
+
+#### 20.5 脚本页面修复（`ScriptSpacePage.vue`）
+
+| 问题 | 严重级别 | 修复 |
+|------|----------|------|
+| `totalPages` computed 内修改 `currentPage` | HIGH | 移至 `watch(totalPages, ...)` ，放在 `filteredScripts` 定义之后 |
+| `runCurrentScript` 无并发保护 | HIGH | 添加 `isRunning` 守卫 + `finally` 块 |
+| `doDelete` 无 try/catch | MEDIUM | 包裹 try/catch + 错误 toast |
+| `mkdir` 错误静默吞掉 | MEDIUM | 添加 `console.warn` 日志 |
+| `genId` 低熵 | LOW | 改用 `crypto.randomUUID().slice(0, 12)` |
+| 临时脚本文件未清理 | MEDIUM | （已知，待后续处理） |
+| `useScriptRunner` elapsedTimer 泄漏 | MEDIUM | `onUnmounted` 中调用 `destroy()` |
+| 路径拼接缺少分隔符 | HIGH | `appDataDir()` 结果后补 `\`，`mkdir` 加 `{ recursive: true }` |
+| 分页按钮距离过远 | LOW | `justify-between` → `justify-center gap-2` |
+| 代码片段气泡被截断 | MEDIUM | 位置自适应（上方空间不足时显示在下方）+ `max-h-[40vh] overflow-y-auto` |
+
+#### 20.6 字段规则页面修复（`FieldRulesPage.vue`）
+
+| 问题 | 严重级别 | 修复 |
+|------|----------|------|
+| `editRuleSet` 直接修改 store 引用 | HIGH | 改用 `JSON.parse(JSON.stringify(...))` 深拷贝到本地 `editingRules` |
+| `addNewField`/`removeField` 修改 store | HIGH | 操作改为修改 `editingRules` 本地副本 |
+| `onDragLeave` null relatedTarget | MEDIUM | 添加 null 检查 |
+| `onDrop` stale dragIdx | MEDIUM | 添加越界检查 |
+
+#### 20.7 其他文件修复
+
+| 文件 | 问题 | 严重级别 | 修复 |
+|------|------|----------|------|
+| `useI18n.ts` | `replace()` 只替换第一个 `{param}` | HIGH | 改为 `split().join()` 替换所有实例 |
+| `SettingsPage.vue` | `loadTheme()` 未 await | MEDIUM | `onMounted` 改为 `async` + `await loadTheme()` |
+| `SettingsPage.vue` | `revokeObjectURL` 时机过早 | MEDIUM | 改为 `setTimeout(() => URL.revokeObjectURL(url), 1000)` |
+
+#### 20.8 未修复项（LOW / COSMETIC）
+
+| 项目 | 原因 |
+|------|------|
+| `useAdb.ts` 输入验证 | Rust 后端已有验证，前端验证为防御性措施 |
+| 数据库外键约束 | 需要 schema 迁移，风险较高 |
+| Workspace 午夜问候语 | 极低优先级，不影响功能 |
+| `FieldRulesPage` computed setter 空操作 | 代码风格，无功能影响 |
+
+**编译验证**：
+| 检查项 | 结果 |
+|--------|------|
+| `npm run build` (vue-tsc + vite) | ✅ 通过 |
