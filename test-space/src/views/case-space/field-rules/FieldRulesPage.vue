@@ -2,12 +2,12 @@
   <div class="flex flex-col h-full">
     <div class="flex items-center justify-between mb-6">
       <div class="flex items-center gap-3">
-        <button class="glass-button p-2 rounded-xl" @click="goBack">
+        <button class="glass-button p-2 rounded-xl select-none" @click="goBack">
           <span class="material-symbols-outlined text-[20px]">arrow_back</span>
         </button>
 
       </div>
-      <button class="glass-button px-5 py-2.5 rounded-full font-label-md text-label-md flex items-center gap-2 transition-all shadow-sm" @click="showCreateDialog = true">
+      <button class="glass-button px-5 py-2.5 rounded-full font-label-md text-label-md flex items-center gap-2 transition-all shadow-sm select-none" @click="showCreateDialog = true">
         <span class="material-symbols-outlined text-[18px]">add</span>
         New Rule Set
       </button>
@@ -16,7 +16,7 @@
     <!-- Rule set editing -->
     <div v-if="editingSetId" class="flex-1 flex flex-col">
       <div class="flex items-center gap-3 mb-5">
-        <button class="glass-button p-2 rounded-xl" @click="editingSetId = ''">
+        <button class="glass-button p-2 rounded-xl select-none" @click="editingSetId = ''">
           <span class="material-symbols-outlined text-[20px]">arrow_back</span>
         </button>
         <div class="flex-1">
@@ -58,17 +58,17 @@
                   <span v-else class="font-caption text-caption text-on-surface-variant/50 px-1">—</span>
                 </td>
                 <td class="py-2 px-2 text-center">
-                  <button class="w-10 h-6 rounded-full transition-all relative" :class="rule.visible ? 'bg-secondary-fixed' : 'bg-surface-variant/50'" @click="rule.visible = !rule.visible">
+                  <button class="w-10 h-6 rounded-full transition-all relative select-none" :class="rule.visible ? 'bg-secondary-fixed' : 'bg-surface-variant/50'" @click="rule.visible = !rule.visible">
                     <span class="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-all" :class="rule.visible ? 'left-[18px]' : 'left-0.5'"></span>
                   </button>
                 </td>
                 <td class="py-2 px-2 text-center">
-                  <button class="w-10 h-6 rounded-full transition-all relative" :class="rule.required ? 'bg-secondary-fixed' : 'bg-surface-variant/50'" @click="rule.required = !rule.required">
+                  <button class="w-10 h-6 rounded-full transition-all relative select-none" :class="rule.required ? 'bg-secondary-fixed' : 'bg-surface-variant/50'" @click="rule.required = !rule.required">
                     <span class="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-all" :class="rule.required ? 'left-[18px]' : 'left-0.5'"></span>
                   </button>
                 </td>
                 <td class="py-2 px-2">
-                  <button class="glass-button p-1 rounded text-on-surface-variant/30 hover:bg-error/10 hover:text-error transition-all" @click="removeField(idx)" title="Remove field">
+                  <button class="glass-button p-1 rounded text-on-surface-variant/30 hover:bg-error/10 hover:text-error transition-all select-none" @click="removeField(idx)" title="Remove field">
                     <span class="material-symbols-outlined text-[16px]">remove_circle</span>
                   </button>
                 </td>
@@ -77,7 +77,7 @@
           </table>
         </div>
         <div class="flex items-center gap-3 px-4 py-3 border-t border-glass-border-dark/30">
-          <button class="glass-button px-3 py-1.5 rounded-full font-caption text-caption flex items-center gap-1.5" @click="addNewField">
+          <button class="glass-button px-3 py-1.5 rounded-full font-caption text-caption flex items-center gap-1.5 select-none" @click="addNewField">
             <span class="material-symbols-outlined text-[16px]">add</span>
             Add Field
           </button>
@@ -86,8 +86,8 @@
       </div>
 
       <div class="flex justify-end gap-3 mt-5">
-        <button class="glass-button px-6 py-2.5 rounded-full font-label-md text-label-md" @click="cancelEditing">Cancel</button>
-        <button class="glass-button px-6 py-2.5 rounded-full font-label-md text-label-md flex items-center gap-2" @click="saveRuleSet">
+        <button class="glass-button px-6 py-2.5 rounded-full font-label-md text-label-md select-none" @click="cancelEditing">Cancel</button>
+        <button class="glass-button px-6 py-2.5 rounded-full font-label-md text-label-md flex items-center gap-2 select-none" @click="saveRuleSet">
           <span class="material-symbols-outlined text-[18px]">save</span>
           Save Changes
         </button>
@@ -102,12 +102,12 @@
             <span class="material-symbols-outlined text-secondary text-[22px]" style="font-variation-settings: 'FILL' 1">fact_check</span>
           </div>
           <div v-if="set.id !== 'default'" class="flex gap-1" @click.stop>
-            <button class="glass-button p-1.5 rounded-lg text-on-surface-variant/40" @click="confirmDeleteSet(set)" title="Delete">
+            <button class="glass-button p-1.5 rounded-lg text-on-surface-variant/40 select-none" @click="confirmDeleteSet(set)" title="Delete">
               <span class="material-symbols-outlined text-[18px]">delete</span>
             </button>
           </div>
         </div>
-        <h3 class="font-body-lg text-body-lg text-on-surface font-semibold mb-1">{{ set.name }}</h3>
+        <h3 class="font-body-lg text-body-lg text-on-surface font-semibold mb-1 select-none">{{ set.name }}</h3>
         <div class="flex items-center gap-3 text-caption text-on-surface-variant/70">
           <span>{{ set.rules.filter(r => r.visible).length }} visible / {{ set.rules.length }} total</span>
           <span>·</span>
@@ -133,8 +133,8 @@
         <div class="absolute inset-0 bg-black/10 backdrop-blur-sm" @click="showCreateDialog = false"></div>
         <div class="glass-panel rounded-2xl p-8 w-[400px] relative z-10">
           <div class="flex items-center justify-between mb-6">
-            <h3 class="font-headline-md text-headline-md text-on-surface font-semibold">New Rule Set</h3>
-            <button class="glass-button p-1 rounded" @click="showCreateDialog = false">
+            <h3 class="font-headline-md text-headline-md text-on-surface font-semibold select-none">New Rule Set</h3>
+            <button class="glass-button p-1 rounded select-none" @click="showCreateDialog = false">
               <span class="material-symbols-outlined text-[20px]">close</span>
             </button>
           </div>
@@ -143,8 +143,8 @@
             <input v-model="newSetName" class="w-full bg-white border border-outline-variant/50 rounded-xl px-4 py-3 text-body-md text-on-surface focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all" placeholder="e.g. API Testing Rules" @keydown.enter="createRuleSet" />
           </div>
           <div class="flex justify-end gap-3 mt-8">
-            <button class="glass-button px-6 py-2.5 rounded-full font-label-md text-label-md" @click="showCreateDialog = false">Cancel</button>
-            <button class="glass-button px-6 py-2.5 rounded-full font-label-md text-label-md flex items-center gap-2" :disabled="!newSetName.trim()" :class="!newSetName.trim() ? 'opacity-50 cursor-not-allowed' : ''" @click="createRuleSet">
+            <button class="glass-button px-6 py-2.5 rounded-full font-label-md text-label-md select-none" @click="showCreateDialog = false">Cancel</button>
+            <button class="glass-button px-6 py-2.5 rounded-full font-label-md text-label-md flex items-center gap-2 select-none" :disabled="!newSetName.trim()" :class="!newSetName.trim() ? 'opacity-50 cursor-not-allowed' : ''" @click="createRuleSet">
               <span class="material-symbols-outlined text-[18px]">add</span>
               Create
             </button>
@@ -163,14 +163,14 @@
               <span class="material-symbols-outlined text-error">warning</span>
             </span>
             <div>
-              <h3 class="font-headline-md text-headline-md text-on-surface font-semibold">Delete Rule Set</h3>
+              <h3 class="font-headline-md text-headline-md text-on-surface font-semibold select-none">Delete Rule Set</h3>
               <p class="font-body-md text-body-md text-on-surface-variant/70 mt-0.5">This action cannot be undone.</p>
             </div>
           </div>
           <p class="font-body-md text-body-md text-on-surface mb-6">Are you sure you want to delete <strong>{{ deleteTarget.name }}</strong>?</p>
           <div class="flex justify-end gap-3">
-            <button class="glass-button px-6 py-2.5 rounded-full font-label-md text-label-md" @click="deleteTarget = null">Cancel</button>
-            <button class="glass-button px-6 py-2.5 rounded-full font-label-md text-label-md bg-error/10 text-error flex items-center gap-2" @click="doDeleteSet">
+            <button class="glass-button px-6 py-2.5 rounded-full font-label-md text-label-md select-none" @click="deleteTarget = null">Cancel</button>
+            <button class="glass-button px-6 py-2.5 rounded-full font-label-md text-label-md bg-error/10 text-error flex items-center gap-2 select-none" @click="doDeleteSet">
               <span class="material-symbols-outlined text-[18px]">delete</span>
               Delete
             </button>

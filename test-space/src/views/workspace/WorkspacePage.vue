@@ -2,7 +2,7 @@
   <div class="flex flex-col min-h-full">
     <!-- Header -->
     <header class="mt-12 mb-16">
-      <h2 class="font-display-lg text-display-lg text-on-surface font-black tracking-tighter">
+      <h2 class="font-display-lg text-display-lg text-on-surface font-black tracking-tighter select-none">
         Good {{ greeting }}, Tester.
       </h2>
       <p class="font-headline-md text-headline-md text-on-surface-variant mt-4">
@@ -18,7 +18,7 @@
           type="text"
         />
         <button
-          class="glass-button px-6 py-2 rounded-full font-label-md text-label-md"
+          class="glass-button px-6 py-2 rounded-full font-label-md text-label-md select-none"
         >
           Execute
         </button>
@@ -27,7 +27,7 @@
 
     <!-- Continue Working -->
     <section>
-      <h3 class="font-headline-lg text-headline-lg text-on-surface font-semibold mb-6">Continue Working</h3>
+      <h3 class="font-headline-lg text-headline-lg text-on-surface font-semibold mb-6 select-none">Continue Working</h3>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-gutter-grid">
         <div
           v-for="project in projects"
@@ -51,7 +51,7 @@
               {{ project.icon }}
             </span>
           </div>
-          <h4 class="font-headline-md text-headline-md text-on-surface mb-2">{{ project.title }}</h4>
+          <h4 class="font-headline-md text-headline-md text-on-surface mb-2 select-none">{{ project.title }}</h4>
           <p class="font-body-md text-body-md text-on-surface-variant mb-6">{{ project.description }}</p>
           <div class="flex items-center justify-between border-t border-glass-border-dark pt-4">
             <span class="font-caption text-caption text-on-surface-variant">Last edited {{ project.time }}</span>

@@ -2,36 +2,36 @@
   <div class="flex flex-col h-screen -mx-margin-page">
     <!-- Toolbar -->
     <div class="flex items-center gap-1 px-4 py-2 bg-white/20 backdrop-blur-sm border-b border-white/20 shrink-0 overflow-x-auto custom-scrollbar">
-      <button class="glass-button px-3 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1 shrink-0" title="Back to Home" @click="goHome">
+      <button class="glass-button px-3 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1 shrink-0 select-none" title="Back to Home" @click="goHome">
         <span class="material-symbols-outlined text-[16px]">arrow_back</span>
         <span class="hidden sm:inline">Back</span>
       </button>
       <span class="w-px h-5 bg-white/30 mx-1 shrink-0"></span>
-      <button class="glass-button px-3 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1 shrink-0" title="Save" @click="saveFile">
+      <button class="glass-button px-3 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1 shrink-0 select-none" title="Save" @click="saveFile">
         <span class="material-symbols-outlined text-[16px]">save</span>
         <span class="hidden sm:inline">Save</span>
       </button>
-      <button class="glass-button px-3 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1 shrink-0" title="Save As" @click="showSaveAsDialog = true">
+      <button class="glass-button px-3 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1 shrink-0 select-none" title="Save As" @click="showSaveAsDialog = true">
         <span class="material-symbols-outlined text-[16px]">save_as</span>
         <span class="hidden sm:inline">Save As</span>
       </button>
       <span class="w-px h-5 bg-white/30 mx-1 shrink-0"></span>
-      <button class="glass-button px-3 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1 shrink-0 opacity-50 cursor-not-allowed" title="Cloud Sync (Coming Soon)">
+      <button class="glass-button px-3 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1 shrink-0 opacity-50 cursor-not-allowed select-none" title="Cloud Sync (Coming Soon)">
         <span class="material-symbols-outlined text-[16px]">cloud_sync</span>
         <span class="hidden sm:inline">Cloud</span>
       </button>
-      <button class="glass-button px-3 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1 shrink-0 opacity-50 cursor-not-allowed" title="Platform Sync (Coming Soon)">
+      <button class="glass-button px-3 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1 shrink-0 opacity-50 cursor-not-allowed select-none" title="Platform Sync (Coming Soon)">
         <span class="material-symbols-outlined text-[16px]">sync</span>
         <span class="hidden sm:inline">Platform</span>
       </button>
 
       <div class="ml-auto flex items-center gap-1">
         <div class="glass-panel rounded-full p-0.5 inline-flex shadow-sm shrink-0">
-          <button class="px-3 py-1.5 rounded-full font-caption text-caption flex items-center gap-1.5 transition-all" :class="viewMode === 'excel' ? 'glass-active' : 'glass-button'" @click="viewMode = 'excel'">
+          <button class="px-3 py-1.5 rounded-full font-caption text-caption flex items-center gap-1.5 transition-all select-none" :class="viewMode === 'excel' ? 'glass-active' : 'glass-button'" @click="viewMode = 'excel'">
             <span class="material-symbols-outlined text-[16px]">table_view</span>
             <span class="hidden sm:inline">Excel</span>
           </button>
-          <button class="px-3 py-1.5 rounded-full font-caption text-caption flex items-center gap-1.5 transition-all" :class="viewMode === 'mindmap' ? 'glass-active' : 'glass-button'" @click="viewMode = 'mindmap'">
+          <button class="px-3 py-1.5 rounded-full font-caption text-caption flex items-center gap-1.5 transition-all select-none" :class="viewMode === 'mindmap' ? 'glass-active' : 'glass-button'" @click="viewMode = 'mindmap'">
             <span class="material-symbols-outlined text-[16px]">account_tree</span>
             <span class="hidden sm:inline">Mind Map</span>
           </button>
@@ -49,7 +49,7 @@
             <span class="font-caption text-caption text-on-surface-variant/60">{{ contentRows().length }} cases</span>
           </div>
           <div class="flex items-center gap-1">
-            <button class="glass-button px-2 py-1 rounded-lg text-caption flex items-center gap-1" @click="addRow">
+            <button class="glass-button px-2 py-1 rounded-lg text-caption flex items-center gap-1 select-none" @click="addRow">
               <span class="material-symbols-outlined text-[14px]">add</span>
               Row
             </button>
@@ -71,7 +71,7 @@
                   <div class="flex items-center gap-1">
                     <span class="truncate">{{ col.label }}</span>
                     <span v-if="sortState?.key === col.key" class="text-[11px] text-secondary font-bold shrink-0">{{ sortState.dir === 'asc' ? '▲' : '▼' }}</span>
-                    <button class="p-0.5 rounded hover:bg-black/10 ml-auto shrink-0" :class="{ 'text-secondary': isFilterActive(col.key) }" @click.stop="openFilterPopup($event, col.key)">
+                    <button class="p-0.5 rounded hover:bg-black/10 ml-auto shrink-0 select-none" :class="{ 'text-secondary': isFilterActive(col.key) }" @click.stop="openFilterPopup($event, col.key)">
                       <span class="material-symbols-outlined text-[14px]">filter_list</span>
                     </button>
                   </div>
@@ -119,7 +119,7 @@
                           <span v-for="(tag, tIdx) in getCaseTags(entry.item as CaseItem)" :key="tIdx"
                             class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-white/60 text-on-surface-variant/70 text-[11px]">
                             {{ tag }}
-                            <button class="p-0 rounded-full ml-0.5 text-on-surface-variant/40 hover:text-error/60" @click.stop="removeTag((entry.item as CaseItem).id, tIdx)">
+                            <button class="p-0 rounded-full ml-0.5 text-on-surface-variant/40 hover:text-error/60 select-none" @click.stop="removeTag((entry.item as CaseItem).id, tIdx)">
                               <span class="material-symbols-outlined text-[12px]">close</span>
                             </button>
                           </span>
@@ -147,10 +147,10 @@
                       </template>
                     </div>
                     <div class="border-b border-gray-300/40 flex items-center justify-center gap-0 opacity-30 hover:opacity-80 transition-opacity">
-                      <button class="p-0.5 rounded hover:bg-white/40" @click.stop="duplicateSingle((entry.item as CaseItem).id)" title="Duplicate">
+                      <button class="p-0.5 rounded hover:bg-white/40 select-none" @click.stop="duplicateSingle((entry.item as CaseItem).id)" title="Duplicate">
                         <span class="material-symbols-outlined text-[14px] text-on-surface-variant/50">content_copy</span>
                       </button>
-                      <button class="p-0.5 rounded hover:bg-white/40" @click.stop="store.deleteCase((entry.item as CaseItem).id)" title="Delete">
+                      <button class="p-0.5 rounded hover:bg-white/40 select-none" @click.stop="store.deleteCase((entry.item as CaseItem).id)" title="Delete">
                         <span class="material-symbols-outlined text-[14px] text-on-surface-variant/50">delete</span>
                       </button>
                     </div>
@@ -162,7 +162,7 @@
               <div class="text-center">
                 <span class="material-symbols-outlined text-4xl text-on-surface-variant/15">table_rows</span>
                 <p class="font-body-md text-body-md text-on-surface-variant/50 mt-3">No test cases yet</p>
-                <button class="mt-4 px-5 py-2 rounded-full glass-button inline-flex items-center gap-1.5" @click="addRow">
+                <button class="mt-4 px-5 py-2 rounded-full glass-button inline-flex items-center gap-1.5 select-none" @click="addRow">
                   <span class="material-symbols-outlined text-[16px]">add</span>
                   Add First Case
                 </button>
@@ -198,24 +198,24 @@
 
             <!-- Row context menu -->
             <template v-if="contextMenu.targetType === 'row'">
-              <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left" @click="cmInsertAbove">
+              <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left select-none" @click="cmInsertAbove">
                 <span class="material-symbols-outlined text-[16px]">expand_less</span> Insert Above
               </button>
-              <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left" @click="cmInsertBelow">
+              <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left select-none" @click="cmInsertBelow">
                 <span class="material-symbols-outlined text-[16px]">expand_more</span> Insert Below
               </button>
-              <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left" @click="cmDuplicate">
+              <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left select-none" @click="cmDuplicate">
                 <span class="material-symbols-outlined text-[16px]">content_copy</span> Duplicate
               </button>
               <div class="border-t border-white/10"></div>
-              <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-error glass-hover text-left" @click="cmDelete">
+              <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-error glass-hover text-left select-none" @click="cmDelete">
                 <span class="material-symbols-outlined text-[16px]">delete</span> Delete
               </button>
             </template>
 
             <!-- Header column context menu -->
             <template v-else-if="contextMenu.targetType === 'header'">
-              <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left" @click="cmAddColumn">
+              <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left select-none" @click="cmAddColumn">
                 <span class="material-symbols-outlined text-[16px]">add</span> Add Column
               </button>
               <div class="border-t border-white/10"></div>
@@ -234,18 +234,18 @@
                 </span>
                 <span>{{ col.label }}</span>
                 <span v-if="isCustomField(col.key)" class="ml-auto text-[11px] text-on-surface-variant/40">
-                  <button class="glass-button px-1 py-0.5 rounded text-[11px]" @click.stop="cmEditField(col.key)">Edit</button>
-                  <button class="glass-button px-1 py-0.5 rounded text-[11px] text-error/60 ml-1" @click.stop="cmRemoveField(col.key)">Del</button>
+                  <button class="glass-button px-1 py-0.5 rounded text-[11px] select-none" @click.stop="cmEditField(col.key)">Edit</button>
+                  <button class="glass-button px-1 py-0.5 rounded text-[11px] text-error/60 ml-1 select-none" @click.stop="cmRemoveField(col.key)">Del</button>
                 </span>
               </div>
             </template>
 
             <!-- Table context menu -->
             <template v-else>
-              <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left" @click="addRow">
+              <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left select-none" @click="addRow">
                 <span class="material-symbols-outlined text-[16px]">add</span> Insert Row
               </button>
-              <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left" @click="cmAddColumn">
+              <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left select-none" @click="cmAddColumn">
                 <span class="material-symbols-outlined text-[16px]">view_column</span> Add Column
               </button>
               <div v-if="selectedIds.length > 0" class="border-t border-white/10"></div>
@@ -268,7 +268,7 @@
           <div v-if="showColumnDialog" class="fixed inset-0 z-50 flex items-center justify-center">
             <div class="absolute inset-0 bg-black/10 backdrop-blur-sm" @click="showColumnDialog = false"></div>
             <div class="glass-panel rounded-2xl p-6 w-[420px] relative z-10">
-              <h3 class="font-headline-md text-headline-md text-on-surface font-semibold mb-4">{{ editingColumnKey ? 'Edit Column' : 'Add Column' }}</h3>
+              <h3 class="font-headline-md text-headline-md text-on-surface font-semibold mb-4 select-none">{{ editingColumnKey ? 'Edit Column' : 'Add Column' }}</h3>
               <div class="flex flex-col gap-3">
                 <div>
                   <label class="font-caption text-caption text-on-surface-variant/60 block mb-1">Key</label>
@@ -308,8 +308,8 @@
                 </div>
               </div>
               <div class="flex justify-end gap-2 mt-5">
-                <button class="glass-button px-4 py-2 rounded-full text-caption" @click="showColumnDialog = false">Cancel</button>
-                <button class="glass-button px-4 py-2 rounded-full text-caption flex items-center gap-1" @click="confirmColumn">
+                <button class="glass-button px-4 py-2 rounded-full text-caption select-none" @click="showColumnDialog = false">Cancel</button>
+                <button class="glass-button px-4 py-2 rounded-full text-caption flex items-center gap-1 select-none" @click="confirmColumn">
                   <span class="material-symbols-outlined text-[14px]">check</span>
                   {{ editingColumnKey ? 'Update' : 'Add' }}
                 </button>
@@ -325,16 +325,16 @@
       <div v-if="showSaveAsDialog" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="showSaveAsDialog = false">
         <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
         <div class="glass-panel rounded-2xl p-6 w-full max-w-xs relative z-10 bg-white/80 shadow-xl">
-          <h3 class="font-headline-md text-headline-md text-on-surface font-semibold mb-4">Export As</h3>
+          <h3 class="font-headline-md text-headline-md text-on-surface font-semibold mb-4 select-none">Export As</h3>
           <div class="flex flex-col gap-2">
-            <button class="glass-button w-full px-4 py-3 rounded-xl font-label-md text-label-md flex items-center gap-3 text-left" @click="saveAsExcel">
+            <button class="glass-button w-full px-4 py-3 rounded-xl font-label-md text-label-md flex items-center gap-3 text-left select-none" @click="saveAsExcel">
               <span class="material-symbols-outlined text-[20px]">table_chart</span>
               <div>
                 <div>Excel (.xlsx)</div>
                 <div class="font-caption text-caption text-on-surface-variant/60">Export to spreadsheet</div>
               </div>
             </button>
-            <button class="glass-button w-full px-4 py-3 rounded-xl font-label-md text-label-md flex items-center gap-3 text-left" @click="saveAsPng">
+            <button class="glass-button w-full px-4 py-3 rounded-xl font-label-md text-label-md flex items-center gap-3 text-left select-none" @click="saveAsPng">
               <span class="material-symbols-outlined text-[20px]">account_tree</span>
               <div>
                 <div>Mind Map (.png)</div>
@@ -342,7 +342,7 @@
               </div>
             </button>
           </div>
-          <button class="glass-button w-full mt-3 px-4 py-2 rounded-xl font-caption text-caption text-on-surface-variant" @click="showSaveAsDialog = false">Cancel</button>
+          <button class="glass-button w-full mt-3 px-4 py-2 rounded-xl font-caption text-caption text-on-surface-variant select-none" @click="showSaveAsDialog = false">Cancel</button>
         </div>
       </div>
     </Teleport>
@@ -399,7 +399,7 @@
               ></textarea>
               <span v-else class="text-[13px] text-on-surface font-medium flex-1 whitespace-pre-wrap break-words leading-snug">{{ mod.label }}</span>
               <span class="text-[10px] text-on-surface-variant/50 bg-white/30 rounded-full px-1.5 py-0.5 shrink-0 mt-0.5 whitespace-nowrap">{{ mod.data?.count }}</span>
-              <button class="p-0.5 rounded hover:bg-white/30 shrink-0 mt-0.5" @click.stop="toggleCollapse(mod)">
+              <button class="p-0.5 rounded hover:bg-white/30 shrink-0 mt-0.5 select-none" @click.stop="toggleCollapse(mod)">
                 <span class="material-symbols-outlined text-[14px] text-on-surface-variant/40">{{ mod.collapsed ? 'chevron_right' : 'expand_more' }}</span>
               </button>
             </div>
@@ -465,18 +465,18 @@
       </div>
 
       <div class="absolute bottom-4 left-4 glass-panel rounded-lg p-1 flex items-center gap-1 z-20 shadow-sm">
-        <button class="glass-button w-7 h-7 rounded flex items-center justify-center" @click="mmZoomIn"><span class="material-symbols-outlined text-[16px]">add</span></button>
+        <button class="glass-button w-7 h-7 rounded flex items-center justify-center select-none" @click="mmZoomIn"><span class="material-symbols-outlined text-[16px]">add</span></button>
         <div class="w-px h-4 bg-white/20"></div>
-        <button class="glass-button w-7 h-7 rounded flex items-center justify-center" @click="mmZoomOut"><span class="material-symbols-outlined text-[16px]">remove</span></button>
+        <button class="glass-button w-7 h-7 rounded flex items-center justify-center select-none" @click="mmZoomOut"><span class="material-symbols-outlined text-[16px]">remove</span></button>
         <div class="w-px h-4 bg-white/20"></div>
-        <button class="glass-button w-7 h-7 rounded flex items-center justify-center" @click="mmFit"><span class="material-symbols-outlined text-[16px]">fit_screen</span></button>
+        <button class="glass-button w-7 h-7 rounded flex items-center justify-center select-none" @click="mmFit"><span class="material-symbols-outlined text-[16px]">fit_screen</span></button>
         <div class="w-px h-4 bg-white/20"></div>
         <span class="w-10 h-7 flex items-center justify-center font-caption text-caption text-on-surface-variant">{{ Math.round(mmZoom * 100) }}%</span>
       </div>
 
       <!-- Mind Map toolbar -->
       <div class="absolute top-4 right-4 flex items-center gap-2 z-20">
-        <button class="glass-button px-3 py-1.5 rounded-lg text-caption flex items-center gap-1 shadow-sm" @click="mmAddNewCase">
+        <button class="glass-button px-3 py-1.5 rounded-lg text-caption flex items-center gap-1 shadow-sm select-none" @click="mmAddNewCase">
           <span class="material-symbols-outlined text-[14px]">add</span>
           Case
         </button>
@@ -493,25 +493,25 @@
             {{ mmCtx.node?.fieldLabel || (mmCtx.node?.type === 'root' ? 'Root' : mmCtx.node?.type) }}
           </div>
           <template v-if="mmCtx.node?.type === 'module'">
-            <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left" @click="mmCtxAddCase">
+            <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left select-none" @click="mmCtxAddCase">
               <span class="material-symbols-outlined text-[16px]">add</span> Add Case
             </button>
-            <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left" @click="mmCtxAddSibling">
+            <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left select-none" @click="mmCtxAddSibling">
               <span class="material-symbols-outlined text-[16px]">add</span> Add Sibling Module
             </button>
-            <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left" @click="mmCtxRename">
+            <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left select-none" @click="mmCtxRename">
               <span class="material-symbols-outlined text-[16px]">edit</span> Rename
             </button>
           </template>
           <template v-if="mmCtx.node?.type === 'case'">
-            <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left" @click="mmCtxAddSibling">
+            <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left select-none" @click="mmCtxAddSibling">
               <span class="material-symbols-outlined text-[16px]">add</span> Add Sibling
             </button>
-            <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left" @click="mmCtxRename">
+            <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left select-none" @click="mmCtxRename">
               <span class="material-symbols-outlined text-[16px]">edit</span> Rename
             </button>
             <div class="border-t border-white/10"></div>
-            <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-error glass-hover text-left" @click="mmCtxDelete">
+            <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-error glass-hover text-left select-none" @click="mmCtxDelete">
               <span class="material-symbols-outlined text-[16px]">delete</span> Delete
             </button>
           </template>
@@ -526,10 +526,10 @@
           @mousedown.stop
         >
           <div class="px-3 py-1.5 font-caption text-caption text-on-surface-variant/60 border-b border-white/20">{{ t('case.addChild') }}</div>
-          <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left" @click="mmTabAddModule">
+          <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left select-none" @click="mmTabAddModule">
             <span class="material-symbols-outlined text-[16px]">create_new_folder</span> {{ t('case.subModule') }}
           </button>
-          <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left" @click="mmTabAddCase">
+          <button class="w-full flex items-center gap-2 px-3 py-1.5 text-[13px] text-on-surface glass-hover text-left select-none" @click="mmTabAddCase">
             <span class="material-symbols-outlined text-[16px]">description</span> {{ t('case.caseTitle') }}
           </button>
         </div>
@@ -543,21 +543,21 @@
     <div v-if="activeFilterCol" class="fixed inset-0 z-50" @click="closeFilterPopup">
       <div class="absolute bg-white rounded-lg shadow-xl border border-gray-200 py-1 text-[13px] min-w-[180px] max-h-[320px] overflow-y-auto" :style="{ top: filterPopupPos.top + 'px', left: filterPopupPos.left + 'px' }" @click.stop>
         <div class="px-3 py-1 text-[12px] font-medium text-gray-500">Sort</div>
-        <button class="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-100 text-left" :class="{ 'font-bold text-secondary': sortState?.key === activeFilterCol && sortState?.dir === 'asc' }" @click="setSort(activeFilterCol!, 'asc')">
+        <button class="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-100 text-left select-none" :class="{ 'font-bold text-secondary': sortState?.key === activeFilterCol && sortState?.dir === 'asc' }" @click="setSort(activeFilterCol!, 'asc')">
           <span class="material-symbols-outlined text-[14px]">arrow_upward</span> Sort A→Z
         </button>
-        <button class="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-100 text-left" :class="{ 'font-bold text-secondary': sortState?.key === activeFilterCol && sortState?.dir === 'desc' }" @click="setSort(activeFilterCol!, 'desc')">
+        <button class="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-100 text-left select-none" :class="{ 'font-bold text-secondary': sortState?.key === activeFilterCol && sortState?.dir === 'desc' }" @click="setSort(activeFilterCol!, 'desc')">
           <span class="material-symbols-outlined text-[14px]">arrow_downward</span> Sort Z→A
         </button>
         <div v-if="sortState" class="border-t border-gray-200 my-1">
-          <button class="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-100 text-left text-gray-500" @click="clearSort">
+          <button class="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-100 text-left text-gray-500 select-none" @click="clearSort">
             <span class="material-symbols-outlined text-[14px]">close</span> Clear Sort
           </button>
         </div>
         <div class="border-t border-gray-200 my-1"></div>
         <div class="px-3 py-1 flex items-center justify-between">
           <span class="text-[12px] font-medium text-gray-500">Filter by value</span>
-          <button v-if="isFilterActive(activeFilterCol!)" class="text-[11px] text-secondary hover:underline" @click="clearColumnFilter(activeFilterCol!)">Clear</button>
+          <button v-if="isFilterActive(activeFilterCol!)" class="text-[11px] text-secondary hover:underline select-none" @click="clearColumnFilter(activeFilterCol!)">Clear</button>
         </div>
         <label v-for="val in getUniqueValues(activeFilterCol!)" :key="val" class="flex items-center gap-2 px-3 py-1 hover:bg-gray-100 cursor-pointer">
           <input type="checkbox" :checked="columnFilters[activeFilterCol!]?.has(val)" @change="toggleFilterValue(activeFilterCol!, val)" class="accent-secondary" />

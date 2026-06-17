@@ -4,7 +4,7 @@
     <div class="flex items-center gap-3 mb-2 flex-shrink-0 ml-3">
       <!-- Type dropdown -->
       <div class="relative" ref="typeDropdownRef">
-        <button class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-1.5 min-w-[100px]" @click="typeDropdownOpen = !typeDropdownOpen">
+        <button class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-1.5 min-w-[100px] select-none" @click="typeDropdownOpen = !typeDropdownOpen">
           <span class="material-symbols-outlined text-[18px]">code</span>
           <span class="text-[13px] font-mono uppercase">{{ currentTypeLabel }}</span>
           <span class="material-symbols-outlined text-[16px] transition-transform" :class="typeDropdownOpen ? 'rotate-180' : ''">expand_more</span>
@@ -12,7 +12,7 @@
         <Transition name="dropdown">
           <div v-if="typeDropdownOpen" class="absolute top-full left-0 mt-1.5 w-[140px] rounded-xl border border-white/10 shadow-2xl overflow-hidden z-50 glass-panel">
             <button v-for="t in typeOptions" :key="t.value"
-              class="w-full flex items-center gap-2 px-3 py-2 text-[13px] font-mono uppercase transition-colors"
+              class="w-full flex items-center gap-2 px-3 py-2 text-[13px] font-mono uppercase transition-colors select-none"
               :class="globalType === t.value ? 'bg-white/15 text-on-surface' : 'text-on-surface-variant hover:bg-white/8 hover:text-on-surface'"
               @click="switchType(t.value)">
               <span class="material-symbols-outlined text-[16px]" :class="globalType === t.value ? 'text-green-400' : 'text-on-surface-variant/40'">check</span>
@@ -21,19 +21,19 @@
           </div>
         </Transition>
       </div>
-      <button class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-1.5" @click="newScript">
+      <button class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-1.5 select-none" @click="newScript">
         <span class="material-symbols-outlined text-[18px]">add</span>
         {{ t("scripts.new") }}
       </button>
-      <button class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-1.5" @click="openLocalFile">
+      <button class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-1.5 select-none" @click="openLocalFile">
         <span class="material-symbols-outlined text-[18px]">folder_open</span>
         {{ t("scripts.open") }}
       </button>
-      <button v-if="currentScript" class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-1.5" @click="saveCurrentScript">
+      <button v-if="currentScript" class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-1.5 select-none" @click="saveCurrentScript">
         <span class="material-symbols-outlined text-[18px]">save</span>
         {{ t("scripts.save") }}
       </button>
-      <button v-if="currentScript" class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-1.5" @click="exportToFile">
+      <button v-if="currentScript" class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-1.5 select-none" @click="exportToFile">
         <span class="material-symbols-outlined text-[18px]">file_upload</span>
         {{ t("scripts.export") }}
       </button>
@@ -53,7 +53,7 @@
           <span class="text-[11px] text-on-surface-variant/40 flex-shrink-0">{{ filteredScripts.length }}</span>
         </div>
         <div class="px-3 py-1.5 border-b border-white/10 flex items-center gap-2">
-          <button class="flex items-center gap-0.5 text-[11px] text-on-surface-variant/50 hover:text-on-surface transition-colors" @click="toggleSort">
+          <button class="flex items-center gap-0.5 text-[11px] text-on-surface-variant/50 hover:text-on-surface transition-colors select-none" @click="toggleSort">
             <span class="material-symbols-outlined text-[13px]">{{ sortAsc ? 'arrow_upward' : 'arrow_downward' }}</span>
             {{ sortLabel }}
           </button>
@@ -68,17 +68,17 @@
             @click="loadScript(s.id)">
             <span class="material-symbols-outlined text-[16px] text-on-surface-variant/50 flex-shrink-0">code</span>
             <span class="truncate flex-1">{{ s.name }}</span>
-            <button class="p-0.5 rounded hover:bg-red-500/20 text-on-surface-variant/20 hover:text-red-400 transition-colors flex-shrink-0" @click.stop="confirmDelete(s)">
+            <button class="p-0.5 rounded hover:bg-red-500/20 text-on-surface-variant/20 hover:text-red-400 transition-colors flex-shrink-0 select-none" @click.stop="confirmDelete(s)">
               <span class="material-symbols-outlined text-[14px]">close</span>
             </button>
           </div>
         </div>
         <div v-if="totalPages > 1" class="px-3 py-1.5 border-t border-white/10 flex items-center justify-between flex-shrink-0">
-          <button class="text-[11px] text-on-surface-variant/50 hover:text-on-surface disabled:opacity-30 disabled:cursor-default" :disabled="currentPage <= 1" @click="currentPage--">
+          <button class="text-[11px] text-on-surface-variant/50 hover:text-on-surface disabled:opacity-30 disabled:cursor-default select-none" :disabled="currentPage <= 1" @click="currentPage--">
             <span class="material-symbols-outlined text-[14px]">chevron_left</span>
           </button>
           <span class="text-[11px] text-on-surface-variant/50">{{ currentPage }} / {{ totalPages }}</span>
-          <button class="text-[11px] text-on-surface-variant/50 hover:text-on-surface disabled:opacity-30 disabled:cursor-default" :disabled="currentPage >= totalPages" @click="currentPage++">
+          <button class="text-[11px] text-on-surface-variant/50 hover:text-on-surface disabled:opacity-30 disabled:cursor-default select-none" :disabled="currentPage >= totalPages" @click="currentPage++">
             <span class="material-symbols-outlined text-[14px]">chevron_right</span>
           </button>
         </div>
@@ -95,7 +95,7 @@
             <div class="flex items-center gap-1 flex-wrap justify-end min-w-0">
               <div v-for="(snp, idx) in snippets" :key="snp.label" class="relative"
                 @mouseenter="(e: MouseEvent) => showSnippetTip(idx, e)" @mouseleave="hideSnippetTip">
-                <button class="px-2 py-0.5 rounded text-[11px] bg-white/10 hover:bg-white/20 text-on-surface-variant/70 hover:text-on-surface transition-colors whitespace-nowrap" @click="insertSnippet(snp.code)">
+                <button class="px-2 py-0.5 rounded text-[11px] bg-white/10 hover:bg-white/20 text-on-surface-variant/70 hover:text-on-surface transition-colors whitespace-nowrap select-none" @click="insertSnippet(snp.code)">
                   {{ snp.label }}
                 </button>
               </div>
@@ -110,7 +110,7 @@
                 <span class="w-3 h-3 rounded-full bg-[#27c93f]"></span>
               </div>
               <div class="flex-1"></div>
-              <button class="flex items-center gap-1 px-3 py-1 rounded-full text-[12px] bg-green-500/20 hover:bg-green-500/30 text-green-400 transition-colors" @click="runCurrentScript">
+              <button class="flex items-center gap-1 px-3 py-1 rounded-full text-[12px] bg-green-500/20 hover:bg-green-500/30 text-green-400 transition-colors select-none" @click="runCurrentScript">
                 <span class="material-symbols-outlined text-[15px]">play_arrow</span>
                 {{ t("scripts.run") }}
               </button>
@@ -155,11 +155,11 @@
               <span v-else-if="activeTab?.status === 'killed'" class="text-[11px] text-orange-400">{{ t("scripts.terminated") }}</span>
             </div>
             <div class="flex items-center gap-2">
-              <button v-if="activeTab?.status === 'running'" class="glass-button px-2.5 py-1 rounded-full text-[11px] flex items-center gap-1 text-red-400" @click="killScript(activeTab.id)">
+              <button v-if="activeTab?.status === 'running'" class="glass-button px-2.5 py-1 rounded-full text-[11px] flex items-center gap-1 text-red-400 select-none" @click="killScript(activeTab.id)">
                 <span class="material-symbols-outlined text-[13px]">stop</span>
                 {{ t("scripts.stop") }}
               </button>
-              <button class="glass-button px-2.5 py-1 rounded-full text-[11px] flex items-center gap-1" @click="activeTabId && clearTabOutput(activeTabId)">
+              <button class="glass-button px-2.5 py-1 rounded-full text-[11px] flex items-center gap-1 select-none" @click="activeTabId && clearTabOutput(activeTabId)">
                 <span class="material-symbols-outlined text-[13px]">delete</span>
                 {{ t("scripts.clear") }}
               </button>
@@ -200,8 +200,8 @@
           <div class="text-[15px] font-medium text-white mb-2">{{ t("scripts.deleteTitle") }}</div>
           <div class="text-[13px] text-white/50 mb-5">{{ t("scripts.deleteDesc", { name: deleteTarget.name }) }}</div>
           <div class="flex justify-end gap-2">
-            <button class="px-4 py-1.5 rounded-full text-[13px] text-white/60 border border-white/10 hover:bg-white/10 transition-colors" @click="deleteTarget = null">{{ t("scripts.deleteCancel") }}</button>
-            <button class="px-4 py-1.5 rounded-full text-[13px] bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors" @click="doDelete">{{ t("scripts.deleteConfirm") }}</button>
+            <button class="px-4 py-1.5 rounded-full text-[13px] text-white/60 border border-white/10 hover:bg-white/10 transition-colors select-none" @click="deleteTarget = null">{{ t("scripts.deleteCancel") }}</button>
+            <button class="px-4 py-1.5 rounded-full text-[13px] bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors select-none" @click="doDelete">{{ t("scripts.deleteConfirm") }}</button>
           </div>
         </div>
       </div>
@@ -214,8 +214,8 @@
           <div class="text-[15px] font-medium text-white mb-2">{{ t("scripts.typeTitle") }}</div>
           <div class="text-[13px] text-white/50 mb-5">{{ t("scripts.typeDesc", { name: editingName || 'untitled' }) }}</div>
           <div class="flex justify-end gap-2">
-            <button class="px-4 py-1.5 rounded-full text-[13px] text-white/60 border border-white/10 hover:bg-white/10 transition-colors" @click="pendingTypeSwitch = null">{{ t("scripts.typeCancel") }}</button>
-            <button class="px-4 py-1.5 rounded-full text-[13px] bg-white/15 text-white hover:bg-white/25 transition-colors" @click="confirmTypeSwitch">{{ t("scripts.typeConfirm") }}</button>
+            <button class="px-4 py-1.5 rounded-full text-[13px] text-white/60 border border-white/10 hover:bg-white/10 transition-colors select-none" @click="pendingTypeSwitch = null">{{ t("scripts.typeCancel") }}</button>
+            <button class="px-4 py-1.5 rounded-full text-[13px] bg-white/15 text-white hover:bg-white/25 transition-colors select-none" @click="confirmTypeSwitch">{{ t("scripts.typeConfirm") }}</button>
           </div>
         </div>
       </div>

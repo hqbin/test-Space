@@ -6,7 +6,7 @@
       <!-- Tab Switcher (leftmost) -->
       <div class="flex gap-2 shrink-0">
         <button v-for="tab in tabs" :key="tab.key"
-          class="px-5 py-2 rounded-full font-label-md text-label-md transition-all flex items-center hover:scale-105"
+          class="px-5 py-2 rounded-full font-label-md text-label-md transition-all flex items-center hover:scale-105 select-none"
           :class="activeTab === tab.key ? 'bg-secondary/10 text-secondary border border-secondary/30' : 'bg-transparent text-on-surface-variant/70 border border-transparent hover:bg-white/30'"
           @click="activeTab = tab.key">
           <span class="material-symbols-outlined text-[16px] align-middle mr-1.5">{{ tab.icon }}</span>
@@ -20,14 +20,14 @@
           class="flex-1 bg-transparent border-none outline-none font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-0 p-0"
           :placeholder="t('device.inputHint')" @keyup.enter="connectToDevice" />
       </div>
-      <button class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-1 border border-outline-variant/60" @click="connectToDevice" :disabled="connecting">
+      <button class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-1 border border-outline-variant/60 select-none" @click="connectToDevice" :disabled="connecting">
         <span v-if="connecting" class="w-3.5 h-3.5 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
         <span v-else class="material-symbols-outlined text-[16px]">add_link</span>{{ connecting ? t('device.connecting') : t('device.connect') }}
       </button>
       <div class="h-5 w-[1px] bg-glass-border-dark"></div>
       <div class="flex gap-2 flex-wrap items-center">
         <button v-for="device in devices" :key="device.serial"
-          class="px-3 py-1.5 rounded-full font-caption text-caption flex items-center gap-1.5 transition-all group border hover:scale-105"
+          class="px-3 py-1.5 rounded-full font-caption text-caption flex items-center gap-1.5 transition-all group border hover:scale-105 select-none"
           :class="selectedDevice?.serial === device.serial ? 'bg-secondary/10 text-secondary border-secondary/30' : 'bg-white/50 border-outline-variant/60 text-on-surface hover:bg-white/70'"
           @click="selectDevice(device)">
           <div class="w-2 h-2 rounded-full" :class="device.status === 'online' ? 'bg-success-indicator' : 'bg-outline-variant'"></div>
@@ -37,7 +37,7 @@
         </button>
         <span v-if="devices.length === 0" class="font-caption text-caption text-on-surface-variant/50">{{ t('device.noDevice') }}</span>
       </div>
-      <button class="text-on-surface-variant hover:text-secondary hover:scale-105 transition-all" @click="scanDevices()" :disabled="scanLoading">
+      <button class="text-on-surface-variant hover:text-secondary hover:scale-105 transition-all select-none" @click="scanDevices()" :disabled="scanLoading">
         <span class="material-symbols-outlined text-[18px] block" :class="scanLoading ? 'animate-spin' : ''">refresh</span>
       </button>
     </div>
@@ -48,31 +48,31 @@
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 shrink-0">
         <!-- Device Operations Card -->
         <div class="glass-panel rounded-xl p-5 flex flex-col gap-4 shadow-md">
-          <h3 class="flex items-center gap-2 font-label-md text-label-md text-on-surface">
+          <h3 class="flex items-center gap-2 font-label-md text-label-md text-on-surface select-none">
             <span class="material-symbols-outlined text-[16px] text-on-surface-variant">settings_remote</span> {{ t('device.deviceOps') }}
           </h3>
           <div class="grid grid-cols-3 gap-3">
-            <button class="bg-white/30 border border-white/50 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm"
+            <button class="bg-white/30 border border-white/50 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm select-none"
               :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('basic')">
               <span v-if="infoLoading === 'basic'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
               <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">info</span> {{ t('device.basicInfo') }}
             </button>
-            <button class="bg-white/30 border border-white/50 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm"
+            <button class="bg-white/30 border border-white/50 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm select-none"
               :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('mac')">
               <span v-if="infoLoading === 'mac'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
               <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">wifi</span> {{ t('device.macInfo') }}
             </button>
-            <button class="bg-white/30 border border-white/50 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm"
+            <button class="bg-white/30 border border-white/50 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm select-none"
               :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('whaleos')">
               <span v-if="infoLoading === 'whaleos'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
               <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">description</span> {{ t('device.firmwareInfo') }}
             </button>
-            <button class="bg-white/30 border border-white/50 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm"
+            <button class="bg-white/30 border border-white/50 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm select-none"
               :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('storage')">
               <span v-if="infoLoading === 'storage'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
               <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">database</span> {{ t('device.storageInfo') }}
             </button>
-            <button class="bg-white/30 border border-white/50 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm col-span-2"
+            <button class="bg-white/30 border border-white/50 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm col-span-2 select-none"
               :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('keys')">
               <span v-if="infoLoading === 'keys'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
               <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">vpn_key</span> {{ t('device.checkKeys') }}
@@ -80,20 +80,20 @@
           </div>
           <hr class="border-outline-variant/30 my-1">
           <div class="flex flex-wrap gap-2">
-            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="confirmThen(t('device.rebootConfirm2'), rebootDevice)">
+            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="confirmThen(t('device.rebootConfirm2'), rebootDevice)">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">restart_alt</span> {{ t('device.reboot') }}
             </button>
-            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="rootDevice">
+            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="rootDevice">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">shield</span> Root
             </button>
-            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="confirmThen(t('device.remountConfirm'), remountDevice)">
+            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="confirmThen(t('device.remountConfirm'), remountDevice)">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">published_with_changes</span> Remount
             </button>
           </div>
         </div>
         <!-- Quick Actions Card -->
         <div class="glass-panel rounded-xl p-5 flex flex-col gap-4 shadow-md">
-          <h3 class="flex items-center gap-2 font-label-md text-label-md text-on-surface">
+          <h3 class="flex items-center gap-2 font-label-md text-label-md text-on-surface select-none">
             <span class="material-symbols-outlined text-[16px] text-on-surface-variant">keyboard_command_key</span> {{ t('device.quickActions') }}
           </h3>
           <div class="flex gap-2">
@@ -102,29 +102,29 @@
                 class="w-full bg-white/50 border border-outline-variant/60 rounded-full px-3 py-1.5 font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all"
                 :placeholder="t('device.textHint')" @keyup.enter="sendText" @focus="showTextHistory = true" @blur="hideTextHistoryDelayed" />
               <div v-if="showTextHistory && textHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-outline-variant rounded-lg p-1 max-h-32 overflow-y-auto shadow-lg">
-                <button v-for="(h, i) in textHistory" :key="i" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100"
+                <button v-for="(h, i) in textHistory" :key="i" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none"
                   @mousedown.prevent @click="selectTextHistory(h)">{{ h }}</button>
               </div>
             </div>
-            <button class="bg-white/30 border border-white/50 text-on-surface px-4 py-1.5 rounded-xl font-label-md text-label-md hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="sendText" :disabled="!inputTextValue.trim()">{{ t('device.send') }}</button>
+            <button class="bg-white/30 border border-white/50 text-on-surface px-4 py-1.5 rounded-xl font-label-md text-label-md hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="sendText" :disabled="!inputTextValue.trim()">{{ t('device.send') }}</button>
           </div>
           <hr class="border-outline-variant/30 my-1">
           <div class="flex flex-wrap gap-2">
-            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="takeScreenshot" :disabled="!selectedDevice">
+            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="takeScreenshot" :disabled="!selectedDevice">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">image</span> {{ t('device.screenshot') }}
             </button>
-            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm"
+            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none"
               :class="isRecording ? 'bg-error/10 text-error border border-error/20' : ''"
               :disabled="recordingLoading" @click="toggleRecording">
               <span v-if="recordingLoading" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
               <span v-else class="material-symbols-outlined text-[14px]">{{ isRecording ? 'stop' : 'videocam' }}</span>
               {{ recordingLoading ? (isRecording ? t('device.stopping') : t('device.starting')) : (isRecording ? t('device.stopRecording') : t('device.screenrec')) }}
             </button>
-            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm"
+            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none"
               :disabled="!selectedDevice || logPrepActive" @click="clearLogcatLogs">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">delete_sweep</span> {{ t('device.clearLogs') }}
             </button>
-            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="restartAdbServer">
+            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="restartAdbServer">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">power_settings_new</span> {{ t('device.restartAdb') }}
             </button>
           </div>
@@ -133,7 +133,7 @@
             {{ logPrepMessage }}
           </div>
           <div class="flex flex-wrap gap-2">
-            <button class="bg-white/30 border border-white/50 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm"
+            <button class="bg-white/30 border border-white/50 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm select-none"
               :class="logcatRunning ? 'bg-error/20 text-error border-error/30 hover:bg-error/30' : ''"
               :disabled="logPrepActive" @click="toggleLogcat">
               <span class="material-symbols-outlined text-[14px]" :class="logcatRunning ? 'text-error' : 'text-on-surface-variant'">{{ logcatRunning ? 'stop' : 'assignment' }}</span>
@@ -142,7 +142,7 @@
               </span>
               <span v-else>{{ t('device.realtimeLogs') }}</span>
             </button>
-            <button class="bg-white/30 border border-white/50 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm"
+            <button class="bg-white/30 border border-white/50 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm select-none"
               :class="diagRunning ? 'bg-error/20 text-error border-error/30 hover:bg-error/30' : ''"
               :disabled="logPrepActive" @click="toggleDiagnostic">
               <span class="material-symbols-outlined text-[14px]" :class="diagRunning ? 'text-error' : 'text-on-surface-variant'">{{ diagRunning ? 'stop' : 'work' }}</span>
@@ -151,7 +151,7 @@
               </span>
               <span v-else>{{ t('device.diagnostics') }}</span>
             </button>
-            <button class="bg-white/30 border border-white/50 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm"
+            <button class="bg-white/30 border border-white/50 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm select-none"
               :class="bootLogcatRunning ? 'bg-error/20 text-error border-error/30 hover:bg-error/30' : ''"
               :disabled="logPrepActive" @click="toggleBootLogcat">
               <span class="material-symbols-outlined text-[14px]" :class="bootLogcatRunning ? 'text-error' : 'text-on-surface-variant'">{{ bootLogcatRunning ? 'stop' : 'pest_control' }}</span>
@@ -160,7 +160,7 @@
               </span>
               <span v-else>{{ t('device.bootLogs') }}</span>
             </button>
-            <button class="bg-white/30 border border-white/50 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm"
+            <button class="bg-white/30 border border-white/50 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm select-none"
               :disabled="!selectedDevice" @click="generateBugreport">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">bug_report</span> Bugreport
             </button>
@@ -176,12 +176,12 @@
             <div class="p-4 border-b border-outline-variant/30 flex flex-col gap-3">
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-4">
-                  <h3 class="font-label-md text-label-md text-on-surface flex items-center gap-2 shrink-0">
+                  <h3 class="font-label-md text-label-md text-on-surface flex items-center gap-2 shrink-0 select-none">
                     <span class="material-symbols-outlined text-[16px] text-on-surface-variant">apps</span>{{ t('device.appManagement') }}
                     <span class="font-caption text-caption text-on-surface-variant/60 font-normal text-sm">({{ sortedApps.length }})</span>
                   </h3>
                   <div class="flex items-center gap-2 text-sm text-on-surface-variant">
-                    <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="refreshPackageList" :disabled="pkgLoading">
+                    <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="refreshPackageList" :disabled="pkgLoading">
                       <span v-if="pkgLoading" class="w-3 h-3 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
                       <span v-else class="material-symbols-outlined text-[14px]">refresh</span>{{ t('device.refresh') }}
                     </button>
@@ -189,10 +189,10 @@
                       <input type="checkbox" v-model="showThirdParty" class="rounded border-outline-variant text-secondary focus:ring-secondary mr-1 w-3.5 h-3.5 accent-secondary" @change="refreshPackageList" />
                       {{ t('device.thirdPartyApps') }}
                     </label>
-                    <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="apkDialogOpen = true">
+                    <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="apkDialogOpen = true">
                       <span class="material-symbols-outlined text-[14px]">file_upload</span> {{ t('device.installApk') }}
                     </button>
-                    <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="getCurrentForegroundApp">
+                    <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="getCurrentForegroundApp">
                       <span class="material-symbols-outlined text-[14px]">center_focus_strong</span> {{ t('device.foregroundApp') }}
                     </button>
                   </div>
@@ -206,19 +206,19 @@
                       :placeholder="t('device.searchApp')" @input="onAppSearchInput" @keyup.enter="queryAppPath" @focus="loadAppSearchHistory" @blur="hideAppSearchHistoryDelayed" />
                   </div>
                   <div v-if="showAppSearchHistory && appSearchHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-outline-variant rounded-lg p-1 max-h-32 overflow-y-auto shadow-lg">
-                    <button v-for="(h, i) in appSearchHistory" :key="i" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100"
+                    <button v-for="(h, i) in appSearchHistory" :key="i" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none"
                       @mousedown.prevent @click="selectAppSearchHistory(h)">{{ h }}</button>
                   </div>
                 </div>
-                <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="queryAppPath">
+                <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="queryAppPath">
                   <span class="material-symbols-outlined text-[14px]">folder_open</span> {{ t('device.path') }}
                 </button>
                 <div v-if="totalPages > 1" class="flex items-center gap-2 text-sm text-on-surface bg-white/30 border border-white/50 rounded-xl px-3 py-1 ml-auto backdrop-blur-sm">
-                  <button class="hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 rounded-full p-0.5 transition-all disabled:opacity-50" :disabled="appPage <= 1" @click="appPage = Math.max(1, appPage - 1); nextTick(loadVisibleAppVersions)">
+                  <button class="hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 rounded-full p-0.5 transition-all disabled:opacity-50 select-none" :disabled="appPage <= 1" @click="appPage = Math.max(1, appPage - 1); nextTick(loadVisibleAppVersions)">
                     <span class="material-symbols-outlined text-[16px]">chevron_left</span>
                   </button>
                   <span class="whitespace-nowrap">{{ appPage }} / {{ totalPages }}</span>
-                  <button class="hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 rounded-full p-0.5 transition-all disabled:opacity-50" :disabled="appPage >= totalPages" @click="appPage = Math.min(totalPages, appPage + 1); nextTick(loadVisibleAppVersions)">
+                  <button class="hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 rounded-full p-0.5 transition-all disabled:opacity-50 select-none" :disabled="appPage >= totalPages" @click="appPage = Math.min(totalPages, appPage + 1); nextTick(loadVisibleAppVersions)">
                     <span class="material-symbols-outlined text-[16px]">chevron_right</span>
                   </button>
                 </div>
@@ -267,11 +267,11 @@
         <div class="glass-panel rounded-xl p-5 flex flex-col gap-6 overflow-y-auto shadow-md">
           <div class="flex flex-col gap-3">
             <div class="flex items-center justify-between">
-              <h3 class="flex items-center gap-2 font-label-md text-label-md text-on-surface">
+              <h3 class="flex items-center gap-2 font-label-md text-label-md text-on-surface select-none">
                 <span class="material-symbols-outlined text-[16px] text-on-surface-variant">bolt</span> {{ t('device.shortcuts') }}
               </h3>
               <div class="flex items-center gap-1">
-                <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-on-surface-variant backdrop-blur-sm" :title="t('device.manage')" @click="showCmdManager = true">
+                <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-on-surface-variant backdrop-blur-sm select-none" :title="t('device.manage')" @click="showCmdManager = true">
                   <span class="material-symbols-outlined text-[18px]">edit_note</span>
                 </button>
               </div>
@@ -305,7 +305,7 @@
               <span class="material-symbols-outlined text-[16px]">screenshot_monitor</span>
               <span class="font-label-md text-label-md text-on-surface">{{ t('device.screenMirror') }}</span>
             </div>
-            <button class="glass-button px-4 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1"
+            <button class="glass-button px-4 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1 select-none"
               :class="isMirroring ? 'bg-error/10 text-error border border-error/20' : ''"
               @click="toggleMirror">
               <span class="material-symbols-outlined text-[16px]">{{ isMirroring ? 'stop' : 'play_arrow' }}</span>
@@ -459,12 +459,12 @@
           <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
           <div class="glass-panel rounded-[2rem] p-4 w-full max-w-2xl max-h-[85vh] relative z-10 bg-white/60 flex flex-col">
             <div class="flex justify-between items-center mb-2 shrink-0">
-              <h3 class="font-label-md text-label-md text-on-surface font-semibold truncate">{{ previewDialog.name }}</h3>
+              <h3 class="font-label-md text-label-md text-on-surface font-semibold truncate select-none">{{ previewDialog.name }}</h3>
               <div class="flex gap-2 shrink-0">
-                <button class="glass-button px-3 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1" @click="editFile(previewDialog.name)">
+                <button class="glass-button px-3 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1 select-none" @click="editFile(previewDialog.name)">
                   <span class="material-symbols-outlined text-[16px]">edit</span>{{ t('device.edit') }}
                 </button>
-                <button class="glass-button p-1.5 rounded-lg" @click="previewDialog.show = false">
+                <button class="glass-button p-1.5 rounded-lg select-none" @click="previewDialog.show = false">
                   <span class="material-symbols-outlined text-[20px]">close</span>
                 </button>
               </div>
@@ -492,17 +492,17 @@
           <div class="glass-panel rounded-[2rem] p-4 w-full max-w-6xl h-[85vh] relative z-10 bg-white/60 flex flex-col">
             <div class="flex justify-between items-center mb-2 shrink-0">
               <div class="flex items-center gap-2 min-w-0">
-                <h3 class="font-label-md text-label-md text-on-surface font-semibold truncate">{{ fileEditDialog.filePath }}</h3>
+                <h3 class="font-label-md text-label-md text-on-surface font-semibold truncate select-none">{{ fileEditDialog.filePath }}</h3>
                 <span v-if="fileEditDialog.loading" class="w-3.5 h-3.5 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
               </div>
               <div class="flex gap-2 shrink-0">
-                <button class="glass-button px-3 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1" :disabled="fileEditDialog.loading" @click="saveEditedFile">
+                <button class="glass-button px-3 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1 select-none" :disabled="fileEditDialog.loading" @click="saveEditedFile">
                   <span class="material-symbols-outlined text-[16px]">save</span>{{ t('device.save') }}
                 </button>
-                <button class="glass-button px-3 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1" @click="downloadFileFromEdit">
+                <button class="glass-button px-3 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1 select-none" @click="downloadFileFromEdit">
                   <span class="material-symbols-outlined text-[16px]">download</span>{{ t('device.download') }}
                 </button>
-                <button class="glass-button p-1.5 rounded-lg" @click="fileEditDialog.show = false">
+                <button class="glass-button p-1.5 rounded-lg select-none" @click="fileEditDialog.show = false">
                   <span class="material-symbols-outlined text-[20px]">close</span>
                 </button>
               </div>
@@ -529,8 +529,8 @@
           <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
           <div class="glass-panel rounded-[2rem] p-6 w-full max-w-xl max-h-[80vh] relative z-10 bg-white/60 overflow-y-auto">
             <div class="flex justify-between items-center mb-4">
-              <h3 class="font-label-lg text-label-lg text-on-surface font-semibold">{{ infoDialog.title }}</h3>
-              <button class="glass-button p-1 rounded" @click="infoDialog.show = false">
+              <h3 class="font-label-lg text-label-lg text-on-surface font-semibold select-none">{{ infoDialog.title }}</h3>
+              <button class="glass-button p-1 rounded select-none" @click="infoDialog.show = false">
                 <span class="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
@@ -540,7 +540,7 @@
                   <span class="font-label-md text-label-md text-on-surface font-medium text-[13px] break-all">{{ item.key }}</span>
                   <div class="flex items-start gap-1">
                     <span class="font-body-sm text-body-sm text-secondary break-all text-[12px]">{{ item.value }}</span>
-                    <button v-if="item.raw" class="shrink-0 text-[11px] text-secondary hover:text-secondary/70" @click="toggleInfoExpand(idx)">
+                    <button v-if="item.raw" class="shrink-0 text-[11px] text-secondary hover:text-secondary/70 select-none" @click="toggleInfoExpand(idx)">
                       <span class="material-symbols-outlined text-[14px]">{{ infoDialogExpanded.has(idx) ? 'expand_less' : 'expand_more' }}</span>
                     </button>
                   </div>
@@ -558,15 +558,15 @@
           <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
           <div class="glass-panel rounded-[2rem] p-6 w-full max-w-lg relative z-10 bg-white/60">
             <div class="flex justify-between items-center mb-3">
-              <h3 class="font-label-lg text-label-lg text-on-surface font-semibold">{{ resultDialog.title }}</h3>
-              <button class="glass-button p-1 rounded" @click="resultDialog.show = false">
+              <h3 class="font-label-lg text-label-lg text-on-surface font-semibold select-none">{{ resultDialog.title }}</h3>
+              <button class="glass-button p-1 rounded select-none" @click="resultDialog.show = false">
                 <span class="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
             <pre class="bg-black/5 rounded-xl p-3 text-[12px] font-mono whitespace-pre-wrap break-all max-h-64 overflow-y-auto mb-3">{{ resultDialog.content }}</pre>
             <div class="flex gap-2 justify-end">
-              <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md" @click="resultDialog.show = false">{{ t('device.close') }}</button>
-              <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md flex items-center gap-1" @click="copyToClipboard(resultDialog.content); showToast(t('device.copied'))">
+              <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md select-none" @click="resultDialog.show = false">{{ t('device.close') }}</button>
+              <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md flex items-center gap-1 select-none" @click="copyToClipboard(resultDialog.content); showToast(t('device.copied'))">
                 <span class="material-symbols-outlined text-[14px]">content_copy</span>{{ t('device.copy') }}
               </button>
             </div>
@@ -580,8 +580,8 @@
           <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
           <div class="glass-panel rounded-[2rem] p-6 w-full max-w-lg relative z-10 bg-white/60">
             <div class="flex justify-between items-center mb-3">
-              <h3 class="font-label-lg text-label-lg text-on-surface font-semibold break-all">{{ appDetailDialog.title }}</h3>
-              <button class="glass-button p-1 rounded shrink-0" @click="appDetailDialog.show = false">
+              <h3 class="font-label-lg text-label-lg text-on-surface font-semibold break-all select-none">{{ appDetailDialog.title }}</h3>
+              <button class="glass-button p-1 rounded shrink-0 select-none" @click="appDetailDialog.show = false">
                 <span class="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
@@ -592,8 +592,8 @@
               </div>
             </div>
             <div class="flex gap-2 justify-end mt-4">
-              <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md" @click="appDetailDialog.show = false">{{ t('device.close') }}</button>
-              <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md flex items-center gap-1" @click="copyToClipboard(appDetailDialog.pkg); showToast(t('device.pkgCopied'))">
+              <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md select-none" @click="appDetailDialog.show = false">{{ t('device.close') }}</button>
+              <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md flex items-center gap-1 select-none" @click="copyToClipboard(appDetailDialog.pkg); showToast(t('device.pkgCopied'))">
                 <span class="material-symbols-outlined text-[14px]">content_copy</span>{{ t('device.copyPkgName') }}
               </button>
             </div>
@@ -609,10 +609,10 @@
           <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
           <div class="glass-panel rounded-[2rem] p-6 w-full max-w-md relative z-10 bg-white/60">
             <div class="flex justify-between items-center mb-4">
-              <h3 class="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-1.5">
+              <h3 class="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-1.5 select-none">
                 <span class="material-symbols-outlined text-[16px]">upload</span>{{ t('device.installApk') }}
               </h3>
-              <button class="glass-button p-1 rounded" @click="apkDialogOpen = false">
+              <button class="glass-button p-1 rounded select-none" @click="apkDialogOpen = false">
                 <span class="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
@@ -635,8 +635,8 @@
               </label>
               <!-- Actions -->
               <div class="flex gap-2 justify-end">
-                <button class="glass-button px-4 py-1.5 rounded-lg font-label-md text-label-md" @click="apkDialogOpen = false">{{ t('device.cancel') }}</button>
-                <button class="glass-button px-4 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1"
+                <button class="glass-button px-4 py-1.5 rounded-lg font-label-md text-label-md select-none" @click="apkDialogOpen = false">{{ t('device.cancel') }}</button>
+                <button class="glass-button px-4 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1 select-none"
                   :disabled="!apkFilePath || apkInstalling" @click="handleApkInstall">
                   <span v-if="apkInstalling" class="w-3.5 h-3.5 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
                   <span v-else class="material-symbols-outlined text-[16px]">upload</span>
@@ -656,10 +656,10 @@
           <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
           <div class="glass-panel rounded-[2rem] p-6 w-full max-w-md relative z-10 bg-white/60 max-h-[80vh] flex flex-col">
             <div class="flex justify-between items-center mb-4">
-              <h3 class="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-1.5">
+              <h3 class="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-1.5 select-none">
                 <span class="material-symbols-outlined text-[16px]">edit_note</span>{{ editingCmdIndex !== null ? (editingCmdIndex === -1 ? t('device.addShortcut') : t('device.editShortcut')) : t('device.manageShortcuts') }}
               </h3>
-              <button class="glass-button p-1 rounded" @click="showCmdManager = false; cancelEditCommand()">
+              <button class="glass-button p-1 rounded select-none" @click="showCmdManager = false; cancelEditCommand()">
                 <span class="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
@@ -671,8 +671,8 @@
               <input v-model="editingCmdValue" class="bg-white/80 border border-outline-variant rounded-lg px-3 py-2 font-caption text-caption text-on-surface font-mono focus:ring-2 focus:ring-secondary/30 w-full"
                 :placeholder="t('device.cmdHint')" @keyup.enter="saveCustomCommand" />
               <div class="flex gap-2 justify-end pt-2">
-                <button class="glass-button px-4 py-2 rounded-lg font-label-md text-label-md" @click="cancelEditCommand">{{ t('device.cancel') }}</button>
-                <button class="glass-button px-4 py-2 rounded-lg font-label-md text-label-md" @click="saveCustomCommand">{{ t('device.save') }}</button>
+                <button class="glass-button px-4 py-2 rounded-lg font-label-md text-label-md select-none" @click="cancelEditCommand">{{ t('device.cancel') }}</button>
+                <button class="glass-button px-4 py-2 rounded-lg font-label-md text-label-md select-none" @click="saveCustomCommand">{{ t('device.save') }}</button>
               </div>
             </div>
 
@@ -684,17 +684,17 @@
                   class="flex items-center justify-between gap-2 p-3 bg-white/30 rounded-xl">
                   <div class="font-caption text-caption text-on-surface leading-tight truncate min-w-0">{{ cmd.name }}</div>
                   <div class="flex gap-2 shrink-0">
-                    <button class="glass-button px-2.5 py-1.5 rounded-lg flex items-center gap-1 text-caption font-caption" :title="t('device.edit')" @click="startEditCustomCommand(idx)">
+                    <button class="glass-button px-2.5 py-1.5 rounded-lg flex items-center gap-1 text-caption font-caption select-none" :title="t('device.edit')" @click="startEditCustomCommand(idx)">
                       <span class="material-symbols-outlined text-[14px]">edit</span>{{ t('device.edit') }}
                     </button>
-                    <button class="glass-button px-2.5 py-1.5 rounded-lg flex items-center gap-1 text-caption font-caption text-error" :title="t('device.delete')" @click="confirmThen(`${t('device.delete')}「${cmd.name}」?`, async () => removeCustomCommand(idx))">
+                    <button class="glass-button px-2.5 py-1.5 rounded-lg flex items-center gap-1 text-caption font-caption text-error select-none" :title="t('device.delete')" @click="confirmThen(`${t('device.delete')}「${cmd.name}」?`, async () => removeCustomCommand(idx))">
                       <span class="material-symbols-outlined text-[14px]">delete</span>{{ t('device.delete') }}
                     </button>
                   </div>
                 </div>
               </div>
               <div class="pt-3 border-t border-outline-variant/30">
-                <button class="text-sm text-on-surface-variant hover:text-secondary flex items-center gap-1 transition-colors" @click="addCustomCommand">
+                <button class="text-sm text-on-surface-variant hover:text-secondary flex items-center gap-1 transition-colors select-none" @click="addCustomCommand">
                   <span class="material-symbols-outlined text-[16px]">add</span>{{ t('device.addShortcut') }}
                 </button>
               </div>
@@ -712,11 +712,11 @@
           <div class="glass-panel rounded-[2rem] p-6 w-full max-w-sm relative z-10 bg-white/60">
             <div class="flex items-center gap-3 mb-4">
               <span class="material-symbols-outlined text-[24px] text-error">warning</span>
-              <h3 class="font-headline-md text-headline-md text-on-surface font-semibold">{{ confirmDialog.title }}</h3>
+              <h3 class="font-headline-md text-headline-md text-on-surface font-semibold select-none">{{ confirmDialog.title }}</h3>
             </div>
             <div class="flex gap-2 justify-end">
-              <button class="glass-button px-4 py-2 rounded-lg font-label-md text-label-md" @click="confirmDialog.show = false">{{ t('device.cancel') }}</button>
-              <button class="px-4 py-2 rounded-lg font-label-md text-label-md bg-error/10 text-error border border-error/20" @click="confirmDialog.onConfirm()">{{ t('device.confirm') }}</button>
+              <button class="glass-button px-4 py-2 rounded-lg font-label-md text-label-md select-none" @click="confirmDialog.show = false">{{ t('device.cancel') }}</button>
+              <button class="px-4 py-2 rounded-lg font-label-md text-label-md bg-error/10 text-error border border-error/20 select-none" @click="confirmDialog.onConfirm()">{{ t('device.confirm') }}</button>
             </div>
           </div>
         </div>
@@ -734,7 +734,7 @@
                 <span v-else class="material-symbols-outlined text-[16px] text-success-indicator shrink-0">check_circle</span>
                 <span class="font-label-md text-label-md text-on-surface font-medium truncate">{{ cmdExec.title }}</span>
               </div>
-              <button v-if="!cmdExec.running" class="glass-button p-0.5 rounded-full shrink-0" @click="closeCmdExec">
+              <button v-if="!cmdExec.running" class="glass-button p-0.5 rounded-full shrink-0 select-none" @click="closeCmdExec">
                 <span class="material-symbols-outlined text-[14px]">close</span>
               </button>
             </div>

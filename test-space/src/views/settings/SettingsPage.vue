@@ -6,12 +6,12 @@
         <span class="font-body-md text-body-md text-on-surface font-medium">{{ t("settings.language") }}</span>
         <div class="flex gap-2">
           <button
-            class="glass-button px-4 py-2 rounded-full font-label-md text-label-md"
+            class="glass-button px-4 py-2 rounded-full font-label-md text-label-md select-none"
             :class="lang === 'zh' ? 'glass-active' : ''"
             @click="setLanguage('zh')"
           >{{ t("settings.langZh") }}</button>
           <button
-            class="glass-button px-4 py-2 rounded-full font-label-md text-label-md"
+            class="glass-button px-4 py-2 rounded-full font-label-md text-label-md select-none"
             :class="lang === 'en' ? 'glass-active' : ''"
             @click="setLanguage('en')"
           >{{ t("settings.langEn") }}</button>
@@ -25,7 +25,7 @@
         <span class="font-body-md text-body-md text-on-surface font-medium">{{ t("settings.theme") }}</span>
         <div class="flex gap-2">
           <button
-            class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-2"
+            class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-2 select-none"
             :class="theme === 'light' ? 'glass-active' : ''"
             @click="setTheme('light')"
           >
@@ -33,7 +33,7 @@
             {{ t("settings.themeLight") }}
           </button>
           <button
-            class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-2"
+            class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-2 select-none"
             :class="theme === 'dark' ? 'glass-active' : ''"
             @click="setTheme('dark')"
           >
@@ -50,11 +50,11 @@
         <span class="font-body-md text-body-md text-on-surface font-medium">{{ t("settings.backup") }}</span>
         <p class="font-caption text-caption text-on-surface-variant mt-0.5">{{ t("settings.backupDesc") }}</p>
         <div class="flex gap-4 mt-4">
-          <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2" @click="handleExport">
+          <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2 select-none" @click="handleExport">
             <span class="material-symbols-outlined text-[18px]">file_upload</span>
             {{ t("settings.exportAll") }}
           </button>
-          <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2" @click="handleImport">
+          <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2 select-none" @click="handleImport">
             <span class="material-symbols-outlined text-[18px]">file_download</span>
             {{ t("settings.importAll") }}
           </button>

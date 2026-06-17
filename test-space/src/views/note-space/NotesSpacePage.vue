@@ -12,7 +12,7 @@
             class="bg-transparent border-none outline-none text-[12px] text-on-surface w-full"
             @input="onSearch"
           />
-          <button v-if="searchQuery" class="glass-button p-0.5" @click="clearSearch">
+          <button v-if="searchQuery" class="glass-button p-0.5 select-none" @click="clearSearch">
             <span class="material-symbols-outlined text-[12px]">close</span>
           </button>
         </div>
@@ -20,10 +20,10 @@
       <div class="px-3 py-1.5 border-b border-glass-border-light/50 flex justify-between items-center">
         <span class="font-label-md text-label-md text-on-surface font-semibold text-[12px]">{{ t('notes.directory') }}</span>
         <div class="flex gap-1">
-          <button class="glass-button p-0.5" :title="t('notes.newFolder')" @click="createFolder">
+          <button class="glass-button p-0.5 select-none" :title="t('notes.newFolder')" @click="createFolder">
             <span class="material-symbols-outlined text-[14px]">create_new_folder</span>
           </button>
-          <button class="glass-button p-0.5" :title="t('notes.newNoteAction')" @click="createNote">
+          <button class="glass-button p-0.5 select-none" :title="t('notes.newNoteAction')" @click="createNote">
             <span class="material-symbols-outlined text-[14px]">note_add</span>
           </button>
         </div>
@@ -31,7 +31,7 @@
       <!-- Space selector dropdown -->
       <div class="px-2 py-1.5 border-b border-glass-border-light/30">
         <div class="relative" ref="spaceDropdownRef">
-          <button class="w-full flex items-center justify-between gap-1 px-2 py-1 rounded-md text-[11px] glass-hover cursor-pointer transition-colors text-on-surface-variant" @click="showSpaceDropdown = !showSpaceDropdown">
+          <button class="w-full flex items-center justify-between gap-1 px-2 py-1 rounded-md text-[11px] glass-hover cursor-pointer transition-colors text-on-surface-variant select-none" @click="showSpaceDropdown = !showSpaceDropdown">
             <span class="truncate font-medium">{{ spaces.find(s => s.id === selectedSpaceId)?.name || t('notes.allNotes') }}</span>
             <span class="material-symbols-outlined text-[14px]">expand_more</span>
           </button>
@@ -46,17 +46,17 @@
               >
                 <span class="truncate flex-1">{{ space.name }}</span>
                 <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100">
-                  <button class="p-0.5 rounded hover:bg-black/5" @click.stop="startRenameSpace(space)" :title="t('notes.rename')">
+                  <button class="p-0.5 rounded hover:bg-black/5 select-none" @click.stop="startRenameSpace(space)" :title="t('notes.rename')">
                     <span class="material-symbols-outlined text-[12px]">edit</span>
                   </button>
-                  <button class="p-0.5 rounded hover:bg-red-50 text-red-400" @click.stop="confirmDeleteSpace(space)" :title="t('notes.delete')">
+                  <button class="p-0.5 rounded hover:bg-red-50 text-red-400 select-none" @click.stop="confirmDeleteSpace(space)" :title="t('notes.delete')">
                     <span class="material-symbols-outlined text-[12px]">delete</span>
                   </button>
                 </div>
               </div>
             </div>
             <div class="border-t border-gray-100 py-1">
-              <button class="w-full flex items-center gap-1 px-3 py-1.5 text-[11px] text-on-surface-variant hover:bg-gray-50 transition-colors" @click="createSpace(); showSpaceDropdown = false">
+              <button class="w-full flex items-center gap-1 px-3 py-1.5 text-[11px] text-on-surface-variant hover:bg-gray-50 transition-colors select-none" @click="createSpace(); showSpaceDropdown = false">
                 <span class="material-symbols-outlined text-[13px]">add</span> {{ t('notes.newSpace') }}
               </button>
             </div>
@@ -88,7 +88,7 @@
               <span class="material-symbols-outlined text-[13px] text-secondary">description</span>
               <span class="font-body-md text-body-md text-[12px] flex-1 truncate">{{ note.title || t('notes.untitled') }}</span>
               <span class="material-symbols-outlined text-[12px] text-secondary">star</span>
-              <button class="glass-button p-0.5 opacity-0 group-hover:opacity-100 rounded" :title="t('notes.delete')" @click.stop="confirmDeleteNote(note)">
+              <button class="glass-button p-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.delete')" @click.stop="confirmDeleteNote(note)">
                 <span class="material-symbols-outlined text-[11px]">delete</span>
               </button>
             </div>
@@ -114,13 +114,13 @@
             >
               <span class="material-symbols-outlined text-[14px]">{{ expandedFolders[folder.id] ? 'folder_open' : 'folder' }}</span>
               <span class="font-body-md text-body-md text-[12px] flex-1 truncate">{{ folder.name }}</span>
-              <button class="glass-button p-0.5 rounded opacity-0 group-hover:opacity-100" title="Add" @click.stop="openFolderAddDropdown(folder.id, $event)">
+              <button class="glass-button p-0.5 rounded opacity-0 group-hover:opacity-100 select-none" title="Add" @click.stop="openFolderAddDropdown(folder.id, $event)">
                 <span class="material-symbols-outlined text-[13px]">add</span>
               </button>
-              <button class="glass-button p-0.5 rounded opacity-0 group-hover:opacity-100" :title="t('notes.rename')" @click.stop="startRenameFolder(folder)">
+              <button class="glass-button p-0.5 rounded opacity-0 group-hover:opacity-100 select-none" :title="t('notes.rename')" @click.stop="startRenameFolder(folder)">
                 <span class="material-symbols-outlined text-[12px]">edit</span>
               </button>
-              <button class="glass-button p-0.5 rounded opacity-0 group-hover:opacity-100" :title="t('notes.delete')" @click.stop="deleteFolder(folder.id)">
+              <button class="glass-button p-0.5 rounded opacity-0 group-hover:opacity-100 select-none" :title="t('notes.delete')" @click.stop="deleteFolder(folder.id)">
                 <span class="material-symbols-outlined text-[12px]">delete</span>
               </button>
             </div>
@@ -137,7 +137,7 @@
                   <span class="material-symbols-outlined text-[13px] text-secondary">description</span>
                   <span class="font-body-md text-body-md text-[12px] flex-1 truncate">{{ note.title || t('notes.untitled') }}</span>
                   <span v-if="note.isFavorite" class="material-symbols-outlined text-[12px] text-secondary">star</span>
-                  <button class="glass-button p-0.5 opacity-0 group-hover:opacity-100 rounded" :title="t('notes.delete')" @click.stop="confirmDeleteNote(note)">
+                  <button class="glass-button p-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.delete')" @click.stop="confirmDeleteNote(note)">
                     <span class="material-symbols-outlined text-[11px]">delete</span>
                   </button>
                 </div>
@@ -164,7 +164,7 @@
             >
               <span class="material-symbols-outlined text-[13px] text-secondary">description</span>
               <span class="font-body-md text-body-md text-[12px] flex-1 truncate">{{ note.title || t('notes.untitled') }}</span>
-              <button class="glass-button p-0.5 opacity-0 group-hover:opacity-100 rounded" :title="t('notes.delete')" @click.stop="confirmDeleteNote(note)">
+              <button class="glass-button p-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.delete')" @click.stop="confirmDeleteNote(note)">
                 <span class="material-symbols-outlined text-[11px]">delete</span>
               </button>
             </div>
@@ -192,21 +192,21 @@
             @input="onTitleChange"
           />
           <div class="flex items-center gap-1">
-            <button class="toolbar-btn !p-1" :class="{ 'toolbar-active': currentNoteData?.isFavorite }" :title="t('notes.favorites')" @click="toggleFavorite">
+            <button class="toolbar-btn !p-1 select-none" :class="{ 'toolbar-active': currentNoteData?.isFavorite }" :title="t('notes.favorites')" @click="toggleFavorite">
               <span class="material-symbols-outlined text-[20px]">{{ currentNoteData?.isFavorite ? 'star' : 'star_border' }}</span>
             </button>
             <div class="relative" ref="exportMenuRef">
-              <button class="toolbar-btn !p-1" :title="t('notes.exportMd')" @click="showExportMenu = !showExportMenu">
+              <button class="toolbar-btn !p-1 select-none" :title="t('notes.exportMd')" @click="showExportMenu = !showExportMenu">
                 <span class="material-symbols-outlined text-[20px]">file_download</span>
               </button>
               <div v-if="showExportMenu" class="absolute right-0 top-full mt-1 bg-white rounded-xl py-1 min-w-[220px] z-50 shadow-xl border border-gray-200/80 overflow-hidden" @click.stop>
-                <button class="hover:bg-gray-100 w-full text-left px-4 py-2.5 text-[13px] text-gray-700 flex items-center gap-2 transition-colors" @click="exportAs('docx')">
+                <button class="hover:bg-gray-100 w-full text-left px-4 py-2.5 text-[13px] text-gray-700 flex items-center gap-2 transition-colors select-none" @click="exportAs('docx')">
                   <span class="material-symbols-outlined text-[16px] text-gray-500">description</span> {{ t('notes.exportWord') }}
                 </button>
-                <button class="hover:bg-gray-100 w-full text-left px-4 py-2.5 text-[13px] text-gray-700 flex items-center gap-2 transition-colors" @click="exportAs('md')">
+                <button class="hover:bg-gray-100 w-full text-left px-4 py-2.5 text-[13px] text-gray-700 flex items-center gap-2 transition-colors select-none" @click="exportAs('md')">
                   <span class="material-symbols-outlined text-[16px] text-gray-500">code</span> {{ t('notes.exportMd') }}
                 </button>
-                <button class="hover:bg-gray-100 w-full text-left px-4 py-2.5 text-[13px] text-gray-700 flex items-center gap-2 transition-colors" @click="exportAs('pdf')">
+                <button class="hover:bg-gray-100 w-full text-left px-4 py-2.5 text-[13px] text-gray-700 flex items-center gap-2 transition-colors select-none" @click="exportAs('pdf')">
                   <span class="material-symbols-outlined text-[16px] text-gray-500">picture_as_pdf</span> {{ t('notes.exportPdf') }}
                 </button>
               </div>
@@ -218,51 +218,51 @@
           </div>
         </div>
         <div class="bg-white/40 backdrop-blur-md border-b border-glass-border-light/30 px-4 py-2 flex items-center gap-1 flex-wrap">
-          <button class="toolbar-btn" :class="{ 'toolbar-active': editor?.isActive('bold') }" @click="editor?.chain().focus().toggleBold().run()" title="Bold">
+          <button class="toolbar-btn select-none" :class="{ 'toolbar-active': editor?.isActive('bold') }" @click="editor?.chain().focus().toggleBold().run()" title="Bold">
             <span class="material-symbols-outlined text-[20px]">format_bold</span>
           </button>
-          <button class="toolbar-btn" :class="{ 'toolbar-active': editor?.isActive('italic') }" @click="editor?.chain().focus().toggleItalic().run()" title="Italic">
+          <button class="toolbar-btn select-none" :class="{ 'toolbar-active': editor?.isActive('italic') }" @click="editor?.chain().focus().toggleItalic().run()" title="Italic">
             <span class="material-symbols-outlined text-[20px]">format_italic</span>
           </button>
-          <button class="toolbar-btn" :class="{ 'toolbar-active': editor?.isActive('underline') }" @click="editor?.chain().focus().toggleUnderline().run()" title="Underline">
+          <button class="toolbar-btn select-none" :class="{ 'toolbar-active': editor?.isActive('underline') }" @click="editor?.chain().focus().toggleUnderline().run()" title="Underline">
             <span class="material-symbols-outlined text-[20px]">format_underlined</span>
           </button>
-          <button class="toolbar-btn" :class="{ 'toolbar-active': editor?.isActive('strike') }" @click="editor?.chain().focus().toggleStrike().run()" title="Strikethrough">
+          <button class="toolbar-btn select-none" :class="{ 'toolbar-active': editor?.isActive('strike') }" @click="editor?.chain().focus().toggleStrike().run()" title="Strikethrough">
             <span class="material-symbols-outlined text-[20px]">strikethrough_s</span>
           </button>
           <div class="w-px h-4 bg-outline-variant/30 mx-1"></div>
-          <button class="toolbar-btn" :class="{ 'toolbar-active': editor?.isActive('heading', { level: 1 }) }" @click="editor?.chain().focus().toggleHeading({ level: 1 }).run()" title="Heading 1">
+          <button class="toolbar-btn select-none" :class="{ 'toolbar-active': editor?.isActive('heading', { level: 1 }) }" @click="editor?.chain().focus().toggleHeading({ level: 1 }).run()" title="Heading 1">
             <span class="text-[13px] font-bold px-1">H1</span>
           </button>
-          <button class="toolbar-btn" :class="{ 'toolbar-active': editor?.isActive('heading', { level: 2 }) }" @click="editor?.chain().focus().toggleHeading({ level: 2 }).run()" title="Heading 2">
+          <button class="toolbar-btn select-none" :class="{ 'toolbar-active': editor?.isActive('heading', { level: 2 }) }" @click="editor?.chain().focus().toggleHeading({ level: 2 }).run()" title="Heading 2">
             <span class="text-[13px] font-bold px-1">H2</span>
           </button>
-          <button class="toolbar-btn" :class="{ 'toolbar-active': editor?.isActive('heading', { level: 3 }) }" @click="editor?.chain().focus().toggleHeading({ level: 3 }).run()" title="Heading 3">
+          <button class="toolbar-btn select-none" :class="{ 'toolbar-active': editor?.isActive('heading', { level: 3 }) }" @click="editor?.chain().focus().toggleHeading({ level: 3 }).run()" title="Heading 3">
             <span class="text-[13px] font-bold px-1">H3</span>
           </button>
           <div class="w-px h-4 bg-outline-variant/30 mx-1"></div>
-          <button class="toolbar-btn" :class="{ 'toolbar-active': editor?.isActive('bulletList') }" @click="toggleBulletList" title="Bullet List">
+          <button class="toolbar-btn select-none" :class="{ 'toolbar-active': editor?.isActive('bulletList') }" @click="toggleBulletList" title="Bullet List">
             <span class="material-symbols-outlined text-[20px]">format_list_bulleted</span>
           </button>
-          <button class="toolbar-btn" :class="{ 'toolbar-active': editor?.isActive('orderedList') }" @click="toggleOrderedList" title="Ordered List">
+          <button class="toolbar-btn select-none" :class="{ 'toolbar-active': editor?.isActive('orderedList') }" @click="toggleOrderedList" title="Ordered List">
             <span class="material-symbols-outlined text-[20px]">format_list_numbered</span>
           </button>
-          <button class="toolbar-btn" :class="{ 'toolbar-active': editor?.isActive('blockquote') }" @click="editor?.chain().focus().toggleBlockquote().run()" title="Blockquote">
+          <button class="toolbar-btn select-none" :class="{ 'toolbar-active': editor?.isActive('blockquote') }" @click="editor?.chain().focus().toggleBlockquote().run()" title="Blockquote">
             <span class="material-symbols-outlined text-[20px]">format_quote</span>
           </button>
-          <button class="toolbar-btn" @click="showLinkDialog = true" :title="t('notes.insertLink')">
+          <button class="toolbar-btn select-none" @click="showLinkDialog = true" :title="t('notes.insertLink')">
             <span class="material-symbols-outlined text-[20px]">link</span>
           </button>
-          <button class="toolbar-btn text-on-surface-variant relative overflow-hidden" @click="triggerImageUpload" title="Insert Image">
+          <button class="toolbar-btn text-on-surface-variant relative overflow-hidden select-none" @click="triggerImageUpload" title="Insert Image">
             <span class="material-symbols-outlined text-[20px]">image</span>
           </button>
           <input type="file" accept="image/*" class="hidden" ref="imageInput" @change="addImage" />
           <div class="w-px h-4 bg-outline-variant/30 mx-1"></div>
           <div class="w-px h-4 bg-outline-variant/30 mx-1"></div>
-          <button class="toolbar-btn" @click="editor?.chain().focus().undo().run()" title="Undo">
+          <button class="toolbar-btn select-none" @click="editor?.chain().focus().undo().run()" title="Undo">
             <span class="material-symbols-outlined text-[20px]">undo</span>
           </button>
-          <button class="toolbar-btn" @click="editor?.chain().focus().redo().run()" title="Redo">
+          <button class="toolbar-btn select-none" @click="editor?.chain().focus().redo().run()" title="Redo">
             <span class="material-symbols-outlined text-[20px]">redo</span>
           </button>
         </div>
@@ -277,7 +277,7 @@
     <!-- TOC Toggle Button (semi-transparent, right side) -->
     <button
       v-if="selectedNoteId && !showToc"
-      class="fixed right-0 top-1/2 -translate-y-1/2 z-50 bg-white/40 backdrop-blur-md border border-white/60 rounded-l-md px-1.5 py-4 shadow-lg hover:bg-white/60 hover:pr-2 transition-all opacity-[85%]"
+      class="fixed right-0 top-1/2 -translate-y-1/2 z-50 bg-white/40 backdrop-blur-md border border-white/60 rounded-l-md px-1.5 py-4 shadow-lg hover:bg-white/60 hover:pr-2 transition-all opacity-[85%] select-none"
       :title="t('notes.toc')"
       @click="showToc = true"
     >
@@ -293,7 +293,7 @@
               <span class="material-symbols-outlined text-[18px]">toc</span>
               Table of Contents
             </span>
-            <button class="glass-button p-1 rounded hover:bg-white/20 transition-colors" @click="showToc = false">
+            <button class="glass-button p-1 rounded hover:bg-white/20 transition-colors select-none" @click="showToc = false">
               <span class="material-symbols-outlined text-[16px]">close</span>
             </button>
           </div>
@@ -310,7 +310,7 @@
                 :style="{ paddingLeft: (8 + item.depth * 16) + 'px' }"
                 @click="item.canExpand ? toggleTocNode(item.index) : scrollToHeading(item.index)"
               >
-                <button v-if="item.canExpand && tocCollapsed.has(item.index)" class="flex-shrink-0 p-0.5 rounded hover:bg-black/5 transition-transform duration-200" @click.stop="toggleTocNode(item.index)">
+                <button v-if="item.canExpand && tocCollapsed.has(item.index)" class="flex-shrink-0 p-0.5 rounded hover:bg-black/5 transition-transform duration-200 select-none" @click.stop="toggleTocNode(item.index)">
                   <span class="material-symbols-outlined text-[14px]">chevron_right</span>
                 </button>
                 <span v-else class="w-5 flex-shrink-0"></span>
@@ -327,7 +327,7 @@
     <Teleport to="body">
       <div v-if="showLinkDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm" @click.self="showLinkDialog = false">
         <div class="glass-panel rounded-2xl p-6 w-96 bg-white/60" @click.stop>
-          <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-4">{{ t('notes.insertLink') }}</h3>
+          <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-4 select-none">{{ t('notes.insertLink') }}</h3>
           <div class="space-y-3">
             <div>
               <label class="text-[12px] text-on-surface-variant block mb-1">{{ t('notes.url') }}</label>
@@ -351,8 +351,8 @@
             </div>
           </div>
           <div class="flex justify-end gap-2 mt-6">
-            <button class="glass-button px-4 py-2 rounded-full text-[13px]" @click="showLinkDialog = false">{{ t('notes.cancel') }}</button>
-            <button class="glass-button px-4 py-2 rounded-full text-[13px] glass-active" @click="confirmLink" :disabled="!linkUrl.trim()">{{ t('notes.apply') }}</button>
+            <button class="glass-button px-4 py-2 rounded-full text-[13px] select-none" @click="showLinkDialog = false">{{ t('notes.cancel') }}</button>
+            <button class="glass-button px-4 py-2 rounded-full text-[13px] glass-active select-none" @click="confirmLink" :disabled="!linkUrl.trim()">{{ t('notes.apply') }}</button>
           </div>
         </div>
       </div>
@@ -362,7 +362,7 @@
     <Teleport to="body">
       <div v-if="renameTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm" @click.self="renameTarget = null">
         <div class="glass-panel rounded-2xl p-6 w-80 bg-white/60">
-          <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-4">{{ t('notes.rename') }}</h3>
+          <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-4 select-none">{{ t('notes.rename') }}</h3>
           <input
             v-model="renameValue"
             class="glass-input w-full px-3 py-2 rounded-lg text-[14px] outline-none mb-4"
@@ -370,8 +370,8 @@
             ref="renameInputRef"
           />
           <div class="flex justify-end gap-2">
-            <button class="glass-button px-4 py-2 rounded-full text-[13px]" @click="renameTarget = null">{{ t('notes.cancel') }}</button>
-            <button class="glass-button px-4 py-2 rounded-full text-[13px] glass-active" @click="confirmRename">{{ t('notes.rename') }}</button>
+            <button class="glass-button px-4 py-2 rounded-full text-[13px] select-none" @click="renameTarget = null">{{ t('notes.cancel') }}</button>
+            <button class="glass-button px-4 py-2 rounded-full text-[13px] glass-active select-none" @click="confirmRename">{{ t('notes.rename') }}</button>
           </div>
         </div>
       </div>
@@ -381,10 +381,10 @@
     <Teleport to="body">
       <div v-if="folderAddDropdownId" ref="folderAddDropdownRef" class="fixed z-50" :style="{ left: folderAddDropdownPos.x + 'px', top: folderAddDropdownPos.y + 'px' }">
         <div class="bg-white rounded-lg shadow-xl border border-gray-200/80 overflow-hidden min-w-[140px]">
-          <button class="w-full flex items-center gap-2 px-3 py-2 text-[12px] hover:bg-gray-50 transition-colors text-left" @click="createSubFolder(folderAddDropdownId!)">
+          <button class="w-full flex items-center gap-2 px-3 py-2 text-[12px] hover:bg-gray-50 transition-colors text-left select-none" @click="createSubFolder(folderAddDropdownId!)">
             <span class="material-symbols-outlined text-[14px]">create_new_folder</span> {{ t('notes.newFolderTitle') }}
           </button>
-          <button class="w-full flex items-center gap-2 px-3 py-2 text-[12px] hover:bg-gray-50 transition-colors text-left" @click="addNoteToFolder(folderAddDropdownId!)">
+          <button class="w-full flex items-center gap-2 px-3 py-2 text-[12px] hover:bg-gray-50 transition-colors text-left select-none" @click="addNoteToFolder(folderAddDropdownId!)">
             <span class="material-symbols-outlined text-[14px]">note_add</span> {{ t('notes.newNoteTitle') }}
           </button>
         </div>
@@ -395,11 +395,11 @@
     <Teleport to="body">
       <div v-if="deleteSpaceTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="deleteSpaceTarget = null">
         <div class="glass-panel rounded-2xl p-6 w-80 bg-white/80">
-          <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-2">{{ t('notes.deleteSpace') }}</h3>
+          <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-2 select-none">{{ t('notes.deleteSpace') }}</h3>
           <p class="text-[13px] text-on-surface-variant mb-6" v-html="t('notes.deleteSpaceDesc', { name: `<strong>${deleteSpaceTarget.name}</strong>` })"></p>
           <div class="flex justify-end gap-2">
-            <button class="glass-button px-4 py-2 rounded-full text-[13px]" @click="deleteSpaceTarget = null">{{ t('notes.cancel') }}</button>
-            <button class="px-4 py-2 rounded-full text-[13px] bg-red-500 text-white hover:bg-red-600 transition-colors" @click="doDeleteSpace">{{ t('notes.delete') }}</button>
+            <button class="glass-button px-4 py-2 rounded-full text-[13px] select-none" @click="deleteSpaceTarget = null">{{ t('notes.cancel') }}</button>
+            <button class="px-4 py-2 rounded-full text-[13px] bg-red-500 text-white hover:bg-red-600 transition-colors select-none" @click="doDeleteSpace">{{ t('notes.delete') }}</button>
           </div>
         </div>
       </div>
@@ -409,11 +409,11 @@
     <Teleport to="body">
       <div v-if="deleteFolderTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="deleteFolderTarget = null">
         <div class="glass-panel rounded-2xl p-6 w-80 bg-white/80">
-          <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-2">{{ t('notes.deleteFolder') }}</h3>
+          <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-2 select-none">{{ t('notes.deleteFolder') }}</h3>
           <p class="text-[13px] text-on-surface-variant mb-6" v-html="t('notes.deleteFolderDesc', { name: `<strong>${deleteFolderTarget.name}</strong>` })"></p>
           <div class="flex justify-end gap-2">
-            <button class="glass-button px-4 py-2 rounded-full text-[13px]" @click="deleteFolderTarget = null">{{ t('notes.cancel') }}</button>
-            <button class="px-4 py-2 rounded-full text-[13px] bg-red-500 text-white hover:bg-red-600 transition-colors" @click="doDeleteFolder">{{ t('notes.delete') }}</button>
+            <button class="glass-button px-4 py-2 rounded-full text-[13px] select-none" @click="deleteFolderTarget = null">{{ t('notes.cancel') }}</button>
+            <button class="px-4 py-2 rounded-full text-[13px] bg-red-500 text-white hover:bg-red-600 transition-colors select-none" @click="doDeleteFolder">{{ t('notes.delete') }}</button>
           </div>
         </div>
       </div>
@@ -423,11 +423,11 @@
     <Teleport to="body">
       <div v-if="deleteNoteTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="deleteNoteTarget = null">
         <div class="glass-panel rounded-2xl p-6 w-80 bg-white/80">
-          <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-2">{{ t('notes.deleteNote') }}</h3>
+          <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-2 select-none">{{ t('notes.deleteNote') }}</h3>
           <p class="text-[13px] text-on-surface-variant mb-6" v-html="t('notes.deleteNoteDesc', { name: `<strong>${deleteNoteTarget.title || t('notes.untitled')}</strong>` })"></p>
           <div class="flex justify-end gap-2">
-            <button class="glass-button px-4 py-2 rounded-full text-[13px]" @click="deleteNoteTarget = null">{{ t('notes.cancel') }}</button>
-            <button class="px-4 py-2 rounded-full text-[13px] bg-red-500 text-white hover:bg-red-600 transition-colors" @click="doDeleteNote">{{ t('notes.delete') }}</button>
+            <button class="glass-button px-4 py-2 rounded-full text-[13px] select-none" @click="deleteNoteTarget = null">{{ t('notes.cancel') }}</button>
+            <button class="px-4 py-2 rounded-full text-[13px] bg-red-500 text-white hover:bg-red-600 transition-colors select-none" @click="doDeleteNote">{{ t('notes.delete') }}</button>
           </div>
         </div>
       </div>
