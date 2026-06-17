@@ -418,7 +418,7 @@
             </div>
           </div>
           <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar bg-[#1a1c1d]/5 rounded text-[12px] leading-relaxed relative">
-            <div v-if="dragOverFileList && fileEntries.length > 0" class="absolute inset-0 z-10 flex items-center justify-center bg-secondary/10 backdrop-blur-sm rounded border-2 border-dashed border-secondary/40 pointer-events-none">
+            <div v-if="dragOverFileList" class="absolute inset-0 z-10 flex items-center justify-center bg-white/80 backdrop-blur-sm rounded-lg border-2 border-dashed border-secondary/50">
               <div class="flex flex-col items-center gap-2 text-secondary">
                 <span class="material-symbols-outlined text-3xl">cloud_upload</span>
                 <span class="font-label-md text-label-md font-semibold">{{ t('device.dropToUpload') }}</span>
@@ -429,7 +429,7 @@
               <p class="font-body-sm text-body-sm mt-1">{{ t('device.pathHint') }}</p>
             </div>
             <div v-for="(entry, idx) in fileEntries" :key="idx"
-              class="flex items-center gap-1.5 px-2 py-1 hover:bg-white/20 cursor-pointer border-b border-outline-variant/10 last:border-0 group"
+              class="flex items-center gap-1.5 px-2 py-1 hover:bg-secondary/5 hover:scale-[1.02] cursor-pointer border-b border-outline-variant/10 last:border-0 group transition-all duration-200"
               @dblclick="handleEntryDblClick(entry, $event)">
               <span class="material-symbols-outlined text-[16px] shrink-0"
                 :class="entry.isDir ? 'text-secondary' : 'text-on-surface-variant/60'">{{ entry.isDir ? 'folder' : 'description' }}</span>
@@ -1185,7 +1185,7 @@ async function downloadDir(name: string) {
     appendCmdExec(t('device.downloadDone'));
     finishCmdExec(t('device.dirDownloaded'));
     showToast(t('device.dirDownloaded'));
-  } catch (e: any) { showToast(t('device.downloadFailedWith', { e: String(e) }), "error"); }
+  } catch (e: any) { appendCmdExec(`[${t('device.error')}] ${e}`); finishCmdExec(t('device.downloadFailed')); showToast(t('device.downloadFailedWith', { e: String(e) }), "error"); }
 }
 async function deleteFile(name: string) {
   if (!selectedDevice.value) return;
