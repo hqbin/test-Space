@@ -29,7 +29,6 @@ Thumbs.db
 .env.local
 
 # Compiled binaries
-*.exe
 *.dll
 *.dylib
 *.so
