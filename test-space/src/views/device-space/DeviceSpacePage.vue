@@ -2,7 +2,7 @@
   <div class="flex gap-4 h-screen overflow-hidden select-none">
     <div class="flex-1 flex flex-col gap-4 min-w-0 overflow-hidden">
     <!-- Connection Bar - always visible, moved up -->
-    <div class="glass-panel rounded-xl p-3 px-5 flex items-center gap-4">
+    <div class="glass-panel rounded-xl p-3 px-5 flex items-center gap-3 flex-nowrap overflow-hidden">
       <!-- Tab Switcher (leftmost) -->
       <div class="flex gap-2 shrink-0">
         <button v-for="tab in tabs" :key="tab.key"
@@ -14,28 +14,31 @@
         </button>
       </div>
       <div class="h-5 w-[1px] bg-glass-border-dark shrink-0 ml-auto"></div>
-      <div class="flex items-center border border-outline-variant/60 rounded-full px-4 py-2 bg-white/50 max-w-[400px]">
+      <div class="flex items-center border border-outline-variant/60 rounded-full px-4 py-2 bg-white/50 min-w-[160px] flex-1 max-w-[360px]">
         <span class="material-symbols-outlined text-on-surface-variant text-[16px] mr-2">link</span>
         <input v-model="connectAddress"
           class="flex-1 bg-transparent border-none outline-none font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-0 p-0 select-text"
           :placeholder="t('device.inputHint')" @keyup.enter="connectToDevice" />
       </div>
-      <button class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-1 border border-outline-variant/60 select-none" @click="connectToDevice" :disabled="connecting">
+      <button class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-1 border border-outline-variant/60 shrink-0 select-none" @click="connectToDevice" :disabled="connecting">
         <span v-if="connecting" class="w-3.5 h-3.5 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
         <span v-else class="material-symbols-outlined text-[16px]">add_link</span>{{ connecting ? t('device.connecting') : t('device.connect') }}
       </button>
       <div class="h-5 w-[1px] bg-glass-border-dark"></div>
-      <div class="flex gap-2 flex-wrap items-center">
-        <button v-for="device in devices" :key="device.serial"
-          class="px-3 py-1.5 rounded-full font-caption text-caption flex items-center gap-1.5 transition-all group border hover:scale-105 select-none"
-          :class="selectedDevice?.serial === device.serial ? 'bg-secondary/10 text-secondary border-secondary/30' : 'bg-white/50 border-outline-variant/60 text-on-surface hover:bg-white/70'"
-          @click="selectDevice(device)">
-          <div class="w-2 h-2 rounded-full" :class="device.status === 'online' ? 'bg-success-indicator' : 'bg-outline-variant'"></div>
-          {{ device.name }}
-          <span class="material-symbols-outlined text-[12px] opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-error ml-0.5"
-            @click.stop="disconnectDeviceHandler(device.serial)">close</span>
+      <div class="flex items-center gap-2 shrink-0">
+        <div v-if="devices.length > 0">
+          <button ref="deviceDropdownBtnRef" @click="toggleDeviceDropdown"
+            class="flex items-center gap-2 bg-white/50 border border-outline-variant/60 rounded-full pl-3 pr-3 py-2 font-caption text-caption text-on-surface cursor-pointer hover:bg-white/70 transition-all min-w-[130px] max-w-[200px]">
+            <div class="w-2 h-2 rounded-full shrink-0" :class="selectedDevice?.status === 'online' ? 'bg-success-indicator' : 'bg-outline-variant'"></div>
+            <span class="truncate flex-1 text-left">{{ selectedDevice?.name || t('device.selectDeviceFirst') }}</span>
+            <span class="material-symbols-outlined text-[14px] text-on-surface-variant shrink-0">unfold_more</span>
+          </button>
+        </div>
+        <button v-if="selectedDevice" class="text-on-surface-variant hover:text-error hover:scale-105 transition-all select-none flex items-center" :title="t('device.disconnect')"
+          @click="disconnectDeviceHandler(selectedDevice.serial)">
+          <span class="material-symbols-outlined text-[16px]">close</span>
         </button>
-        <span v-if="devices.length === 0" class="font-caption text-caption text-on-surface-variant/50">{{ t('device.noDevice') }}</span>
+        <span v-if="devices.length === 0" class="font-caption text-caption text-on-surface-variant/50 whitespace-nowrap">{{ t('device.noDevice') }}</span>
       </div>
       <button class="text-on-surface-variant hover:text-secondary hover:scale-105 transition-all select-none" @click="scanDevices()" :disabled="scanLoading">
         <span class="material-symbols-outlined text-[18px] block" :class="scanLoading ? 'animate-spin' : ''">refresh</span>
@@ -417,39 +420,58 @@
                 @mousedown.prevent @click="selectRemotePathHistory(h)">{{ h }}</button>
             </div>
           </div>
-          <div class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar text-[12px] leading-relaxed relative select-none">
-            <div v-if="dragOverFileList" class="absolute inset-0 z-10 flex items-center justify-center bg-white/80 backdrop-blur-sm rounded-lg border-2 border-dashed border-secondary/50">
+          <div class="relative flex-1 min-h-0">
+            <div v-if="dragOverFileList" class="absolute inset-0 z-10 flex items-center justify-center bg-white/80 backdrop-blur-sm rounded-lg border-2 border-dashed border-secondary/50 pointer-events-none">
               <div class="flex flex-col items-center gap-2 text-secondary">
                 <span class="material-symbols-outlined text-3xl">cloud_upload</span>
                 <span class="font-label-md text-label-md font-semibold">{{ t('device.dropToUpload') }}</span>
               </div>
             </div>
-            <div v-if="fileEntries.length === 0" class="text-center py-8 text-on-surface-variant/40">
-              <span class="material-symbols-outlined text-3xl">folder_open</span>
-              <p class="font-body-sm text-body-sm mt-1">{{ t('device.pathHint') }}</p>
-            </div>
-            <div v-for="(entry, idx) in fileEntries" :key="idx"
-              class="flex items-center gap-1.5 px-2 py-1 hover:bg-secondary/5 hover:scale-[1.02] cursor-pointer border-b border-outline-variant/20 last:border-0 group transition-transform duration-200 rounded select-none"
-              @click="handleEntryClick(entry, $event)">
-              <span class="material-symbols-outlined text-[16px] shrink-0"
-                :class="entry.name === '..' ? 'text-secondary' : (entry.isDir ? 'text-secondary' : 'text-on-surface-variant/60')">{{ entry.name === '..' ? 'arrow_back' : (entry.isDir ? 'folder' : 'description') }}</span>
-              <span class="flex-1 truncate font-mono text-[12px] text-on-surface" :class="entry.name === '..' ? 'text-secondary' : ''">{{ entry.name }}</span>
-              <div v-if="entry.name !== '..'" class="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                <button class="glass-button p-0.5 rounded select-none" :title="t('device.download')" @click.stop="entry.isDir ? downloadDir(entry.name) : downloadFile(entry.name)">
-                  <span class="material-symbols-outlined text-[14px]">download</span>
-                </button>
-                <button v-if="!entry.isDir" class="glass-button p-0.5 rounded select-none" :title="t('device.edit')" @click.stop="editFile(entry.name)">
-                  <span class="material-symbols-outlined text-[14px]">edit</span>
-                </button>
-                <button class="glass-button p-0.5 rounded select-none" :title="t('device.delete')" @click.stop="confirmThen(`${t('device.delete')} ${entry.name}?`, () => deleteFile(entry.name))">
-                  <span class="material-symbols-outlined text-[14px] text-error">delete</span>
-                </button>
+            <div class="absolute inset-0 overflow-y-auto overflow-x-hidden custom-scrollbar text-[12px] leading-relaxed select-none">
+              <div v-if="fileEntries.length === 0" class="text-center py-8 text-on-surface-variant/40">
+                <span class="material-symbols-outlined text-3xl">folder_open</span>
+                <p class="font-body-sm text-body-sm mt-1">{{ t('device.pathHint') }}</p>
+              </div>
+              <div v-for="(entry, idx) in fileEntries" :key="idx"
+                class="flex items-center gap-1.5 px-2 py-1 hover:bg-secondary/5 hover:scale-[1.02] cursor-pointer border-b border-outline-variant/20 last:border-0 group transition-transform duration-200 rounded select-none"
+                @click="handleEntryClick(entry, $event)">
+                <span class="material-symbols-outlined text-[16px] shrink-0"
+                  :class="entry.name === '..' ? 'text-secondary' : (entry.isDir ? 'text-secondary' : 'text-on-surface-variant/60')">{{ entry.name === '..' ? 'arrow_back' : (entry.isDir ? 'folder' : 'description') }}</span>
+                <span class="flex-1 truncate font-mono text-[12px] text-on-surface" :class="entry.name === '..' ? 'text-secondary' : ''">{{ entry.name }}</span>
+                <div v-if="entry.name !== '..'" class="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                  <button class="glass-button p-0.5 rounded select-none" :title="t('device.download')" @click.stop="entry.isDir ? downloadDir(entry.name) : downloadFile(entry.name)">
+                    <span class="material-symbols-outlined text-[14px]">download</span>
+                  </button>
+                  <button v-if="!entry.isDir" class="glass-button p-0.5 rounded select-none" :title="t('device.edit')" @click.stop="editFile(entry.name)">
+                    <span class="material-symbols-outlined text-[14px]">edit</span>
+                  </button>
+                  <button class="glass-button p-0.5 rounded select-none" :title="t('device.delete')" @click.stop="confirmThen(`${t('device.delete')} ${entry.name}?`, () => deleteFile(entry.name))">
+                    <span class="material-symbols-outlined text-[14px] text-error">delete</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
     </div>
+
+    <!-- Device Dropdown (teleported to body to escape glass-panel backdrop-filter) -->
+    <Teleport to="body">
+      <div v-if="showDeviceDropdown" class="fixed inset-0 z-50" @click="showDeviceDropdown = false"></div>
+      <div v-if="showDeviceDropdown" class="fixed z-50 bg-white border border-outline-variant rounded-lg p-1 max-h-48 overflow-y-auto custom-scrollbar shadow-lg min-w-[200px]"
+        :style="{ top: deviceDropdownPos.top + 'px', left: deviceDropdownPos.left + 'px' }">
+        <button v-for="d in devices" :key="d.serial"
+          class="w-full flex items-center gap-2 px-2 py-1.5 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none text-left"
+          @mousedown.prevent @click="selectDevice(d); showDeviceDropdown = false">
+          <div class="w-2 h-2 rounded-full shrink-0" :class="d.status === 'online' ? 'bg-success-indicator' : 'bg-outline-variant'"></div>
+          <span class="truncate flex-1">{{ d.name }}</span>
+          <span class="text-[10px] text-on-surface-variant/50 truncate max-w-[80px]">{{ d.serial }}</span>
+          <span class="material-symbols-outlined text-[12px] text-on-surface-variant hover:text-error ml-1 shrink-0"
+            @click.stop="disconnectDeviceHandler(d.serial)">close</span>
+        </button>
+      </div>
+    </Teleport>
 
     <!-- Preview Dialog -->
     <Teleport to="body">
@@ -894,6 +916,17 @@ let versionGen = 0;
 interface DeviceItem { serial: string; name: string; status: "online" | "offline"; os: string; }
 const devices = ref<DeviceItem[]>([]);
 const selectedDevice = ref<DeviceItem | null>(null);
+const showDeviceDropdown = ref(false);
+const deviceDropdownBtnRef = ref<HTMLElement | null>(null);
+const deviceDropdownPos = ref({ top: 0, left: 0 });
+function toggleDeviceDropdown() {
+  if (showDeviceDropdown.value) { showDeviceDropdown.value = false; return; }
+  if (deviceDropdownBtnRef.value) {
+    const r = deviceDropdownBtnRef.value.getBoundingClientRect();
+    deviceDropdownPos.value = { top: r.bottom + 4, left: Math.max(4, Math.min(r.left, window.innerWidth - 210)) };
+  }
+  showDeviceDropdown.value = true;
+}
 const deviceProps = ref<DeviceProperties | null>(null);
 const connectAddress = ref("");
 
@@ -1381,6 +1414,7 @@ let unlistenDragDrop: (() => void) | null = null;
 // ── Device operations ──
 async function scanDevices(silent = false) {
   scanLoading.value = true;
+  showDeviceDropdown.value = false;
   try {
     const adbDevices = await listDevices();
     devices.value = adbDevices.map(d => ({
@@ -1392,13 +1426,18 @@ async function scanDevices(silent = false) {
       apps.value = [];
       deviceProps.value = null;
     }
-    if (devices.value.length > 0 && !selectedDevice.value) selectDevice(devices.value[0]);
+    if (devices.value.length > 0 && !selectedDevice.value) {
+      const savedSerial = localStorage.getItem('last_device_serial');
+      const savedDevice = savedSerial ? devices.value.find(d => d.serial === savedSerial) : null;
+      selectDevice(savedDevice || devices.value[0]);
+    }
     if (!silent) showToast(t('device.deviceCount', { count: String(devices.value.length) }));
   } catch { if (!silent) showToast(t("device.scanFailed"), "error"); }
   finally { scanLoading.value = false; }
 }
 function selectDevice(device: DeviceItem) {
   selectedDevice.value = device;
+  localStorage.setItem('last_device_serial', device.serial);
   deviceProps.value = null;
 
   loadDeviceProperties();
@@ -1436,6 +1475,7 @@ async function disconnectDeviceHandler(serial: string) {
     if (selectedDevice.value?.serial === serial) {
       selectedDevice.value = devices.value[0] || null;
       apps.value = [];
+      localStorage.removeItem('last_device_serial');
     }
     showToast(t("device.disconnected"));
   } catch { showToast(t("device.disconnectFailed"), "error"); }
@@ -1555,10 +1595,11 @@ async function refreshPackageList() {
 async function loadVisibleAppVersions() {
   if (!selectedDevice.value) return;
   const currentGen = ++versionGen;
-  for (const app of currentPageApps.value) {
-    if (app.version_name || loadedVersions.value.has(app.package_name)) continue;
-    loadedVersions.value = new Set(loadedVersions.value).add(app.package_name);
-    versionQueue = versionQueue.then(async () => {
+  const pageApps = currentPageApps.value.filter(a => !a.version_name && !loadedVersions.value.has(a.package_name));
+  for (const app of pageApps) loadedVersions.value = new Set(loadedVersions.value).add(app.package_name);
+  for (let i = 0; i < pageApps.length; i += 4) {
+    if (currentGen !== versionGen) return;
+    await Promise.all(pageApps.slice(i, i + 4).map(async app => {
       if (currentGen !== versionGen) return;
       try {
         const info = await getAppInfo(selectedDevice.value!.serial, app.package_name);
@@ -1569,7 +1610,7 @@ async function loadVisibleAppVersions() {
           apps.value = apps.value.map(a => a.package_name === app.package_name ? { ...a, version_name: vn, version_code: vc } : a);
         }
       } catch {}
-    });
+    }));
   }
 }
 async function getCurrentForegroundApp() {
