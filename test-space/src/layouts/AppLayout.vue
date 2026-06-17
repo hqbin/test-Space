@@ -4,7 +4,7 @@
     :style="bgStyle"
   >
     <Sidebar />
-    <main class="px-margin-page pb-20 md:pb-12 box-border min-h-screen">
+    <main class="px-margin-page box-border min-h-screen">
       <router-view />
     </main>
   </div>

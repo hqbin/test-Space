@@ -1,5 +1,8 @@
 use std::process::Command;
 use serde::Serialize;
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -36,10 +39,21 @@ pub struct DeviceProperties {
 fn run_adb(serial: &str, args: &[&str]) -> Result<String, String> {
     let mut full_args = vec!["-s", serial];
     full_args.extend_from_slice(args);
-    let output = adb_cmd()
+    let (tx, rx) = mpsc::channel();
+    let child = adb_cmd()
         .args(&full_args)
-        .output()
-        .map_err(|e| format!("ADB command failed: {}", e))?;
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn adb: {}", e))?;
+    thread::spawn(move || {
+        let output = child.wait_with_output();
+        let _ = tx.send(output);
+    });
+    let output = rx
+        .recv_timeout(Duration::from_secs(120))
+        .map_err(|_| "ADB command timed out (120s)".to_string())?
+        .map_err(|e| format!("ADB wait failed: {}", e))?;
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
     } else {

@@ -1,7 +1,7 @@
 <template>
-  <div class="flex h-[calc(100vh-64px)] -mx-margin-page overflow-hidden">
+  <div class="flex h-screen -mx-margin-page overflow-hidden pb-4 box-border">
     <!-- Left: Search + File Tree -->
-    <div class="flex-shrink-0 flex flex-col bg-white/5 backdrop-blur-[30px] overflow-hidden border-r border-glass-border-light/50 w-64 glass-panel">
+    <div class="flex-shrink-0 flex flex-col w-64 ml-3 overflow-hidden rounded-xl bg-white/10 backdrop-blur-[60px] border border-white/50 shadow-lg">
       <div class="p-3 border-b border-glass-border-light/50">
         <div class="glass-input flex items-center gap-2 px-3 py-2 rounded-lg">
           <span class="material-symbols-outlined text-[14px] text-on-surface-variant">search</span>
@@ -175,7 +175,7 @@
     </div>
 
     <!-- Center: TipTap Editor -->
-    <div class="flex-1 flex flex-col overflow-hidden bg-transparent pt-4 px-4 lg:px-8">
+    <div class="flex-1 flex flex-col overflow-hidden bg-transparent pt-4 pl-3 pr-3">
       <!-- Empty state when no note selected -->
       <div v-if="!selectedNoteId" class="flex-1 glass-panel rounded-xl overflow-hidden flex items-center justify-center shadow-md">
         <div class="text-center">
@@ -241,10 +241,10 @@
             <span class="text-[13px] font-bold px-1">H3</span>
           </button>
           <div class="w-px h-4 bg-outline-variant/30 mx-1"></div>
-          <button class="toolbar-btn" :class="{ 'toolbar-active': editor?.isActive('bulletList') }" @click="editor?.chain().focus().toggleBulletList().run()" title="Bullet List">
+          <button class="toolbar-btn" :class="{ 'toolbar-active': editor?.isActive('bulletList') }" @click="toggleBulletList" title="Bullet List">
             <span class="material-symbols-outlined text-[20px]">format_list_bulleted</span>
           </button>
-          <button class="toolbar-btn" :class="{ 'toolbar-active': editor?.isActive('orderedList') }" @click="editor?.chain().focus().toggleOrderedList().run()" title="Ordered List">
+          <button class="toolbar-btn" :class="{ 'toolbar-active': editor?.isActive('orderedList') }" @click="toggleOrderedList" title="Ordered List">
             <span class="material-symbols-outlined text-[20px]">format_list_numbered</span>
           </button>
           <button class="toolbar-btn" :class="{ 'toolbar-active': editor?.isActive('blockquote') }" @click="editor?.chain().focus().toggleBlockquote().run()" title="Blockquote">
@@ -287,7 +287,7 @@
     <!-- Right: Table of Contents (slide panel) -->
     <Teleport to="body">
       <div v-if="showToc" class="fixed inset-0 z-20" @click.self="showToc = false">
-        <div class="absolute right-0 top-0 bottom-0 w-72 flex flex-col bg-white/20 backdrop-blur-[30px] border-l border-white/30 overflow-hidden shadow-2xl animate-toc-in opacity-[85%]">
+        <div class="absolute right-0 top-0 bottom-0 w-72 flex flex-col bg-white/70 backdrop-blur-[20px] border-l border-white/40 overflow-hidden shadow-2xl animate-toc-in">
           <div class="p-4 border-b border-white/20 flex items-center justify-between">
             <span class="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-2">
               <span class="material-symbols-outlined text-[18px]">toc</span>
@@ -579,9 +579,6 @@ async function loadData() {
     notes.value = await db.loadNotes()
     if (spaces.value.length > 0 && !selectedSpaceId.value) {
       selectedSpaceId.value = spaces.value[0].id
-    }
-    for (const f of folders.value) {
-      expandedFolders.value[f.id] = true
     }
   } catch (e) {
     console.error('Failed to load notes:', e)
@@ -941,24 +938,10 @@ function toggleTocNode(idx: number) {
 function scrollToHeading(idx: number) {
   if (!editor.value) return
   activeHeadingIndex.value = idx
-  let pos = 0
-  let count = 0
-  editor.value.state.doc.forEach((node: any, offset: number) => {
-    if (node.type.name === 'heading') {
-      if (count === idx) {
-        pos = offset
-        return false
-      }
-      count++
-    }
-  })
-  if (pos > 0) {
-    const $pos = editor.value.state.doc.resolve(pos)
-    const dom = editor.value.view.domAtPos($pos.pos)
-    if (dom.node instanceof HTMLElement || (dom.node instanceof Text && dom.node.parentElement)) {
-      const el = dom.node instanceof HTMLElement ? dom.node : dom.node.parentElement!
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
+  const headings = editor.value.view.dom.querySelectorAll('h1, h2, h3, h4, h5, h6')
+  const heading = headings[idx]
+  if (heading) {
+    heading.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 }
 
@@ -1172,6 +1155,26 @@ async function exportAs(format: 'docx' | 'md' | 'pdf') {
 
 // ── Editor Actions ───────────────────────────────────────────
 
+function toggleOrderedList() {
+  const ed = editor.value
+  if (!ed) return
+  if (ed.isActive('orderedList')) {
+    ed.chain().focus().toggleOrderedList().run()
+  } else {
+    ed.chain().focus().clearNodes().toggleOrderedList().run()
+  }
+}
+
+function toggleBulletList() {
+  const ed = editor.value
+  if (!ed) return
+  if (ed.isActive('bulletList')) {
+    ed.chain().focus().toggleBulletList().run()
+  } else {
+    ed.chain().focus().clearNodes().toggleBulletList().run()
+  }
+}
+
 function triggerImageUpload() {
   imageInput.value?.click()
 }
@@ -1264,15 +1267,19 @@ const visibleTocItems = computed(() => {
 
 watch(tocItems, (items) => {
   const tree = buildTocTree(items)
-  const expandable = new Set(tocCollapsed.value)
+  const current = new Set(tocCollapsed.value)
+  const valid = new Set<number>()
   function collect(nodes: TocNode[]) {
     for (const node of nodes) {
-      if (node.children.length > 0) expandable.add(node.index)
+      valid.add(node.index)
       collect(node.children)
     }
   }
   collect(tree)
-  tocCollapsed.value = expandable
+  for (const idx of current) {
+    if (!valid.has(idx)) current.delete(idx)
+  }
+  tocCollapsed.value = current
 })
 
 // ── Close export menu on outside click ──────────────────────
@@ -1297,17 +1304,7 @@ onMounted(async () => {
   document.addEventListener('click', onDocumentClick, true)
 
   nextTick(() => {
-    const items = tocItems.value
-    const tree = buildTocTree(items)
-    const expandable = new Set<number>()
-    function collect(nodes: TocNode[]) {
-      for (const node of nodes) {
-        if (node.children.length > 0) expandable.add(node.index)
-        collect(node.children)
-      }
-    }
-    collect(tree)
-    tocCollapsed.value = expandable
+    tocCollapsed.value = new Set()
   })
 })
 
@@ -1335,13 +1332,13 @@ onBeforeUnmount(async () => {
   pointer-events: none;
   height: 0;
 }
-:deep(.prose-editor h1) { font-family: 'Inter', sans-serif; font-weight: 700; color: #1a1c1d; font-size: 2rem; line-height: 1.3; margin-bottom: 1.25rem; letter-spacing: -0.02em; }
-:deep(.prose-editor h2) { font-family: 'Inter', sans-serif; font-weight: 600; color: #1a1c1d; font-size: 1.75rem; line-height: 1.3; margin-top: 2rem; margin-bottom: 1rem; letter-spacing: -0.02em; }
-:deep(.prose-editor h3) { font-family: 'Inter', sans-serif; font-weight: 600; color: #1a1c1d; font-size: 1.375rem; line-height: 1.4; margin-top: 1.5rem; margin-bottom: 0.75rem; letter-spacing: -0.01em; }
-:deep(.prose-editor p) { font-family: 'Inter', sans-serif; font-weight: 400; color: #424656; font-size: 1.0625rem; line-height: 1.6; margin-bottom: 1.25rem; }
-:deep(.prose-editor ul) { list-style-type: disc; padding-left: 1.5rem; color: #424656; margin-bottom: 1.25rem; }
-:deep(.prose-editor ol) { list-style-type: decimal; padding-left: 1.5rem; color: #424656; margin-bottom: 1.25rem; }
-:deep(.prose-editor li) { margin-bottom: 0.5rem; font-size: 1.0625rem; line-height: 1.6; }
+:deep(.prose-editor h1) { font-family: 'Inter', sans-serif; font-weight: 700; color: #1a1c1d; font-size: 2rem; line-height: 1.3; margin-top: 1.5rem; margin-bottom: 0.75rem; letter-spacing: -0.02em; }
+:deep(.prose-editor h2) { font-family: 'Inter', sans-serif; font-weight: 600; color: #1a1c1d; font-size: 1.75rem; line-height: 1.3; margin-top: 1.25rem; margin-bottom: 0.5rem; letter-spacing: -0.02em; }
+:deep(.prose-editor h3) { font-family: 'Inter', sans-serif; font-weight: 600; color: #1a1c1d; font-size: 1.375rem; line-height: 1.4; margin-top: 1rem; margin-bottom: 0.375rem; letter-spacing: -0.01em; }
+:deep(.prose-editor p) { font-family: 'Inter', sans-serif; font-weight: 400; color: #424656; font-size: 1rem; line-height: 1.55; margin-bottom: 0.5rem; }
+:deep(.prose-editor ul) { list-style-type: disc; padding-left: 1.5rem; color: #424656; margin-bottom: 0.5rem; }
+:deep(.prose-editor ol) { list-style-type: decimal; padding-left: 1.5rem; color: #424656; margin-bottom: 0.5rem; }
+:deep(.prose-editor li) { margin-bottom: 0.25rem; font-size: 1rem; line-height: 1.55; }
 :deep(.prose-editor blockquote) { border-left: 3px solid #c2c1ff; padding-left: 1rem; margin-left: 0; color: #6b6f82; font-style: italic; }
 :deep(.prose-editor a) { color: #0050cb; text-decoration: underline; cursor: pointer; }
 
