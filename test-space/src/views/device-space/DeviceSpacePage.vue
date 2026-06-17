@@ -325,70 +325,70 @@
         </div>
 
         <!-- Remote Control -->
-        <div class="glass-panel rounded-xl p-5 shrink-0 shadow-md mb-3">
-          <h3 class="font-label-md text-label-md text-on-surface mb-4 flex items-center gap-1.5 select-none">
-            <span class="material-symbols-outlined text-[16px] select-none">gamepad</span><span class="select-none">{{ t('device.remoteControl') }}</span>
+        <div class="glass-panel rounded-xl p-3 lg:p-4 xl:p-5 2xl:p-6 shadow-md mb-3 overflow-x-auto">
+          <h3 class="font-label-md text-label-md text-on-surface mb-2 lg:mb-3 xl:mb-4 2xl:mb-5 flex items-center gap-1.5 select-none">
+            <span class="material-symbols-outlined text-[14px] lg:text-[16px] xl:text-[18px] 2xl:text-[22px] select-none">gamepad</span><span class="select-none">{{ t('device.remoteControl') }}</span>
           </h3>
-          <div class="flex gap-8 items-start justify-center">
+          <div class="flex gap-2 lg:gap-4 xl:gap-6 2xl:gap-8 items-start justify-center">
             <!-- Left: Back, Home, Settings -->
-            <div class="flex flex-col gap-1.5">
-              <button class="glass-button py-2 px-4 rounded-lg font-caption text-caption flex items-center gap-1.5 select-none" @click="sendKey('4')">
-                <span class="material-symbols-outlined text-[16px] select-none">arrow_back</span><span class="select-none">{{ t('device.back') }}</span>
+            <div class="flex flex-col gap-1 lg:gap-1.5">
+              <button class="glass-button px-2 py-1 lg:px-3 lg:py-1.5 xl:px-4 xl:py-2 2xl:px-6 2xl:py-3 rounded-lg font-caption text-caption text-[10px] lg:text-[11px] xl:text-[13px] 2xl:text-[15px] flex items-center gap-1 select-none" @click="sendKey('4')">
+                <span class="material-symbols-outlined text-[12px] lg:text-[14px] xl:text-[16px] 2xl:text-[20px] select-none">arrow_back</span><span class="select-none">{{ t('device.back') }}</span>
               </button>
-              <button class="glass-button py-2 px-4 rounded-lg font-caption text-caption flex items-center gap-1.5 select-none" @click="sendKey('3')">
-                <span class="material-symbols-outlined text-[16px] select-none">home</span><span class="select-none">Home</span>
+              <button class="glass-button px-2 py-1 lg:px-3 lg:py-1.5 xl:px-4 xl:py-2 2xl:px-6 2xl:py-3 rounded-lg font-caption text-caption text-[10px] lg:text-[11px] xl:text-[13px] 2xl:text-[15px] flex items-center gap-1 select-none" @click="sendKey('3')">
+                <span class="material-symbols-outlined text-[12px] lg:text-[14px] xl:text-[16px] 2xl:text-[20px] select-none">home</span><span class="select-none">Home</span>
               </button>
-              <button class="glass-button py-2 px-4 rounded-lg font-caption text-caption flex items-center gap-1.5 select-none" @click="sendKey('176')">
-                <span class="material-symbols-outlined text-[16px] select-none">settings</span><span class="select-none">{{ t('device.settings') }}</span>
+              <button class="glass-button px-2 py-1 lg:px-3 lg:py-1.5 xl:px-4 xl:py-2 2xl:px-6 2xl:py-3 rounded-lg font-caption text-caption text-[10px] lg:text-[11px] xl:text-[13px] 2xl:text-[15px] flex items-center gap-1 select-none" @click="sendKey('176')">
+                <span class="material-symbols-outlined text-[12px] lg:text-[14px] xl:text-[16px] 2xl:text-[20px] select-none">settings</span><span class="select-none">{{ t('device.settings') }}</span>
               </button>
             </div>
             <!-- Center: D-pad -->
-            <div class="relative w-40 h-40">
+            <div class="relative w-[110px] h-[110px] lg:w-[140px] lg:h-[140px] xl:w-[170px] xl:h-[170px] 2xl:w-[220px] 2xl:h-[220px] flex-none">
               <div class="absolute top-0 left-1/2 -translate-x-1/2">
-                <button class="w-10 h-10 glass-button rounded-full flex items-center justify-center select-none" @click="sendKey('19')">
-                  <span class="material-symbols-outlined text-[18px] select-none">keyboard_arrow_up</span>
+                <button class="w-[26px] h-[26px] lg:w-[32px] lg:h-[32px] xl:w-[40px] xl:h-[40px] 2xl:w-[52px] 2xl:h-[52px] glass-button rounded-full flex items-center justify-center select-none" @click="sendKey('19')">
+                  <span class="material-symbols-outlined text-[12px] lg:text-[16px] xl:text-[20px] 2xl:text-[26px] select-none">keyboard_arrow_up</span>
                 </button>
               </div>
               <div class="absolute bottom-0 left-1/2 -translate-x-1/2">
-                <button class="w-10 h-10 glass-button rounded-full flex items-center justify-center select-none" @click="sendKey('20')">
-                  <span class="material-symbols-outlined text-[18px] select-none">keyboard_arrow_down</span>
+                <button class="w-[26px] h-[26px] lg:w-[32px] lg:h-[32px] xl:w-[40px] xl:h-[40px] 2xl:w-[52px] 2xl:h-[52px] glass-button rounded-full flex items-center justify-center select-none" @click="sendKey('20')">
+                  <span class="material-symbols-outlined text-[12px] lg:text-[16px] xl:text-[20px] 2xl:text-[26px] select-none">keyboard_arrow_down</span>
                 </button>
               </div>
               <div class="absolute left-0 top-1/2 -translate-y-1/2">
-                <button class="w-10 h-10 glass-button rounded-full flex items-center justify-center select-none" @click="sendKey('21')">
-                  <span class="material-symbols-outlined text-[18px] select-none">keyboard_arrow_left</span>
+                <button class="w-[26px] h-[26px] lg:w-[32px] lg:h-[32px] xl:w-[40px] xl:h-[40px] 2xl:w-[52px] 2xl:h-[52px] glass-button rounded-full flex items-center justify-center select-none" @click="sendKey('21')">
+                  <span class="material-symbols-outlined text-[12px] lg:text-[16px] xl:text-[20px] 2xl:text-[26px] select-none">keyboard_arrow_left</span>
                 </button>
               </div>
               <div class="absolute right-0 top-1/2 -translate-y-1/2">
-                <button class="w-10 h-10 glass-button rounded-full flex items-center justify-center select-none" @click="sendKey('22')">
-                  <span class="material-symbols-outlined text-[18px] select-none">keyboard_arrow_right</span>
+                <button class="w-[26px] h-[26px] lg:w-[32px] lg:h-[32px] xl:w-[40px] xl:h-[40px] 2xl:w-[52px] 2xl:h-[52px] glass-button rounded-full flex items-center justify-center select-none" @click="sendKey('22')">
+                  <span class="material-symbols-outlined text-[12px] lg:text-[16px] xl:text-[20px] 2xl:text-[26px] select-none">keyboard_arrow_right</span>
                 </button>
               </div>
               <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-                <button class="w-12 h-12 glass-button rounded-full flex items-center justify-center bg-secondary/10 select-none" @click="sendKey('23')">
-                  <span class="material-symbols-outlined text-secondary text-[22px] select-none">check</span>
+                <button class="w-[32px] h-[32px] lg:w-[40px] lg:h-[40px] xl:w-[48px] xl:h-[48px] 2xl:w-[64px] 2xl:h-[64px] glass-button rounded-full flex items-center justify-center bg-secondary/10 select-none" @click="sendKey('23')">
+                  <span class="material-symbols-outlined text-secondary text-[16px] lg:text-[20px] xl:text-[24px] 2xl:text-[32px] select-none">check</span>
                 </button>
               </div>
             </div>
             <!-- Right: Power, Volume, Numpad -->
-            <div class="flex flex-col gap-1.5">
-              <button class="glass-button py-2 px-4 rounded-lg font-caption text-caption flex items-center justify-center gap-1.5 bg-error/10 text-error border border-error/20 select-none" @click="sendKey('26')">
-                <span class="material-symbols-outlined text-[16px] select-none">power_settings_new</span><span class="select-none">{{ t('device.power') }}</span>
+            <div class="flex flex-col gap-1 lg:gap-1.5">
+              <button class="glass-button px-2 py-1 lg:px-3 lg:py-1.5 xl:px-4 xl:py-2 2xl:px-6 2xl:py-3 rounded-lg font-caption text-caption text-[10px] lg:text-[11px] xl:text-[13px] 2xl:text-[15px] flex items-center justify-center gap-1 bg-error/10 text-error border border-error/20 select-none" @click="sendKey('26')">
+                <span class="material-symbols-outlined text-[12px] lg:text-[14px] xl:text-[16px] 2xl:text-[20px] select-none">power_settings_new</span><span class="select-none">{{ t('device.power') }}</span>
               </button>
-              <div class="grid grid-cols-3 gap-1.5">
-                <button class="glass-button p-2 rounded-lg font-caption text-caption flex items-center justify-center select-none" @click="sendKey('24')">
-                  <span class="material-symbols-outlined text-[16px] select-none">volume_up</span>
+              <div class="grid grid-cols-3 gap-0.5 lg:gap-1 xl:gap-1.5">
+                <button class="glass-button p-1 lg:p-1.5 xl:p-2 2xl:p-3 rounded-lg font-caption text-caption text-[10px] lg:text-[11px] xl:text-[13px] 2xl:text-[15px] flex items-center justify-center select-none" @click="sendKey('24')">
+                  <span class="material-symbols-outlined text-[12px] lg:text-[14px] xl:text-[16px] 2xl:text-[20px] select-none">volume_up</span>
                 </button>
-                <button class="glass-button p-2 rounded-lg font-caption text-caption flex items-center justify-center select-none" @click="sendKey('25')">
-                  <span class="material-symbols-outlined text-[16px] select-none">volume_down</span>
+                <button class="glass-button p-1 lg:p-1.5 xl:p-2 2xl:p-3 rounded-lg font-caption text-caption text-[10px] lg:text-[11px] xl:text-[13px] 2xl:text-[15px] flex items-center justify-center select-none" @click="sendKey('25')">
+                  <span class="material-symbols-outlined text-[12px] lg:text-[14px] xl:text-[16px] 2xl:text-[20px] select-none">volume_down</span>
                 </button>
-                <button class="glass-button p-2 rounded-lg font-caption text-caption flex items-center justify-center select-none" @click="sendKey('164')">
-                  <span class="material-symbols-outlined text-[16px] select-none">volume_off</span>
+                <button class="glass-button p-1 lg:p-1.5 xl:p-2 2xl:p-3 rounded-lg font-caption text-caption text-[10px] lg:text-[11px] xl:text-[13px] 2xl:text-[15px] flex items-center justify-center select-none" @click="sendKey('164')">
+                  <span class="material-symbols-outlined text-[12px] lg:text-[14px] xl:text-[16px] 2xl:text-[20px] select-none">volume_off</span>
                 </button>
               </div>
-              <div class="grid grid-cols-5 gap-1.5">
-                <button v-for="n in 9" :key="n" class="glass-button py-2 px-2 rounded-lg font-caption text-caption select-none" @click="sendKey(String(7 + n))"><span class="select-none">{{ n }}</span></button>
-                <button class="glass-button py-2 px-2 rounded-lg font-caption text-caption select-none" @click="sendKey('0')"><span class="select-none">0</span></button>
+              <div class="grid grid-cols-5 gap-0.5 lg:gap-1 xl:gap-1.5">
+                <button v-for="n in 9" :key="n" class="glass-button px-1 py-0.5 lg:px-1.5 lg:py-1 xl:px-2 xl:py-1.5 2xl:px-3 2xl:py-2 rounded-lg font-caption text-caption text-[10px] lg:text-[11px] xl:text-[13px] 2xl:text-[15px] select-none" @click="sendKey(String(7 + n))"><span class="select-none">{{ n }}</span></button>
+                <button class="glass-button px-1 py-0.5 lg:px-1.5 lg:py-1 xl:px-2 xl:py-1.5 2xl:px-3 2xl:py-2 rounded-lg font-caption text-caption text-[10px] lg:text-[11px] xl:text-[13px] 2xl:text-[15px] select-none" @click="sendKey('0')"><span class="select-none">0</span></button>
               </div>
             </div>
           </div>
