@@ -403,7 +403,7 @@
               <span class="material-symbols-outlined text-[16px] select-none">folder_open</span><span class="select-none">{{ t('device.fileManager') }}</span>
             </h3>
             <div class="flex gap-1.5">
-              <button class="glass-button px-2.5 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1" @click="uploadFile">
+              <button class="glass-button px-2.5 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1 select-none" @click="uploadFile">
                 <span class="material-symbols-outlined text-[14px]">upload</span>{{ t('device.upload') }}
               </button>
             </div>
@@ -413,11 +413,11 @@
               class="w-full bg-white border border-outline-variant rounded-lg px-3 py-1.5 font-body-sm text-body-sm text-on-surface font-mono focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all"
               :placeholder="t('device.remotePathHint')" @focus="showRemotePathHistory = true" @blur="hideRemotePathHistoryDelayed" @keyup.enter="navigateToPath" />
             <div v-if="showRemotePathHistory && remotePathHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-outline-variant rounded-lg p-1 max-h-32 overflow-y-auto shadow-lg">
-              <button v-for="(h, i) in remotePathHistory" :key="i" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100"
+              <button v-for="(h, i) in remotePathHistory" :key="i" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none"
                 @mousedown.prevent @click="selectRemotePathHistory(h)">{{ h }}</button>
             </div>
           </div>
-          <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar bg-[#1a1c1d]/5 rounded text-[12px] leading-relaxed relative">
+          <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar bg-[#1a1c1d]/5 rounded text-[12px] leading-relaxed relative select-none">
             <div v-if="dragOverFileList" class="absolute inset-0 z-10 flex items-center justify-center bg-white/80 backdrop-blur-sm rounded-lg border-2 border-dashed border-secondary/50">
               <div class="flex flex-col items-center gap-2 text-secondary">
                 <span class="material-symbols-outlined text-3xl">cloud_upload</span>
@@ -429,20 +429,20 @@
               <p class="font-body-sm text-body-sm mt-1">{{ t('device.pathHint') }}</p>
             </div>
             <div v-for="(entry, idx) in fileEntries" :key="idx"
-              class="flex items-center gap-1.5 px-2 py-1 hover:bg-secondary/5 hover:scale-[1.02] cursor-pointer border-b border-outline-variant/10 last:border-0 group transition-all duration-200"
+              class="flex items-center gap-1.5 px-2 py-1 hover:bg-secondary/5 hover:scale-[1.02] cursor-pointer border-b border-outline-variant/10 last:border-0 group transition-transform duration-200 select-none"
               @dblclick="handleEntryDblClick(entry, $event)">
               <span class="material-symbols-outlined text-[16px] shrink-0"
                 :class="entry.isDir ? 'text-secondary' : 'text-on-surface-variant/60'">{{ entry.isDir ? 'folder' : 'description' }}</span>
               <span class="flex-1 truncate font-mono text-[11px] text-on-surface">{{ entry.name }}</span>
               <span class="font-caption text-caption text-on-surface-variant/50 text-[10px] whitespace-nowrap">{{ entry.size }}</span>
               <div class="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                <button class="glass-button p-0.5 rounded" :title="t('device.download')" @click.stop="entry.isDir ? downloadDir(entry.name) : downloadFile(entry.name)">
+                <button class="glass-button p-0.5 rounded select-none" :title="t('device.download')" @click.stop="entry.isDir ? downloadDir(entry.name) : downloadFile(entry.name)">
                   <span class="material-symbols-outlined text-[14px]">download</span>
                 </button>
-                <button v-if="!entry.isDir" class="glass-button p-0.5 rounded" :title="t('device.edit')" @click.stop="editFile(entry.name)">
+                <button v-if="!entry.isDir" class="glass-button p-0.5 rounded select-none" :title="t('device.edit')" @click.stop="editFile(entry.name)">
                   <span class="material-symbols-outlined text-[14px]">edit</span>
                 </button>
-                <button class="glass-button p-0.5 rounded" :title="t('device.delete')" @click.stop="confirmThen(`${t('device.delete')} ${entry.name}?`, () => deleteFile(entry.name))">
+                <button class="glass-button p-0.5 rounded select-none" :title="t('device.delete')" @click.stop="confirmThen(`${t('device.delete')} ${entry.name}?`, () => deleteFile(entry.name))">
                   <span class="material-symbols-outlined text-[14px] text-error">delete</span>
                 </button>
               </div>
