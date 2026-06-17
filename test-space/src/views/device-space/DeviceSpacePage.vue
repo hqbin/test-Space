@@ -326,69 +326,69 @@
 
         <!-- Remote Control -->
         <div class="glass-panel rounded-xl p-5 shrink-0 shadow-md mb-3">
-          <h3 class="font-label-md text-label-md text-on-surface mb-4 flex items-center gap-1.5">
-            <span class="material-symbols-outlined text-[16px]">gamepad</span>{{ t('device.remoteControl') }}
+          <h3 class="font-label-md text-label-md text-on-surface mb-4 flex items-center gap-1.5 select-none">
+            <span class="material-symbols-outlined text-[16px] select-none">gamepad</span><span class="select-none">{{ t('device.remoteControl') }}</span>
           </h3>
           <div class="flex gap-8 items-start justify-center">
             <!-- Left: Back, Home, Settings -->
-            <div class="flex flex-col gap-2.5 shrink-0">
-              <button class="glass-button py-2.5 px-6 rounded-lg font-caption text-caption flex items-center gap-2 min-w-[120px]" @click="sendKey('4')">
-                <span class="material-symbols-outlined text-[18px]">arrow_back</span>{{ t('device.back') }}
+            <div class="flex flex-col gap-1.5">
+              <button class="glass-button py-2 px-4 rounded-lg font-caption text-caption flex items-center gap-1.5 select-none" @click="sendKey('4')">
+                <span class="material-symbols-outlined text-[16px] select-none">arrow_back</span><span class="select-none">{{ t('device.back') }}</span>
               </button>
-              <button class="glass-button py-2.5 px-6 rounded-lg font-caption text-caption flex items-center gap-2 min-w-[120px]" @click="sendKey('3')">
-                <span class="material-symbols-outlined text-[18px]">home</span>Home
+              <button class="glass-button py-2 px-4 rounded-lg font-caption text-caption flex items-center gap-1.5 select-none" @click="sendKey('3')">
+                <span class="material-symbols-outlined text-[16px] select-none">home</span><span class="select-none">Home</span>
               </button>
-              <button class="glass-button py-2.5 px-6 rounded-lg font-caption text-caption flex items-center gap-2 min-w-[120px]" @click="sendKey('176')">
-                <span class="material-symbols-outlined text-[18px]">settings</span>{{ t('device.settings') }}
+              <button class="glass-button py-2 px-4 rounded-lg font-caption text-caption flex items-center gap-1.5 select-none" @click="sendKey('176')">
+                <span class="material-symbols-outlined text-[16px] select-none">settings</span><span class="select-none">{{ t('device.settings') }}</span>
               </button>
             </div>
             <!-- Center: D-pad -->
-            <div class="relative w-48 h-48 shrink-0">
+            <div class="relative w-40 h-40">
               <div class="absolute top-0 left-1/2 -translate-x-1/2">
-                <button class="w-12 h-12 glass-button rounded-full flex items-center justify-center" @click="sendKey('19')">
-                  <span class="material-symbols-outlined text-[22px]">keyboard_arrow_up</span>
+                <button class="w-10 h-10 glass-button rounded-full flex items-center justify-center select-none" @click="sendKey('19')">
+                  <span class="material-symbols-outlined text-[18px] select-none">keyboard_arrow_up</span>
                 </button>
               </div>
               <div class="absolute bottom-0 left-1/2 -translate-x-1/2">
-                <button class="w-12 h-12 glass-button rounded-full flex items-center justify-center" @click="sendKey('20')">
-                  <span class="material-symbols-outlined text-[22px]">keyboard_arrow_down</span>
+                <button class="w-10 h-10 glass-button rounded-full flex items-center justify-center select-none" @click="sendKey('20')">
+                  <span class="material-symbols-outlined text-[18px] select-none">keyboard_arrow_down</span>
                 </button>
               </div>
               <div class="absolute left-0 top-1/2 -translate-y-1/2">
-                <button class="w-12 h-12 glass-button rounded-full flex items-center justify-center" @click="sendKey('21')">
-                  <span class="material-symbols-outlined text-[22px]">keyboard_arrow_left</span>
+                <button class="w-10 h-10 glass-button rounded-full flex items-center justify-center select-none" @click="sendKey('21')">
+                  <span class="material-symbols-outlined text-[18px] select-none">keyboard_arrow_left</span>
                 </button>
               </div>
               <div class="absolute right-0 top-1/2 -translate-y-1/2">
-                <button class="w-12 h-12 glass-button rounded-full flex items-center justify-center" @click="sendKey('22')">
-                  <span class="material-symbols-outlined text-[22px]">keyboard_arrow_right</span>
+                <button class="w-10 h-10 glass-button rounded-full flex items-center justify-center select-none" @click="sendKey('22')">
+                  <span class="material-symbols-outlined text-[18px] select-none">keyboard_arrow_right</span>
                 </button>
               </div>
               <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-                <button class="w-16 h-16 glass-button rounded-full flex items-center justify-center bg-secondary/10" @click="sendKey('23')">
-                  <span class="material-symbols-outlined text-secondary text-[28px]">check</span>
+                <button class="w-12 h-12 glass-button rounded-full flex items-center justify-center bg-secondary/10 select-none" @click="sendKey('23')">
+                  <span class="material-symbols-outlined text-secondary text-[22px] select-none">check</span>
                 </button>
               </div>
             </div>
             <!-- Right: Power, Volume, Numpad -->
-            <div class="flex flex-col gap-2.5 shrink-0">
-              <button class="glass-button py-2.5 px-6 rounded-lg font-caption text-caption flex items-center justify-center gap-2 bg-error/10 text-error border border-error/20 min-w-[120px]" @click="sendKey('26')">
-                <span class="material-symbols-outlined text-[18px]">power_settings_new</span>{{ t('device.power') }}
+            <div class="flex flex-col gap-1.5">
+              <button class="glass-button py-2 px-4 rounded-lg font-caption text-caption flex items-center justify-center gap-1.5 bg-error/10 text-error border border-error/20 select-none" @click="sendKey('26')">
+                <span class="material-symbols-outlined text-[16px] select-none">power_settings_new</span><span class="select-none">{{ t('device.power') }}</span>
               </button>
-              <div class="grid grid-cols-3 gap-2">
-                <button class="glass-button p-2.5 rounded-lg font-caption text-caption flex items-center justify-center" @click="sendKey('24')">
-                  <span class="material-symbols-outlined text-[18px]">volume_up</span>
+              <div class="grid grid-cols-3 gap-1.5">
+                <button class="glass-button p-2 rounded-lg font-caption text-caption flex items-center justify-center select-none" @click="sendKey('24')">
+                  <span class="material-symbols-outlined text-[16px] select-none">volume_up</span>
                 </button>
-                <button class="glass-button p-2.5 rounded-lg font-caption text-caption flex items-center justify-center" @click="sendKey('25')">
-                  <span class="material-symbols-outlined text-[18px]">volume_down</span>
+                <button class="glass-button p-2 rounded-lg font-caption text-caption flex items-center justify-center select-none" @click="sendKey('25')">
+                  <span class="material-symbols-outlined text-[16px] select-none">volume_down</span>
                 </button>
-                <button class="glass-button p-2.5 rounded-lg font-caption text-caption flex items-center justify-center" @click="sendKey('164')">
-                  <span class="material-symbols-outlined text-[18px]">volume_off</span>
+                <button class="glass-button p-2 rounded-lg font-caption text-caption flex items-center justify-center select-none" @click="sendKey('164')">
+                  <span class="material-symbols-outlined text-[16px] select-none">volume_off</span>
                 </button>
               </div>
-              <div class="grid grid-cols-5 gap-2">
-                <button v-for="n in 9" :key="n" class="glass-button py-2.5 px-3 rounded-lg font-caption text-caption" @click="sendKey(String(7 + n))">{{ n }}</button>
-                <button class="glass-button py-2.5 px-3 rounded-lg font-caption text-caption" @click="sendKey('0')">0</button>
+              <div class="grid grid-cols-5 gap-1.5">
+                <button v-for="n in 9" :key="n" class="glass-button py-2 px-2 rounded-lg font-caption text-caption select-none" @click="sendKey(String(7 + n))"><span class="select-none">{{ n }}</span></button>
+                <button class="glass-button py-2 px-2 rounded-lg font-caption text-caption select-none" @click="sendKey('0')"><span class="select-none">0</span></button>
               </div>
             </div>
           </div>
@@ -399,11 +399,10 @@
       <div class="col-span-1 lg:col-span-2 flex flex-col min-h-0 mb-3">
         <div class="glass-panel rounded-xl p-3 flex flex-col flex-1 min-h-0 shadow-md">
           <div class="flex items-center justify-between mb-2 shrink-0">
-            <h3 class="font-label-md text-label-md text-on-surface flex items-center gap-1.5">
-              <span class="material-symbols-outlined text-[16px]">folder_open</span>{{ t('device.fileManager') }}
+            <h3 class="font-label-md text-label-md text-on-surface flex items-center gap-1.5 select-none">
+              <span class="material-symbols-outlined text-[16px] select-none">folder_open</span><span class="select-none">{{ t('device.fileManager') }}</span>
             </h3>
             <div class="flex gap-1.5">
-              
               <button class="glass-button px-2.5 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1" @click="uploadFile">
                 <span class="material-symbols-outlined text-[14px]">upload</span>{{ t('device.upload') }}
               </button>
