@@ -403,9 +403,7 @@
               <span class="material-symbols-outlined text-[16px]">folder_open</span>{{ t('device.fileManager') }}
             </h3>
             <div class="flex gap-1.5">
-              <button class="glass-button px-2.5 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1" @click="navigateToParent">
-                <span class="material-symbols-outlined text-[14px]">arrow_upward</span>{{ t('device.parentDir') }}
-              </button>
+              
               <button class="glass-button px-2.5 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1" @click="uploadFile">
                 <span class="material-symbols-outlined text-[14px]">upload</span>{{ t('device.upload') }}
               </button>
@@ -420,14 +418,20 @@
                 @mousedown.prevent @click="selectRemotePathHistory(h)">{{ h }}</button>
             </div>
           </div>
-          <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar bg-[#1a1c1d]/5 rounded text-[12px] leading-relaxed">
+          <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar bg-[#1a1c1d]/5 rounded text-[12px] leading-relaxed relative">
+            <div v-if="dragOverFileList && fileEntries.length > 0" class="absolute inset-0 z-10 flex items-center justify-center bg-secondary/10 backdrop-blur-sm rounded border-2 border-dashed border-secondary/40 pointer-events-none">
+              <div class="flex flex-col items-center gap-2 text-secondary">
+                <span class="material-symbols-outlined text-3xl">cloud_upload</span>
+                <span class="font-label-md text-label-md font-semibold">{{ t('device.dropToUpload') }}</span>
+              </div>
+            </div>
             <div v-if="fileEntries.length === 0" class="text-center py-8 text-on-surface-variant/40">
               <span class="material-symbols-outlined text-3xl">folder_open</span>
               <p class="font-body-sm text-body-sm mt-1">{{ t('device.pathHint') }}</p>
             </div>
             <div v-for="(entry, idx) in fileEntries" :key="idx"
               class="flex items-center gap-1.5 px-2 py-1 hover:bg-white/20 cursor-pointer border-b border-outline-variant/10 last:border-0 group"
-              @dblclick="entry.isDir ? navigateToDir(entry.name) : editFile(entry.name)">
+              @dblclick="handleEntryDblClick(entry, $event)">
               <span class="material-symbols-outlined text-[16px] shrink-0"
                 :class="entry.isDir ? 'text-secondary' : 'text-on-surface-variant/60'">{{ entry.isDir ? 'folder' : 'description' }}</span>
               <span class="flex-1 truncate font-mono text-[11px] text-on-surface">{{ entry.name }}</span>
@@ -448,6 +452,38 @@
         </div>
       </div>
     </div>
+
+    <!-- Preview Dialog -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div v-if="previewDialog.show" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="previewDialog.show = false">
+          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
+          <div class="glass-panel rounded-[2rem] p-4 w-full max-w-2xl max-h-[85vh] relative z-10 bg-white/60 flex flex-col">
+            <div class="flex justify-between items-center mb-2 shrink-0">
+              <h3 class="font-label-md text-label-md text-on-surface font-semibold truncate">{{ previewDialog.name }}</h3>
+              <div class="flex gap-2 shrink-0">
+                <button class="glass-button px-3 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1" @click="editFile(previewDialog.name)">
+                  <span class="material-symbols-outlined text-[16px]">edit</span>{{ t('device.edit') }}
+                </button>
+                <button class="glass-button p-1.5 rounded-lg" @click="previewDialog.show = false">
+                  <span class="material-symbols-outlined text-[20px]">close</span>
+                </button>
+              </div>
+            </div>
+            <div v-if="previewDialog.loading" class="flex-1 flex items-center justify-center">
+              <span class="w-6 h-6 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
+            </div>
+            <div v-else-if="previewDialog.content" class="flex-1 min-h-0 flex items-center justify-center">
+              <img v-if="isImageFile(previewDialog.name)" :src="previewDialog.content" class="max-w-full max-h-full object-contain rounded-lg" />
+              <video v-else :src="previewDialog.content" controls autoplay class="max-w-full max-h-full rounded-lg"></video>
+            </div>
+            <div v-else class="flex-1 flex items-center justify-center text-on-surface-variant/50">
+              <span class="font-body-sm text-body-sm">{{ t('device.previewNotAvailable') }}</span>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
 
     <!-- File Edit Dialog -->
     <Teleport to="body">
@@ -726,10 +762,12 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useAdb, type DeviceProperties } from "@/composables/useAdb";
 import { useI18n } from "@/composables/useI18n";
 
 const { t } = useI18n();
+// preview dialog & drag-drop keys will be in useI18n.ts
 
 interface ScriptResult { stdout: string; stderr: string; exit_code: number; }
 import { addInputHistory, getInputHistory, saveLogSession, getRunningLogSessions, removeLogSession } from "@/services/database";
@@ -1032,7 +1070,17 @@ async function executeCustomCommand(fullCmd: string) {
 
 // ── File Manager (tree view) ──
 interface FileEntry { name: string; isDir: boolean; size: string; }
+const dragOverFileList = ref(false);
 const fileEntries = ref<FileEntry[]>([]);
+function isImageFile(name: string) { return /\.(png|jpg|jpeg|gif|bmp|webp|svg)$/i.test(name); }
+function isMediaFile(name: string) { return isImageFile(name) || /\.(mp4|webm|ogg|mov|avi|mkv)$/i.test(name); }
+async function handleEntryDblClick(entry: FileEntry, e: MouseEvent) {
+  e.stopPropagation();
+  if (entry.name === "..") { await navigateToParent(); return; }
+  if (entry.isDir) { await navigateToDir(entry.name); return; }
+  if (isMediaFile(entry.name)) { previewFile(entry.name); return; }
+  editFile(entry.name);
+}
 async function navigateToPath() {
   if (!selectedDevice.value || !remotePath.value.trim()) return;
   await addInputHistory('remote_path', remotePath.value);
@@ -1069,27 +1117,38 @@ function parseLsLine(line: string): { name: string; isDir: boolean; size: string
   return { name, isDir, size: sizeFormatted };
 }
 async function loadFileList() {
+  dragOverFileList.value = false;
   if (!selectedDevice.value) return;
   try {
     const raw = await shell(selectedDevice.value.serial, `ls -la "${remotePath.value}"`);
     const lines = raw.split('\n').filter(l => l.trim() && !l.startsWith('total'));
-    fileEntries.value = lines.map(l => parseLsLine(l)).filter((e): e is NonNullable<typeof e> => e !== null && e.name !== '.' && e.name !== '..');
-  } catch { fileEntries.value = []; showToast(t('device.dirReadFail'), "error"); }
+    const entries = lines.map(l => parseLsLine(l)).filter((e): e is NonNullable<typeof e> => e !== null && e.name !== '.' && e.name !== '..')
+      .sort((a, b) => {
+        if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+    if (remotePath.value !== '/') entries.unshift({ name: '..', isDir: true, size: '' });
+    fileEntries.value = entries;
+  } catch { fileEntries.value = remotePath.value !== '/' ? [{ name: '..', isDir: true, size: '' }] : []; showToast(t('device.dirReadFail'), "error"); }
+}
+async function uploadFilePath(filePath: string) {
+  if (!selectedDevice.value) return;
+  try {
+    showCmdExec(t('device.uploadFile'), `adb push "${filePath}" "${remotePath.value}"`);
+    appendCmdExec(t('device.uploading'));
+    await pushFile(selectedDevice.value.serial, filePath, remotePath.value);
+    appendCmdExec(t('device.uploadDone'));
+    finishCmdExec(t('device.fileUploaded'));
+    showToast(t('device.fileUploaded'));
+    loadFileList();
+  } catch (e: any) { appendCmdExec(`[${t('device.error')}] ${e}`); finishCmdExec(t('device.uploadFailed')); showToast(t('device.uploadFailed'), "error"); }
 }
 async function uploadFile() {
   if (!selectedDevice.value || !remotePath.value.trim()) return;
   try {
     const { open } = await import("@tauri-apps/plugin-dialog");
     const selected = await open({ multiple: false });
-    if (selected) {
-      showCmdExec(t('device.uploadFile'), `adb push ${selected} ${remotePath.value}`);
-      appendCmdExec(t('device.uploading'));
-      await pushFile(selectedDevice.value.serial, selected, remotePath.value);
-      appendCmdExec(t('device.uploadDone'));
-      finishCmdExec(t('device.fileUploaded'));
-      showToast(t('device.fileUploaded'));
-      loadFileList();
-    }
+    if (selected) { await uploadFilePath(selected); }
   } catch { showToast(t('device.uploadFailed'), "error"); }
 }
 async function downloadFile(name: string) {
@@ -1099,14 +1158,14 @@ async function downloadFile(name: string) {
     const { save } = await import("@tauri-apps/plugin-dialog");
     const dest = await save({ defaultPath: name });
     if (dest) {
-      showCmdExec(t('device.downloadFile'), `adb pull ${remoteFile}`);
+      showCmdExec(t('device.downloadFile'), `adb pull "${remoteFile}" "${dest}"`);
       appendCmdExec(t('device.downloading'));
       await pullFile(selectedDevice.value.serial, remoteFile, dest);
       appendCmdExec(t('device.downloadDone'));
       finishCmdExec(t('device.fileDownloaded'));
       showToast(t('device.fileDownloaded'));
     }
-  } catch { showToast(t('device.downloadFailed'), "error"); }
+  } catch (e: any) { appendCmdExec(`[${t('device.error')}] ${e}`); finishCmdExec(t('device.downloadFailed')); showToast(t('device.downloadFailed'), "error"); }
 }
 async function downloadDir(name: string) {
   if (!selectedDevice.value) return;
@@ -1140,7 +1199,22 @@ async function deleteFile(name: string) {
 }
 
 // ── File Edit ──
+const previewDialog = ref({ show: false, name: "", loading: false, content: "" });
 const fileEditDialog = ref({ show: false, filePath: "", content: "", loading: false, originContent: "" });
+function previewFile(name: string) {
+  previewDialog.value = { show: true, name, loading: true, content: '' };
+  loadPreviewContent(name);
+}
+async function loadPreviewContent(name: string) {
+  if (!selectedDevice.value) return;
+  const filePath = remotePath.value.replace(/\/?$/, '/') + name.trim();
+  try {
+    const raw = await shell(selectedDevice.value.serial, `cat "${filePath}" | base64`);
+    const mime = isImageFile(name) ? `image/${name.replace(/.*\./, '')}` : 'video/mp4';
+    previewDialog.value.content = `data:${mime};base64,${raw.trim()}`;
+  } catch { previewDialog.value.content = ''; }
+  previewDialog.value.loading = false;
+}
 async function editFile(name: string) {
   if (!selectedDevice.value) return;
   const remoteFile = remotePath.value.replace(/\/?$/, '/') + name.trim();
@@ -1271,6 +1345,7 @@ const recordingFilename = ref("");
 
 // ── Device auto-refresh ──
 let autoRefreshId: ReturnType<typeof setInterval> | null = null;
+let unlistenDragDrop: (() => void) | null = null;
 
 // ── Custom commands stored in localStorage
 
@@ -2327,6 +2402,20 @@ onMounted(async () => {
       if (s.type === 'logcat') { /* previously running - could auto-restore */ }
     }
   } catch {}
+  // Drag-drop file upload
+  try {
+    const webview = getCurrentWebview();
+    unlistenDragDrop = await webview.onDragDropEvent((event) => {
+      if (event.payload.type === 'over') { dragOverFileList.value = true; }
+      else if (event.payload.type === 'leave') { dragOverFileList.value = false; }
+      else if (event.payload.type === 'drop') {
+        dragOverFileList.value = false;
+        if (activeTab.value === 'other') {
+          for (const path of event.payload.paths) { uploadFilePath(path); }
+        }
+      }
+    });
+  } catch {}
 });
 
 onUnmounted(() => {
@@ -2340,6 +2429,7 @@ onUnmounted(() => {
   if (bootLogcatTimeoutId) clearTimeout(bootLogcatTimeoutId);
   if (autoRefreshId) clearInterval(autoRefreshId);
   if (cmdExecTimeout) clearTimeout(cmdExecTimeout);
+  if (unlistenDragDrop) { unlistenDragDrop(); unlistenDragDrop = null; }
   // Note: log sessions are saved to DB; user can see "running" sessions on next visit
 });
 </script>

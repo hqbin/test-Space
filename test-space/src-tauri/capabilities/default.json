@@ -21,6 +21,7 @@
     "dialog:allow-save",
     "core:window:allow-hide",
     "core:window:allow-close",
-    "core:tray:default"
+    "core:tray:default",
+    "core:webview:default"
   ]
 }
