@@ -2,20 +2,35 @@ import type Database from '@tauri-apps/plugin-sql'
 import type { InputHistoryEntry, LogSession, NoteSpace, NoteFolder, NoteItem, NoteVersion, NoteLink } from '@/types'
 
 let db: Database | null = null
+let dbPromise: Promise<Database> | null = null
 
-async function getDb(): Promise<Database> {
-  if (db) return db
+function escapeLike(s: string): string {
+  return s.replace(/%/g, '%').replace(/_/g, '_')
+}
+
+function safeJsonParse<T = any>(raw: string | null | undefined, fallback: T): T {
+  if (!raw) return fallback
+  try { return JSON.parse(raw) } catch { return fallback }
+}
+
+async function initDb(): Promise<Database> {
   const { default: DatabaseClass } = await import('@tauri-apps/plugin-sql')
   const { appDataDir } = await import('@tauri-apps/api/path')
   const dir = await appDataDir()
-  db = await DatabaseClass.load(`sqlite:${dir}/test-space.db`)
+  const instance = await DatabaseClass.load(`sqlite:${dir}/test-space.db`)
   console.log('[DB] path:', `sqlite:${dir}/test-space.db`)
-  await migrate()
+  await migrateInternal(instance)
+  return instance
+}
+
+async function getDb(): Promise<Database> {
+  if (db) return db
+  if (!dbPromise) dbPromise = initDb()
+  db = await dbPromise
   return db
 }
 
-async function migrate() {
-  const d = await getDb()
+async function migrateInternal(d: Database) {
   await d.execute(`CREATE TABLE IF NOT EXISTS field_rule_sets (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -156,7 +171,7 @@ export async function loadFieldRuleSets(): Promise<any[]> {
   const rows = await d.select<{ id: string; name: string; rules: string; created_at: string; updated_at: string }[]>(
     'SELECT * FROM field_rule_sets ORDER BY created_at ASC'
   )
-  return rows.map(r => ({ ...r, rules: JSON.parse(r.rules) }))
+  return rows.map(r => ({ ...r, rules: safeJsonParse(r.rules, []) }))
 }
 
 export async function saveFieldRuleSet(set: { id: string; name: string; rules: any[]; createdAt: string; updatedAt?: string }) {
@@ -222,8 +237,8 @@ export async function deleteCaseFile(id: string) {
 export async function searchCaseFiles(query: string): Promise<any[]> {
   const d = await getDb()
   return await d.select(
-    'SELECT * FROM case_files WHERE name LIKE ? ORDER BY updated_at DESC',
-    [`%${query}%`]
+    'SELECT * FROM case_files WHERE name LIKE ? ESCAPE \'\\\' ORDER BY updated_at DESC',
+    [`%${escapeLike(query)}%`]
   )
 }
 
@@ -267,7 +282,7 @@ export async function toggleFavorite(path: string): Promise<boolean> {
     await d.execute('DELETE FROM favorites WHERE path = ?', [path])
     return false
   } else {
-    await d.execute('INSERT INTO favorites (path, added_at) VALUES (?, ?)', [path, new Date().toISOString()])
+    await d.execute('INSERT OR IGNORE INTO favorites (path, added_at) VALUES (?, ?)', [path, new Date().toISOString()])
     return true
   }
 }
@@ -366,9 +381,12 @@ export async function saveNoteSpace(space: { id: string; name: string; sortOrder
 
 export async function deleteNoteSpace(id: string) {
   const d = await getDb()
-  await d.execute('DELETE FROM note_spaces WHERE id = ?', [id])
-  await d.execute('DELETE FROM note_folders WHERE space_id = ?', [id])
+  // First: move notes out of folders that belong to this space
   await d.execute('UPDATE notes SET folder_id = NULL WHERE folder_id IN (SELECT id FROM note_folders WHERE space_id = ?)', [id])
+  // Second: delete folders
+  await d.execute('DELETE FROM note_folders WHERE space_id = ?', [id])
+  // Third: delete the space itself
+  await d.execute('DELETE FROM note_spaces WHERE id = ?', [id])
 }
 
 export async function renameNoteSpace(id: string, name: string) {
@@ -404,9 +422,24 @@ export async function saveNoteFolder(folder: { id: string; spaceId?: string | nu
 
 export async function deleteNoteFolder(id: string) {
   const d = await getDb()
-  await d.execute('DELETE FROM note_folders WHERE id = ?', [id])
-  // Move notes in this folder to uncategorized
-  await d.execute('UPDATE notes SET folder_id = NULL WHERE folder_id = ?', [id])
+  // Collect all descendant folder IDs (BFS)
+  const allIds: string[] = [id]
+  let currentIds = [id]
+  while (currentIds.length > 0) {
+    const placeholders = currentIds.map(() => '?').join(',')
+    const children = await d.select<{ id: string }[]>(
+      `SELECT id FROM note_folders WHERE parent_id IN (${placeholders})`, currentIds
+    )
+    const childIds = children.map(c => c.id)
+    if (childIds.length === 0) break
+    allIds.push(...childIds)
+    currentIds = childIds
+  }
+  // Move notes in all these folders to uncategorized
+  const placeholders = allIds.map(() => '?').join(',')
+  await d.execute(`UPDATE notes SET folder_id = NULL WHERE folder_id IN (${placeholders})`, allIds)
+  // Delete all descendant folders first (children before parents to respect FK order)
+  await d.execute(`DELETE FROM note_folders WHERE id IN (${placeholders})`, allIds)
 }
 
 export async function renameNoteFolder(id: string, name: string) {
@@ -423,7 +456,7 @@ export async function loadNotes(): Promise<NoteItem[]> {
             created_at as createdAt, updated_at as updatedAt
      FROM notes ORDER BY updated_at DESC`
   )
-  return rows.map(r => ({ ...r, tags: JSON.parse(r.tags || '[]'), isFavorite: !!r.isFavorite }))
+  return rows.map(r => ({ ...r, tags: safeJsonParse(r.tags, []), isFavorite: !!r.isFavorite }))
 }
 
 export async function loadNote(id: string): Promise<NoteItem | null> {
@@ -435,35 +468,35 @@ export async function loadNote(id: string): Promise<NoteItem | null> {
   )
   if (rows.length === 0) return null
   const r = rows[0]
-  return { ...r, tags: JSON.parse(r.tags || '[]'), isFavorite: !!r.isFavorite }
+  return { ...r, tags: safeJsonParse(r.tags, []), isFavorite: !!r.isFavorite }
 }
 
 export async function saveNote(note: { id: string; folderId?: string | null; title: string; content: string; tags?: string[]; isFavorite?: boolean }) {
   const d = await getDb()
   const now = new Date().toISOString()
-  const existing = await d.select<any[]>('SELECT id FROM notes WHERE id = ?', [note.id])
-  if (existing.length === 0) {
-    await d.execute(
-      `INSERT INTO notes (id, folder_id, title, content, tags, is_favorite, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [note.id, note.folderId || null, note.title, note.content,
-       JSON.stringify(note.tags || []), note.isFavorite ? 1 : 0, now, now]
-    )
-  } else {
-    await d.execute(
-      `UPDATE notes SET folder_id = ?, title = ?, content = ?, tags = ?, is_favorite = ?, updated_at = ?
-       WHERE id = ?`,
-      [note.folderId || null, note.title, note.content,
-       JSON.stringify(note.tags || []), note.isFavorite ? 1 : 0, now, note.id]
-    )
-  }
+  await d.execute(
+    `INSERT INTO notes (id, folder_id, title, content, tags, is_favorite, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       folder_id = excluded.folder_id, title = excluded.title, content = excluded.content,
+       tags = excluded.tags, is_favorite = excluded.is_favorite, updated_at = excluded.updated_at`,
+    [note.id, note.folderId || null, note.title, note.content,
+     JSON.stringify(note.tags || []), note.isFavorite ? 1 : 0, now, now]
+  )
 }
 
 export async function deleteNote(id: string) {
   const d = await getDb()
-  await d.execute('DELETE FROM notes WHERE id = ?', [id])
-  await d.execute('DELETE FROM note_versions WHERE note_id = ?', [id])
-  await d.execute('DELETE FROM note_links WHERE source_note_id = ? OR target_note_id = ?', [id, id])
+  await d.execute('BEGIN TRANSACTION')
+  try {
+    await d.execute('DELETE FROM note_versions WHERE note_id = ?', [id])
+    await d.execute('DELETE FROM note_links WHERE source_note_id = ? OR target_note_id = ?', [id, id])
+    await d.execute('DELETE FROM notes WHERE id = ?', [id])
+    await d.execute('COMMIT')
+  } catch (e) {
+    await d.execute('ROLLBACK')
+    throw e
+  }
 }
 
 export async function toggleNoteFavorite(id: string): Promise<boolean> {
@@ -477,14 +510,15 @@ export async function toggleNoteFavorite(id: string): Promise<boolean> {
 
 export async function searchNotes(query: string): Promise<NoteItem[]> {
   const d = await getDb()
+  const like = `%${escapeLike(query)}%`
   const rows = await d.select<any[]>(
     `SELECT id, folder_id as folderId, title, content, tags, is_favorite as isFavorite,
             created_at as createdAt, updated_at as updatedAt
-     FROM notes WHERE title LIKE ? OR content LIKE ?
+     FROM notes WHERE title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\'
      ORDER BY updated_at DESC`,
-    [`%${query}%`, `%${query}%`]
+    [like, like]
   )
-  return rows.map(r => ({ ...r, tags: JSON.parse(r.tags || '[]'), isFavorite: !!r.isFavorite }))
+  return rows.map(r => ({ ...r, tags: safeJsonParse(r.tags, []), isFavorite: !!r.isFavorite }))
 }
 
 export async function getFavoriteNotes(): Promise<NoteItem[]> {
@@ -494,7 +528,7 @@ export async function getFavoriteNotes(): Promise<NoteItem[]> {
             created_at as createdAt, updated_at as updatedAt
      FROM notes WHERE is_favorite = 1 ORDER BY updated_at DESC`
   )
-  return rows.map(r => ({ ...r, tags: JSON.parse(r.tags || '[]'), isFavorite: !!r.isFavorite }))
+  return rows.map(r => ({ ...r, tags: safeJsonParse(r.tags, []), isFavorite: !!r.isFavorite }))
 }
 
 // ── Note Versions ─────────────────────────────────────────────
@@ -583,18 +617,11 @@ export interface ScriptItem {
 export async function saveScript(script: { id: string; name: string; type: string; content: string }) {
   const d = await getDb()
   const now = new Date().toISOString()
-  const existing = await d.select<any[]>('SELECT id FROM scripts WHERE id = ?', [script.id])
-  if (existing.length === 0) {
-    await d.execute(
-      `INSERT INTO scripts (id, name, type, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
-      [script.id, script.name, script.type, script.content, now, now]
-    )
-  } else {
-    await d.execute(
-      `UPDATE scripts SET name = ?, type = ?, content = ?, updated_at = ? WHERE id = ?`,
-      [script.name, script.type, script.content, now, script.id]
-    )
-  }
+  await d.execute(
+    `INSERT INTO scripts (id, name, type, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET name = excluded.name, type = excluded.type, content = excluded.content, updated_at = excluded.updated_at`,
+    [script.id, script.name, script.type, script.content, now, now]
+  )
 }
 
 export async function loadScript(id: string): Promise<ScriptItem | null> {
@@ -680,104 +707,111 @@ export async function exportAllData(): Promise<AppBackup> {
 
 export async function importAllData(backup: AppBackup) {
   const d = await getDb()
-  await d.execute('DELETE FROM field_rule_sets')
-  await d.execute('DELETE FROM case_files')
-  await d.execute('DELETE FROM recent_files')
-  await d.execute('DELETE FROM favorites')
-  await d.execute('DELETE FROM app_settings')
-  await d.execute('DELETE FROM input_history')
-  await d.execute('DELETE FROM log_sessions')
-  await d.execute('DELETE FROM note_folders')
-  await d.execute('DELETE FROM notes')
-  await d.execute('DELETE FROM note_versions')
-  await d.execute('DELETE FROM note_links')
-  try { await d.execute('DELETE FROM note_spaces') } catch {}
-  await d.execute('DELETE FROM scripts')
+  await d.execute('BEGIN TRANSACTION')
+  try {
+    await d.execute('DELETE FROM field_rule_sets')
+    await d.execute('DELETE FROM case_files')
+    await d.execute('DELETE FROM recent_files')
+    await d.execute('DELETE FROM favorites')
+    await d.execute('DELETE FROM app_settings')
+    await d.execute('DELETE FROM input_history')
+    await d.execute('DELETE FROM log_sessions')
+    await d.execute('DELETE FROM note_folders')
+    await d.execute('DELETE FROM notes')
+    await d.execute('DELETE FROM note_versions')
+    await d.execute('DELETE FROM note_links')
+    try { await d.execute('DELETE FROM note_spaces') } catch {}
+    await d.execute('DELETE FROM scripts')
 
-  for (const s of backup.fieldRuleSets || []) {
-    await d.execute(
-      'INSERT INTO field_rule_sets (id, name, rules, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-      [s.id, s.name, JSON.stringify(s.rules), s.createdAt || s.created_at, s.updatedAt || s.updated_at || s.createdAt]
-    )
-  }
-  for (const f of backup.caseFiles || []) {
-    await d.execute(
-      'INSERT INTO case_files (id, name, data, tags, custom_fields, rule_set_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [f.id, f.name, f.data || JSON.stringify(f), JSON.stringify(f.tags || []), JSON.stringify(f.custom_fields || f.customFields || []), f.rule_set_id || f.ruleSetId || '', f.created_at || f.createdAt, f.updated_at || f.updatedAt]
-    )
-  }
-  for (const r of backup.recentFiles || []) {
-    await d.execute(
-      'INSERT INTO recent_files (path, name, case_count, last_opened) VALUES (?, ?, ?, ?)',
-      [r.path, r.name, r.case_count || r.caseCount || 0, r.last_opened || r.lastOpened]
-    )
-  }
-  for (const path of backup.favorites || []) {
-    await d.execute(
-      'INSERT INTO favorites (path, added_at) VALUES (?, ?)',
-      [path, new Date().toISOString()]
-    )
-  }
-  for (const [key, value] of Object.entries(backup.settings || {})) {
-    await d.execute(
-      'INSERT INTO app_settings (key, value) VALUES (?, ?)',
-      [key, value]
-    )
-  }
-  for (const h of backup.inputHistory || []) {
-    await d.execute(
-      'INSERT INTO input_history (key_name, value, created_at, sort_order) VALUES (?, ?, ?, ?)',
-      [h.keyName, h.value, h.createdAt, Date.parse(h.createdAt)]
-    )
-  }
-  for (const s of backup.logSessions || []) {
-    await d.execute(
-      'INSERT INTO log_sessions (id, type, device_serial, status, started_at, metadata) VALUES (?, ?, ?, ?, ?, ?)',
-      [s.id, s.type, s.deviceSerial, s.status, s.startedAt, s.metadata]
-    )
-  }
-  // ── Notes ──────────────────────────────────────────────────
-  for (const raw of backup.noteSpaces || []) {
-    const s: any = raw
-    await d.execute(
-      'INSERT INTO note_spaces (id, name, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-      [s.id, s.name, s.sortOrder ?? s.sort_order ?? 0, s.createdAt ?? s.created_at, s.updatedAt ?? s.updated_at]
-    )
-  }
-  for (const raw of backup.noteFolders || []) {
-    const f: any = raw
-    await d.execute(
-      'INSERT INTO note_folders (id, space_id, name, parent_id, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [f.id, f.spaceId ?? f.space_id ?? null, f.name, f.parentId ?? f.parent_id ?? null, f.sortOrder ?? f.sort_order ?? 0, f.createdAt ?? f.created_at, f.updatedAt ?? f.updated_at]
-    )
-  }
-  for (const raw of backup.notes || []) {
-    const n: any = raw
-    await d.execute(
-      'INSERT INTO notes (id, folder_id, title, content, tags, is_favorite, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [n.id, n.folderId ?? n.folder_id ?? null, n.title ?? '', n.content ?? '',
-       JSON.stringify(n.tags ?? []), n.isFavorite ? 1 : 0, n.createdAt ?? n.created_at, n.updatedAt ?? n.updated_at]
-    )
-  }
-  for (const raw of backup.noteVersions || []) {
-    const v: any = raw
-    await d.execute(
-      'INSERT INTO note_versions (id, note_id, content, saved_at) VALUES (?, ?, ?, ?)',
-      [v.id, v.noteId ?? v.note_id, v.content, v.savedAt ?? v.saved_at]
-    )
-  }
-  for (const raw of backup.noteLinks || []) {
-    const l: any = raw
-    await d.execute(
-      'INSERT INTO note_links (id, source_note_id, target_note_id, created_at) VALUES (?, ?, ?, ?)',
-      [l.id, l.sourceNoteId ?? l.source_note_id, l.targetNoteId ?? l.target_note_id, l.createdAt ?? l.created_at]
-    )
-  }
-  for (const raw of backup.scripts || []) {
-    const s: any = raw
-    await d.execute(
-      'INSERT INTO scripts (id, name, type, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-      [s.id, s.name, s.type ?? 'bat', s.content ?? '', s.createdAt ?? s.created_at, s.updatedAt ?? s.updated_at ?? s.createdAt]
-    )
+    for (const s of backup.fieldRuleSets || []) {
+      await d.execute(
+        'INSERT INTO field_rule_sets (id, name, rules, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+        [s.id, s.name, JSON.stringify(s.rules), s.createdAt || s.created_at, s.updatedAt || s.updated_at || s.createdAt]
+      )
+    }
+    for (const f of backup.caseFiles || []) {
+      await d.execute(
+        'INSERT INTO case_files (id, name, data, tags, custom_fields, rule_set_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [f.id, f.name, f.data || JSON.stringify(f), JSON.stringify(f.tags || []), JSON.stringify(f.custom_fields || f.customFields || []), f.rule_set_id || f.ruleSetId || '', f.created_at || f.createdAt, f.updated_at || f.updatedAt]
+      )
+    }
+    for (const r of backup.recentFiles || []) {
+      await d.execute(
+        'INSERT INTO recent_files (path, name, case_count, last_opened) VALUES (?, ?, ?, ?)',
+        [r.path, r.name, r.case_count || r.caseCount || 0, r.last_opened || r.lastOpened]
+      )
+    }
+    for (const path of backup.favorites || []) {
+      await d.execute(
+        'INSERT INTO favorites (path, added_at) VALUES (?, ?)',
+        [path, new Date().toISOString()]
+      )
+    }
+    for (const [key, value] of Object.entries(backup.settings || {})) {
+      await d.execute(
+        'INSERT INTO app_settings (key, value) VALUES (?, ?)',
+        [key, value]
+      )
+    }
+    for (const h of backup.inputHistory || []) {
+      await d.execute(
+        'INSERT INTO input_history (key_name, value, created_at, sort_order) VALUES (?, ?, ?, ?)',
+        [h.keyName, h.value, h.createdAt, Date.parse(h.createdAt)]
+      )
+    }
+    for (const s of backup.logSessions || []) {
+      await d.execute(
+        'INSERT INTO log_sessions (id, type, device_serial, status, started_at, metadata) VALUES (?, ?, ?, ?, ?, ?)',
+        [s.id, s.type, s.deviceSerial, s.status, s.startedAt, s.metadata]
+      )
+    }
+    // ── Notes ──────────────────────────────────────────────────
+    for (const raw of backup.noteSpaces || []) {
+      const s: any = raw
+      await d.execute(
+        'INSERT INTO note_spaces (id, name, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+        [s.id, s.name, s.sortOrder ?? s.sort_order ?? 0, s.createdAt ?? s.created_at, s.updatedAt ?? s.updated_at]
+      )
+    }
+    for (const raw of backup.noteFolders || []) {
+      const f: any = raw
+      await d.execute(
+        'INSERT INTO note_folders (id, space_id, name, parent_id, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [f.id, f.spaceId ?? f.space_id ?? null, f.name, f.parentId ?? f.parent_id ?? null, f.sortOrder ?? f.sort_order ?? 0, f.createdAt ?? f.created_at, f.updatedAt ?? f.updated_at]
+      )
+    }
+    for (const raw of backup.notes || []) {
+      const n: any = raw
+      await d.execute(
+        'INSERT INTO notes (id, folder_id, title, content, tags, is_favorite, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [n.id, n.folderId ?? n.folder_id ?? null, n.title ?? '', n.content ?? '',
+         JSON.stringify(n.tags ?? []), n.isFavorite ? 1 : 0, n.createdAt ?? n.created_at, n.updatedAt ?? n.updated_at]
+      )
+    }
+    for (const raw of backup.noteVersions || []) {
+      const v: any = raw
+      await d.execute(
+        'INSERT INTO note_versions (id, note_id, content, saved_at) VALUES (?, ?, ?, ?)',
+        [v.id, v.noteId ?? v.note_id, v.content, v.savedAt ?? v.saved_at]
+      )
+    }
+    for (const raw of backup.noteLinks || []) {
+      const l: any = raw
+      await d.execute(
+        'INSERT INTO note_links (id, source_note_id, target_note_id, created_at) VALUES (?, ?, ?, ?)',
+        [l.id, l.sourceNoteId ?? l.source_note_id, l.targetNoteId ?? l.target_note_id, l.createdAt ?? l.created_at]
+      )
+    }
+    for (const raw of backup.scripts || []) {
+      const s: any = raw
+      await d.execute(
+        'INSERT INTO scripts (id, name, type, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+        [s.id, s.name, s.type ?? 'bat', s.content ?? '', s.createdAt ?? s.created_at, s.updatedAt ?? s.updated_at ?? s.createdAt]
+      )
+    }
+    await d.execute('COMMIT')
+  } catch (e) {
+    await d.execute('ROLLBACK')
+    throw e
   }
 }

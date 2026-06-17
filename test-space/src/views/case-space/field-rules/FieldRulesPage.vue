@@ -206,24 +206,20 @@ const dragIdx = ref<number | null>(null)
 const dragOverIdx = ref<number | null>(null)
 
 const currentSet = computed(() => getRuleSet(editingSetId.value))
-const editingRules = computed({
-  get: () => {
-    const s = getRuleSet(editingSetId.value)
-    return s ? s.rules : []
-  },
-  set: () => {},
-})
+const editingRules = ref<FieldRule[]>([])
 
 function editRuleSet(id: string) {
   const s = getRuleSet(id)
   if (s) {
-    s.rules.forEach(r => {
+    const cloned: FieldRule[] = JSON.parse(JSON.stringify(s.rules))
+    cloned.forEach(r => {
       if (r.type === 'select' && r.options && !r.optionsStr) {
         r.optionsStr = r.options.join(', ')
       }
       if (!r.key) r.key = slugify(r.labelCn || r.label) + '_' + Date.now().toString(36).slice(-4)
       r.label = r.labelCn || r.label
     })
+    editingRules.value = cloned
     editingSetId.value = id
     editingSetName.value = s.name
   }
@@ -232,13 +228,14 @@ function editRuleSet(id: string) {
 function cancelEditing() {
   editingSetId.value = ''
   editingSetName.value = ''
+  editingRules.value = []
   fieldKeyGenCounter.value = 0
 }
 
 function saveRuleSet() {
   const s = getRuleSet(editingSetId.value)
   if (s) {
-    const clean = s.rules.map(r => {
+    const clean = editingRules.value.map(r => {
       const { optionsStr, ...rest } = r
       return r.type === 'select'
         ? { ...rest, options: r.options && r.options.length > 0 ? r.options : [''] }
@@ -248,6 +245,7 @@ function saveRuleSet() {
   }
   editingSetId.value = ''
   editingSetName.value = ''
+  editingRules.value = []
   fieldKeyGenCounter.value = 0
 }
 
@@ -268,8 +266,6 @@ function onLabelChange(rule: FieldRule) {
 }
 
 function addNewField() {
-  const s = getRuleSet(editingSetId.value)
-  if (!s) return
   const label = 'New Field'
   const key = genFieldKey()
   const newField: FieldRule = {
@@ -281,13 +277,12 @@ function addNewField() {
     type: 'textarea',
     optionsStr: '',
   }
-  s.rules.push(newField)
+  editingRules.value.push(newField)
 }
 
 function removeField(idx: number) {
-  const s = getRuleSet(editingSetId.value)
-  if (!s || s.rules.length <= 1) return
-  s.rules.splice(idx, 1)
+  if (editingRules.value.length <= 1) return
+  editingRules.value.splice(idx, 1)
 }
 
 function onTypeChange(rule: FieldRule) {
@@ -319,11 +314,13 @@ function onDragOver(idx: number, event: DragEvent) {
 
 function onDrop(idx: number) {
   if (dragIdx.value !== null && dragIdx.value !== idx) {
-    const s = getRuleSet(editingSetId.value)
-    if (s) {
-      const [moved] = s.rules.splice(dragIdx.value, 1)
-      s.rules.splice(idx, 0, moved)
+    if (dragIdx.value >= editingRules.value.length) {
+      dragIdx.value = null
+      dragOverIdx.value = null
+      return
     }
+    const [moved] = editingRules.value.splice(dragIdx.value, 1)
+    editingRules.value.splice(idx, 0, moved)
   }
   dragIdx.value = null
   dragOverIdx.value = null
@@ -331,8 +328,8 @@ function onDrop(idx: number) {
 
 function onDragLeave(event: DragEvent) {
   const target = event.currentTarget as HTMLElement
-  const related = event.relatedTarget as HTMLElement
-  if (!target.contains(related)) {
+  const related = event.relatedTarget as HTMLElement | null
+  if (!related || !target.contains(related)) {
     dragOverIdx.value = null
   }
 }

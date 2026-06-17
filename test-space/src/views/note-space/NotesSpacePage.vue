@@ -391,7 +391,7 @@
       <div v-if="deleteSpaceTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="deleteSpaceTarget = null">
         <div class="glass-panel rounded-2xl p-6 w-80 bg-white/80">
           <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-2 select-none">{{ t('notes.deleteSpace') }}</h3>
-          <p class="text-[13px] text-on-surface-variant mb-6" v-html="t('notes.deleteSpaceDesc', { name: `<strong>${deleteSpaceTarget.name}</strong>` })"></p>
+          <p class="text-[13px] text-on-surface-variant mb-6" v-html="t('notes.deleteSpaceDesc', { name: `<strong>${escapeHtml(deleteSpaceTarget.name)}</strong>` })"></p>
           <div class="flex justify-end gap-2">
             <button class="glass-button px-4 py-2 rounded-full text-[13px] select-none" @click="deleteSpaceTarget = null">{{ t('notes.cancel') }}</button>
             <button class="px-4 py-2 rounded-full text-[13px] bg-red-500 text-white hover:bg-red-600 transition-colors select-none" @click="doDeleteSpace">{{ t('notes.delete') }}</button>
@@ -405,7 +405,7 @@
       <div v-if="deleteFolderTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="deleteFolderTarget = null">
         <div class="glass-panel rounded-2xl p-6 w-80 bg-white/80">
           <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-2 select-none">{{ t('notes.deleteFolder') }}</h3>
-          <p class="text-[13px] text-on-surface-variant mb-6" v-html="t('notes.deleteFolderDesc', { name: `<strong>${deleteFolderTarget.name}</strong>` })"></p>
+          <p class="text-[13px] text-on-surface-variant mb-6" v-html="t('notes.deleteFolderDesc', { name: `<strong>${escapeHtml(deleteFolderTarget.name)}</strong>` })"></p>
           <div class="flex justify-end gap-2">
             <button class="glass-button px-4 py-2 rounded-full text-[13px] select-none" @click="deleteFolderTarget = null">{{ t('notes.cancel') }}</button>
             <button class="px-4 py-2 rounded-full text-[13px] bg-red-500 text-white hover:bg-red-600 transition-colors select-none" @click="doDeleteFolder">{{ t('notes.delete') }}</button>
@@ -419,7 +419,7 @@
       <div v-if="deleteNoteTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="deleteNoteTarget = null">
         <div class="glass-panel rounded-2xl p-6 w-80 bg-white/80">
           <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-2 select-none">{{ t('notes.deleteNote') }}</h3>
-          <p class="text-[13px] text-on-surface-variant mb-6" v-html="t('notes.deleteNoteDesc', { name: `<strong>${deleteNoteTarget.title || t('notes.untitled')}</strong>` })"></p>
+          <p class="text-[13px] text-on-surface-variant mb-6" v-html="t('notes.deleteNoteDesc', { name: `<strong>${escapeHtml(deleteNoteTarget.title || t('notes.untitled'))}</strong>` })"></p>
           <div class="flex justify-end gap-2">
             <button class="glass-button px-4 py-2 rounded-full text-[13px] select-none" @click="deleteNoteTarget = null">{{ t('notes.cancel') }}</button>
             <button class="px-4 py-2 rounded-full text-[13px] bg-red-500 text-white hover:bg-red-600 transition-colors select-none" @click="doDeleteNote">{{ t('notes.delete') }}</button>
@@ -466,6 +466,7 @@ const showFavorites = ref(false)
 const searchQuery = ref("")
 const searchResults = ref<NoteItem[]>([])
 const saved = ref(true)
+const lastEditorContent = ref<string>("")
 const noteTitle = ref("")
 const renameTarget = ref<{ type: 'space' | 'folder' | 'note'; id: string; name: string } | null>(null)
 const renameValue = ref("")
@@ -538,6 +539,7 @@ function getNotesByFolder(folderId: string): NoteItem[] {
 
 const uncategorizedNotes = computed(() => {
   if (searchQuery.value) return []
+  if (!selectedSpaceId.value) return []
   return notes.value.filter(n => !n.folderId)
 })
 
@@ -563,6 +565,12 @@ function buildTocTree(items: { level: number; text: string }[]): TocNode[] {
     path.push(node)
   }
   return root
+}
+
+// ── Utility ────────────────────────────────────────────────────
+
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 }
 
 // ── Data Loading ─────────────────────────────────────────────
@@ -613,24 +621,18 @@ function confirmDeleteSpace(space: NoteSpace) {
 async function doDeleteSpace() {
   if (!deleteSpaceTarget.value) return
   const id = deleteSpaceTarget.value.id
+  try {
+    await db.deleteNoteSpace(id)
+    spaces.value = spaces.value.filter(s => s.id !== id)
+    folders.value = await db.loadNoteFolders()
+    notes.value = await db.loadNotes()
+    if (selectedSpaceId.value === id) {
+      selectedSpaceId.value = spaces.value.length > 0 ? spaces.value[0].id : null
+    }
+  } catch (e) {
+    console.error('Failed to delete space:', e)
+  }
   deleteSpaceTarget.value = null
-  await db.deleteNoteSpace(id)
-  spaces.value = spaces.value.filter(s => s.id !== id)
-  folders.value = await db.loadNoteFolders()
-  notes.value = await db.loadNotes()
-  if (selectedSpaceId.value === id) {
-    selectedSpaceId.value = spaces.value.length > 0 ? spaces.value[0].id : null
-  }
-}
-
-async function deleteSpace(id: string) {
-  await db.deleteNoteSpace(id)
-  spaces.value = spaces.value.filter(s => s.id !== id)
-  folders.value = await db.loadNoteFolders()
-  notes.value = await db.loadNotes()
-  if (selectedSpaceId.value === id) {
-    selectedSpaceId.value = spaces.value.length > 0 ? spaces.value[0].id : null
-  }
 }
 
 // ── Folder Management ────────────────────────────────────────
@@ -679,14 +681,18 @@ async function confirmRename() {
   }
   const { type, id } = renameTarget.value
   const name = renameValue.value.trim()
-  if (type === 'space') {
-    await db.renameNoteSpace(id, name)
-    const s = spaces.value.find(s => s.id === id)
-    if (s) s.name = name
-  } else if (type === 'folder') {
-    await db.renameNoteFolder(id, name)
-    const f = folders.value.find(f => f.id === id)
-    if (f) f.name = name
+  try {
+    if (type === 'space') {
+      await db.renameNoteSpace(id, name)
+      const s = spaces.value.find(s => s.id === id)
+      if (s) s.name = name
+    } else if (type === 'folder') {
+      await db.renameNoteFolder(id, name)
+      const f = folders.value.find(f => f.id === id)
+      if (f) f.name = name
+    }
+  } catch (e) {
+    console.error('Failed to rename:', e)
   }
   renameTarget.value = null
 }
@@ -701,11 +707,15 @@ async function deleteFolder(id: string) {
 async function doDeleteFolder() {
   if (!deleteFolderTarget.value) return
   const id = deleteFolderTarget.value.id
+  try {
+    await db.deleteNoteFolder(id)
+    folders.value = folders.value.filter(f => f.id !== id)
+    notes.value = await db.loadNotes()
+    if (selectedFolderId.value === id) selectedFolderId.value = null
+  } catch (e) {
+    console.error('Failed to delete folder:', e)
+  }
   deleteFolderTarget.value = null
-  await db.deleteNoteFolder(id)
-  folders.value = folders.value.filter(f => f.id !== id)
-  notes.value = await db.loadNotes()
-  if (selectedFolderId.value === id) selectedFolderId.value = null
 }
 
 function selectFolder(id: string) {
@@ -755,7 +765,7 @@ async function onDrop(targetFolderId: string | null) {
   if (note.folderId === newFolderId) { dragNoteId = null; return }
   note.folderId = newFolderId
   note.updatedAt = new Date().toISOString()
-  await db.saveNote(note)
+  try { await db.saveNote(note) } catch { /* best effort */ }
   dragNoteId = null
 }
 
@@ -785,6 +795,7 @@ function selectNoteById(id: string, content: string) {
   if (editor.value) {
     editor.value.commands.setContent(content)
   }
+  lastEditorContent.value = content
   saved.value = true
 }
 
@@ -793,7 +804,7 @@ async function selectNote(note: NoteItem) {
   if (versionTimer) { clearTimeout(versionTimer); versionTimer = null }
 
   if (selectedNoteId.value && currentNoteData.value && !saved.value) {
-    await saveCurrentNote()
+    try { await saveCurrentNote() } catch { /* best effort */ }
   }
 
   selectedNoteId.value = note.id
@@ -801,6 +812,7 @@ async function selectNote(note: NoteItem) {
   if (editor.value) {
     editor.value.commands.setContent(note.content || "")
   }
+  lastEditorContent.value = note.content || ""
   saved.value = true
 
   try {
@@ -862,14 +874,18 @@ async function confirmDeleteNote(note: NoteItem) {
 async function doDeleteNote() {
   if (!deleteNoteTarget.value) return
   const id = deleteNoteTarget.value.id
-  deleteNoteTarget.value = null
-  await db.deleteNote(id)
-  notes.value = notes.value.filter(n => n.id !== id)
-  if (selectedNoteId.value === id) {
-    selectedNoteId.value = null
-    noteTitle.value = ""
-    if (editor.value) editor.value.commands.setContent("")
+  try {
+    await db.deleteNote(id)
+    notes.value = notes.value.filter(n => n.id !== id)
+    if (selectedNoteId.value === id) {
+      selectedNoteId.value = null
+      noteTitle.value = ""
+      if (editor.value) editor.value.commands.setContent("")
+    }
+  } catch (e) {
+    console.error('Failed to delete note:', e)
   }
+  deleteNoteTarget.value = null
 }
 
 // ── Favorite ──────────────────────────────────────────────────
@@ -889,10 +905,12 @@ function triggerSave() {
   saveTimer = setTimeout(async () => {
     await saveCurrentNote()
     if (versionTimer) clearTimeout(versionTimer)
+    const noteIdForVersion = selectedNoteId.value
+    const contentForVersion = lastEditorContent.value
     versionTimer = setTimeout(async () => {
-      if (selectedNoteId.value && editor.value) {
-        await db.saveNoteVersion(selectedNoteId.value, editor.value.getHTML())
-        noteVersions.value = await db.loadNoteVersions(selectedNoteId.value)
+      if (noteIdForVersion && contentForVersion) {
+        await db.saveNoteVersion(noteIdForVersion, contentForVersion)
+        noteVersions.value = await db.loadNoteVersions(noteIdForVersion)
       }
     }, 30000)
   }, 1500)
@@ -1205,6 +1223,7 @@ const editor = useEditor({
     Typography,
   ],
   onUpdate: () => {
+    lastEditorContent.value = editor.value?.getHTML() ?? ""
     saved.value = false
     triggerSave()
   },
@@ -1303,10 +1322,15 @@ onMounted(async () => {
   })
 })
 
-onBeforeUnmount(async () => {
+onBeforeUnmount(() => {
   document.removeEventListener('click', onDocumentClick, true)
-  if (!saved.value) {
-    await saveCurrentNote()
+  if (!saved.value && selectedNoteId.value && lastEditorContent.value !== null) {
+    const note = currentNoteData.value
+    if (note) {
+      note.title = noteTitle.value || t('notes.untitled')
+      note.content = lastEditorContent.value
+      db.saveNote(note).catch(() => {})
+    }
   }
   if (saveTimer) clearTimeout(saveTimer)
   if (versionTimer) clearTimeout(versionTimer)

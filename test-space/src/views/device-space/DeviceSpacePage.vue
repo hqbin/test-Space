@@ -105,7 +105,7 @@
                 class="w-full bg-white/50 border border-outline-variant/60 rounded-full px-3 py-1.5 font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all select-text"
                 :placeholder="t('device.textHint')" @keyup.enter="sendText" @focus="showTextHistory = true" @blur="hideTextHistoryDelayed" />
               <div v-if="showTextHistory && textHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-outline-variant rounded-lg p-1 max-h-32 overflow-y-auto shadow-lg">
-                <button v-for="(h, i) in textHistory" :key="i" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none"
+                <button v-for="h in textHistory" :key="h" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none"
                   @mousedown.prevent @click="selectTextHistory(h)">{{ h }}</button>
               </div>
             </div>
@@ -209,7 +209,7 @@
                       :placeholder="t('device.searchApp')" @input="onAppSearchInput" @keyup.enter="queryAppPath" @focus="loadAppSearchHistory" @blur="hideAppSearchHistoryDelayed" />
                   </div>
                   <div v-if="showAppSearchHistory && appSearchHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-outline-variant rounded-lg p-1 max-h-32 overflow-y-auto shadow-lg">
-                    <button v-for="(h, i) in appSearchHistory" :key="i" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none"
+                    <button v-for="h in appSearchHistory" :key="h" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none"
                       @mousedown.prevent @click="selectAppSearchHistory(h)">{{ h }}</button>
                   </div>
                 </div>
@@ -416,7 +416,7 @@
               class="w-full bg-white border border-outline-variant rounded-lg px-3 py-1.5 font-body-sm text-body-sm text-on-surface font-mono focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all select-text"
               :placeholder="t('device.remotePathHint')" @focus="showRemotePathHistory = true" @blur="hideRemotePathHistoryDelayed" @keyup.enter="navigateToPath" />
             <div v-if="showRemotePathHistory && remotePathHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-outline-variant rounded-lg p-1 max-h-32 overflow-y-auto shadow-lg">
-              <button v-for="(h, i) in remotePathHistory" :key="i" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none"
+              <button v-for="h in remotePathHistory" :key="h" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none"
                 @mousedown.prevent @click="selectRemotePathHistory(h)">{{ h }}</button>
             </div>
           </div>
@@ -432,7 +432,7 @@
                 <span class="material-symbols-outlined text-3xl">folder_open</span>
                 <p class="font-body-sm text-body-sm mt-1">{{ t('device.pathHint') }}</p>
               </div>
-              <div v-for="(entry, idx) in fileEntries" :key="idx"
+              <div v-for="entry in fileEntries" :key="entry.name"
                 class="flex items-center gap-1.5 px-2 py-1 hover:bg-secondary/5 hover:scale-[1.02] cursor-pointer border-b border-outline-variant/20 last:border-0 group transition-transform duration-200 rounded select-none"
                 @click="handleEntryClick(entry, $event)">
                 <span class="material-symbols-outlined text-[16px] shrink-0"
@@ -856,9 +856,11 @@ const activeTab = ref('common');
 
 // ── Toast ──
 const toast = ref({ show: false, message: "", type: "success" as "success" | "error" });
+let toastTimer: number | null = null;
 function showToast(message: string, type: "success" | "error" = "success") {
   toast.value = { show: true, message, type };
-  setTimeout(() => { toast.value.show = false; }, 2500);
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => { toast.value.show = false; }, 2500);
 }
 
 // ── Confirm Dialog ──
@@ -909,7 +911,6 @@ const scanLoading = ref(false);
 const pkgLoading = ref(false);
 const connecting = ref(false);
 const recordingLoading = ref(false);
-const operationInProgress = ref(false);
 let versionGen = 0;
 
 // ── Device state ──
@@ -969,7 +970,6 @@ const appSearchHistory = ref<string[]>([]);
 const appPage = ref(1);
 
 const loadedVersions = ref(new Set<string>());
-let versionQueue: Promise<unknown> = Promise.resolve();
 const appLoadingState = ref<Record<string, Record<string, boolean>>>({});
 const appListContainer = ref<HTMLElement | null>(null);
 const appItemHeight = ref(28);
@@ -1132,12 +1132,14 @@ async function handleEntryClick(entry: FileEntry, e: MouseEvent) {
 async function navigateToPath() {
   if (!selectedDevice.value || !remotePath.value.trim()) return;
   await addInputHistory('remote_path', remotePath.value);
+  remotePathHistory.value = [remotePath.value, ...remotePathHistory.value.filter(h => h !== remotePath.value)].slice(0, 15);
   await loadFileList();
 }
 async function navigateToDir(name: string) {
   const base = remotePath.value.replace(/\/?$/, '/');
   remotePath.value = base + name.trim();
   await addInputHistory('remote_path', remotePath.value);
+  remotePathHistory.value = [remotePath.value, ...remotePathHistory.value.filter(h => h !== remotePath.value)].slice(0, 15);
   await loadFileList();
 }
 async function navigateToParent() {
@@ -1164,11 +1166,14 @@ function parseLsLine(line: string): { name: string; isDir: boolean; size: string
   if (!name) return null;
   return { name, isDir, size: sizeFormatted, rawSize: sizeVal };
 }
+let loadFileListGen = 0;
 async function loadFileList() {
   dragOverFileList.value = false;
   if (!selectedDevice.value) return;
+  const gen = ++loadFileListGen;
   try {
     const raw = await shell(selectedDevice.value.serial, `ls -la "${remotePath.value}"`);
+    if (gen !== loadFileListGen) return;
     const lines = raw.split('\n').filter(l => l.trim() && !l.startsWith('total'));
     const entries = lines.map(l => parseLsLine(l)).filter((e): e is NonNullable<typeof e> => e !== null && e.name !== '.' && e.name !== '..')
       .sort((a, b) => {
@@ -1325,13 +1330,19 @@ async function downloadFileFromEdit() {
 // ── Helper: yield to UI thread ──
 function yieldToUI() { return new Promise(resolve => setTimeout(resolve, 0)); }
 
+// ── Helper: sanitize shell arguments ──
+function sanitizeShellArg(s: string): string {
+  return s.replace(/[;&|`$(){}!<>\\'"*?#\n\r\t]/g, '')
+}
+
 // ── Information Query ──
 const infoLoading = ref("");
 const infoDialog = ref({ show: false, title: "", entries: [] as { key: string; value: string; raw?: string }[] });
 const infoDialogExpanded = ref(new Set<number>());
 function toggleInfoExpand(idx: number) {
-  if (infoDialogExpanded.value.has(idx)) infoDialogExpanded.value.delete(idx);
-  else infoDialogExpanded.value.add(idx);
+  const s = new Set(infoDialogExpanded.value);
+  if (s.has(idx)) s.delete(idx); else s.add(idx);
+  infoDialogExpanded.value = s;
 }
 
 function showDeviceInfoDialog() {
@@ -1567,6 +1578,7 @@ async function sendText() {
   try {
     await adbInputText(selectedDevice.value.serial, text);
     await addInputHistory('input_text', text);
+    textHistory.value = [text, ...textHistory.value.filter(h => h !== text)].slice(0, 15);
     appendCmdExec(t('device.textSentWith', { text }));
     finishCmdExec(t("device.textSent"));
     showToast(t("device.textSent"));
@@ -1597,6 +1609,7 @@ async function loadVisibleAppVersions() {
   const currentGen = ++versionGen;
   const pageApps = currentPageApps.value.filter(a => !a.version_name && !loadedVersions.value.has(a.package_name));
   for (const app of pageApps) loadedVersions.value = new Set(loadedVersions.value).add(app.package_name);
+  const updates = new Map<string, { vn?: string; vc?: string }>();
   for (let i = 0; i < pageApps.length; i += 4) {
     if (currentGen !== versionGen) return;
     await Promise.all(pageApps.slice(i, i + 4).map(async app => {
@@ -1607,11 +1620,16 @@ async function loadVisibleAppVersions() {
         const vn = info.match(/versionName=([^\s]+)/)?.[1];
         const vc = info.match(/versionCode=(\d+)/)?.[1];
         if (vn || vc) {
-          apps.value = apps.value.map(a => a.package_name === app.package_name ? { ...a, version_name: vn, version_code: vc } : a);
+          updates.set(app.package_name, { vn, vc });
         }
       } catch {}
     }));
   }
+  if (currentGen !== versionGen || updates.size === 0) return;
+  apps.value = apps.value.map(a => {
+    const u = updates.get(a.package_name);
+    return u ? { ...a, version_name: u.vn, version_code: u.vc } : a;
+  });
 }
 async function getCurrentForegroundApp() {
   if (!selectedDevice.value) return;
@@ -1669,7 +1687,7 @@ async function showAppDetail(pkg: string) {
 
 async function startApp(pkg: string) {
   if (!selectedDevice.value) return;
-  showCmdExec(t("device.startAppAction"), `adb shell monkey -p ${pkg} 1`);
+  showCmdExec(t("device.startAppAction"), `adb shell monkey -p ${sanitizeShellArg(pkg)} 1`);
   try {
     appendCmdExec(t('device.startingApp', { pkg }));
     await adbStartApp(selectedDevice.value.serial, pkg);
@@ -1680,9 +1698,9 @@ async function startApp(pkg: string) {
     appendCmdExec(t("device.monkeyFailedFallback"));
     try {
       const mainAct = await shell(selectedDevice.value.serial, 
-        `cmd package resolve-activity --brief ${pkg} | tail -1`);
+        `cmd package resolve-activity --brief ${sanitizeShellArg(pkg)} | tail -1`);
       if (mainAct && mainAct.includes("/")) {
-        await shell(selectedDevice.value.serial, `am start -n ${mainAct.trim()}`);
+        await shell(selectedDevice.value.serial, `am start -n ${sanitizeShellArg(mainAct.trim())}`);
         appendCmdExec(t('device.startedApp', { pkg }));
         finishCmdExec(t("device.appStarted"));
         showToast(t('device.startedApp', { pkg }));
@@ -1694,7 +1712,7 @@ async function startApp(pkg: string) {
 }
 async function stopApp(pkg: string) {
   if (!selectedDevice.value) return;
-  showCmdExec(t("device.stopAppAction"), `adb shell am force-stop ${pkg}`);
+  showCmdExec(t("device.stopAppAction"), `adb shell am force-stop ${sanitizeShellArg(pkg)}`);
   try {
     appendCmdExec(t('device.stoppingApp', { pkg }));
     await adbStopApp(selectedDevice.value.serial, pkg);
@@ -1705,7 +1723,7 @@ async function stopApp(pkg: string) {
 }
 async function clearApp(pkg: string) {
   if (!selectedDevice.value) return;
-  showCmdExec(t("device.clearDataAction"), `adb shell pm clear ${pkg}`);
+  showCmdExec(t("device.clearDataAction"), `adb shell pm clear ${sanitizeShellArg(pkg)}`);
   try {
     appendCmdExec(t('device.clearingData', { pkg }));
     await clearAppData(selectedDevice.value.serial, pkg);
@@ -1810,10 +1828,11 @@ async function queryAppPath() {
     return;
   }
   try {
-    const result = await shell(selectedDevice.value.serial, `pm path ${queryPackageName.value.trim()}`);
+    const result = await shell(selectedDevice.value.serial, `pm path ${sanitizeShellArg(queryPackageName.value.trim())}`);
     const match = result.match(/package:(.+)/);
     if (match) {
       await addInputHistory('app_search', queryPackageName.value.trim());
+      appSearchHistory.value = [queryPackageName.value.trim(), ...appSearchHistory.value.filter(h => h !== queryPackageName.value.trim())].slice(0, 15);
       resultDialog.value = { show: true, title: t("device.apkPathTitle", { pkg: queryPackageName.value.trim() }), content: match[1].trim() };
     } else {
       showToast(t("device.appNotFound"), "error");
@@ -2013,11 +2032,12 @@ function scheduleDiagTimer() {
   }
 }
 async function stopDiagnosticCapture() {
+  if (!selectedDevice.value) return;
   if (diagTimeoutId) { clearTimeout(diagTimeoutId); diagTimeoutId = null; }
   diagRunning.value = false;
   await yieldToUI();
   try {
-    const serial = selectedDevice.value!.serial;
+    const serial = selectedDevice.value.serial;
     showCmdExec(t("device.collectingDiag"));
     appendCmdExec(t("device.collectingLogs"));
 
@@ -2398,7 +2418,7 @@ async function takeScreenshot() {
     appendCmdExec(result);
     finishCmdExec(t("device.screenshotSaved"));
     showToast(t("device.screenshotSaved"));
-  } catch (e: any) { showToast(t('device.screenshotFailedWith', { e: String(e) }), "error"); }
+  } catch (e: any) { finishCmdExec(); showToast(t('device.screenshotFailedWith', { e: String(e) }), "error"); }
 }
 async function takeScreenshotFromMirror() {
   await takeScreenshot();
@@ -2421,7 +2441,7 @@ async function toggleRecording() {
         appendCmdExec(t("device.pullingRecording"));
         await pullFile(selectedDevice.value.serial, recordingFilename.value, dest);
         appendCmdExec(t("device.cleaningDeviceFiles"));
-        await shell(selectedDevice.value.serial, `rm ${recordingFilename.value}`).catch(() => {});
+        await shell(selectedDevice.value.serial, `rm ${sanitizeShellArg(recordingFilename.value)}`).catch(() => {});
         appendCmdExec(t("device.screenrecSaved") + ": " + dest);
         finishCmdExec(t("device.screenrecSaved"));
         showToast(t("device.screenrecSaved"));
@@ -2455,7 +2475,7 @@ onMounted(async () => {
   loadTextHistory();
   loadRemotePathHistory();
   // Auto-refresh devices every 5s (silent, no toast)
-  autoRefreshId = setInterval(() => { if (!operationInProgress.value) scanDevices(true); }, 5000);
+  autoRefreshId = setInterval(() => { if (!pkgLoading.value && !scanLoading.value && !connecting.value && !recordingLoading.value) scanDevices(true); }, 5000);
   nextTick(() => {
     recalcAppPageSize();
     let rafId: number;

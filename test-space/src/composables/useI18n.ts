@@ -960,7 +960,7 @@ export function useI18n() {
     let val = messages[lang.value]?.[key] ?? messages.zh[key] ?? key;
     if (params) {
       for (const [k, v] of Object.entries(params)) {
-        val = val.replace(`{${k}}`, v);
+        val = val.split(`{${k}}`).join(v);
       }
     }
     return val;

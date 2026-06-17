@@ -235,7 +235,7 @@ const { t } = useI18n();
 
 const {
   tabs, activeTabId, activeTab, activeTabOutput,
-  addTab, clearTabOutput, killScript, setup: setupRunner, setScrollContainer,
+  addTab, clearTabOutput, killScript, setup: setupRunner, setScrollContainer, destroy,
 } = useScriptRunner();
 
 const scripts = ref<db.ScriptItem[]>([]);
@@ -257,9 +257,11 @@ const PAGINATOR_H = 32;
 const currentPage = ref(1);
 
 const totalPages = computed(() => {
-  const n = Math.max(1, Math.ceil(filteredScripts.value.length / pageSize.value));
-  if (currentPage.value > n) currentPage.value = n;
+  const n = Math.ceil(filteredScripts.value.length / pageSize.value) || 1;
   return n;
+});
+watch(totalPages, (n) => {
+  if (currentPage.value > n) currentPage.value = n;
 });
 
 function updatePageSize() {
@@ -356,14 +358,20 @@ function confirmDelete(s: db.ScriptItem) {
 async function doDelete() {
   if (!deleteTarget.value) return;
   const id = deleteTarget.value.id;
-  await db.deleteScript(id);
-  if (currentScript.value?.id === id) {
-    currentScript.value = null;
-    editingName.value = "";
-    editingContent.value = "";
+  try {
+    await db.deleteScript(id);
+    if (currentScript.value?.id === id) {
+      currentScript.value = null;
+      editingName.value = "";
+      editingContent.value = "";
+    }
+    deleteTarget.value = null;
+    await loadScriptList();
+  } catch (e: any) {
+    console.error("[ScriptSpace] delete failed:", e);
+    showToast(t("scripts.saveFail") + ": " + (e?.message || e), false);
+    deleteTarget.value = null;
   }
-  deleteTarget.value = null;
-  await loadScriptList();
 }
 
 // ── Toast feedback ─────────────────────────────────
@@ -480,7 +488,7 @@ const PY_SNIPPETS = computed(() => [
 // ── Helpers ─────────────────────────────────────
 
 function genId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  return crypto.randomUUID().replace(/-/g, '').slice(0, 12);
 }
 
 function insertTab() {
@@ -592,8 +600,11 @@ async function exportToFile() {
   }
 }
 
+let isRunning = false;
 async function runCurrentScript() {
+  if (isRunning) return;
   if (!editingContent.value.trim()) return;
+  isRunning = true;
   const name = editingName.value.trim() || "untitled";
   const tab = addTab(name);
   const extMap: Record<string, string> = { bat: "bat", py: "py" };
@@ -605,7 +616,7 @@ async function runCurrentScript() {
     const { mkdir } = await import("@tauri-apps/plugin-fs");
     const dir = await appDataDir();
     const tmpDir = `${dir}temp_scripts`;
-    try { await mkdir(tmpDir); } catch {}
+    try { await mkdir(tmpDir); } catch (e) { console.warn('[ScriptSpace] mkdir failed:', e); }
     const tempPath = `${tmpDir}${tab.id}.${ext}`;
     await invoke("write_script_file", { path: tempPath, content: editingContent.value, interpreter });
     await invoke("script_spawn", {
@@ -618,6 +629,8 @@ async function runCurrentScript() {
     tab.output.push({ text: `Failed: ${e?.message || e}`, stream: "stderr" });
     tab.status = "error";
     tab.exitCode = -1;
+  } finally {
+    isRunning = false;
   }
 }
 
@@ -646,6 +659,7 @@ onMounted(async () => {
 watch([globalType, searchQuery, sortMode, sortAsc], () => { currentPage.value = 1; });
 
 onUnmounted(() => {
+  destroy();
   document.removeEventListener("click", handleDocClick);
   if (tipTimer) clearTimeout(tipTimer);
   if (toastTimer) clearTimeout(toastTimer);

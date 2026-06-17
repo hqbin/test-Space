@@ -46,7 +46,7 @@
         <div class="flex items-center justify-between px-3 py-1.5 border-b border-white/30 bg-white/10 shrink-0">
           <div class="flex items-center gap-2">
             <span class="font-label-md text-label-md text-on-surface-variant">{{ activeFile.name }}</span>
-            <span class="font-caption text-caption text-on-surface-variant/60">{{ contentRows().length }} cases</span>
+            <span class="font-caption text-caption text-on-surface-variant/60">{{ contentRows.length }} cases</span>
           </div>
           <div class="flex items-center gap-1">
             <button class="glass-button px-2 py-1 rounded-lg text-caption flex items-center gap-1 select-none" @click="addRow">
@@ -158,7 +158,7 @@
                 </div>
               </div>
             </div>
-            <div v-if="contentRows().length === 0" class="flex items-center justify-center py-20">
+            <div v-if="contentRows.length === 0" class="flex items-center justify-center py-20">
               <div class="text-center">
                 <span class="material-symbols-outlined text-4xl text-on-surface-variant/15">table_rows</span>
                 <p class="font-body-md text-body-md text-on-surface-variant/50 mt-3">No test cases yet</p>
@@ -173,7 +173,7 @@
 
         <!-- Status bar -->
         <div class="flex items-center justify-between px-3 py-1 border-t border-gray-300/50 bg-white/10 shrink-0">
-          <span class="font-caption text-caption text-on-surface-variant/50">{{ contentRows().length }} rows</span>
+          <span class="font-caption text-caption text-on-surface-variant/50">{{ contentRows.length }} rows</span>
           <div class="flex items-center gap-3">
             <span v-if="selectedIds.length > 0" class="font-caption text-caption text-secondary/70">{{ selectedIds.length }} selected</span>
             <button v-if="selectedIds.length > 1" class="glass-button px-2 py-0.5 rounded text-caption text-error/70 flex items-center gap-1" @click="deleteSelected">
@@ -355,7 +355,7 @@
         <div class="flex items-center gap-2">
           <span class="material-symbols-outlined text-[14px] text-on-surface-variant/50">account_tree</span>
           <span class="font-caption text-caption text-on-surface-variant/70">{{ activeFile.name }}</span>
-          <span class="font-caption text-caption text-on-surface-variant/40">{{ contentRows().length }} cases</span>
+          <span class="font-caption text-caption text-on-surface-variant/40">{{ contentRows.length }} cases</span>
         </div>
       </div>
       <div ref="mindmapContainer" class="w-full h-full cursor-grab pt-8" @wheel.prevent="onMindMapWheel">
@@ -587,6 +587,16 @@ const tagInputs = ref<Record<string, string>>({})
 const colWidths = ref<Record<string, number>>({})
 const resizing = ref<{ key: string; startX: number; startW: number } | null>(null)
 
+const _docListeners = new Map<string, EventListenerOrEventListenerObject>()
+
+function trackDocListener(event: string, handler: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions) {
+  document.addEventListener(event, handler, options)
+  _docListeners.set(event + '_' + _docListeners.size, handler)
+}
+
+let _offsetCacheItems: any[] | null = null
+let _offsetCacheResult: { offsets: number[]; total: number } | null = null
+
 // Filter / Sort state
 const sortState = ref<{ key: string; dir: 'asc' | 'desc' } | null>(null)
 const columnFilters = ref<Record<string, Set<string>>>({})
@@ -667,8 +677,8 @@ function startResize(event: MouseEvent, key: string) {
   const cell = (event.target as HTMLElement).closest('[data-col-key]') as HTMLElement
   if (!cell) return
   resizing.value = { key, startX: event.clientX, startW: cell.offsetWidth }
-  document.addEventListener('mousemove', onResizeMove)
-  document.addEventListener('mouseup', onResizeEnd)
+  trackDocListener('mousemove', onResizeMove as EventListener)
+  trackDocListener('mouseup', onResizeEnd as EventListener)
   document.body.style.cursor = 'col-resize'
   document.body.style.userSelect = 'none'
 }
@@ -930,7 +940,7 @@ function bindMenuClose() {
   }
   // Delay to avoid the right-click event itself triggering close
   setTimeout(() => {
-    document.addEventListener('mousedown', _menuCloseHandler!)
+    trackDocListener('mousedown', _menuCloseHandler! as EventListener)
   }, 0)
 }
 
@@ -986,7 +996,7 @@ function copySelected() {
   if (!f) return
   const items = f.cases.filter(c => selectedIds.value.includes(c.id))
   if (items.length > 0) {
-    navigator.clipboard.writeText(JSON.stringify(items, null, 2))
+    navigator.clipboard.writeText(JSON.stringify(items, null, 2)).catch(() => {})
   }
 }
 
@@ -1002,9 +1012,17 @@ function resizeTextarea(ta: HTMLTextAreaElement) {
   if (h > 0) ta.style.height = h + 'px'
 }
 
+const _textareaRafMap = new WeakMap<HTMLElement, number>()
+
 function initTextarea(el: any) {
   if (!el || !(el instanceof HTMLTextAreaElement)) return
-  requestAnimationFrame(() => resizeTextarea(el as HTMLTextAreaElement))
+  const existing = _textareaRafMap.get(el)
+  if (existing) cancelAnimationFrame(existing)
+  const id = requestAnimationFrame(() => {
+    _textareaRafMap.delete(el)
+    resizeTextarea(el as HTMLTextAreaElement)
+  })
+  _textareaRafMap.set(el, id)
 }
 
 function onTextareaInput(caseId: string, field: string, event: Event) {
@@ -1017,18 +1035,26 @@ function goHome() {
   router.push('/case-space')
 }
 
+let _isSaving = false
+
 async function saveFile() {
-  if (!store.activeFile) return
+  if (!store.activeFile || _isSaving) return
+  _isSaving = true
   const f = store.activeFile
   const content = f.cases.filter(c => hasContent(c))
+  const contentCopy = JSON.parse(JSON.stringify(content))
   const backup = f.cases
-  f.cases = content
-  await store.saveFileToDb(f.id)
-  f.cases = backup
-  store.markSaved(f.id)
-  await store.addToRecent(f.id, f.name, content.length, 'db://' + f.id)
-  importStatus.value = "Saved to database"
-  setTimeout(() => importStatus.value = "", 2000)
+  f.cases = contentCopy
+  try {
+    await store.saveFileToDb(f.id)
+    store.markSaved(f.id)
+    await store.addToRecent(f.id, f.name, content.length, 'db://' + f.id)
+    importStatus.value = "Saved to database"
+    setTimeout(() => importStatus.value = "", 2000)
+  } finally {
+    f.cases = backup
+    _isSaving = false
+  }
 }
 
 const showSaveAsDialog = ref(false)
@@ -1142,20 +1168,34 @@ function isEmptyCase(c: CaseItem): boolean {
   if ((c as any)._activated) return false
   if (c.title || c.steps || c.expected || c.precondition || c.module || c.remarks || c.assignee) return false
   if (c.tags && c.tags.length > 0) return false
+  const f = activeFile.value
+  if (f?.customFields) {
+    for (const cf of f.customFields) {
+      const val = (c as any)[cf.key]
+      if (val != null && val !== '' && !(Array.isArray(val) && val.length === 0)) return false
+    }
+  }
   return true
 }
 
 function hasContent(c: CaseItem): boolean {
   if (c.title || c.steps || c.expected || c.precondition || c.module || c.remarks || c.assignee) return true
   if (c.tags && c.tags.length > 0) return true
+  const f = activeFile.value
+  if (f?.customFields) {
+    for (const cf of f.customFields) {
+      const val = (c as any)[cf.key]
+      if (val != null && val !== '' && !(Array.isArray(val) && val.length === 0)) return true
+    }
+  }
   return false
 }
 
-function contentRows(): CaseItem[] {
+const contentRows = computed<CaseItem[]>(() => {
   const f = activeFile.value
   if (!f) return []
   return f.cases.filter(c => !isEmptyCase(c))
-}
+})
 
 const VIRTUAL_PREFIX = '__virtual__'
 
@@ -1166,7 +1206,7 @@ function isVirtualId(id: string): boolean {
 const displayRows = computed<(CaseItem | { id: string; _virtual: true })[]>(() => {
   const f = activeFile.value
   if (!f) return []
-  const content = contentRows()
+  const content = contentRows.value
   if (content.length >= EMPTY_ROW_COUNT) return content
   const pads: { id: string; _virtual: true }[] = []
   for (let i = 0; i < EMPTY_ROW_COUNT - content.length; i++) {
@@ -1285,7 +1325,7 @@ function buildMindMap(f: CaseFile): MindMapResult {
 
   // Build module tree by splitting module paths on '/'
   const moduleRoot: ModuleTree = { name: '', children: {}, cases: [] }
-  for (const c of contentRows()) {
+  for (const c of contentRows.value) {
     const parts = (c.module || '').split('/').filter(Boolean)
     let current = moduleRoot
     for (const part of parts) {
@@ -1573,7 +1613,7 @@ function showTabPrompt(node: MNode) {
       _mmTabPromptHandler = null
     }
   }
-  setTimeout(() => document.addEventListener('mousedown', _mmTabPromptHandler!), 0)
+  setTimeout(() => trackDocListener('mousedown', _mmTabPromptHandler! as EventListener), 0)
 }
 
 function mmTabAddModule() {
@@ -1674,8 +1714,8 @@ function onMmMouseDown(e: MouseEvent, node: MNode) {
     _mmDragEndHandler = null
   }
 
-  document.addEventListener('mousemove', _mmDragMoveHandler)
-  document.addEventListener('mouseup', _mmDragEndHandler)
+  trackDocListener('mousemove', _mmDragMoveHandler as EventListener)
+  trackDocListener('mouseup', _mmDragEndHandler as EventListener)
 }
 
 // ===== Context Menu =====
@@ -1693,7 +1733,7 @@ function openMmCtx(e: MouseEvent, node: MNode) {
       _mmCtxHandler = null
     }
   }
-  setTimeout(() => document.addEventListener('mousedown', _mmCtxHandler!), 0)
+  setTimeout(() => trackDocListener('mousedown', _mmCtxHandler! as EventListener), 0)
 }
 
 function addCaseToFile(moduleName: string = ''): string | null {
@@ -2034,6 +2074,7 @@ function ensureRowObserver() {
         }
       }
     }
+    if (measuredHeights.size > 500) measuredHeights.clear()
     if (changed) updateVirtualRows()
   })
   return _resizeObserver
@@ -2054,6 +2095,7 @@ function observeRenderedRows() {
         ensureRowObserver().observe(el)
       }
     })
+    if (measuredHeights.size > 500) measuredHeights.clear()
     if (changed) updateVirtualRows()
   })
 }
@@ -2084,6 +2126,21 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('keydown', onKeydown)
+  _resizeObserver?.disconnect()
+  _resizeObserver = null
+  document.removeEventListener('mousemove', onResizeMove)
+  document.removeEventListener('mouseup', onResizeEnd)
+  if (_menuCloseHandler) { document.removeEventListener('mousedown', _menuCloseHandler); _menuCloseHandler = null }
+  if (_mmTabPromptHandler) { document.removeEventListener('mousedown', _mmTabPromptHandler); _mmTabPromptHandler = null }
+  if (_mmDragMoveHandler) { document.removeEventListener('mousemove', _mmDragMoveHandler); _mmDragMoveHandler = null }
+  if (_mmDragEndHandler) { document.removeEventListener('mouseup', _mmDragEndHandler); _mmDragEndHandler = null }
+  if (_mmCtxHandler) { document.removeEventListener('mousedown', _mmCtxHandler); _mmCtxHandler = null }
+  for (const [, handler] of _docListeners) {
+    document.removeEventListener('mousedown', handler)
+    document.removeEventListener('mousemove', handler)
+    document.removeEventListener('mouseup', handler)
+  }
+  _docListeners.clear()
 })
 
 watch(viewMode, (v) => {

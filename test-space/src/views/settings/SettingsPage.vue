@@ -131,7 +131,7 @@ async function handleExport() {
       a.href = url;
       a.download = "test-space-backup.tsb";
       a.click();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
       importStatus.value = t("settings.exportSuccess");
     }
   } catch (e: any) {
@@ -177,7 +177,7 @@ async function handleImport() {
 
 onMounted(async () => {
   initLanguage();
-  loadTheme();
+  await loadTheme();
   try {
     appVersion.value = await getVersion();
   } catch {
