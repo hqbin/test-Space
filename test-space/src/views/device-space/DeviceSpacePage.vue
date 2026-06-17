@@ -456,10 +456,21 @@
       <Transition name="fade">
         <div v-if="previewDialog.show" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="previewDialog.show = false">
           <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
-          <div class="glass-panel rounded-[2rem] p-4 w-full max-w-2xl max-h-[85vh] relative z-10 bg-white/60 flex flex-col">
+          <div class="glass-panel rounded-[2rem] p-3 lg:p-4 xl:p-6 w-[95vw] lg:w-[90vw] max-w-7xl max-h-[85vh] lg:max-h-[90vh] relative z-10 bg-white/60 flex flex-col">
             <div class="flex justify-between items-center mb-2 shrink-0">
               <h3 class="font-label-md text-label-md text-on-surface font-semibold truncate select-none">{{ previewDialog.name }}</h3>
-              <div class="flex gap-2 shrink-0">
+              <div class="flex items-center gap-1 shrink-0">
+                <span class="font-caption text-caption text-on-surface-variant/60 select-none text-[11px]">{{ Math.round(previewScale * 100) }}%</span>
+                <button class="glass-button p-1 rounded-lg select-none" :disabled="previewScale <= 0.25" @click="zoomPreviewOut">
+                  <span class="material-symbols-outlined text-[16px]">zoom_out</span>
+                </button>
+                <button class="glass-button p-1 rounded-lg select-none" @click="resetPreviewScale">
+                  <span class="material-symbols-outlined text-[16px]">zoom_in_map</span>
+                </button>
+                <button class="glass-button p-1 rounded-lg select-none" :disabled="previewScale >= 5" @click="zoomPreviewIn">
+                  <span class="material-symbols-outlined text-[16px]">zoom_in</span>
+                </button>
+                <span class="w-px h-4 bg-outline-variant/30 mx-1"></span>
                 <button class="glass-button px-3 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1 select-none" @click="editFile(previewDialog.name)">
                   <span class="material-symbols-outlined text-[16px]">edit</span>{{ t('device.edit') }}
                 </button>
@@ -471,9 +482,14 @@
             <div v-if="previewDialog.loading" class="flex-1 flex items-center justify-center">
               <span class="w-6 h-6 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
             </div>
-            <div v-else-if="previewDialog.content" class="flex-1 min-h-0 flex items-center justify-center">
-              <img v-if="isImageFile(previewDialog.name)" :src="previewDialog.content" class="max-w-full max-h-full object-contain rounded-lg" />
-              <video v-else :src="previewDialog.content" controls autoplay class="max-w-full max-h-full rounded-lg"></video>
+            <div v-else-if="previewDialog.content" class="flex-1 min-h-0 flex items-center justify-center overflow-auto" @wheel.prevent="isAudioFile(previewDialog.name) ? undefined : onPreviewWheel">
+              <div v-if="isAudioFile(previewDialog.name)" class="flex items-center justify-center p-4 w-full max-w-lg">
+                <audio :src="previewDialog.content" controls autoplay class="w-full"></audio>
+              </div>
+              <div v-else class="flex items-center justify-center min-w-0 min-h-0" :style="{ transform: `scale(${previewScale})`, transformOrigin: 'center center' }">
+                <img v-if="isImageFile(previewDialog.name)" :src="previewDialog.content" class="max-w-full max-h-full object-contain rounded-lg select-none" draggable="false" />
+                <video v-else :src="previewDialog.content" controls autoplay class="max-w-full max-h-full rounded-lg"></video>
+              </div>
             </div>
             <div v-else class="flex-1 flex items-center justify-center text-on-surface-variant/50">
               <span class="font-body-sm text-body-sm">{{ t('device.previewNotAvailable') }}</span>
@@ -1067,16 +1083,17 @@ async function executeCustomCommand(fullCmd: string) {
 }
 
 // ── File Manager (tree view) ──
-interface FileEntry { name: string; isDir: boolean; size: string; }
+interface FileEntry { name: string; isDir: boolean; size: string; rawSize: number; }
 const dragOverFileList = ref(false);
 const fileEntries = ref<FileEntry[]>([]);
 function isImageFile(name: string) { return /\.(png|jpg|jpeg|gif|bmp|webp|svg)$/i.test(name); }
-function isMediaFile(name: string) { return isImageFile(name) || /\.(mp4|webm|ogg|mov|avi|mkv)$/i.test(name); }
+function isAudioFile(name: string) { return /\.(flac|mp3|wav|ogg|aac|m4a|wma)$/i.test(name); }
+function isMediaFile(name: string) { return isImageFile(name) || isAudioFile(name) || /\.(mp4|webm|ogg|mov|avi|mkv)$/i.test(name); }
 async function handleEntryClick(entry: FileEntry, e: MouseEvent) {
   e.stopPropagation();
   if (entry.name === "..") { await navigateToParent(); return; }
   if (entry.isDir) { await navigateToDir(entry.name); return; }
-  if (isMediaFile(entry.name)) { previewFile(entry.name); return; }
+  if (isMediaFile(entry.name)) { await previewFile(entry); return; }
   editFile(entry.name);
 }
 async function navigateToPath() {
@@ -1096,7 +1113,7 @@ async function navigateToParent() {
   remotePath.value = parent || '/';
   await loadFileList();
 }
-function parseLsLine(line: string): { name: string; isDir: boolean; size: string } | null {
+function parseLsLine(line: string): { name: string; isDir: boolean; size: string; rawSize: number } | null {
   const parts = line.split(/\s+/);
   if (parts.length < 7) return null;
   const perms = parts[0];
@@ -1112,7 +1129,7 @@ function parseLsLine(line: string): { name: string; isDir: boolean; size: string
   const sizeFormatted = sizeVal > 1024 ? Math.round(sizeVal / 1024) + 'KB' : sizeVal + 'B';
   const name = parts.slice(nameIdx).join(' ').trim();
   if (!name) return null;
-  return { name, isDir, size: sizeFormatted };
+  return { name, isDir, size: sizeFormatted, rawSize: sizeVal };
 }
 async function loadFileList() {
   dragOverFileList.value = false;
@@ -1125,9 +1142,9 @@ async function loadFileList() {
         if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
         return a.name.localeCompare(b.name);
       });
-    if (remotePath.value !== '/') entries.unshift({ name: '..', isDir: true, size: '' });
+    if (remotePath.value !== '/') entries.unshift({ name: '..', isDir: true, size: '', rawSize: 0 });
     fileEntries.value = entries;
-  } catch { fileEntries.value = remotePath.value !== '/' ? [{ name: '..', isDir: true, size: '' }] : []; showToast(t('device.dirReadFail'), "error"); }
+  } catch { fileEntries.value = remotePath.value !== '/' ? [{ name: '..', isDir: true, size: '', rawSize: 0 }] : []; showToast(t('device.dirReadFail'), "error"); }
 }
 async function uploadFilePath(filePath: string) {
   if (!selectedDevice.value) return;
@@ -1199,19 +1216,30 @@ async function deleteFile(name: string) {
 // ── File Edit ──
 const previewDialog = ref({ show: false, name: "", loading: false, content: "" });
 const fileEditDialog = ref({ show: false, filePath: "", content: "", loading: false, originContent: "" });
-function previewFile(name: string) {
-  previewDialog.value = { show: true, name, loading: true, content: '' };
-  loadPreviewContent(name);
+const previewScale = ref(1);
+function resetPreviewScale() { previewScale.value = 1; }
+function zoomPreviewIn() { previewScale.value = Math.min(previewScale.value + 0.25, 5); }
+function zoomPreviewOut() { previewScale.value = Math.max(previewScale.value - 0.25, 0.25); }
+function onPreviewWheel(e: WheelEvent) {
+  e.preventDefault();
+  if (e.deltaY < 0) zoomPreviewIn(); else zoomPreviewOut();
+}
+async function previewFile(entry: FileEntry) {
+  previewDialog.value = { show: true, name: entry.name, loading: true, content: '' };
+  previewScale.value = 1;
+  await nextTick();
+  await loadPreviewContent(entry.name);
 }
 async function loadPreviewContent(name: string) {
   if (!selectedDevice.value) return;
   const filePath = remotePath.value.replace(/\/?$/, '/') + name.trim();
   const vMime: Record<string, string> = { webm: 'video/webm', ogg: 'video/ogg', mp4: 'video/mp4', mov: 'video/quicktime', avi: 'video/x-msvideo', mkv: 'video/x-matroska' };
+  const aMime: Record<string, string> = { flac: 'audio/flac', mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', aac: 'audio/aac', m4a: 'audio/mp4', wma: 'audio/x-ms-wma' };
   const iMime: Record<string, string> = { jpg: 'jpeg', jpeg: 'jpeg', png: 'png', gif: 'gif', webp: 'webp', bmp: 'bmp', svg: 'svg+xml', ico: 'x-icon' };
   const ext = name.replace(/.*\./, '').toLowerCase();
   try {
     const raw = await shell(selectedDevice.value.serial, `cat "${filePath}" | base64`);
-    const mime = isImageFile(name) ? `image/${iMime[ext] || ext}` : (vMime[ext] || 'video/mp4');
+    const mime = isImageFile(name) ? `image/${iMime[ext] || ext}` : (isAudioFile(name) ? (aMime[ext] || 'audio/mpeg') : (vMime[ext] || 'video/mp4'));
     previewDialog.value.content = `data:${mime};base64,${raw.trim()}`;
   } catch { previewDialog.value.content = ''; }
   previewDialog.value.loading = false;
