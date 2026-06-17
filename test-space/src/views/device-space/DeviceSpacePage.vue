@@ -430,12 +430,12 @@
             </div>
             <div v-for="(entry, idx) in fileEntries" :key="idx"
               class="flex items-center gap-1.5 px-2 py-1 hover:bg-secondary/5 hover:scale-[1.02] cursor-pointer border-b border-outline-variant/10 last:border-0 group transition-transform duration-200 select-none"
-              @dblclick="handleEntryDblClick(entry, $event)">
+              @click="handleEntryClick(entry, $event)">
               <span class="material-symbols-outlined text-[16px] shrink-0"
-                :class="entry.isDir ? 'text-secondary' : 'text-on-surface-variant/60'">{{ entry.isDir ? 'folder' : 'description' }}</span>
-              <span class="flex-1 truncate font-mono text-[11px] text-on-surface">{{ entry.name }}</span>
-              <span class="font-caption text-caption text-on-surface-variant/50 text-[10px] whitespace-nowrap">{{ entry.size }}</span>
-              <div class="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                :class="entry.name === '..' ? 'text-secondary' : (entry.isDir ? 'text-secondary' : 'text-on-surface-variant/60')">{{ entry.name === '..' ? 'arrow_back' : (entry.isDir ? 'folder' : 'description') }}</span>
+              <span class="flex-1 truncate font-mono text-[11px] text-on-surface" :class="entry.name === '..' ? 'text-secondary' : ''">{{ entry.name }}</span>
+              <span class="font-caption text-caption text-on-surface-variant/50 text-[10px] whitespace-nowrap">{{ entry.name !== '..' ? entry.size : '' }}</span>
+              <div v-if="entry.name !== '..'" class="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                 <button class="glass-button p-0.5 rounded select-none" :title="t('device.download')" @click.stop="entry.isDir ? downloadDir(entry.name) : downloadFile(entry.name)">
                   <span class="material-symbols-outlined text-[14px]">download</span>
                 </button>
@@ -1073,7 +1073,7 @@ const dragOverFileList = ref(false);
 const fileEntries = ref<FileEntry[]>([]);
 function isImageFile(name: string) { return /\.(png|jpg|jpeg|gif|bmp|webp|svg)$/i.test(name); }
 function isMediaFile(name: string) { return isImageFile(name) || /\.(mp4|webm|ogg|mov|avi|mkv)$/i.test(name); }
-async function handleEntryDblClick(entry: FileEntry, e: MouseEvent) {
+async function handleEntryClick(entry: FileEntry, e: MouseEvent) {
   e.stopPropagation();
   if (entry.name === "..") { await navigateToParent(); return; }
   if (entry.isDir) { await navigateToDir(entry.name); return; }
@@ -1207,9 +1207,12 @@ function previewFile(name: string) {
 async function loadPreviewContent(name: string) {
   if (!selectedDevice.value) return;
   const filePath = remotePath.value.replace(/\/?$/, '/') + name.trim();
+  const vMime: Record<string, string> = { webm: 'video/webm', ogg: 'video/ogg', mp4: 'video/mp4', mov: 'video/quicktime', avi: 'video/x-msvideo', mkv: 'video/x-matroska' };
+  const iMime: Record<string, string> = { jpg: 'jpeg', jpeg: 'jpeg', png: 'png', gif: 'gif', webp: 'webp', bmp: 'bmp', svg: 'svg+xml', ico: 'x-icon' };
+  const ext = name.replace(/.*\./, '').toLowerCase();
   try {
     const raw = await shell(selectedDevice.value.serial, `cat "${filePath}" | base64`);
-    const mime = isImageFile(name) ? `image/${name.replace(/.*\./, '')}` : 'video/mp4';
+    const mime = isImageFile(name) ? `image/${iMime[ext] || ext}` : (vMime[ext] || 'video/mp4');
     previewDialog.value.content = `data:${mime};base64,${raw.trim()}`;
   } catch { previewDialog.value.content = ''; }
   previewDialog.value.loading = false;
