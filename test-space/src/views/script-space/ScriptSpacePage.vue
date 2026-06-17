@@ -73,7 +73,7 @@
             </button>
           </div>
         </div>
-        <div v-if="totalPages > 1" class="px-3 py-1.5 border-t border-white/10 flex items-center justify-between flex-shrink-0">
+        <div v-if="totalPages > 1" class="px-3 py-1.5 border-t border-white/10 flex items-center justify-center gap-2 flex-shrink-0">
           <button class="text-[11px] text-on-surface-variant/50 hover:text-on-surface disabled:opacity-30 disabled:cursor-default select-none" :disabled="currentPage <= 1" @click="currentPage--">
             <span class="material-symbols-outlined text-[14px]">chevron_left</span>
           </button>
@@ -186,7 +186,7 @@
 
     <!-- Snippet tooltip -->
     <Teleport to="body">
-      <div v-if="activeTip !== null && tipSnippet" class="fixed z-[10000] px-3 py-2 rounded-lg text-[12px] text-white/90 max-w-[280px] pointer-events-none shadow-xl border border-white/10"
+      <div v-if="activeTip !== null && tipSnippet" class="fixed z-[10000] px-3 py-2 rounded-lg text-[12px] text-white/90 max-w-[280px] max-h-[40vh] overflow-y-auto pointer-events-none shadow-xl border border-white/10"
         :style="tipStyle" style="background: rgba(20,22,28,0.95); backdrop-filter: blur(12px);">
         <div class="font-medium text-green-400 mb-1 font-mono text-[11px]">{{ tipSnippet.label }}</div>
         <div class="text-white/50 leading-relaxed">{{ tipSnippet.desc }}</div>
@@ -259,9 +259,6 @@ const currentPage = ref(1);
 const totalPages = computed(() => {
   const n = Math.ceil(filteredScripts.value.length / pageSize.value) || 1;
   return n;
-});
-watch(totalPages, (n) => {
-  if (currentPage.value > n) currentPage.value = n;
 });
 
 function updatePageSize() {
@@ -336,6 +333,9 @@ const filteredScripts = computed(() => {
   });
   return list;
 });
+watch(totalPages, (n) => {
+  if (currentPage.value > n) currentPage.value = n;
+});
 
 function toggleSort() {
   if (sortMode.value === "name") {
@@ -398,11 +398,11 @@ function showSnippetTip(idx: number, e: MouseEvent) {
     tipSnippet.value = snippetsArr[idx] || null;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    tipStyle.value = {
-      left: `${rect.left}px`,
-      top: `${rect.top - 8}px`,
-      transform: 'translateY(-100%)',
-    };
+    const tipH = 80;
+    const above = rect.top >= tipH + 8;
+    tipStyle.value = above
+      ? { left: `${rect.left}px`, top: `${rect.top - 8}px`, transform: 'translateY(-100%)' }
+      : { left: `${rect.left}px`, top: `${rect.bottom + 8}px` };
   }, 500);
 }
 
@@ -615,9 +615,10 @@ async function runCurrentScript() {
     const { appDataDir } = await import("@tauri-apps/api/path");
     const { mkdir } = await import("@tauri-apps/plugin-fs");
     const dir = await appDataDir();
-    const tmpDir = `${dir}temp_scripts`;
-    try { await mkdir(tmpDir); } catch (e) { console.warn('[ScriptSpace] mkdir failed:', e); }
-    const tempPath = `${tmpDir}${tab.id}.${ext}`;
+    const sep = dir.includes('\\') ? '\\' : '/';
+    const tmpDir = dir.endsWith(sep) ? `${dir}temp_scripts` : `${dir}${sep}temp_scripts`;
+    try { await mkdir(tmpDir, { recursive: true }); } catch (e) { console.warn('[ScriptSpace] mkdir failed:', e); }
+    const tempPath = `${tmpDir}${sep}${tab.id}.${ext}`;
     await invoke("write_script_file", { path: tempPath, content: editingContent.value, interpreter });
     await invoke("script_spawn", {
       id: tab.id,
