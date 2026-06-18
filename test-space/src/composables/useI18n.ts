@@ -84,6 +84,8 @@ const messages: Record<Lang, Record<string, string>> = {
     "settings.keyExported": "密钥已复制到剪贴板",
     "settings.keyImported": "密钥导入成功",
     "settings.keyImportFail": "密钥导入失败",
+    "settings.cancel": "取消",
+    "settings.confirm": "确定",
     "settings.version": "版本",
 
     // Device page
@@ -584,6 +586,8 @@ const messages: Record<Lang, Record<string, string>> = {
     "settings.keyExported": "Key copied to clipboard",
     "settings.keyImported": "Key imported successfully",
     "settings.keyImportFail": "Key import failed",
+    "settings.cancel": "Cancel",
+    "settings.confirm": "OK",
     "settings.version": "Version",
 
     // Device page

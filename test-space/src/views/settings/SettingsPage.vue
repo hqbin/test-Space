@@ -135,6 +135,24 @@
       </div>
     </div>
   </div>
+
+  <!-- Key Import Modal -->
+  <div v-if="showKeyImportModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm" @click.self="showKeyImportModal = false">
+    <div class="glass-panel rounded-2xl p-6 w-96 bg-white/60" @click.stop>
+      <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-4 select-none">{{ t("settings.importKey") }}</h3>
+      <input
+        v-model="keyImportInput"
+        type="text"
+        placeholder="粘贴 44 位加密密钥"
+        class="glass-input w-full px-3 py-2 rounded-lg text-[14px] outline-none select-text font-mono"
+        @keydown.enter="confirmImportKey"
+      />
+      <div class="flex justify-end gap-2 mt-6">
+        <button class="glass-button px-4 py-2 rounded-full text-[13px] select-none" @click="showKeyImportModal = false">{{ t("settings.cancel") }}</button>
+        <button class="glass-button px-4 py-2 rounded-full text-[13px] select-none glass-active" @click="confirmImportKey">{{ t("settings.confirm") }}</button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -164,6 +182,8 @@ const showBackupMenu = ref(false);
 const showRestoreMenu = ref(false);
 const cloudBusy = ref(false);
 const showDeviceDropdown = ref(false);
+const showKeyImportModal = ref(false);
+const keyImportInput = ref("");
 
 async function ensureDeviceId() {
   const last = await db.getLastDeviceId();
@@ -290,9 +310,14 @@ async function handleExportKey() {
 }
 
 async function handleImportKey() {
-  const text = window.prompt(t("settings.importKey"));
-  if (!text) return;
-  const trimmed = text.trim();
+  keyImportInput.value = "";
+  showKeyImportModal.value = true;
+}
+
+async function confirmImportKey() {
+  showKeyImportModal.value = false;
+  const trimmed = keyImportInput.value.trim();
+  if (!trimmed) return;
   if (trimmed.length !== 44 || !/^[A-Za-z0-9+/=]+$/.test(trimmed)) {
     setStatus(t("settings.keyImportFail"), true);
     return;
