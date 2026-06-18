@@ -193,6 +193,17 @@ export async function saveLastDeviceId(id: string) {
   await setSetting(DEVICE_ID_LAST_KEY, id);
 }
 
+const DEVICE_ID_NAMES_KEY = "cloud_device_id_names";
+
+export async function getDeviceIdNames(): Promise<Record<string, string>> {
+  const raw = await getSetting(DEVICE_ID_NAMES_KEY);
+  return raw ? safeJsonParse<Record<string, string>>(raw, {}) : {};
+}
+
+export async function saveDeviceIdNames(names: Record<string, string>) {
+  await setSetting(DEVICE_ID_NAMES_KEY, JSON.stringify(names));
+}
+
 // ── Field Rule Sets ──────────────────────────────────────────
 
 export async function loadFieldRuleSets(): Promise<any[]> {

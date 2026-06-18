@@ -1,6 +1,6 @@
 <template>
-  <div class="pt-12 max-w-5xl select-none">
-    <div class="glass-panel rounded-xl p-padding-card shadow-md">
+  <div class="h-screen overflow-y-auto select-none px-margin-page pt-safe-area-top pb-4">
+    <div class="glass-panel rounded-xl p-padding-card shadow-md flex flex-col min-h-0 h-full">
       <!-- Language -->
       <div class="flex items-center justify-between">
         <span class="font-body-md text-body-md text-on-surface font-medium">{{ t("settings.language") }}</span>
@@ -47,78 +47,99 @@
 
       <!-- Backup & Restore -->
       <div>
-        <span class="font-body-md text-body-md text-on-surface font-medium">{{ t("settings.backup") }}</span>
-        <!-- Device ID -->
-        <div class="flex items-center gap-3 mt-3">
-          <span class="font-body-md text-body-md text-on-surface-variant whitespace-nowrap">{{ t("settings.cloudDeviceId") }}</span>
-          <div class="relative flex-1">
-            <input
-              class="w-full px-3 py-2 rounded-lg font-body-md text-body-md bg-white border border-gray-300 outline-none focus:border-gray-400"
-              :placeholder="t('settings.cloudDeviceIdPlaceholder')"
-              v-model="deviceId"
-              @focus="showDeviceDropdown = true"
-              @blur="handleDeviceIdBlur"
-            />
-            <div
-              v-if="showDeviceDropdown && deviceIdList.length > 0"
-              class="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-md z-10 max-h-40 overflow-y-auto border border-gray-200"
-            >
+        <div class="flex items-center justify-between flex-wrap gap-y-3">
+          <span class="font-body-md text-body-md text-on-surface font-medium">{{ t("settings.backup") }}</span>
+          <div class="flex items-center gap-3">
+            <div class="relative">
+              <input
+                class="w-64 px-3 py-2 rounded-lg font-body-md text-body-md bg-white border border-gray-300 outline-none focus:border-gray-400"
+                :placeholder="t('settings.cloudDeviceIdPlaceholder')"
+                :value="isEditingDeviceId ? deviceId : (deviceDisplayName || deviceId)"
+                @focus="isEditingDeviceId = true; showDeviceDropdown = true"
+                @blur="isEditingDeviceId = false; handleDeviceIdBlur()"
+                @input="deviceId = ($event.target as HTMLInputElement).value"
+              />
               <div
-                v-for="id in deviceIdList"
-                :key="id"
-                class="px-3 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer truncate"
-                @mousedown="selectDeviceId(id)"
-              >{{ id }}</div>
+                v-if="showDeviceDropdown && deviceIdList.length > 0"
+                class="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-md z-10 max-h-60 overflow-y-auto border border-gray-200 min-w-[480px]"
+              >
+                <div
+                  v-for="item in deviceIdList"
+                  :key="item.id"
+                  class="px-3 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2 group"
+                  @mousedown.prevent="selectDeviceId(item.id)"
+                >
+                  <div class="flex-1 min-w-0 flex items-center gap-2">
+                    <span class="truncate">{{ item.name || item.id }}</span>
+                    <span v-if="item.name" class="text-[11px] text-gray-400 truncate shrink-0">{{ item.id }}</span>
+                  </div>
+                  <button
+                    class="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity px-1 py-0.5 rounded hover:bg-gray-200"
+                    @mousedown.stop.prevent="copyDeviceIdById(item.id)"
+                    :title="t('settings.cloudDeviceIdCopy')"
+                  >
+                    <span class="material-symbols-outlined text-[14px]">content_copy</span>
+                  </button>
+                  <button
+                    class="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity px-1 py-0.5 rounded hover:bg-gray-200"
+                    @mousedown.stop.prevent="startRenameDeviceId(item)"
+                    :title="t('settings.deviceIdRename')"
+                  >
+                    <span class="material-symbols-outlined text-[14px]">edit</span>
+                  </button>
+                  <button
+                    class="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity px-1 py-0.5 rounded hover:bg-red-100 text-red-500"
+                    @mousedown.stop.prevent="confirmDeleteDeviceId(item)"
+                    :title="t('settings.deviceIdDelete')"
+                  >
+                    <span class="material-symbols-outlined text-[14px]">close</span>
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-          <button class="glass-button px-3 py-2 rounded-lg font-label-md text-label-md select-none" @click="copyDeviceId">
-            {{ t("settings.cloudDeviceIdCopy") }}
-          </button>
-        </div>
-        <!-- Buttons -->
-        <div class="flex gap-3 mt-4 flex-wrap">
-          <!-- Backup dropdown -->
-          <div class="relative">
-            <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2 select-none" @click="showBackupMenu = !showBackupMenu; showRestoreMenu = false">
-              <span class="material-symbols-outlined text-[18px]">upload</span>
-              {{ t("settings.cloudUpload") }}
-              <span class="material-symbols-outlined text-[16px]">arrow_drop_down</span>
-            </button>
-            <div v-if="showBackupMenu" class="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-md z-20 min-w-[160px] border border-gray-200">
-              <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleExport(); showBackupMenu = false">
-                <span class="material-symbols-outlined text-[18px]">file_upload</span>
-                {{ t("settings.exportLocal") }}
-              </div>
-              <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleCloudUpload(); showBackupMenu = false">
-                <span class="material-symbols-outlined text-[18px]">cloud_upload</span>
-                {{ t("settings.exportCloud") }}
+            <!-- Backup dropdown -->
+            <div class="relative">
+              <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2 select-none" @click="showBackupMenu = !showBackupMenu; showRestoreMenu = false">
+                <span class="material-symbols-outlined text-[18px]">upload</span>
+                {{ t("settings.cloudUpload") }}
+                <span class="material-symbols-outlined text-[16px]">arrow_drop_down</span>
+              </button>
+              <div v-if="showBackupMenu" class="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-md z-20 min-w-[160px] border border-gray-200">
+                <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleExport(); showBackupMenu = false">
+                  <span class="material-symbols-outlined text-[18px]">file_upload</span>
+                  {{ t("settings.exportLocal") }}
+                </div>
+                <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleCloudUpload(); showBackupMenu = false">
+                  <span class="material-symbols-outlined text-[18px]">cloud_upload</span>
+                  {{ t("settings.exportCloud") }}
+                </div>
               </div>
             </div>
-          </div>
-          <!-- Restore dropdown -->
-          <div class="relative">
-            <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2 select-none" @click="showRestoreMenu = !showRestoreMenu; showBackupMenu = false">
-              <span class="material-symbols-outlined text-[18px]">download</span>
-              {{ t("settings.restore") }}
-              <span class="material-symbols-outlined text-[16px]">arrow_drop_down</span>
-            </button>
-            <div v-if="showRestoreMenu" class="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-md z-20 min-w-[160px] border border-gray-200">
-              <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleImport(); showRestoreMenu = false">
-                <span class="material-symbols-outlined text-[18px]">file_download</span>
-                {{ t("settings.importLocal") }}
-              </div>
-              <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleCloudRestore(); showRestoreMenu = false">
-                <span class="material-symbols-outlined text-[18px]">cloud_download</span>
-                {{ t("settings.importCloud") }}
-              </div>
-              <div class="border-t border-gray-100 my-1"></div>
-              <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleExportKey(); showRestoreMenu = false">
-                <span class="material-symbols-outlined text-[18px]">key</span>
-                {{ t("settings.exportKey") }}
-              </div>
-              <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleImportKey(); showRestoreMenu = false">
-                <span class="material-symbols-outlined text-[18px]">vpn_key</span>
-                {{ t("settings.importKey") }}
+            <!-- Restore dropdown -->
+            <div class="relative">
+              <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2 select-none" @click="showRestoreMenu = !showRestoreMenu; showBackupMenu = false">
+                <span class="material-symbols-outlined text-[18px]">download</span>
+                {{ t("settings.restore") }}
+                <span class="material-symbols-outlined text-[16px]">arrow_drop_down</span>
+              </button>
+              <div v-if="showRestoreMenu" class="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-md z-20 min-w-[160px] border border-gray-200">
+                <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleImport(); showRestoreMenu = false">
+                  <span class="material-symbols-outlined text-[18px]">file_download</span>
+                  {{ t("settings.importLocal") }}
+                </div>
+                <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleCloudRestore(); showRestoreMenu = false">
+                  <span class="material-symbols-outlined text-[18px]">cloud_download</span>
+                  {{ t("settings.importCloud") }}
+                </div>
+                <div class="border-t border-gray-100 my-1"></div>
+                <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleExportKey(); showRestoreMenu = false">
+                  <span class="material-symbols-outlined text-[18px]">key</span>
+                  {{ t("settings.exportKey") }}
+                </div>
+                <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleImportKey(); showRestoreMenu = false">
+                  <span class="material-symbols-outlined text-[18px]">vpn_key</span>
+                  {{ t("settings.importKey") }}
+                </div>
               </div>
             </div>
           </div>
@@ -126,10 +147,8 @@
         <p v-if="statusMessage" class="mt-3 font-body-md text-body-md" :class="statusIsError ? 'text-error' : 'text-success-indicator'">{{ statusMessage }}</p>
       </div>
 
-      <div class="border-t border-glass-border-light/30 my-5"></div>
-
       <!-- Version -->
-      <div class="flex items-center justify-between">
+      <div class="mt-auto border-t border-glass-border-light/30 pt-5 flex items-center justify-between">
         <span class="font-body-md text-body-md text-on-surface font-medium">{{ t("settings.version") }}</span>
         <span class="font-body-md text-body-md text-on-surface-variant">v{{ appVersion }}</span>
       </div>
@@ -153,10 +172,41 @@
       </div>
     </div>
   </div>
+
+  <!-- Delete Device ID Confirmation -->
+  <div v-if="deleteDeviceIdTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="deleteDeviceIdTarget = null">
+    <div class="glass-panel rounded-2xl p-6 w-80 bg-white/80">
+      <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-2 select-none">{{ t("settings.deviceIdDeleteTitle") }}</h3>
+      <p class="text-[13px] text-on-surface-variant mb-6">{{ t("settings.deviceIdDeleteDesc") }}</p>
+      <div class="flex justify-end gap-2">
+        <button class="glass-button px-4 py-2 rounded-full text-[13px] select-none" @click="deleteDeviceIdTarget = null">{{ t("settings.cancel") }}</button>
+        <button class="px-4 py-2 rounded-full text-[13px] bg-red-500 text-white hover:bg-red-600 transition-colors select-none" @click="doDeleteDeviceId">{{ t("settings.confirm") }}</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rename Device ID -->
+  <div v-if="renameDeviceIdTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm" @click.self="renameDeviceIdTarget = null">
+    <div class="glass-panel rounded-2xl p-6 w-96 bg-white/60" @click.stop>
+      <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-1 select-none">{{ t("settings.deviceIdRenameTitle") }}</h3>
+      <p class="text-[12px] text-on-surface-variant mb-4 font-mono break-all">{{ renameDeviceIdTarget.id }}</p>
+      <input
+        v-model="renameInput"
+        type="text"
+        :placeholder="t('settings.deviceIdRenamePlaceholder')"
+        class="glass-input w-full px-3 py-2 rounded-lg text-[14px] outline-none select-text"
+        @keydown.enter="confirmRenameDeviceId"
+      />
+      <div class="flex justify-end gap-2 mt-6">
+        <button class="glass-button px-4 py-2 rounded-full text-[13px] select-none" @click="renameDeviceIdTarget = null">{{ t("settings.cancel") }}</button>
+        <button class="glass-button px-4 py-2 rounded-full text-[13px] select-none glass-active" @click="confirmRenameDeviceId">{{ t("settings.confirm") }}</button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import * as db from "@/services/database";
 import * as cloudApi from "@/services/cloudBackup";
 import * as crypto from "@/services/crypto";
@@ -177,24 +227,36 @@ function setStatus(msg: string, isError = false) {
 
 // Cloud backup state
 const deviceId = ref("");
-const deviceIdList = ref<string[]>([]);
+const deviceIdList = ref<{ id: string; name: string }[]>([]);
+const deviceIdNames = ref<Record<string, string>>({});
 const showBackupMenu = ref(false);
 const showRestoreMenu = ref(false);
 const cloudBusy = ref(false);
 const showDeviceDropdown = ref(false);
+const isEditingDeviceId = ref(false);
 const showKeyImportModal = ref(false);
 const keyImportInput = ref("");
+const deleteDeviceIdTarget = ref<{ id: string; name: string } | null>(null);
+const renameDeviceIdTarget = ref<{ id: string; name: string } | null>(null);
+const renameInput = ref("");
+
+const deviceDisplayName = computed(() => {
+  const item = deviceIdList.value.find(item => item.id === deviceId.value);
+  return item?.name || "";
+});
 
 async function ensureDeviceId() {
   const last = await db.getLastDeviceId();
   const list = await db.getDeviceIdList();
-  deviceIdList.value = list;
+  const names = await db.getDeviceIdNames();
+  deviceIdNames.value = names;
+  deviceIdList.value = list.map(id => ({ id, name: names[id] || "" }));
   if (last) {
     deviceId.value = last;
   } else {
     const id = crypto.generateDeviceId();
     deviceId.value = id;
-    deviceIdList.value = [id];
+    deviceIdList.value = [{ id, name: "" }];
     await db.saveDeviceIdList([id]);
     await db.saveLastDeviceId(id);
   }
@@ -218,6 +280,7 @@ onUnmounted(() => { document.removeEventListener('click', closeMenus); });
 function selectDeviceId(id: string) {
   deviceId.value = id;
   showDeviceDropdown.value = false;
+  isEditingDeviceId.value = false;
   db.saveLastDeviceId(id);
 }
 
@@ -225,11 +288,9 @@ async function saveCurrentDeviceId() {
   const id = deviceId.value.trim();
   if (!id) return;
   await db.saveLastDeviceId(id);
-  const list = await db.getDeviceIdList();
-  if (!list.includes(id)) {
-    list.unshift(id);
-    await db.saveDeviceIdList(list);
-    deviceIdList.value = list;
+  if (!deviceIdList.value.some(item => item.id === id)) {
+    deviceIdList.value.unshift({ id, name: deviceIdNames.value[id] || "" });
+    await db.saveDeviceIdList(deviceIdList.value.map(item => item.id));
   }
 }
 
@@ -240,6 +301,66 @@ async function copyDeviceId() {
     setStatus(t("settings.cloudDeviceIdCopied"));
     setTimeout(() => { if (statusMessage.value === t("settings.cloudDeviceIdCopied")) setStatus(""); }, 2000);
   } catch {}
+}
+
+async function copyDeviceIdById(id: string) {
+  try {
+    await navigator.clipboard.writeText(id);
+    setStatus(t("settings.cloudDeviceIdCopied"));
+    setTimeout(() => { if (statusMessage.value === t("settings.cloudDeviceIdCopied")) setStatus(""); }, 2000);
+  } catch {}
+}
+
+function confirmDeleteDeviceId(item: { id: string; name: string }) {
+  deleteDeviceIdTarget.value = item;
+}
+
+async function doDeleteDeviceId() {
+  if (!deleteDeviceIdTarget.value) return;
+  const target = deleteDeviceIdTarget.value;
+  deleteDeviceIdTarget.value = null;
+
+  deviceIdList.value = deviceIdList.value.filter(item => item.id !== target.id);
+  await db.saveDeviceIdList(deviceIdList.value.map(item => item.id));
+
+  if (deviceIdNames.value[target.id]) {
+    delete deviceIdNames.value[target.id];
+    await db.saveDeviceIdNames(deviceIdNames.value);
+  }
+
+  if (deviceId.value === target.id) {
+    if (deviceIdList.value.length > 0) {
+      deviceId.value = deviceIdList.value[0].id;
+    } else {
+      const id = crypto.generateDeviceId();
+      deviceId.value = id;
+      deviceIdList.value = [{ id, name: "" }];
+      await db.saveDeviceIdList([id]);
+    }
+    await db.saveLastDeviceId(deviceId.value);
+  }
+}
+
+function startRenameDeviceId(item: { id: string; name: string }) {
+  renameDeviceIdTarget.value = item;
+  renameInput.value = item.name || "";
+}
+
+async function confirmRenameDeviceId() {
+  if (!renameDeviceIdTarget.value) return;
+  const id = renameDeviceIdTarget.value.id;
+  const name = renameInput.value.trim();
+  renameDeviceIdTarget.value = null;
+
+  if (name) {
+    deviceIdNames.value[id] = name;
+  } else {
+    delete deviceIdNames.value[id];
+  }
+  await db.saveDeviceIdNames(deviceIdNames.value);
+
+  const item = deviceIdList.value.find(item => item.id === id);
+  if (item) item.name = name;
 }
 
 async function handleCloudUpload() {
