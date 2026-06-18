@@ -507,7 +507,7 @@
               <span class="material-symbols-outlined text-[16px]">close</span>{{ t('device.cancel') }}
             </button>
           </div>
-          <div v-else-if="previewDialog.content" class="flex-1 min-h-0 flex items-center justify-center overflow-auto" @wheel.prevent="isAudioFile(previewDialog.name) ? undefined : onPreviewWheel">
+          <div v-else-if="previewDialog.content" ref="previewContainerRef" class="flex-1 min-h-0 flex items-center justify-center overflow-auto">
             <div v-if="isAudioFile(previewDialog.name)" class="flex items-center justify-center p-4 w-full max-w-lg">
               <audio :src="previewDialog.content" controls autoplay class="w-full"></audio>
             </div>
@@ -1353,6 +1353,7 @@ async function deleteFile(name: string) {
 
 // ── File Edit ──
 const previewDialog = ref({ show: false, name: "", loading: false, content: "" });
+const previewContainerRef = ref<HTMLElement | null>(null);
 const fileEditDialog = ref({ show: false, filePath: "", content: "", loading: false, originContent: "" });
 const previewScale = ref(1);
 let previewGen = 0;
@@ -1363,6 +1364,12 @@ function onPreviewWheel(e: WheelEvent) {
   e.preventDefault();
   if (e.deltaY < 0) zoomPreviewIn(); else zoomPreviewOut();
 }
+watch(() => previewDialog.value.content, async (content) => {
+  await nextTick();
+  if (content && previewContainerRef.value) {
+    previewContainerRef.value.addEventListener('wheel', onPreviewWheel, { passive: false });
+  }
+});
 async function previewFile(entry: FileEntry) {
   if (entry.rawSize > 10 * 1024 * 1024) {
     const ok = await confirmThen(t('device.largeFileConfirm', { name: entry.name }));
