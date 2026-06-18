@@ -420,7 +420,7 @@
                 @mousedown.prevent @click="selectRemotePathHistory(h)">{{ h }}</button>
             </div>
           </div>
-            <div class="relative flex-1 min-h-0" @click="closeFileContextMenu">
+            <div class="relative flex-1 min-h-0" @click="closeFileContextMenu" @dragenter.prevent="onFileDragEnter" @dragover.prevent @dragleave="onFileDragLeave" @drop.prevent="onFileDrop">
             <div v-if="dragOverFileList" class="absolute inset-0 z-10 flex items-center justify-center bg-white/80 backdrop-blur-sm rounded-lg border-2 border-dashed border-secondary/50 pointer-events-none">
               <div class="flex flex-col items-center gap-2 text-secondary">
                 <span class="material-symbols-outlined text-3xl">cloud_upload</span>
@@ -825,7 +825,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
 import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useAdb, type DeviceProperties } from "@/composables/useAdb";
 import { useI18n } from "@/composables/useI18n";
 
@@ -1238,6 +1237,57 @@ async function uploadFilePath(filePath: string) {
     loadFileList();
   } catch (e: any) { appendCmdExec(`[${t('device.error')}] ${e}`); finishCmdExec(t('device.uploadFailed')); showToast(t('device.uploadFailed'), "error"); }
 }
+function onFileDragEnter() {
+  dragOverFileList.value = true
+}
+
+function onFileDragLeave(event: DragEvent) {
+  const el = event.currentTarget as HTMLElement
+  if (!el.contains(event.relatedTarget as Node)) {
+    dragOverFileList.value = false
+  }
+}
+
+async function onFileDrop(event: DragEvent) {
+  dragOverFileList.value = false
+  if (!selectedDevice.value || activeTab.value !== 'other') return
+  const files = event.dataTransfer?.files
+  if (!files || files.length === 0) return
+
+  const uris = event.dataTransfer?.getData('text/uri-list')
+  if (uris) {
+    const lines = uris.split('\n').map(u => u.trim()).filter(u => u.startsWith('file:///'))
+    for (const uri of lines) {
+      const path = decodeURIComponent(uri.replace(/^file:\/\/\//, '')).replace(/\r$/, '')
+      if (path) {
+        await uploadFilePath(path)
+        return
+      }
+    }
+  }
+
+  showCmdExec(t('device.uploadFile'), t('device.uploading'))
+  const { invoke } = await import('@tauri-apps/api/core')
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i]
+    try {
+      const buffer = await file.arrayBuffer()
+      await invoke('adb_push_bytes', {
+        serial: selectedDevice.value.serial,
+        remote: remotePath.value,
+        filename: file.name,
+        data: Array.from(new Uint8Array(buffer)),
+      })
+      appendCmdExec(`${t('device.uploadDone')} ${file.name}`)
+    } catch (e: any) {
+      appendCmdExec(`[${t('device.error')}] ${file.name}: ${e}`)
+    }
+  }
+  finishCmdExec(t('device.fileUploaded'))
+  showToast(t('device.fileUploaded'))
+  loadFileList()
+}
+
 async function uploadFile() {
   if (!selectedDevice.value || !remotePath.value.trim()) return;
   try {
@@ -1496,7 +1546,6 @@ const recordingFilename = ref("");
 
 // ── Device auto-refresh ──
 let autoRefreshId: ReturnType<typeof setInterval> | null = null;
-let unlistenDragDrop: (() => void) | null = null;
 
 // ── Custom commands stored in localStorage
 
@@ -2570,20 +2619,7 @@ onMounted(async () => {
       if (s.type === 'logcat') { /* previously running - could auto-restore */ }
     }
   } catch {}
-  // Drag-drop file upload
-  try {
-    const webview = getCurrentWebview();
-    unlistenDragDrop = await webview.onDragDropEvent((event) => {
-      if (event.payload.type === 'over') { dragOverFileList.value = true; }
-      else if (event.payload.type === 'leave') { dragOverFileList.value = false; }
-      else if (event.payload.type === 'drop') {
-        dragOverFileList.value = false;
-        if (activeTab.value === 'other') {
-          for (const path of event.payload.paths) { uploadFilePath(path); }
-        }
-      }
-    });
-  } catch {}
+
 });
 
 onUnmounted(() => {
@@ -2597,7 +2633,6 @@ onUnmounted(() => {
   if (bootLogcatTimeoutId) clearTimeout(bootLogcatTimeoutId);
   if (autoRefreshId) clearInterval(autoRefreshId);
   if (cmdExecTimeout) clearTimeout(cmdExecTimeout);
-  if (unlistenDragDrop) { unlistenDragDrop(); unlistenDragDrop = null; }
   // Note: log sessions are saved to DB; user can see "running" sessions on next visit
 });
 </script>

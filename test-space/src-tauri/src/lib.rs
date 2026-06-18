@@ -46,6 +46,16 @@ async fn adb_push(serial: String, local: String, remote: String) -> Result<Strin
 }
 
 #[tauri::command]
+async fn adb_push_bytes(serial: String, remote: String, filename: String, data: Vec<u8>) -> Result<String, String> {
+    let tmp_dir = std::env::temp_dir();
+    let tmp_path = tmp_dir.join(&filename);
+    std::fs::write(&tmp_path, &data).map_err(|e| format!("Failed to write temp file: {}", e))?;
+    let result = adb::push_file(&serial, &tmp_path.to_string_lossy(), &remote);
+    let _ = std::fs::remove_file(&tmp_path);
+    result
+}
+
+#[tauri::command]
 async fn adb_pull(serial: String, remote: String, local: String) -> Result<String, String> {
     tokio::task::spawn_blocking(move || {
         adb::pull_file(&serial, &remote, &local)
@@ -443,6 +453,7 @@ pub fn run() {
             adb_install,
             adb_uninstall,
             adb_push,
+            adb_push_bytes,
             adb_pull,
             adb_reboot,
             adb_screenshot,

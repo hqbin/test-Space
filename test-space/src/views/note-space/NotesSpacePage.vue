@@ -71,7 +71,7 @@
         <span>{{ t('notes.favorites') }}</span>
         <span class="ml-auto text-[10px] text-on-surface-variant/60">{{ favoriteNotes.length }}</span>
       </div>
-      <div class="flex-1 overflow-y-auto p-2 custom-scrollbar">
+      <div class="flex-1 overflow-y-auto p-2 custom-scrollbar" @dragenter.prevent @dragover.prevent>
         <!-- Favorites flat list -->
         <div v-if="showFavorites" class="space-y-0.5">
           <div class="px-2 py-0.5 text-[10px] text-on-surface-variant/50 uppercase tracking-wider font-medium mb-1">{{ t('notes.favorites') }}</div>
@@ -100,16 +100,18 @@
         <ul class="space-y-0.5">
           <li v-for="{ folder, depth } in flatFolders" :key="folder.id"
             :class="dragOverFolderId === folder.id ? 'bg-purple-100/50 rounded-lg ring-2 ring-purple-300/50' : ''"
-            @dragover.prevent="onDragOver(folder.id)"
+            @dragover="onDragOver($event, folder.id)"
             @dragleave="onDragLeave"
-            @drop="onDrop(folder.id)"
+            @drop.stop="onDrop($event, folder.id)"
           >
             <div
+              draggable="true"
               class="glass-hover flex items-center gap-1.5 px-2 py-1 rounded-md cursor-pointer transition-colors group relative"
               :style="{ paddingLeft: (8 + depth * 16) + 'px' }"
               :class="selectedFolderId === folder.id && !showFavorites ? 'bg-purple-100/60 text-secondary font-medium' : 'text-on-surface-variant'"
-              :data-folder-id="folder.id"
               @click="selectFolder(folder.id)"
+              @dragstart="onFolderDragStart(folder, $event)"
+              @dragend="onDragEnd"
             >
               <span class="material-symbols-outlined text-[14px]">{{ expandedFolders[folder.id] ? 'folder_open' : 'folder' }}</span>
               <span class="font-body-md text-body-md text-[12px] flex-1 truncate">{{ folder.name }}</span>
@@ -147,9 +149,9 @@
         <div
           class="mt-3 pt-2 border-t border-glass-border-light/30"
           :class="{ 'bg-purple-100/50 rounded-lg ring-2 ring-purple-300/50': dragOverFolderId === '__uncategorized__' }"
-          @dragover.prevent="onDragOver('__uncategorized__')"
+          @dragover="onDragOver($event, '__uncategorized__')"
           @dragleave="onDragLeave"
-          @drop="onDrop(null)"
+          @drop.stop="onDrop($event, null)"
         >
           <div class="px-2 py-0.5 text-[10px] text-on-surface-variant/50 uppercase tracking-wider font-medium">{{ t('notes.uncategorized') }}</div>
           <div v-for="note in uncategorizedNotes" :key="note.id" class="group">
@@ -492,6 +494,7 @@ const showToc = ref(false)
 const tocCollapsed = ref<Set<number>>(new Set())
 
 let dragNoteId: string | null = null
+let dragFolderId: string | null = null
 const dragOverFolderId = ref<string | null>(null)
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
@@ -737,7 +740,17 @@ function toggleFavorites() {
 
 function onDragStart(note: NoteItem, event: DragEvent) {
   dragNoteId = note.id
+  dragFolderId = null
   event.dataTransfer?.setData('text/plain', note.id)
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+  }
+}
+
+function onFolderDragStart(folder: NoteFolder, event: DragEvent) {
+  dragFolderId = folder.id
+  dragNoteId = null
+  event.dataTransfer?.setData('text/plain', folder.id)
   if (event.dataTransfer) {
     event.dataTransfer.effectAllowed = 'move'
   }
@@ -745,10 +758,15 @@ function onDragStart(note: NoteItem, event: DragEvent) {
 
 function onDragEnd() {
   dragNoteId = null
+  dragFolderId = null
   dragOverFolderId.value = null
 }
 
-function onDragOver(folderId: string | null) {
+function onDragOver(event: DragEvent, folderId: string | null) {
+  event.preventDefault()
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'move'
+  }
   dragOverFolderId.value = folderId
 }
 
@@ -756,17 +774,51 @@ function onDragLeave() {
   dragOverFolderId.value = null
 }
 
-async function onDrop(targetFolderId: string | null) {
+function isDescendantOf(folderId: string, potentialAncestorId: string | null): boolean {
+  if (!potentialAncestorId) return false
+  let currentId: string | null = folderId
+  while (currentId) {
+    if (currentId === potentialAncestorId) return true
+    const folder = folders.value.find(f => f.id === currentId)
+    currentId = folder?.parentId || null
+  }
+  return false
+}
+
+async function onDrop(event: DragEvent, targetFolderId: string | null) {
+  event.preventDefault()
   dragOverFolderId.value = null
-  if (!dragNoteId) return
-  const note = notes.value.find(n => n.id === dragNoteId)
-  if (!note) return
-  const newFolderId = targetFolderId === '__uncategorized__' ? null : targetFolderId
-  if (note.folderId === newFolderId) { dragNoteId = null; return }
-  note.folderId = newFolderId
-  note.updatedAt = new Date().toISOString()
-  try { await db.saveNote(note) } catch { /* best effort */ }
-  dragNoteId = null
+
+  if (dragNoteId) {
+    const note = notes.value.find(n => n.id === dragNoteId)
+    if (note) {
+      const newFolderId = targetFolderId === '__uncategorized__' ? null : targetFolderId
+      if (note.folderId !== newFolderId) {
+        note.folderId = newFolderId
+        note.updatedAt = new Date().toISOString()
+        try { await db.saveNote(note) } catch { /* best effort */ }
+      }
+    }
+    dragNoteId = null
+    return
+  }
+
+  if (dragFolderId) {
+    const folder = folders.value.find(f => f.id === dragFolderId)
+    if (folder) {
+      const newParentId = targetFolderId === '__uncategorized__' ? null : targetFolderId
+      if (newParentId !== null && (newParentId === dragFolderId || isDescendantOf(dragFolderId, newParentId))) {
+        dragFolderId = null
+        return
+      }
+      if (folder.parentId !== newParentId) {
+        folder.parentId = newParentId
+        folder.updatedAt = new Date().toISOString()
+        try { await db.saveNoteFolder(folder) } catch { /* best effort */ }
+      }
+    }
+    dragFolderId = null
+  }
 }
 
 // ── Note Management ──────────────────────────────────────────
