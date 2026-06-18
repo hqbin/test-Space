@@ -18,6 +18,8 @@ async function initDb(): Promise<Database> {
   const { appDataDir } = await import('@tauri-apps/api/path')
   const dir = await appDataDir()
   const instance = await DatabaseClass.load(`sqlite:${dir}/test-space.db`)
+  await instance.execute('PRAGMA journal_mode = WAL')
+  await instance.execute('PRAGMA busy_timeout = 30000')
   console.log('[DB] path:', `sqlite:${dir}/test-space.db`)
   await migrateInternal(instance)
   return instance
@@ -162,6 +164,33 @@ export async function setSetting(key: string, value: string) {
     'INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
     [key, value]
   )
+}
+
+// ── Cloud Backup Settings ────────────────────────────────────
+
+export async function checkDatabaseReady() {
+  const d = await getDb()
+  await d.select('SELECT 1')
+}
+
+const DEVICE_ID_LIST_KEY = "cloud_device_id_list";
+const DEVICE_ID_LAST_KEY = "cloud_device_id_last";
+
+export async function getDeviceIdList(): Promise<string[]> {
+  const raw = await getSetting(DEVICE_ID_LIST_KEY);
+  return raw ? safeJsonParse<string[]>(raw, []) : [];
+}
+
+export async function saveDeviceIdList(ids: string[]) {
+  await setSetting(DEVICE_ID_LIST_KEY, JSON.stringify(ids));
+}
+
+export async function getLastDeviceId(): Promise<string | null> {
+  return getSetting(DEVICE_ID_LAST_KEY);
+}
+
+export async function saveLastDeviceId(id: string) {
+  await setSetting(DEVICE_ID_LAST_KEY, id);
 }
 
 // ── Field Rule Sets ──────────────────────────────────────────
@@ -705,113 +734,76 @@ export async function exportAllData(): Promise<AppBackup> {
   }
 }
 
-export async function importAllData(backup: AppBackup) {
-  const d = await getDb()
-  await d.execute('BEGIN TRANSACTION')
-  try {
-    await d.execute('DELETE FROM field_rule_sets')
-    await d.execute('DELETE FROM case_files')
-    await d.execute('DELETE FROM recent_files')
-    await d.execute('DELETE FROM favorites')
-    await d.execute('DELETE FROM app_settings')
-    await d.execute('DELETE FROM input_history')
-    await d.execute('DELETE FROM log_sessions')
-    await d.execute('DELETE FROM note_folders')
-    await d.execute('DELETE FROM notes')
-    await d.execute('DELETE FROM note_versions')
-    await d.execute('DELETE FROM note_links')
-    try { await d.execute('DELETE FROM note_spaces') } catch {}
-    await d.execute('DELETE FROM scripts')
+function validateBackup(backup: any): string | null {
+  if (!backup || typeof backup !== 'object') return '备份数据格式无效'
+  if (!backup.version) return '备份文件缺少版本号，可能是旧格式或损坏文件'
+  const tables = ['fieldRuleSets', 'caseFiles', 'recentFiles', 'favorites', 'settings', 'inputHistory', 'logSessions', 'noteSpaces', 'noteFolders', 'notes', 'noteVersions', 'noteLinks', 'scripts']
+  for (const t of tables) {
+    if (backup[t] !== undefined && !Array.isArray(backup[t]) && typeof backup[t] !== 'object') {
+      return `字段 "${t}" 类型无效`
+    }
+  }
+  return null
+}
 
-    for (const s of backup.fieldRuleSets || []) {
-      await d.execute(
-        'INSERT INTO field_rule_sets (id, name, rules, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-        [s.id, s.name, JSON.stringify(s.rules), s.createdAt || s.created_at, s.updatedAt || s.updated_at || s.createdAt]
-      )
+export async function importAllData(backup: AppBackup) {
+  const err = validateBackup(backup)
+  if (err) throw new Error(err)
+  const d = await getDb()
+  const maxRetries = 3
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await d.select('SELECT 1')
+      break
+    } catch {
+      if (attempt === maxRetries) throw new Error('数据库繁忙，请稍后重试')
+      await new Promise(r => setTimeout(r, 1000 * attempt))
     }
-    for (const f of backup.caseFiles || []) {
-      await d.execute(
-        'INSERT INTO case_files (id, name, data, tags, custom_fields, rule_set_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [f.id, f.name, f.data || JSON.stringify(f), JSON.stringify(f.tags || []), JSON.stringify(f.custom_fields || f.customFields || []), f.rule_set_id || f.ruleSetId || '', f.created_at || f.createdAt, f.updated_at || f.updatedAt]
-      )
+  }
+  const failures: string[] = []
+  const deletes = [
+    'field_rule_sets', 'case_files', 'recent_files', 'favorites',
+    'app_settings', 'input_history', 'log_sessions',
+    'note_folders', 'notes', 'note_versions', 'note_links', 'scripts'
+  ]
+  for (const table of deletes) {
+    try { await d.execute(`DELETE FROM ${table}`) } catch (e: any) { failures.push(`DELETE ${table}: ${e}`) }
+  }
+  try { await d.execute('DELETE FROM note_spaces') } catch {}
+  const inserts: [string, string, any[], (item: any) => unknown[]][] = [
+    ['field_rule_sets', 'id, name, rules, created_at, updated_at', backup.fieldRuleSets || [], s => [s.id, s.name, JSON.stringify(s.rules), s.createdAt || s.created_at, s.updatedAt || s.updated_at || s.createdAt]],
+    ['case_files', 'id, name, data, tags, custom_fields, rule_set_id, created_at, updated_at', backup.caseFiles || [], f => [f.id, f.name, f.data || JSON.stringify(f), JSON.stringify(f.tags || []), JSON.stringify(f.custom_fields || f.customFields || []), f.rule_set_id || f.ruleSetId || '', f.created_at || f.createdAt, f.updated_at || f.updatedAt]],
+    ['recent_files', 'path, name, case_count, last_opened', backup.recentFiles || [], r => [r.path, r.name, r.case_count || r.caseCount || 0, r.last_opened || r.lastOpened]],
+    ['favorites', 'path, added_at', backup.favorites || [], path => [path, new Date().toISOString()]],
+    ['input_history', 'key_name, value, created_at, sort_order', backup.inputHistory || [], h => [h.keyName, h.value, h.createdAt, Date.parse(h.createdAt)]],
+    ['log_sessions', 'id, type, device_serial, status, started_at, metadata', backup.logSessions || [], s => [s.id, s.type, s.deviceSerial, s.status, s.startedAt, s.metadata]],
+    ['note_spaces', 'id, name, sort_order, created_at, updated_at', backup.noteSpaces || [], (s: any) => [s.id, s.name, s.sortOrder ?? s.sort_order ?? 0, s.createdAt ?? s.created_at, s.updatedAt ?? s.updated_at]],
+    ['note_folders', 'id, space_id, name, parent_id, sort_order, created_at, updated_at', backup.noteFolders || [], (f: any) => [f.id, f.spaceId ?? f.space_id ?? null, f.name, f.parentId ?? f.parent_id ?? null, f.sortOrder ?? f.sort_order ?? 0, f.createdAt ?? f.created_at, f.updatedAt ?? f.updated_at]],
+    ['notes', 'id, folder_id, title, content, tags, is_favorite, created_at, updated_at', backup.notes || [], (n: any) => [n.id, n.folderId ?? n.folder_id ?? null, n.title ?? '', n.content ?? '', JSON.stringify(n.tags ?? []), n.isFavorite ? 1 : 0, n.createdAt ?? n.created_at, n.updatedAt ?? n.updated_at]],
+    ['note_versions', 'id, note_id, content, saved_at', backup.noteVersions || [], (v: any) => [v.id, v.noteId ?? v.note_id, v.content, v.savedAt ?? v.saved_at]],
+    ['note_links', 'id, source_note_id, target_note_id, created_at', backup.noteLinks || [], (l: any) => [l.id, l.sourceNoteId ?? l.source_note_id, l.targetNoteId ?? l.target_note_id, l.createdAt ?? l.created_at]],
+    ['scripts', 'id, name, type, content, created_at, updated_at', backup.scripts || [], (s: any) => [s.id, s.name, s.type ?? 'bat', s.content ?? '', s.createdAt ?? s.created_at, s.updatedAt ?? s.updated_at ?? s.createdAt]],
+  ]
+  for (const [table, cols, items, toParams] of inserts) {
+    if (!Array.isArray(items) || items.length === 0) continue
+    for (const item of items) {
+      try {
+        const params = toParams(item)
+        await d.execute(`INSERT INTO ${table} (${cols}) VALUES (${params.map(() => '?').join(',')})`, params)
+      } catch (e: any) {
+        failures.push(`INSERT ${table}: ${e.message || e}`)
+      }
     }
-    for (const r of backup.recentFiles || []) {
-      await d.execute(
-        'INSERT INTO recent_files (path, name, case_count, last_opened) VALUES (?, ?, ?, ?)',
-        [r.path, r.name, r.case_count || r.caseCount || 0, r.last_opened || r.lastOpened]
-      )
+  }
+  for (const [key, value] of Object.entries(backup.settings || {})) {
+    try {
+      await d.execute('INSERT INTO app_settings (key, value) VALUES (?, ?)', [key, value])
+    } catch (e: any) {
+      failures.push(`INSERT app_settings(${key}): ${e.message || e}`)
     }
-    for (const path of backup.favorites || []) {
-      await d.execute(
-        'INSERT INTO favorites (path, added_at) VALUES (?, ?)',
-        [path, new Date().toISOString()]
-      )
-    }
-    for (const [key, value] of Object.entries(backup.settings || {})) {
-      await d.execute(
-        'INSERT INTO app_settings (key, value) VALUES (?, ?)',
-        [key, value]
-      )
-    }
-    for (const h of backup.inputHistory || []) {
-      await d.execute(
-        'INSERT INTO input_history (key_name, value, created_at, sort_order) VALUES (?, ?, ?, ?)',
-        [h.keyName, h.value, h.createdAt, Date.parse(h.createdAt)]
-      )
-    }
-    for (const s of backup.logSessions || []) {
-      await d.execute(
-        'INSERT INTO log_sessions (id, type, device_serial, status, started_at, metadata) VALUES (?, ?, ?, ?, ?, ?)',
-        [s.id, s.type, s.deviceSerial, s.status, s.startedAt, s.metadata]
-      )
-    }
-    // ── Notes ──────────────────────────────────────────────────
-    for (const raw of backup.noteSpaces || []) {
-      const s: any = raw
-      await d.execute(
-        'INSERT INTO note_spaces (id, name, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-        [s.id, s.name, s.sortOrder ?? s.sort_order ?? 0, s.createdAt ?? s.created_at, s.updatedAt ?? s.updated_at]
-      )
-    }
-    for (const raw of backup.noteFolders || []) {
-      const f: any = raw
-      await d.execute(
-        'INSERT INTO note_folders (id, space_id, name, parent_id, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [f.id, f.spaceId ?? f.space_id ?? null, f.name, f.parentId ?? f.parent_id ?? null, f.sortOrder ?? f.sort_order ?? 0, f.createdAt ?? f.created_at, f.updatedAt ?? f.updated_at]
-      )
-    }
-    for (const raw of backup.notes || []) {
-      const n: any = raw
-      await d.execute(
-        'INSERT INTO notes (id, folder_id, title, content, tags, is_favorite, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [n.id, n.folderId ?? n.folder_id ?? null, n.title ?? '', n.content ?? '',
-         JSON.stringify(n.tags ?? []), n.isFavorite ? 1 : 0, n.createdAt ?? n.created_at, n.updatedAt ?? n.updated_at]
-      )
-    }
-    for (const raw of backup.noteVersions || []) {
-      const v: any = raw
-      await d.execute(
-        'INSERT INTO note_versions (id, note_id, content, saved_at) VALUES (?, ?, ?, ?)',
-        [v.id, v.noteId ?? v.note_id, v.content, v.savedAt ?? v.saved_at]
-      )
-    }
-    for (const raw of backup.noteLinks || []) {
-      const l: any = raw
-      await d.execute(
-        'INSERT INTO note_links (id, source_note_id, target_note_id, created_at) VALUES (?, ?, ?, ?)',
-        [l.id, l.sourceNoteId ?? l.source_note_id, l.targetNoteId ?? l.target_note_id, l.createdAt ?? l.created_at]
-      )
-    }
-    for (const raw of backup.scripts || []) {
-      const s: any = raw
-      await d.execute(
-        'INSERT INTO scripts (id, name, type, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-        [s.id, s.name, s.type ?? 'bat', s.content ?? '', s.createdAt ?? s.created_at, s.updatedAt ?? s.updated_at ?? s.createdAt]
-      )
-    }
-    await d.execute('COMMIT')
-  } catch (e) {
-    await d.execute('ROLLBACK')
-    throw e
+  }
+  if (failures.length > 0) {
+    console.warn('[importAllData] failures:', failures)
+    throw new Error(`导入部分失败 (${failures.length}项): ${failures[0]}`)
   }
 }

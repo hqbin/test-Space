@@ -22,6 +22,10 @@
     "core:window:allow-hide",
     "core:window:allow-close",
     "core:tray:default",
-    "core:webview:default"
+    "core:webview:default",
+    {
+      "identifier": "http:default",
+      "allow": [{ "url": "https://tms.zeasn.com/api/TestSpace/*" }]
+    }
   ]
 }

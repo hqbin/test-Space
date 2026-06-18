@@ -420,7 +420,7 @@
                 @mousedown.prevent @click="selectRemotePathHistory(h)">{{ h }}</button>
             </div>
           </div>
-          <div class="relative flex-1 min-h-0">
+            <div class="relative flex-1 min-h-0" @click="closeFileContextMenu">
             <div v-if="dragOverFileList" class="absolute inset-0 z-10 flex items-center justify-center bg-white/80 backdrop-blur-sm rounded-lg border-2 border-dashed border-secondary/50 pointer-events-none">
               <div class="flex flex-col items-center gap-2 text-secondary">
                 <span class="material-symbols-outlined text-3xl">cloud_upload</span>
@@ -434,7 +434,7 @@
               </div>
               <div v-for="entry in fileEntries" :key="entry.name"
                 class="flex items-center gap-1.5 px-2 py-1 hover:bg-secondary/5 hover:scale-[1.02] cursor-pointer border-b border-outline-variant/20 last:border-0 group transition-transform duration-200 rounded select-none"
-                @click="handleEntryClick(entry, $event)">
+                @click="handleEntryClick(entry, $event)" @contextmenu="showFileContextMenu($event, entry)">
                 <span class="material-symbols-outlined text-[16px] shrink-0"
                   :class="entry.name === '..' ? 'text-secondary' : (entry.isDir ? 'text-secondary' : 'text-on-surface-variant/60')">{{ entry.name === '..' ? 'arrow_back' : (entry.isDir ? 'folder' : 'description') }}</span>
                 <span class="flex-1 truncate font-mono text-[12px] text-on-surface" :class="entry.name === '..' ? 'text-secondary' : ''">{{ entry.name }}</span>
@@ -475,50 +475,76 @@
 
     <!-- Preview Dialog -->
     <Teleport to="body">
-      <Transition name="fade">
-        <div v-if="previewDialog.show" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="previewDialog.show = false">
-          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
-          <div class="glass-panel rounded-[2rem] p-3 lg:p-4 xl:p-6 w-[95vw] lg:w-[90vw] max-w-7xl max-h-[85vh] lg:max-h-[90vh] relative z-10 bg-white/60 flex flex-col">
-            <div class="flex justify-between items-center mb-2 shrink-0">
-              <h3 class="font-label-md text-label-md text-on-surface font-semibold truncate select-none">{{ previewDialog.name }}</h3>
-              <div class="flex items-center gap-1 shrink-0">
-                <span class="font-caption text-caption text-on-surface-variant/60 select-none text-[11px]">{{ Math.round(previewScale * 100) }}%</span>
-                <button class="glass-button p-1 rounded-lg select-none" :disabled="previewScale <= 0.25" @click="zoomPreviewOut">
-                  <span class="material-symbols-outlined text-[16px]">zoom_out</span>
-                </button>
-                <button class="glass-button p-1 rounded-lg select-none" @click="resetPreviewScale">
-                  <span class="material-symbols-outlined text-[16px]">zoom_in_map</span>
-                </button>
-                <button class="glass-button p-1 rounded-lg select-none" :disabled="previewScale >= 5" @click="zoomPreviewIn">
-                  <span class="material-symbols-outlined text-[16px]">zoom_in</span>
-                </button>
-                <span class="w-px h-4 bg-outline-variant/30 mx-1"></span>
-                <button class="glass-button px-3 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1 select-none" @click="editFile(previewDialog.name)">
-                  <span class="material-symbols-outlined text-[16px]">edit</span>{{ t('device.edit') }}
-                </button>
-                <button class="glass-button p-1.5 rounded-lg select-none" @click="previewDialog.show = false">
-                  <span class="material-symbols-outlined text-[20px]">close</span>
-                </button>
-              </div>
-            </div>
-            <div v-if="previewDialog.loading" class="flex-1 flex items-center justify-center">
-              <span class="w-6 h-6 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
-            </div>
-            <div v-else-if="previewDialog.content" class="flex-1 min-h-0 flex items-center justify-center overflow-auto" @wheel.prevent="isAudioFile(previewDialog.name) ? undefined : onPreviewWheel">
-              <div v-if="isAudioFile(previewDialog.name)" class="flex items-center justify-center p-4 w-full max-w-lg">
-                <audio :src="previewDialog.content" controls autoplay class="w-full"></audio>
-              </div>
-              <div v-else class="flex items-center justify-center min-w-0 min-h-0" :style="{ transform: `scale(${previewScale})`, transformOrigin: 'center center' }">
-                <img v-if="isImageFile(previewDialog.name)" :src="previewDialog.content" class="max-w-full max-h-full object-contain rounded-lg select-none" draggable="false" />
-                <video v-else :src="previewDialog.content" controls autoplay class="max-w-full max-h-full rounded-lg"></video>
-              </div>
-            </div>
-            <div v-else class="flex-1 flex items-center justify-center text-on-surface-variant/50">
-              <span class="font-body-sm text-body-sm">{{ t('device.previewNotAvailable') }}</span>
+      <div v-if="previewDialog.show" class="fixed inset-0 z-50 flex items-center justify-center">
+        <div class="absolute inset-0 bg-black/10 backdrop-blur-sm" @click="cancelPreview"></div>
+        <div class="glass-panel rounded-[2rem] p-3 lg:p-4 xl:p-6 w-[95vw] lg:w-[90vw] max-w-7xl max-h-[85vh] lg:max-h-[90vh] relative z-10 bg-white/60 flex flex-col">
+          <div class="flex justify-between items-center mb-2 shrink-0">
+            <h3 class="font-label-md text-label-md text-on-surface font-semibold truncate select-none">{{ previewDialog.name }}</h3>
+            <div class="flex items-center gap-1 shrink-0">
+              <span class="font-caption text-caption text-on-surface-variant/60 select-none text-[11px]">{{ Math.round(previewScale * 100) }}%</span>
+              <button class="glass-button p-1 rounded-lg select-none" :disabled="previewScale <= 0.25" @click.stop="zoomPreviewOut">
+                <span class="material-symbols-outlined text-[16px]">zoom_out</span>
+              </button>
+              <button class="glass-button p-1 rounded-lg select-none" @click.stop="resetPreviewScale">
+                <span class="material-symbols-outlined text-[16px]">zoom_in_map</span>
+              </button>
+              <button class="glass-button p-1 rounded-lg select-none" :disabled="previewScale >= 5" @click.stop="zoomPreviewIn">
+                <span class="material-symbols-outlined text-[16px]">zoom_in</span>
+              </button>
+              <span class="w-px h-4 bg-outline-variant/30 mx-1"></span>
+              <button class="glass-button px-3 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1 select-none" @click.stop="editFile(previewDialog.name)">
+                <span class="material-symbols-outlined text-[16px]">edit</span>{{ t('device.edit') }}
+              </button>
+              <button class="glass-button p-1.5 rounded-lg select-none" @click.stop="cancelPreview">
+                <span class="material-symbols-outlined text-[20px]">close</span>
+              </button>
             </div>
           </div>
+          <div v-if="previewDialog.loading" class="flex-1 flex flex-col items-center justify-center gap-3">
+            <span class="w-6 h-6 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
+            <button class="glass-button px-4 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1 select-none" @click.stop="cancelPreview">
+              <span class="material-symbols-outlined text-[16px]">close</span>{{ t('device.cancel') }}
+            </button>
+          </div>
+          <div v-else-if="previewDialog.content" class="flex-1 min-h-0 flex items-center justify-center overflow-auto" @wheel.prevent="isAudioFile(previewDialog.name) ? undefined : onPreviewWheel">
+            <div v-if="isAudioFile(previewDialog.name)" class="flex items-center justify-center p-4 w-full max-w-lg">
+              <audio :src="previewDialog.content" controls autoplay class="w-full"></audio>
+            </div>
+            <div v-else class="flex items-center justify-center min-w-0 min-h-0" :style="{ transform: `scale(${previewScale})`, transformOrigin: 'center center' }">
+              <img v-if="isImageFile(previewDialog.name)" :src="previewDialog.content" class="max-w-full max-h-full object-contain rounded-lg select-none" draggable="false" />
+              <video v-else :src="previewDialog.content" controls autoplay class="max-w-full max-h-full rounded-lg"></video>
+            </div>
+          </div>
+          <div v-else class="flex-1 flex items-center justify-center text-on-surface-variant/50">
+            <span class="font-body-sm text-body-sm">{{ t('device.previewNotAvailable') }}</span>
+          </div>
         </div>
-      </Transition>
+      </div>
+    </Teleport>
+
+    <!-- File Context Menu -->
+    <Teleport to="body">
+      <div v-if="fileContextMenu.show" class="fixed inset-0 z-50" @click="closeFileContextMenu" @contextmenu.prevent="closeFileContextMenu"></div>
+      <div v-if="fileContextMenu.show" class="fixed z-50 bg-white border border-outline-variant rounded-lg py-1 min-w-[160px] shadow-lg"
+        :style="{ top: fileContextMenu.y + 'px', left: fileContextMenu.x + 'px' }">
+        <button class="w-full flex items-center gap-2 px-3 py-1.5 font-body-sm text-body-sm text-on-surface hover:bg-gray-100 select-none text-left" @click="copyFilePath(fileContextMenu.entry!)">
+          <span class="material-symbols-outlined text-[16px] text-on-surface-variant">content_copy</span>{{ t('device.copyPath') }}
+        </button>
+        <div class="border-t border-outline-variant/30 my-1"></div>
+        <button class="w-full flex items-center gap-2 px-3 py-1.5 font-body-sm text-body-sm text-on-surface hover:bg-gray-100 select-none text-left"
+          @click="fileContextMenu.entry!.isDir ? downloadDir(fileContextMenu.entry!.name) : downloadFile(fileContextMenu.entry!.name); closeFileContextMenu()">
+          <span class="material-symbols-outlined text-[16px] text-on-surface-variant">download</span>{{ t('device.download') }}
+        </button>
+        <button v-if="!fileContextMenu.entry!.isDir" class="w-full flex items-center gap-2 px-3 py-1.5 font-body-sm text-body-sm text-on-surface hover:bg-gray-100 select-none text-left"
+          @click="editFile(fileContextMenu.entry!.name); closeFileContextMenu()">
+          <span class="material-symbols-outlined text-[16px] text-on-surface-variant">edit</span>{{ t('device.edit') }}
+        </button>
+        <div class="border-t border-outline-variant/30 my-1"></div>
+        <button class="w-full flex items-center gap-2 px-3 py-1.5 font-body-sm text-body-sm text-error hover:bg-red-50 select-none text-left"
+          @click="confirmThen(`${t('device.delete')} ${fileContextMenu.entry!.name}?`, () => deleteFile(fileContextMenu.entry!.name)); closeFileContextMenu()">
+          <span class="material-symbols-outlined text-[16px]">delete</span>{{ t('device.delete') }}
+        </button>
+      </div>
     </Teleport>
 
     <!-- File Edit Dialog -->
@@ -744,7 +770,7 @@
     <!-- Confirm Dialog -->
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="confirmDialog.show" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="confirmDialog.show = false">
+        <div v-if="confirmDialog.show" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="confirmDialog.onCancel()">
           <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
           <div class="glass-panel rounded-[2rem] p-6 w-full max-w-sm relative z-10 bg-white/60">
             <div class="flex items-center gap-3 mb-4">
@@ -752,7 +778,7 @@
               <h3 class="font-headline-md text-headline-md text-on-surface font-semibold select-none">{{ confirmDialog.title }}</h3>
             </div>
             <div class="flex gap-2 justify-end">
-              <button class="glass-button px-4 py-2 rounded-lg font-label-md text-label-md select-none" @click="confirmDialog.show = false">{{ t('device.cancel') }}</button>
+              <button class="glass-button px-4 py-2 rounded-lg font-label-md text-label-md select-none" @click="confirmDialog.onCancel()">{{ t('device.cancel') }}</button>
               <button class="px-4 py-2 rounded-lg font-label-md text-label-md bg-error/10 text-error border border-error/20 select-none" @click="confirmDialog.onConfirm()">{{ t('device.confirm') }}</button>
             </div>
           </div>
@@ -786,7 +812,8 @@
     <Teleport to="body">
       <Transition name="fade">
         <div v-if="toast.show" class="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 glass-panel rounded-full px-5 py-2.5 flex items-center gap-2 shadow-lg">
-          <span class="material-symbols-outlined text-[18px]"
+          <span v-if="toast.type === 'loading'" class="material-symbols-outlined text-[18px] text-secondary animate-spin">progress_activity</span>
+          <span v-else class="material-symbols-outlined text-[18px]"
             :class="toast.type === 'error' ? 'text-error' : 'text-success-indicator'">{{ toast.type === 'error' ? 'error' : 'check_circle' }}</span>
           <span class="font-body-md text-body-md text-on-surface">{{ toast.message }}</span>
         </div>
@@ -855,25 +882,38 @@ const tabs = computed(() => [
 const activeTab = ref('common');
 
 // ── Toast ──
-const toast = ref({ show: false, message: "", type: "success" as "success" | "error" });
+const toast = ref({ show: false, message: "", type: "success" as "success" | "error" | "loading" });
 let toastTimer: number | null = null;
-function showToast(message: string, type: "success" | "error" = "success") {
+function showToast(message: string, type: "success" | "error" | "loading" = "success") {
   toast.value = { show: true, message, type };
   if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => { toast.value.show = false; }, 2500);
+  if (type !== "loading") {
+    toastTimer = window.setTimeout(() => { toast.value.show = false; }, 2500);
+  }
+}
+function hideToast() {
+  if (toastTimer) clearTimeout(toastTimer);
+  toast.value.show = false;
 }
 
 // ── Confirm Dialog ──
-const confirmDialog = ref({ show: false, title: "", onConfirm: () => {} });
-function confirmThen(title: string, action: () => Promise<void>) {
-  confirmDialog.value = {
-    show: true,
-    title,
-    onConfirm: async () => {
-      confirmDialog.value.show = false;
-      await action();
-    },
-  };
+const confirmDialog = ref({ show: false, title: "", onConfirm: () => {}, onCancel: () => {} });
+function confirmThen(title: string, action?: () => Promise<void>): Promise<boolean> {
+  return new Promise((resolve) => {
+    confirmDialog.value = {
+      show: true,
+      title,
+      onConfirm: async () => {
+        confirmDialog.value.show = false;
+        if (action) await action();
+        resolve(true);
+      },
+      onCancel: () => {
+        confirmDialog.value.show = false;
+        resolve(false);
+      },
+    };
+  });
 }
 
 // ── Command Execution Dialog ──
@@ -1122,11 +1162,13 @@ const fileEntries = ref<FileEntry[]>([]);
 function isImageFile(name: string) { return /\.(png|jpg|jpeg|gif|bmp|webp|svg)$/i.test(name); }
 function isAudioFile(name: string) { return /\.(flac|mp3|wav|ogg|aac|m4a|wma)$/i.test(name); }
 function isMediaFile(name: string) { return isImageFile(name) || isAudioFile(name) || /\.(mp4|webm|ogg|mov|avi|mkv)$/i.test(name); }
+function isUnsupportedFile(name: string) { return /\.(apk|exe|dll|so|dylib|bin|dat|db|sqlite|zip|tar|gz|rar|7z|zst|woff2?|ttf|otf|pyc|class|o|a|lib|jar|war|ear|msi|dmg|iso|img|vmdk|vdi|qcow2)$/i.test(name); }
 async function handleEntryClick(entry: FileEntry, e: MouseEvent) {
   e.stopPropagation();
   if (entry.name === "..") { await navigateToParent(); return; }
   if (entry.isDir) { await navigateToDir(entry.name); return; }
   if (isMediaFile(entry.name)) { await previewFile(entry); return; }
+  if (isUnsupportedFile(entry.name)) { showToast(t('device.unsupportedFile'), 'error'); return; }
   editFile(entry.name);
 }
 async function navigateToPath() {
@@ -1224,18 +1266,13 @@ async function downloadDir(name: string) {
   if (!selectedDevice.value) return;
   const parentPath = remotePath.value.replace(/\/?$/, '');
   const dirPath = parentPath + '/' + name.trim();
-  const tarName = `${name}_${Date.now()}.tar.gz`;
-  const remoteTar = `/sdcard/${tarName}`;
   try {
-    const { save } = await import("@tauri-apps/plugin-dialog");
-    const dest = await save({ defaultPath: `${name}.tar.gz` });
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const dest = await open({ directory: true, defaultPath: name });
     if (!dest) return;
-    showCmdExec(t('device.downloadDir'), `tar czf ${remoteTar} -C ${parentPath} ${name}`);
-    appendCmdExec(t('device.compressingDir'));
-    await shell(selectedDevice.value.serial, `tar czf "${remoteTar}" -C "${parentPath}" "${name}"`);
+    showCmdExec(t('device.downloadDir'), `adb pull "${dirPath}" "${dest}/${name}"`);
     appendCmdExec(t('device.downloading'));
-    await pullFile(selectedDevice.value.serial, remoteTar, dest);
-    await shell(selectedDevice.value.serial, `rm "${remoteTar}"`).catch(() => {});
+    await pullFile(selectedDevice.value.serial, dirPath, dest);
     appendCmdExec(t('device.downloadDone'));
     finishCmdExec(t('device.dirDownloaded'));
     showToast(t('device.dirDownloaded'));
@@ -1255,6 +1292,7 @@ async function deleteFile(name: string) {
 const previewDialog = ref({ show: false, name: "", loading: false, content: "" });
 const fileEditDialog = ref({ show: false, filePath: "", content: "", loading: false, originContent: "" });
 const previewScale = ref(1);
+let previewGen = 0;
 function resetPreviewScale() { previewScale.value = 1; }
 function zoomPreviewIn() { previewScale.value = Math.min(previewScale.value + 0.25, 5); }
 function zoomPreviewOut() { previewScale.value = Math.max(previewScale.value - 0.25, 0.25); }
@@ -1263,13 +1301,25 @@ function onPreviewWheel(e: WheelEvent) {
   if (e.deltaY < 0) zoomPreviewIn(); else zoomPreviewOut();
 }
 async function previewFile(entry: FileEntry) {
+  if (entry.rawSize > 10 * 1024 * 1024) {
+    const ok = await confirmThen(t('device.largeFileConfirm', { name: entry.name }));
+    if (!ok) return;
+    showToast(t('device.largeFileLoading'), 'loading');
+  }
+  previewGen++;
   previewDialog.value = { show: true, name: entry.name, loading: true, content: '' };
   previewScale.value = 1;
   await nextTick();
   await loadPreviewContent(entry.name);
+  hideToast();
+}
+function cancelPreview() {
+  previewGen++;
+  previewDialog.value = { show: false, name: previewDialog.value.name, loading: false, content: '' };
 }
 async function loadPreviewContent(name: string) {
   if (!selectedDevice.value) return;
+  const gen = ++previewGen;
   const filePath = remotePath.value.replace(/\/?$/, '/') + name.trim();
   const vMime: Record<string, string> = { webm: 'video/webm', ogg: 'video/ogg', mp4: 'video/mp4', mov: 'video/quicktime', avi: 'video/x-msvideo', mkv: 'video/x-matroska' };
   const aMime: Record<string, string> = { flac: 'audio/flac', mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', aac: 'audio/aac', m4a: 'audio/mp4', wma: 'audio/x-ms-wma' };
@@ -1277,14 +1327,41 @@ async function loadPreviewContent(name: string) {
   const ext = name.replace(/.*\./, '').toLowerCase();
   try {
     const raw = await shell(selectedDevice.value.serial, `cat "${filePath}" | base64`);
+    if (gen !== previewGen) return;
     const mime = isImageFile(name) ? `image/${iMime[ext] || ext}` : (isAudioFile(name) ? (aMime[ext] || 'audio/mpeg') : (vMime[ext] || 'video/mp4'));
     previewDialog.value.content = `data:${mime};base64,${raw.trim()}`;
-  } catch { previewDialog.value.content = ''; }
-  previewDialog.value.loading = false;
+  } catch { if (gen === previewGen) previewDialog.value.content = ''; }
+  if (gen === previewGen) previewDialog.value.loading = false;
 }
+
+const fileContextMenu = ref({ show: false, x: 0, y: 0, entry: null as FileEntry | null });
+function showFileContextMenu(e: MouseEvent, entry: FileEntry) {
+  e.preventDefault();
+  e.stopPropagation();
+  if (entry.name === '..') return;
+  fileContextMenu.value = { show: true, x: e.clientX, y: e.clientY, entry };
+}
+function closeFileContextMenu() { fileContextMenu.value.show = false; }
+async function copyFilePath(entry: FileEntry) {
+  const fullPath = remotePath.value.replace(/\/?$/, '/') + entry.name;
+  try { await navigator.clipboard.writeText(fullPath); showToast(t('device.copyPath'), 'success'); } catch { showToast(t('device.copyFailed'), 'error'); }
+  closeFileContextMenu();
+}
+
 async function editFile(name: string) {
   if (!selectedDevice.value) return;
   const remoteFile = remotePath.value.replace(/\/?$/, '/') + name.trim();
+  let needLoadingToast = false;
+  try {
+    const sizeStr = await shell(selectedDevice.value.serial, `wc -c < "${remoteFile}"`);
+    const fileSize = parseInt(sizeStr.trim()) || 0;
+    if (fileSize > 5 * 1024 * 1024) {
+      const ok = await confirmThen(t('device.largeFileConfirm', { name }));
+      if (!ok) return;
+      showToast(t('device.largeFileLoading'), 'loading');
+      needLoadingToast = true;
+    }
+  } catch {}
   fileEditDialog.value = { show: true, filePath: remoteFile, content: "", loading: true, originContent: "" };
   try {
     const content = await shell(selectedDevice.value.serial, `cat "${remoteFile}"`);
@@ -1293,6 +1370,7 @@ async function editFile(name: string) {
     fileEditDialog.value = { ...fileEditDialog.value, content: `// ${t('device.readFileFailed')}`, loading: false };
     showToast(t('device.readFileFailed'), "error");
   }
+  if (needLoadingToast) hideToast();
 }
 async function saveEditedFile() {
   if (!selectedDevice.value || !fileEditDialog.value.filePath) return;

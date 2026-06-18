@@ -48,18 +48,73 @@
       <!-- Backup & Restore -->
       <div>
         <span class="font-body-md text-body-md text-on-surface font-medium">{{ t("settings.backup") }}</span>
-        <p class="font-caption text-caption text-on-surface-variant mt-0.5">{{ t("settings.backupDesc") }}</p>
-        <div class="flex gap-4 mt-4">
-          <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2 select-none" @click="handleExport">
-            <span class="material-symbols-outlined text-[18px]">file_upload</span>
-            {{ t("settings.exportAll") }}
-          </button>
-          <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2 select-none" @click="handleImport">
-            <span class="material-symbols-outlined text-[18px]">file_download</span>
-            {{ t("settings.importAll") }}
+        <!-- Device ID -->
+        <div class="flex items-center gap-3 mt-3">
+          <span class="font-body-md text-body-md text-on-surface-variant whitespace-nowrap">{{ t("settings.cloudDeviceId") }}</span>
+          <div class="relative flex-1">
+            <input
+              class="w-full px-3 py-2 rounded-lg font-body-md text-body-md bg-white border border-gray-300 outline-none focus:border-gray-400"
+              :placeholder="t('settings.cloudDeviceIdPlaceholder')"
+              v-model="deviceId"
+              @focus="showDeviceDropdown = true"
+              @blur="handleDeviceIdBlur"
+            />
+            <div
+              v-if="showDeviceDropdown && deviceIdList.length > 0"
+              class="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-md z-10 max-h-40 overflow-y-auto border border-gray-200"
+            >
+              <div
+                v-for="id in deviceIdList"
+                :key="id"
+                class="px-3 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer truncate"
+                @mousedown="selectDeviceId(id)"
+              >{{ id }}</div>
+            </div>
+          </div>
+          <button class="glass-button px-3 py-2 rounded-lg font-label-md text-label-md select-none" @click="copyDeviceId">
+            {{ t("settings.cloudDeviceIdCopy") }}
           </button>
         </div>
-        <p v-if="importStatus" class="mt-3 font-body-md text-body-md" :class="importStatus.startsWith('Error') ? 'text-error' : 'text-success-indicator'">{{ importStatus }}</p>
+        <!-- Buttons -->
+        <div class="flex gap-3 mt-4 flex-wrap">
+          <!-- Backup dropdown -->
+          <div class="relative">
+            <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2 select-none" @click="showBackupMenu = !showBackupMenu; showRestoreMenu = false">
+              <span class="material-symbols-outlined text-[18px]">upload</span>
+              {{ t("settings.cloudUpload") }}
+              <span class="material-symbols-outlined text-[16px]">arrow_drop_down</span>
+            </button>
+            <div v-if="showBackupMenu" class="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-md z-20 min-w-[160px] border border-gray-200">
+              <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleExport(); showBackupMenu = false">
+                <span class="material-symbols-outlined text-[18px]">file_upload</span>
+                {{ t("settings.exportLocal") }}
+              </div>
+              <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleCloudUpload(); showBackupMenu = false">
+                <span class="material-symbols-outlined text-[18px]">cloud_upload</span>
+                {{ t("settings.exportCloud") }}
+              </div>
+            </div>
+          </div>
+          <!-- Restore dropdown -->
+          <div class="relative">
+            <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2 select-none" @click="showRestoreMenu = !showRestoreMenu; showBackupMenu = false">
+              <span class="material-symbols-outlined text-[18px]">download</span>
+              {{ t("settings.restore") }}
+              <span class="material-symbols-outlined text-[16px]">arrow_drop_down</span>
+            </button>
+            <div v-if="showRestoreMenu" class="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-md z-20 min-w-[160px] border border-gray-200">
+              <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleImport(); showRestoreMenu = false">
+                <span class="material-symbols-outlined text-[18px]">file_download</span>
+                {{ t("settings.importLocal") }}
+              </div>
+              <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleCloudRestore(); showRestoreMenu = false">
+                <span class="material-symbols-outlined text-[18px]">cloud_download</span>
+                {{ t("settings.importCloud") }}
+              </div>
+            </div>
+          </div>
+        </div>
+        <p v-if="statusMessage" class="mt-3 font-body-md text-body-md" :class="statusIsError ? 'text-error' : 'text-success-indicator'">{{ statusMessage }}</p>
       </div>
 
       <div class="border-t border-glass-border-light/30 my-5"></div>
@@ -74,16 +129,159 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
 import * as db from "@/services/database";
+import * as cloudApi from "@/services/cloudBackup";
+import * as crypto from "@/services/crypto";
 import { useI18n } from "@/composables/useI18n";
 import { getVersion } from "@tauri-apps/api/app";
 
 const { lang, t, setLanguage, initLanguage } = useI18n();
 
 const theme = ref("light");
-const importStatus = ref("");
+const statusMessage = ref("");
+const statusIsError = ref(false);
 const appVersion = ref("...");
+
+function setStatus(msg: string, isError = false) {
+  statusMessage.value = msg;
+  statusIsError.value = isError;
+}
+
+// Cloud backup state
+const deviceId = ref("");
+const deviceIdList = ref<string[]>([]);
+const showBackupMenu = ref(false);
+const showRestoreMenu = ref(false);
+const cloudBusy = ref(false);
+const showDeviceDropdown = ref(false);
+
+async function ensureDeviceId() {
+  const last = await db.getLastDeviceId();
+  const list = await db.getDeviceIdList();
+  deviceIdList.value = list;
+  if (last) {
+    deviceId.value = last;
+  } else {
+    const id = crypto.generateDeviceId();
+    deviceId.value = id;
+    deviceIdList.value = [id];
+    await db.saveDeviceIdList([id]);
+    await db.saveLastDeviceId(id);
+  }
+}
+
+function handleDeviceIdBlur() {
+  setTimeout(() => { showDeviceDropdown.value = false; }, 200);
+}
+
+function closeMenus(e: MouseEvent) {
+  const target = e.target as HTMLElement;
+  if (!target.closest('.relative')) {
+    showBackupMenu.value = false;
+    showRestoreMenu.value = false;
+  }
+}
+
+onMounted(() => { document.addEventListener('click', closeMenus); });
+onUnmounted(() => { document.removeEventListener('click', closeMenus); });
+
+function selectDeviceId(id: string) {
+  deviceId.value = id;
+  showDeviceDropdown.value = false;
+  db.saveLastDeviceId(id);
+}
+
+async function saveCurrentDeviceId() {
+  const id = deviceId.value.trim();
+  if (!id) return;
+  await db.saveLastDeviceId(id);
+  const list = await db.getDeviceIdList();
+  if (!list.includes(id)) {
+    list.unshift(id);
+    await db.saveDeviceIdList(list);
+    deviceIdList.value = list;
+  }
+}
+
+async function copyDeviceId() {
+  if (!deviceId.value) return;
+  try {
+    await navigator.clipboard.writeText(deviceId.value);
+    setStatus(t("settings.cloudDeviceIdCopied"));
+    setTimeout(() => { if (statusMessage.value === t("settings.cloudDeviceIdCopied")) setStatus(""); }, 2000);
+  } catch {}
+}
+
+async function handleCloudUpload() {
+  if (cloudBusy.value) return;
+  cloudBusy.value = true;
+  setStatus(t("settings.cloudBackingUp"));
+  if (!deviceId.value.trim()) {
+    deviceId.value = crypto.generateDeviceId();
+    await saveCurrentDeviceId();
+  }
+  await saveCurrentDeviceId();
+  try {
+    const data = await db.exportAllData();
+    const json = JSON.stringify(data);
+    const key = await crypto.getOrCreateKey();
+    const payload = await crypto.encryptBackup(json, key, {
+      version: data.version,
+      exportedAt: data.exportedAt,
+    });
+    await cloudApi.uploadBackup(deviceId.value.trim(), payload);
+    setStatus(t("settings.cloudUploadSuccess"));
+  } catch (e: any) {
+    setStatus(t("settings.cloudUploadFail") + ": " + (e.message || e), true);
+  } finally {
+    cloudBusy.value = false;
+  }
+}
+
+async function handleCloudRestore() {
+  if (cloudBusy.value) return;
+  cloudBusy.value = true;
+  setStatus(t("settings.cloudRestoring"));
+  if (!deviceId.value.trim()) { cloudBusy.value = false; setStatus(""); return; }
+  await saveCurrentDeviceId();
+  try {
+    if (!await checkDbReady()) { cloudBusy.value = false; return; }
+    const list = await cloudApi.listBackups(deviceId.value.trim());
+    if (!list || list.length === 0) {
+      setStatus(t("settings.cloudEmpty"));
+      cloudBusy.value = false;
+      return;
+    }
+    const sorted = [...list].sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    const latest = sorted[0];
+    const detail = await cloudApi.getBackup(deviceId.value.trim(), latest.id);
+    const key = await crypto.getOrCreateKey();
+    const json = await crypto.decryptBackup(detail, key);
+    let backup: any;
+    try { backup = JSON.parse(json); } catch { setStatus(t("settings.cloudRestoreFail") + ": 解密失败，密钥可能不匹配", true); return; }
+    if (!backup.version) {
+      setStatus(t("settings.cloudRestoreFail") + ": invalid backup data", true);
+      return;
+    }
+    await db.importAllData(backup);
+    setStatus(t("settings.cloudRestoreSuccess"));
+  } catch (e: any) {
+    setStatus(t("settings.cloudRestoreFail") + ": " + (e.message || e), true);
+  } finally {
+    cloudBusy.value = false;
+  }
+}
+
+async function checkDbReady(): Promise<boolean> {
+  try {
+    await db.checkDatabaseReady();
+    return true;
+  } catch {
+    setStatus(t("settings.dbBusy"), true);
+    return false;
+  }
+}
 
 async function loadTheme() {
   const saved = await db.getSetting("theme");
@@ -109,7 +307,9 @@ async function setTheme(t: string) {
 }
 
 async function handleExport() {
-  importStatus.value = "";
+  if (cloudBusy.value) return;
+  cloudBusy.value = true;
+  setStatus(t("settings.exporting"));
   try {
     const data = await db.exportAllData();
     const json = JSON.stringify(data, null, 2);
@@ -122,7 +322,9 @@ async function handleExport() {
       });
       if (path) {
         await invoke("write_text_file", { path, content: json });
-        importStatus.value = t("settings.exportSuccess");
+        setStatus(t("settings.exportSuccess"));
+      } else {
+        setStatus("");
       }
     } catch {
       const blob = new Blob([json], { type: "application/json" });
@@ -132,15 +334,19 @@ async function handleExport() {
       a.download = "test-space-backup.tsb";
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      importStatus.value = t("settings.exportSuccess");
+      setStatus(t("settings.exportSuccess"));
     }
   } catch (e: any) {
-    importStatus.value = t("settings.exportFail") + ": " + (e.message || e);
+    setStatus(t("settings.exportFail") + ": " + (e.message || e), true);
+  } finally {
+    cloudBusy.value = false;
   }
 }
 
 async function handleImport() {
-  importStatus.value = "";
+  if (cloudBusy.value) return;
+  cloudBusy.value = true;
+  setStatus(t("settings.importing"));
   try {
     let json: string;
     try {
@@ -150,7 +356,7 @@ async function handleImport() {
         filters: [{ name: "Test Space Backup", extensions: ["tsb", "json"] }],
         multiple: false,
       });
-      if (!path) return;
+      if (!path) { cloudBusy.value = false; setStatus(""); return; }
       json = await invoke<string>("read_text_file", { path: path as string });
     } catch {
       const input = document.createElement("input");
@@ -160,18 +366,23 @@ async function handleImport() {
         input.onchange = () => resolve(input.files?.[0] || null);
         input.click();
       });
-      if (!file) return;
+      if (!file) { cloudBusy.value = false; setStatus(""); return; }
       json = await file.text();
     }
-    const backup = JSON.parse(json);
+    if (!await checkDbReady()) { cloudBusy.value = false; return; }
+    let backup: any;
+    try { backup = JSON.parse(json); } catch { setStatus(t("settings.importFail") + ": JSON 解析失败，文件可能损坏", true); return; }
     if (!backup.version) {
-      importStatus.value = t("settings.importFail") + ": invalid backup file";
+      setStatus(t("settings.importFail") + ": invalid backup file", true);
+      cloudBusy.value = false;
       return;
     }
     await db.importAllData(backup);
-    importStatus.value = t("settings.importSuccess");
+    setStatus(t("settings.importSuccess"));
   } catch (e: any) {
-    importStatus.value = t("settings.importFail") + ": " + (e.message || e);
+    setStatus(t("settings.importFail") + ": " + (e.message || e), true);
+  } finally {
+    cloudBusy.value = false;
   }
 }
 
@@ -183,5 +394,6 @@ onMounted(async () => {
   } catch {
     appVersion.value = "1.0.0";
   }
+  await ensureDeviceId();
 });
 </script>
