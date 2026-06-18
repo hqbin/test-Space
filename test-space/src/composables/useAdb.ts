@@ -29,6 +29,9 @@ export function useAdb() {
   const installApk = (serial: string, apkPath: string, reinstall = true) =>
     invoke<string>("adb_install", { serial, apkPath, reinstall });
 
+  const installApkBytes = (serial: string, filename: string, reinstall: boolean, data: number[]) =>
+    invoke<string>("adb_install_bytes", { serial, filename, reinstall, data });
+
   const uninstallApk = (serial: string, packageName: string) =>
     invoke<string>("adb_uninstall", { serial, package: packageName });
 
@@ -135,6 +138,7 @@ export function useAdb() {
     listDevices,
     shell,
     installApk,
+    installApkBytes,
     uninstallApk,
     pushFile,
     pullFile,

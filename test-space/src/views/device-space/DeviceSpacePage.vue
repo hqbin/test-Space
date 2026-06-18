@@ -195,8 +195,9 @@
                     <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="apkDialogOpen = true">
                       <span class="material-symbols-outlined text-[14px]">file_upload</span> {{ t('device.installApk') }}
                     </button>
-                    <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="getCurrentForegroundApp">
-                      <span class="material-symbols-outlined text-[14px]">center_focus_strong</span> {{ t('device.foregroundApp') }}
+                    <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="getCurrentForegroundApp" :disabled="loadingForeground">
+                      <span v-if="loadingForeground" class="inline-block w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                      <span v-else class="material-symbols-outlined text-[14px]">center_focus_strong</span> {{ t('device.foregroundApp') }}
                     </button>
                   </div>
                 </div>
@@ -668,14 +669,14 @@
     <!-- APK Install Dialog -->
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="apkDialogOpen" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="apkDialogOpen = false">
-          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
+        <div v-if="apkDialogOpen" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="closeApkDialog">
+          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm pointer-events-none"></div>
           <div class="glass-panel rounded-[2rem] p-6 w-full max-w-md relative z-10 bg-white/60">
             <div class="flex justify-between items-center mb-4">
               <h3 class="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-1.5 select-none">
                 <span class="material-symbols-outlined text-[16px]">upload</span>{{ t('device.installApk') }}
               </h3>
-              <button class="glass-button p-1 rounded select-none" @click="apkDialogOpen = false">
+              <button class="glass-button p-1 rounded select-none" @click="closeApkDialog">
                 <span class="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
@@ -689,7 +690,7 @@
                 @click="selectApkFile">
                 <span class="material-symbols-outlined text-3xl text-on-surface-variant/40">file_open</span>
                 <p v-if="!apkFilePath" class="font-caption text-caption text-on-surface-variant/60 mt-1">{{ t('device.dragApkHint') }}</p>
-                <p v-else class="font-caption text-caption text-secondary font-mono mt-1 truncate">{{ apkFilePath }}</p>
+                <p v-else :title="apkFilePath" class="font-caption text-caption text-secondary font-mono mt-1 truncate">{{ apkFilePath }}</p>
               </div>
               <!-- Overwrite checkbox -->
               <label class="flex items-center gap-2 font-caption text-caption text-on-surface cursor-pointer px-1">
@@ -698,7 +699,7 @@
               </label>
               <!-- Actions -->
               <div class="flex gap-2 justify-end">
-                <button class="glass-button px-4 py-1.5 rounded-lg font-label-md text-label-md select-none" @click="apkDialogOpen = false">{{ t('device.cancel') }}</button>
+                <button class="glass-button px-4 py-1.5 rounded-lg font-label-md text-label-md select-none" @click="closeApkDialog">{{ t('device.cancel') }}</button>
                 <button class="glass-button px-4 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1 select-none"
                   :disabled="!apkFilePath || apkInstalling" @click="handleApkInstall">
                   <span v-if="apkInstalling" class="w-3.5 h-3.5 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
@@ -993,11 +994,23 @@ async function loadTextHistory() {
 }
 
 // ── APK Install ──
-const reinstallApk = ref(true);
+const reinstallApk = ref(false);
+const loadingForeground = ref(false);
 const apkDialogOpen = ref(false);
 const apkDragOver = ref(false);
 const apkFilePath = ref("");
 const apkInstalling = ref(false);
+const apkTempPaths = ref<string[]>([]);
+
+async function cleanApkTempPath(path: string) {
+  if (!path) return;
+  const idx = apkTempPaths.value.indexOf(path);
+  if (idx >= 0) apkTempPaths.value.splice(idx, 1);
+  try {
+    const { remove } = await import('@tauri-apps/plugin-fs');
+    await remove(path);
+  } catch {}
+}
 
 // ── Apps ──
 interface AppEntry { package_name: string; version_name?: string; version_code?: string; }
@@ -1760,6 +1773,7 @@ async function loadVisibleAppVersions() {
 }
 async function getCurrentForegroundApp() {
   if (!selectedDevice.value) return;
+  loadingForeground.value = true;
   try {
     const raw = await shell(selectedDevice.value.serial, "dumpsys window");
     const lines = raw.split("\n").filter(l => l.includes("mCurrentFocus") || l.includes("mFocusedApp"));
@@ -1768,6 +1782,7 @@ async function getCurrentForegroundApp() {
     const result = m ? m[1] : t("device.noForegroundApp");
     resultDialog.value = { show: true, title: t("device.foregroundApp"), content: result };
   } catch { resultDialog.value = { show: true, title: t("device.foregroundApp"), content: t("device.getFailed") }; }
+  finally { loadingForeground.value = false; }
 }
 const appDetailDialog = ref({ show: false, title: "", pkg: "", entries: [] as { key: string; value: string }[] });
 async function showAppDetail(pkg: string) {
@@ -1875,18 +1890,71 @@ async function selectApkFile() {
   try {
     const { open } = await import("@tauri-apps/plugin-dialog");
     const selected = await open({ multiple: false, filters: [{ name: "APK", extensions: ["apk"] }] });
-    if (selected) apkFilePath.value = selected;
+    if (selected) {
+      await cleanApkTempPath(apkFilePath.value);
+      apkFilePath.value = selected;
+    }
   } catch {}
 }
-function handleApkDrop(e: DragEvent) {
+let apkDropPending = false;
+async function handleApkDrop(e: DragEvent) {
   apkDragOver.value = false;
-  const file = e.dataTransfer?.files?.[0];
-  if (file?.name.endsWith(".apk")) {
-    apkFilePath.value = file.name;
-    showToast(t("device.apkDragHintBrowser"), "error");
-  } else {
-    showToast(t("device.apkDragHintFile"), "error");
+  if (apkDropPending) return;
+
+  // Grab everything we need from dataTransfer IMMEDIATELY before it expires
+  const uris = e.dataTransfer?.getData('text/uri-list') || '';
+  const files = e.dataTransfer?.files;
+  const file = files?.[0];
+
+  // Try file:/// URI first (works when dragging from Windows Explorer)
+  if (uris) {
+    const line = uris.split('\n')[0].trim();
+    if (line.startsWith('file:///')) {
+      const path = decodeURIComponent(line.replace(/^file:\/\//, ''));
+      if (path.endsWith('.apk')) {
+        await cleanApkTempPath(apkFilePath.value);
+        apkFilePath.value = path;
+        return;
+      }
+    }
   }
+
+  // Fall back to reading file data
+  if (!file || !file.name.endsWith('.apk')) {
+    showToast(t("device.apkDragHintFile"), "error");
+    return;
+  }
+
+  // Read file data BEFORE setting pending (before any await)
+  let buf: ArrayBuffer;
+  try {
+    buf = await file.arrayBuffer();
+  } catch {
+    showToast(t("device.apkDragHintBrowser"), "error");
+    return;
+  }
+
+  apkDropPending = true;
+  try {
+    const { appDataDir } = await import('@tauri-apps/api/path');
+    const { writeFile } = await import('@tauri-apps/plugin-fs');
+    const baseDir = await appDataDir();
+    const sep = baseDir.endsWith('\\') || baseDir.endsWith('/') ? '' : '/';
+    const tmpPath = `${baseDir}${sep}drop_apk_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    await writeFile(tmpPath, new Uint8Array(buf));
+    await cleanApkTempPath(apkFilePath.value);
+    apkFilePath.value = tmpPath;
+    apkTempPaths.value.push(tmpPath);
+  } catch (e: any) {
+    showToast(`${t("device.apkDragHintBrowser")} (${String(e)})`, "error");
+  } finally {
+    apkDropPending = false;
+  }
+}
+async function closeApkDialog() {
+  apkDialogOpen.value = false;
+  await cleanApkTempPath(apkFilePath.value);
+  apkFilePath.value = "";
 }
 async function handleApkInstall() {
   if (!selectedDevice.value || !apkFilePath.value) return;
@@ -1895,6 +1963,7 @@ async function handleApkInstall() {
     await installApk(selectedDevice.value.serial, apkFilePath.value, reinstallApk.value);
     showToast(t("device.apkInstallSuccess"));
     apkDialogOpen.value = false;
+    await cleanApkTempPath(apkFilePath.value);
     apkFilePath.value = "";
   } catch (e: any) {
     showToast(t('device.installFailedWith', { e: String(e) }), "error");
@@ -2633,6 +2702,10 @@ onUnmounted(() => {
   if (bootLogcatTimeoutId) clearTimeout(bootLogcatTimeoutId);
   if (autoRefreshId) clearInterval(autoRefreshId);
   if (cmdExecTimeout) clearTimeout(cmdExecTimeout);
+  // Clean up APK temp files
+  for (const p of apkTempPaths.value) {
+    import("@tauri-apps/plugin-fs").then(m => m.remove(p)).catch(() => {});
+  }
   // Note: log sessions are saved to DB; user can see "running" sessions on next visit
 });
 </script>

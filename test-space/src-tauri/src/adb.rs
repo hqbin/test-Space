@@ -116,9 +116,7 @@ pub fn shell_command(serial: &str, command: &str) -> Result<String, String> {
 
 pub fn install_apk(serial: &str, apk_path: &str, reinstall: bool) -> Result<String, String> {
     let mut args = vec!["-s", serial, "install"];
-    if reinstall {
-        args.push("-r");
-    }
+    if reinstall { args.push("-r"); }
     args.push(apk_path);
     let output = adb_cmd()
         .args(&args)

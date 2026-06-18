@@ -12,6 +12,8 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use std::sync::Mutex;
 use std::time::Duration;
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use tauri::Emitter;
 use tauri::Manager;
 use tauri_plugin_single_instance::init as single_instance_init;
@@ -24,18 +26,40 @@ fn adb_list_devices() -> Vec<adb::DeviceInfo> {
 }
 
 #[tauri::command]
-fn adb_shell(serial: String, command: String) -> Result<String, String> {
-    adb::shell_command(&serial, &command)
+async fn adb_shell(serial: String, command: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::shell_command(&serial, &command)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_install(serial: String, apk_path: String, reinstall: bool) -> Result<String, String> {
-    adb::install_apk(&serial, &apk_path, reinstall)
+async fn adb_install(serial: String, apk_path: String, reinstall: bool) -> Result<String, String> {
+    let output = tokio::time::timeout(Duration::from_secs(120), async {
+        let mut cmd = std::process::Command::new("adb");
+        #[cfg(target_os = "windows")]
+        cmd.creation_flags(0x08000000);
+        cmd.args(["-s", &serial, "install"]);
+        if reinstall { cmd.arg("-r"); }
+        cmd.arg(&apk_path);
+        tokio::process::Command::from(cmd).output().await
+            .map_err(|e| format!("ADB install failed: {}", e))
+    }).await
+        .map_err(|_| "ADB install timed out (120s)".to_string())?
+        .map_err(|e| e.to_string())?;
+
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        Err(if stderr.is_empty() { "Unknown error".to_string() } else { stderr })
+    }
 }
 
 #[tauri::command]
-fn adb_uninstall(serial: String, package: String) -> Result<String, String> {
-    adb::uninstall_apk(&serial, &package)
+async fn adb_uninstall(serial: String, package: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::uninstall_apk(&serial, &package)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -50,8 +74,11 @@ async fn adb_push_bytes(serial: String, remote: String, filename: String, data: 
     let tmp_dir = std::env::temp_dir();
     let tmp_path = tmp_dir.join(&filename);
     std::fs::write(&tmp_path, &data).map_err(|e| format!("Failed to write temp file: {}", e))?;
-    let result = adb::push_file(&serial, &tmp_path.to_string_lossy(), &remote);
-    let _ = std::fs::remove_file(&tmp_path);
+    let result = tokio::task::spawn_blocking(move || {
+        let r = adb::push_file(&serial, &tmp_path.to_string_lossy(), &remote);
+        let _ = std::fs::remove_file(&tmp_path);
+        r
+    }).await.map_err(|e| e.to_string())?;
     result
 }
 
@@ -63,13 +90,17 @@ async fn adb_pull(serial: String, remote: String, local: String) -> Result<Strin
 }
 
 #[tauri::command]
-fn adb_reboot(serial: String) -> Result<String, String> {
-    adb::reboot(&serial)
+async fn adb_reboot(serial: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::reboot(&serial)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_screenshot(serial: String, save_path: String) -> Result<String, String> {
-    adb::screenshot(&serial, &save_path)
+async fn adb_screenshot(serial: String, save_path: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::screenshot(&serial, &save_path)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -147,123 +178,178 @@ fn adb_mirror_stop(state: tauri::State<'_, MirrorState>) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn adb_connect(address: String) -> Result<String, String> {
-    adb::connect_device(&address)
+async fn adb_connect(address: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::connect_device(&address)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_disconnect(serial: String) -> Result<String, String> {
-    adb::disconnect_device(&serial)
+async fn adb_disconnect(serial: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::disconnect_device(&serial)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_reboot_recovery(serial: String) -> Result<String, String> {
-    adb::reboot_recovery(&serial)
+async fn adb_reboot_recovery(serial: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::reboot_recovery(&serial)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_reboot_bootloader(serial: String) -> Result<String, String> {
-    adb::reboot_bootloader(&serial)
+async fn adb_reboot_bootloader(serial: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::reboot_bootloader(&serial)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_root(serial: String) -> Result<String, String> {
-    adb::root_device(&serial)
+async fn adb_root(serial: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::root_device(&serial)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_remount(serial: String) -> Result<String, String> {
-    adb::remount_device(&serial)
+async fn adb_remount(serial: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::remount_device(&serial)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_get_properties(serial: String) -> Result<adb::DeviceProperties, String> {
-    adb::get_device_properties(&serial)
+async fn adb_get_properties(serial: String) -> Result<adb::DeviceProperties, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::get_device_properties(&serial)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_input_keyevent(serial: String, keycode: String) -> Result<String, String> {
-    adb::input_keyevent(&serial, &keycode)
+async fn adb_input_keyevent(serial: String, keycode: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::input_keyevent(&serial, &keycode)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_input_text(serial: String, text: String) -> Result<String, String> {
-    adb::input_text(&serial, &text)
+async fn adb_input_text(serial: String, text: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::input_text(&serial, &text)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_input_tap(serial: String, x: i32, y: i32) -> Result<String, String> {
-    adb::input_tap(&serial, x, y)
+async fn adb_input_tap(serial: String, x: i32, y: i32) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::input_tap(&serial, x, y)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_input_swipe(serial: String, x1: i32, y1: i32, x2: i32, y2: i32, duration: i32) -> Result<String, String> {
-    adb::input_swipe(&serial, x1, y1, x2, y2, duration)
+async fn adb_input_swipe(serial: String, x1: i32, y1: i32, x2: i32, y2: i32, duration: i32) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::input_swipe(&serial, x1, y1, x2, y2, duration)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_list_packages(serial: String, third_party_only: bool) -> Result<Vec<String>, String> {
-    adb::list_packages(&serial, third_party_only)
+async fn adb_list_packages(serial: String, third_party_only: bool) -> Result<Vec<String>, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::list_packages(&serial, third_party_only)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_start_app(serial: String, package: String) -> Result<String, String> {
-    adb::start_app(&serial, &package)
+async fn adb_start_app(serial: String, package: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::start_app(&serial, &package)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_stop_app(serial: String, package: String) -> Result<String, String> {
-    adb::stop_app(&serial, &package)
+async fn adb_stop_app(serial: String, package: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::stop_app(&serial, &package)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_clear_app_data(serial: String, package: String) -> Result<String, String> {
-    adb::clear_app_data(&serial, &package)
+async fn adb_clear_app_data(serial: String, package: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::clear_app_data(&serial, &package)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_get_current_app(serial: String) -> Result<String, String> {
-    adb::get_current_app(&serial)
+async fn adb_get_current_app(serial: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::get_current_app(&serial)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_logcat_clear(serial: String) -> Result<String, String> {
-    adb::logcat_clear(&serial)
+async fn adb_logcat_clear(serial: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::logcat_clear(&serial)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_logcat(serial: String, buffer: String, lines: i32) -> Result<String, String> {
-    adb::logcat(&serial, &buffer, lines)
+async fn adb_logcat(serial: String, buffer: String, lines: i32) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::logcat(&serial, &buffer, lines)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_get_battery(serial: String) -> Result<String, String> {
-    adb::get_battery_info(&serial)
+async fn adb_get_battery(serial: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::get_battery_info(&serial)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_list_directory(serial: String, path: String) -> Result<String, String> {
-    adb::list_directory(&serial, &path)
+async fn adb_list_directory(serial: String, path: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::list_directory(&serial, &path)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_get_app_info(serial: String, package: String) -> Result<String, String> {
-    adb::get_app_info(&serial, &package)
+async fn adb_get_app_info(serial: String, package: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::get_app_info(&serial, &package)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_get_cpu(serial: String) -> Result<String, String> {
-    adb::get_cpu_info(&serial)
+async fn adb_get_cpu(serial: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::get_cpu_info(&serial)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_get_memory(serial: String) -> Result<String, String> {
-    adb::get_memory_info(&serial)
+async fn adb_get_memory(serial: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::get_memory_info(&serial)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_logcat_buffer_resize(serial: String, size_mb: u32) -> Result<String, String> {
-    adb::logcat_buffer_resize(&serial, size_mb)
+async fn adb_logcat_buffer_resize(serial: String, size_mb: u32) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::logcat_buffer_resize(&serial, size_mb)
+    }).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn adb_dmesg(serial: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::dmesg(&serial)
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -292,18 +378,17 @@ fn create_zip(files: Vec<ZipFileEntry>, dest_path: String) -> Result<String, Str
 }
 
 #[tauri::command]
-fn adb_dmesg(serial: String) -> Result<String, String> {
-    adb::dmesg(&serial)
+async fn adb_kill_server() -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::kill_server()
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn adb_kill_server() -> Result<String, String> {
-    adb::kill_server()
-}
-
-#[tauri::command]
-fn adb_start_server() -> Result<String, String> {
-    adb::start_server()
+async fn adb_start_server() -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::start_server()
+    }).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
