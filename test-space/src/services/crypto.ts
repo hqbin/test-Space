@@ -119,11 +119,16 @@ export async function decryptBackup(
   combined.set(ciphertext);
   combined.set(authTag, ciphertext.length);
 
-  const decrypted = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv },
-    derivedKey,
-    combined
-  );
+  let decrypted: ArrayBuffer;
+  try {
+    decrypted = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv },
+      derivedKey,
+      combined
+    );
+  } catch {
+    throw new Error("密钥不匹配，解密失败");
+  }
 
   const plaintext = bufToStr(decrypted);
 

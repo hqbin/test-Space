@@ -79,6 +79,11 @@ const messages: Record<Lang, Record<string, string>> = {
     "settings.cloudRestoreFail": "从云端恢复失败",
     "settings.dbBusy": "数据库正忙，请稍后再试",
     "settings.cloudEmpty": "暂无云端备份",
+    "settings.exportKey": "导出加密密钥",
+    "settings.importKey": "导入加密密钥",
+    "settings.keyExported": "密钥已复制到剪贴板",
+    "settings.keyImported": "密钥导入成功",
+    "settings.keyImportFail": "密钥导入失败",
     "settings.version": "版本",
 
     // Device page
@@ -574,6 +579,11 @@ const messages: Record<Lang, Record<string, string>> = {
     "settings.cloudRestoreFail": "Cloud restore failed",
     "settings.dbBusy": "Database is busy, please try again later",
     "settings.cloudEmpty": "No cloud backups",
+    "settings.exportKey": "Export encryption key",
+    "settings.importKey": "Import encryption key",
+    "settings.keyExported": "Key copied to clipboard",
+    "settings.keyImported": "Key imported successfully",
+    "settings.keyImportFail": "Key import failed",
     "settings.version": "Version",
 
     // Device page

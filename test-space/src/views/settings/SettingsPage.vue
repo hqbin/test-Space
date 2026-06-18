@@ -111,6 +111,15 @@
                 <span class="material-symbols-outlined text-[18px]">cloud_download</span>
                 {{ t("settings.importCloud") }}
               </div>
+              <div class="border-t border-gray-100 my-1"></div>
+              <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleExportKey(); showRestoreMenu = false">
+                <span class="material-symbols-outlined text-[18px]">key</span>
+                {{ t("settings.exportKey") }}
+              </div>
+              <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleImportKey(); showRestoreMenu = false">
+                <span class="material-symbols-outlined text-[18px]">vpn_key</span>
+                {{ t("settings.importKey") }}
+              </div>
             </div>
           </div>
         </div>
@@ -271,6 +280,25 @@ async function handleCloudRestore() {
   } finally {
     cloudBusy.value = false;
   }
+}
+
+async function handleExportKey() {
+  const key = await crypto.getOrCreateKey();
+  await navigator.clipboard.writeText(key);
+  setStatus(t("settings.keyExported"));
+  setTimeout(() => { if (statusMessage.value === t("settings.keyExported")) setStatus(""); }, 3000);
+}
+
+async function handleImportKey() {
+  const text = window.prompt(t("settings.importKey"));
+  if (!text) return;
+  const trimmed = text.trim();
+  if (trimmed.length !== 44 || !/^[A-Za-z0-9+/=]+$/.test(trimmed)) {
+    setStatus(t("settings.keyImportFail"), true);
+    return;
+  }
+  await db.setSetting("cloud_encryption_key", trimmed);
+  setStatus(t("settings.keyImported"));
 }
 
 async function checkDbReady(): Promise<boolean> {
