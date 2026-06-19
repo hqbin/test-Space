@@ -321,13 +321,17 @@
               <span class="material-symbols-outlined text-[16px]">{{ isMirroring ? 'stop' : 'play_arrow' }}</span>
               {{ isMirroring ? t('device.stopMirror') : t('device.startMirror') }}
             </button>
+            <button v-if="isMirroring" class="glass-button p-1.5 rounded-lg flex items-center select-none ml-1" title="Open in separate window" @click="mirrorPopout">
+              <span class="material-symbols-outlined text-[16px]">open_in_new</span>
+            </button>
           </div>
           <div class="flex-1 min-h-0 bg-black/5 rounded-xl overflow-hidden relative border border-dashed border-outline-variant/40" style="aspect-ratio:16/9;min-height:200px">
             <canvas v-show="isMirroring && mirrorFrameCount > 0" ref="mirrorCanvas" class="w-full h-full object-contain block"
               @mousedown="handleMirrorPointerDown"
               @mouseup="handleMirrorPointerUp"
               @touchstart.prevent="handleMirrorPointerDown($event.touches[0])"
-              @touchend.prevent="handleMirrorPointerUp($event.changedTouches[0])"></canvas>
+              @touchend.prevent="handleMirrorPointerUp($event.changedTouches[0])"
+              @contextmenu.prevent="handleMirrorRightClick"></canvas>
             <div v-if="!isMirroring" class="absolute inset-0 flex items-center justify-center">
               <span class="material-symbols-outlined text-4xl text-on-surface-variant/30">screenshot_monitor</span>
               <p class="font-body-sm text-body-sm text-on-surface-variant/50 mt-1">Screen mirror inactive</p>
@@ -1622,6 +1626,26 @@ async function handleMirrorPointerUp(e: MouseEvent | Touch) {
     const { invoke } = await import("@tauri-apps/api/core");
     await invoke("adb_input_swipe", { serial: selectedDevice.value.serial, x1: mirrorTapX1, y1: mirrorTapY1, x2: coords.x, y2: coords.y, duration: 200 });
   }
+}
+
+async function handleMirrorRightClick() {
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("adb_input_keyevent", { serial: selectedDevice.value.serial, keycode: "BACK" });
+}
+
+async function mirrorPopout() {
+  const { invoke } = await import("@tauri-apps/api/core");
+  const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+  await stopMirror();
+  const serial = selectedDevice.value.serial;
+  const win = new WebviewWindow(`mirror-${serial}`, {
+    url: `/mirror?serial=${serial}`,
+    title: `Screen Mirror - ${serial}`,
+    width: 480,
+    height: 800,
+  });
+  win.once('tauri://created', () => {});
+  win.once('tauri://error', (e) => { console.error("[mirror] popout failed:", e); });
 }
 
 // ── Screenshot & Recording ──

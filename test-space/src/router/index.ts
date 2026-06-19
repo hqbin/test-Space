@@ -4,6 +4,11 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     {
+      path: "/mirror",
+      name: "standalone-mirror",
+      component: () => import("@/views/device-space/StandaloneMirror.vue"),
+    },
+    {
       path: "/",
       component: () => import("@/layouts/AppLayout.vue"),
       children: [

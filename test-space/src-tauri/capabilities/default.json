@@ -3,7 +3,8 @@
   "identifier": "default",
   "description": "enables the default permissions",
   "windows": [
-    "main"
+    "main",
+    "mirror-*"
   ],
   "permissions": [
     "core:default",
@@ -23,6 +24,7 @@
     "core:window:allow-close",
     "core:tray:default",
     "core:webview:default",
+    "core:webview:allow-create-webview-window",
     {
       "identifier": "http:default",
       "allow": [{ "url": "https://tms.zeasn.com/api/TestSpace/*" }]
