@@ -1610,6 +1610,7 @@ function mirrorCanvasCoords(e: { clientX: number; clientY: number }): { x: numbe
 }
 
 async function handleMirrorPointerDown(e: MouseEvent | Touch) {
+  if (!selectedDevice.value) return;
   const coords = mirrorCanvasCoords(e);
   if (!coords) return;
   mirrorTapX1 = coords.x; mirrorTapY1 = coords.y; mirrorTapping = true;
@@ -1618,6 +1619,7 @@ async function handleMirrorPointerDown(e: MouseEvent | Touch) {
 }
 
 async function handleMirrorPointerUp(e: MouseEvent | Touch) {
+  if (!selectedDevice.value) return;
   if (!mirrorTapping) return;
   mirrorTapping = false;
   const coords = mirrorCanvasCoords(e);
@@ -1629,6 +1631,7 @@ async function handleMirrorPointerUp(e: MouseEvent | Touch) {
 }
 
 async function handleMirrorRightClick() {
+  if (!selectedDevice.value) return;
   const { invoke } = await import("@tauri-apps/api/core");
   await invoke("adb_input_keyevent", { serial: selectedDevice.value.serial, keycode: "BACK" });
 }
@@ -1637,6 +1640,7 @@ async function mirrorPopout() {
   const { invoke } = await import("@tauri-apps/api/core");
   const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
   await stopMirror();
+  if (!selectedDevice.value) return;
   const serial = selectedDevice.value.serial;
   const win = new WebviewWindow(`mirror-${serial}`, {
     url: `/mirror?serial=${serial}`,
