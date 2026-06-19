@@ -61,7 +61,7 @@ pub fn remove_forward(serial: &str) {
 }
 
 pub fn start_server(serial: &str) -> Result<(), String> {
-    let args = "CLASSPATH=/data/local/tmp/scrcpy-server.jar app_process / com.genymobile.scrcpy.Server 3.3.4 log_level=info max_size=720 video_bit_rate=2000000 max_fps=30 tunnel_forward=true raw_stream=true send_device_meta=false send_codec_meta=false audio=false control=false cleanup=true";
+    let args = "CLASSPATH=/data/local/tmp/scrcpy-server.jar app_process / com.genymobile.scrcpy.Server 3.3.4 log_level=info max_size=960 video_bit_rate=3000000 max_fps=15 tunnel_forward=true raw_stream=true send_device_meta=false send_codec_meta=false audio=false control=false cleanup=true";
 
     let mut child =     adb_cmd()
         .args(["-s", serial, "shell", args])
@@ -144,8 +144,8 @@ pub fn connect_and_stream(app_handle: tauri::AppHandle, running: Arc<AtomicBool>
     let mut buf = vec![0u8; 0];
     let mut temp_buf = vec![0u8; 256 * 1024]; // 256KB read buffer
     let mut pending: Vec<u8> = Vec::new();
-    let mut pts: i64 = 0;
     let engine = base64::engine::general_purpose::STANDARD;
+    let stream_start = std::time::Instant::now();
 
     let _ = app_handle.emit("mirror:ready", "h264");
 
@@ -210,9 +210,9 @@ pub fn connect_and_stream(app_handle: tauri::AppHandle, running: Arc<AtomicBool>
                 combined.extend_from_slice(&avcc_nal);
                 let frame_b64 = engine.encode(&combined);
                 let is_key = nal_type == 5;
-                let payload = FramePayload { data: frame_b64, key: is_key, pts };
+                let frame_pts = stream_start.elapsed().as_micros() as i64;
+                let payload = FramePayload { data: frame_b64, key: is_key, pts: frame_pts };
                 let _ = app_handle.emit("mirror:frame", payload);
-                pts += 33333;
             } else if !config_sent {
                 // Before config, buffer everything
                 pending.extend_from_slice(&avcc_nal);

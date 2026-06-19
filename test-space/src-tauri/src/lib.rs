@@ -148,7 +148,15 @@ async fn adb_mirror_start(serial: String, app: tauri::AppHandle, state: tauri::S
         if scrcpy_ok {
             let _ = app_c.emit("mirror:mode", "scrcpy");
             let _ = app_c.emit("mirror:ready", "");
-            let stream_result = mirror::connect_and_stream(app_c.clone(), running_c.clone());
+            let mut stream_result = Err("not started".into());
+            for attempt in 0..3 {
+                if !running_c.load(Ordering::Relaxed) { break; }
+                if attempt > 0 {
+                    std::thread::sleep(Duration::from_secs(2));
+                }
+                stream_result = mirror::connect_and_stream(app_c.clone(), running_c.clone());
+                if stream_result.is_ok() { break; }
+            }
             mirror::remove_forward(&serial_c);
             if let Ok(()) = stream_result {
                 running_c.store(false, Ordering::Relaxed);
