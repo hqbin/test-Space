@@ -295,6 +295,13 @@ async fn adb_stop_app(serial: String, package: String) -> Result<String, String>
 }
 
 #[tauri::command]
+async fn adb_get_display_size(serial: String) -> Result<(u32, u32), String> {
+    tokio::task::spawn_blocking(move || {
+        adb::get_display_size(&serial)
+    }).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 async fn adb_clear_app_data(serial: String, package: String) -> Result<String, String> {
     tokio::task::spawn_blocking(move || {
         adb::clear_app_data(&serial, &package)
@@ -574,6 +581,7 @@ pub fn run() {
             adb_input_text,
             adb_input_tap,
             adb_input_swipe,
+            adb_get_display_size,
             adb_list_packages,
             adb_start_app,
             adb_stop_app,

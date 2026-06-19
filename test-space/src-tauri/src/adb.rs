@@ -268,6 +268,21 @@ pub fn input_swipe(serial: &str, x1: i32, y1: i32, x2: i32, y2: i32, duration: i
     Ok("Swipe sent".to_string())
 }
 
+pub fn get_display_size(serial: &str) -> Result<(u32, u32), String> {
+    let output = run_adb(serial, &["shell", "wm", "size"])?;
+    // Output: "Physical size: 1080x2400"
+    for line in output.lines() {
+        if let Some(s) = line.strip_prefix("Physical size: ") {
+            if let Some((w, h)) = s.split_once('x') {
+                let w = w.trim().parse().map_err(|_| format!("Invalid width: {}", w))?;
+                let h = h.trim().parse().map_err(|_| format!("Invalid height: {}", h))?;
+                return Ok((w, h));
+            }
+        }
+    }
+    Err("Could not parse display size".into())
+}
+
 pub fn list_packages(serial: &str, third_party_only: bool) -> Result<Vec<String>, String> {
     let mut args = vec!["shell", "pm", "list", "packages"];
     if third_party_only {

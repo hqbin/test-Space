@@ -323,7 +323,11 @@
             </button>
           </div>
           <div class="flex-1 min-h-0 bg-black/5 rounded-xl overflow-hidden relative border border-dashed border-outline-variant/40" style="aspect-ratio:16/9;min-height:200px">
-            <canvas v-show="isMirroring && mirrorFrameCount > 0" ref="mirrorCanvas" class="w-full h-full object-contain block"></canvas>
+            <canvas v-show="isMirroring && mirrorFrameCount > 0" ref="mirrorCanvas" class="w-full h-full object-contain block"
+              @mousedown="handleMirrorPointerDown"
+              @mouseup="handleMirrorPointerUp"
+              @touchstart.prevent="handleMirrorPointerDown($event.touches[0])"
+              @touchend.prevent="handleMirrorPointerUp($event.changedTouches[0])"></canvas>
             <div v-if="!isMirroring" class="absolute inset-0 flex items-center justify-center">
               <span class="material-symbols-outlined text-4xl text-on-surface-variant/30">screenshot_monitor</span>
               <p class="font-body-sm text-body-sm text-on-surface-variant/50 mt-1">Screen mirror inactive</p>
@@ -1566,6 +1570,59 @@ const mirrorErrorMsg = ref('');
 let mirrorCtx: CanvasRenderingContext2D | null = null;
 let mirrorUnlisten: (() => void)[] = [];
 const mirrorCanvas = ref<HTMLCanvasElement | null>(null);
+const mirrorWidth = ref(0);
+const mirrorHeight = ref(0);
+const deviceWidth = ref(0);
+const deviceHeight = ref(0);
+
+let mirrorTapX1 = 0, mirrorTapY1 = 0, mirrorTapping = false;
+
+function mirrorCanvasCoords(e: { clientX: number; clientY: number }): { x: number; y: number } | null {
+  const canvas = mirrorCanvas.value;
+  if (!canvas || mirrorWidth.value === 0 || mirrorHeight.value === 0 || deviceWidth.value === 0) return null;
+  const rect = canvas.getBoundingClientRect();
+  const imgAspect = mirrorWidth.value / mirrorHeight.value;
+  const containerAspect = rect.width / rect.height;
+  let displayW: number, displayH: number, offX: number, offY: number;
+  if (imgAspect > containerAspect) {
+    displayW = rect.width;
+    displayH = rect.width / imgAspect;
+    offX = 0; offY = (rect.height - displayH) / 2;
+  } else {
+    displayH = rect.height;
+    displayW = rect.height * imgAspect;
+    offX = (rect.width - displayW) / 2; offY = 0;
+  }
+  const imgX = e.clientX - rect.left - offX;
+  const imgY = e.clientY - rect.top - offY;
+  if (imgX < 0 || imgX > displayW || imgY < 0 || imgY > displayH) return null;
+  // Map from video pixel → device pixel
+  const vx = Math.round(imgX * (mirrorWidth.value / displayW));
+  const vy = Math.round(imgY * (mirrorHeight.value / displayH));
+  return {
+    x: Math.round(vx * (deviceWidth.value / mirrorWidth.value)),
+    y: Math.round(vy * (deviceHeight.value / mirrorHeight.value)),
+  };
+}
+
+async function handleMirrorPointerDown(e: MouseEvent | Touch) {
+  const coords = mirrorCanvasCoords(e);
+  if (!coords) return;
+  mirrorTapX1 = coords.x; mirrorTapY1 = coords.y; mirrorTapping = true;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("adb_input_tap", { serial: selectedDevice.value.serial, x: coords.x, y: coords.y });
+}
+
+async function handleMirrorPointerUp(e: MouseEvent | Touch) {
+  if (!mirrorTapping) return;
+  mirrorTapping = false;
+  const coords = mirrorCanvasCoords(e);
+  if (!coords) return;
+  if (Math.abs(coords.x - mirrorTapX1) > 10 || Math.abs(coords.y - mirrorTapY1) > 10) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("adb_input_swipe", { serial: selectedDevice.value.serial, x1: mirrorTapX1, y1: mirrorTapY1, x2: coords.x, y2: coords.y, duration: 200 });
+  }
+}
 
 // ── Screenshot & Recording ──
 const screenshotDataUrl = ref("");
@@ -2515,6 +2572,14 @@ async function startMirror() {
     const { invoke } = await import("@tauri-apps/api/core");
     console.log("[mirror] tauri APIs imported");
 
+    // Query device display size for accurate touch mapping
+    try {
+      const [dw, dh] = await invoke<[number, number]>("adb_get_display_size", { serial: selectedDevice.value.serial });
+      deviceWidth.value = dw;
+      deviceHeight.value = dh;
+      console.log("[mirror] device display size:", dw, "x", dh);
+    } catch (e) { console.warn("[mirror] failed to get display size:", e); }
+
     const listeners: (() => void)[] = [];
 
     listeners.push(await listen<string>("mirror:mode", (event) => {
@@ -2528,6 +2593,8 @@ async function startMirror() {
             if (!mirrorCtx || !mirrorCanvas.value) { frame.close(); return; }
             mirrorCanvas.value.width = frame.displayWidth;
             mirrorCanvas.value.height = frame.displayHeight;
+            mirrorWidth.value = frame.displayWidth;
+            mirrorHeight.value = frame.displayHeight;
             mirrorCtx.drawImage(frame, 0, 0);
             frame.close();
             mirrorFrameCount.value++;
@@ -2574,6 +2641,8 @@ async function startMirror() {
         if (!canvas || !mirrorCtx) return;
         canvas.width = img.width;
         canvas.height = img.height;
+        mirrorWidth.value = img.width;
+        mirrorHeight.value = img.height;
         mirrorCtx.drawImage(img, 0, 0);
         mirrorFrameCount.value++;
       };
