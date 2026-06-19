@@ -1,0 +1,121 @@
+scrcpy 投屏 STB / 电视盒子卡顿完整优化方案
+机顶盒（STB、TV 盒子）普遍短板：CPU 弱、硬编兼容性差、USB2.0 带宽低、无线 WiFi 芯片性能差，是投屏卡顿重灾区。下面按优先级从高到低落地，先解决传输通道，再调编码参数，最后修复盒子系统层面瓶颈。
+一、传输链路：最核心瓶颈（优先做）
+1. 坚决放弃无线 ADB，改用 USB 有线（效果提升 50%+）
+无线 5G WiFi 依然存在丢包、TCP 重传、带宽波动，STB 网卡普遍廉价，动态画面必卡顿。
+线材：USB3.0 高速数据线（蓝色接口），插电脑蓝色 USB3.0 口；盒子仅 USB2.0 也要用好线，劣质充电线带宽只有几十 Mbps。
+连接模式：盒子开启 USB 调试，直连 PC，不要集线器 / 延长线（会衰减带宽）。
+无线不得已使用时强制优化：
+盒子、电脑连同一路由 5GHz WiFi，远离 2.4G 干扰；
+路由器和盒子隔墙≤1 面，关闭 Mesh、访客网络；
+启动命令加 --tcp 强制 TCP 传输，减少花屏丢帧。
+2. ADB 服务优化，清理占用
+bash
+运行
+# 杀掉残留adb进程，避免多设备抢占带宽
+adb kill-server
+adb start-server
+# 查看在线设备确认仅一台STB
+adb devices
+二、scrcpy 参数组合（分 2 套：流畅优先 / 画质平衡）
+STB 硬件性能弱，默认 8M 码率 + 原生 4K/1080P 是卡顿根源，直接复制命令使用。
+方案 A：极致流畅（调试、快速操作，STB 低配首选）
+bash
+运行
+scrcpy ^
+--max-size=1080 ^
+--video-bit-rate=2M ^
+--max-fps=30 ^
+--video-codec=h264 ^
+--no-audio ^
+--no-control ^
+--locked-video-orientation=0 ^
+--render-expired-frames ^
+--print-fps
+方案 B：平衡画质（界面演示，中高配盒子）
+bash
+运行
+scrcpy ^
+--max-size=1280 ^
+--video-bit-rate=4M ^
+--max-fps=30 ^
+--video-codec=h265 ^
+--no-audio ^
+--render-driver=opengl ^
+--display-buffer=30
+关键参数详解（针对机顶盒痛点）
+--max-size 限制分辨率
+STB 硬编扛不住 4K/2K，强制压缩长边 1080/1280，编码算力直接减半。
+--video-bit-rate 码率下调
+默认 8M 过高，USB2.0 带宽跑满会持续丢帧；2–4M 完美适配盒子。
+--max-fps=30
+多数机顶盒屏幕刷新只有 30fps，60fps 只会增加编码负担，无收益。
+--no-audio 禁用音频
+音频编码 + 同步占用盒子 CPU，仅看画面调试必开。
+--no-control 关闭键鼠控制通道
+不需要操作盒子时关闭输入流，减少双向数据传输。
+--video-codec=h264 / h265
+h264：延迟最低，老旧盒子兼容性最好（优先）
+h265 (hevc)：同等画质带宽减半，新安卓 9 + 盒子使用
+--render-expired-frames
+丢弃过期帧，杜绝画面堆积、拖影、严重延迟。
+--display-buffer=30
+降低 PC 端渲染缓冲，默认缓冲大会累积延迟卡顿。
+三、强制启用 STB 硬件编码器（解决软编码 CPU 爆满）
+盒子默认可能 fallback 软编码，CPU 占用 100% 必然卡顿，手动指定硬编：
+1. 查看盒子支持的硬件编码器
+bash
+运行
+scrcpy --list-encoders
+输出会包含类似：
+OMX.amlogic.video.encoder.avc（晶晨 STB）、OMX.qcom.video.encoder.avc（高通电视盒）
+2. 命令指定硬编码器示例（晶晨盒子通用）
+bash
+运行
+scrcpy ^
+--max-size=1080 ^
+--bit-rate=2M ^
+--encoder-name=OMX.amlogic.video.encoder.avc ^
+--no-audio
+3. 缩短 I 帧间隔，快速恢复流畅（动态画面卡顿专用）
+I 帧间隔太长，画面拖动后长时间模糊卡顿，强制每 30 帧一个关键帧：
+bash
+运行
+scrcpy --video-codec-options=keyint=30
+四、机顶盒 STB 系统层面优化（极易被忽略）
+关闭盒子后台所有 APP
+视频、直播、桌面插件会抢占 CPU/GPU 编码资源，投屏前全部清掉。
+关闭盒子省电 / 休眠 / 动态刷新率
+设置→显示：关闭自动亮度、动态帧率、息屏休眠；投屏时执行：
+bash
+运行
+adb shell settings put system screen_off_timeout 3600000
+关闭系统动画、特效
+开发者选项：窗口缩放、过渡动画全部设 0.5x 或关闭，减少 SurfaceFlinger 渲染压力。
+限制盒子后台进程
+开发者选项→后台进程限制：设为不超过 2 个进程。
+升级盒子 Android 系统
+安卓 7 以下硬编 bug 极多，安卓 9/11 MediaCodec 稳定性大幅提升。
+五、PC 客户端侧优化（解码卡顿）
+更新显卡驱动，开启硬件加速（NVIDIA/AMD/Intel 核显）；
+使用新版 scrcpy（3.3+），旧版本渲染逻辑有性能缺陷；
+关闭电脑占用显卡的软件：游戏、剪辑、直播工具；
+窗口不要全屏放大，缩放窗口会增加 PC 解码负载。
+六、无线 ADB 兜底优化（必须无线时）
+USB 先连接盒子执行一次切换 TCPIP：
+bash
+运行
+adb tcpip 5555
+断开 USB，连接同 WiFi：
+bash
+运行
+adb connect 192.168.1.100:5555
+无线专用流畅命令（码率进一步降低）：
+bash
+运行
+scrcpy --tcp --max-size=960 --bit-rate=1.5M --max-fps=24 --no-audio
+七、替代方案：scrcpy 依旧卡顿换工具
+如果是老旧安卓 7 以下低端 STB，硬编完全失效：
+QtScrcpy/Escrcpy：图形界面可视化调节码率、分辨率，自带硬编检测；
+ADB 截屏流脚本：低帧率静态调试；
+有线 HDMI 采集卡：硬件采集，完全绕过盒子编码，零卡顿（专业测试首选）。

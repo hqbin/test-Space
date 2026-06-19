@@ -308,6 +308,12 @@
             <div class="flex items-center gap-2 shrink-0">
               <span class="material-symbols-outlined text-[16px]">screenshot_monitor</span>
               <span class="font-label-md text-label-md text-on-surface">{{ t('device.screenMirror') }}</span>
+              <span v-if="mirrorMode !== 'idle' || mirrorErrorMsg"
+                class="ml-1 px-2 py-0.5 rounded-full font-caption text-[11px] leading-tight select-none"
+                :class="mirrorMode === 'scrcpy' ? 'bg-success-indicator/20 text-success-indicator border border-success-indicator/30' : 'bg-amber-100 text-amber-700 border border-amber-200'"
+                :title="mirrorErrorMsg">
+                {{ mirrorMode === 'scrcpy' ? 'scrcpy' : (mirrorMode === 'legacy' ? 'screencap' : mirrorErrorMsg) }}
+              </span>
             </div>
             <button class="glass-button px-4 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1 select-none"
               :class="isMirroring ? 'bg-error/10 text-error border border-error/20' : ''"
@@ -1555,6 +1561,8 @@ const bootLogcatSerial = ref<string | null>(null);
 // ── Screen Mirror (adb screencap polling) ──
 const isMirroring = ref(false);
 const mirrorFrameCount = ref(0);
+const mirrorMode = ref<'idle' | 'scrcpy' | 'legacy'>('idle');
+const mirrorErrorMsg = ref('');
 let mirrorCtx: CanvasRenderingContext2D | null = null;
 let mirrorUnlisten: (() => void)[] = [];
 const mirrorCanvas = ref<HTMLCanvasElement | null>(null);
@@ -2511,6 +2519,7 @@ async function startMirror() {
 
     listeners.push(await listen<string>("mirror:mode", (event) => {
       console.log("[mirror] mode event received:", event.payload);
+      mirrorMode.value = event.payload as 'scrcpy' | 'legacy';
       useScrcpy = event.payload === "scrcpy";
       if (useScrcpy) {
         console.log("[mirror] creating VideoDecoder for scrcpy");
@@ -2572,8 +2581,25 @@ async function startMirror() {
       img.src = `data:image/png;base64,${event.payload}`;
     }));
 
+    listeners.push(await listen<string>("mirror:diagnostic", (event) => {
+      console.log("[mirror] diagnostic:", event.payload);
+      const msg = event.payload;
+      if (msg.startsWith("scrcpy-server jar not found")) mirrorErrorMsg.value = t("device.mirrorDiagJarNotFound");
+      else if (msg.startsWith("scrcpy-server push failed")) mirrorErrorMsg.value = t("device.mirrorDiagPushFailed", { detail: msg.split("scrcpy-server push failed: ")[1] || msg });
+      else if (msg.startsWith("ADB forward failed")) mirrorErrorMsg.value = t("device.mirrorDiagForwardFailed", { detail: msg.split("ADB forward failed: ")[1] || msg });
+      else if (msg.startsWith("ADB reverse failed")) mirrorErrorMsg.value = t("device.mirrorDiagForwardFailed", { detail: msg.split("ADB reverse failed: ")[1] || msg });
+      else if (msg.startsWith("scrcpy-server start failed")) mirrorErrorMsg.value = t("device.mirrorDiagStartFailed", { detail: msg.split("scrcpy-server start failed: ")[1] || msg });
+      else if (msg.startsWith("scrcpy: Server not ready after 30s") || msg.includes("Server not ready after 30s")) mirrorErrorMsg.value = t("device.mirrorDiagStreamFailed");
+      else if (msg.startsWith("scrcpy: Codec config not received") || msg.includes("Codec config not received")) mirrorErrorMsg.value = t("device.mirrorDiagStreamFailed");
+      else if (msg.startsWith("scrcpy: Stream ended") || msg.includes("Stream ended")) mirrorErrorMsg.value = t("device.mirrorDiagStreamFailed");
+      else if (msg.startsWith("scrcpy: Failed to read codec meta") || msg.includes("Failed to read codec meta")) mirrorErrorMsg.value = t("device.mirrorDiagStreamFailed");
+      else if (msg.startsWith("scrcpy:")) mirrorErrorMsg.value = t("device.mirrorDiagStreamFailed");
+      else mirrorErrorMsg.value = msg;
+    }));
+
     listeners.push(await listen<string>("mirror:error", async (event) => {
       console.log("[mirror] error event:", event.payload);
+      mirrorErrorMsg.value = event.payload;
       showToast(event.payload, "error");
       await stopMirror();
     }));
@@ -2606,6 +2632,8 @@ async function stopMirror() {
   mirrorCtx = null;
   isMirroring.value = false;
   mirrorFrameCount.value = 0;
+  mirrorMode.value = 'idle';
+  mirrorErrorMsg.value = '';
   console.log("[mirror] stopped");
 }
 

@@ -126,28 +126,39 @@ async fn adb_mirror_start(serial: String, app: tauri::AppHandle, state: tauri::S
 
     tokio::task::spawn_blocking(move || {
         // Try scrcpy-server; if any step fails or config not received, fall back to legacy
-        let use_scrcpy = if jar_str.is_empty() {
+        let scrcpy_ok = if jar_str.is_empty() {
+            let _ = app_c.emit("mirror:diagnostic", "scrcpy-server jar not found in app resources");
+            false
+        } else if let Err(e) = mirror::push_server(&serial_c, &jar_str) {
+            let _ = app_c.emit("mirror:diagnostic", &format!("scrcpy-server push failed: {}", e));
             false
         } else {
-            mirror::push_server(&serial_c, &jar_str).is_ok()
-                && { mirror::remove_forward(&serial_c); mirror::setup_forward(&serial_c).is_ok() }
-                && mirror::start_server(&serial_c).is_ok()
+            mirror::remove_forward(&serial_c);
+            if let Err(e) = mirror::setup_forward(&serial_c) {
+                let _ = app_c.emit("mirror:diagnostic", &format!("ADB forward failed: {}", e));
+                false
+            } else if let Err(e) = mirror::start_server(&serial_c) {
+                let _ = app_c.emit("mirror:diagnostic", &format!("scrcpy-server start failed: {}", e));
+                false
+            } else {
+                true
+            }
         };
 
-        if use_scrcpy {
+        if scrcpy_ok {
             let _ = app_c.emit("mirror:mode", "scrcpy");
             let _ = app_c.emit("mirror:ready", "");
-            let scrcpy_ok = mirror::connect_and_stream(app_c.clone(), running_c.clone()).is_ok();
+            let stream_result = mirror::connect_and_stream(app_c.clone(), running_c.clone());
             mirror::remove_forward(&serial_c);
-            if scrcpy_ok {
+            if let Ok(()) = stream_result {
                 running_c.store(false, Ordering::Relaxed);
                 return;
             }
-            // scrcpy failed – fall through to legacy
-            let _ = app_c.emit("mirror:mode", "legacy");
-        } else {
-            let _ = app_c.emit("mirror:mode", "legacy");
+            if let Err(ref msg) = stream_result {
+                let _ = app_c.emit("mirror:diagnostic", &format!("scrcpy: {}", msg));
+            }
         }
+        let _ = app_c.emit("mirror:mode", "legacy");
 
         while running_c.load(Ordering::Relaxed) {
             match adb::screenshot(&serial_c, "") {
