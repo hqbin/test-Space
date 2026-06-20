@@ -34,13 +34,13 @@
             <span class="material-symbols-outlined text-[14px] text-on-surface-variant shrink-0">unfold_more</span>
           </button>
         </div>
-        <button v-if="selectedDevice" class="text-on-surface-variant hover:text-error hover:scale-105 transition-all select-none flex items-center" :title="t('device.disconnect')"
+        <button v-if="selectedDevice" class="text-on-surface-variant hover:text-error hover:scale-105 transition-all select-none flex items-center no-border" :title="t('device.disconnect')"
           @click="disconnectDeviceHandler(selectedDevice.serial)">
           <span class="material-symbols-outlined text-[16px]">close</span>
         </button>
         <span v-if="devices.length === 0" class="font-caption text-caption text-on-surface-variant/50 whitespace-nowrap">{{ t('device.noDevice') }}</span>
       </div>
-      <button class="text-on-surface-variant hover:text-secondary hover:scale-105 transition-all select-none" @click="scanDevices()" :disabled="scanLoading">
+      <button class="text-on-surface-variant hover:text-secondary hover:scale-105 transition-all select-none no-border" @click="scanDevices()" :disabled="scanLoading">
         <span class="material-symbols-outlined text-[18px] block" :class="scanLoading ? 'animate-spin' : ''">refresh</span>
       </button>
     </div>
@@ -83,13 +83,13 @@
           </div>
           <hr class="border-outline-variant/30 my-1">
           <div class="flex flex-wrap gap-2">
-            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="confirmThen(t('device.rebootConfirm2'), rebootDevice)">
+            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" :disabled="!selectedDevice" @click="confirmThen(t('device.rebootConfirm2'), rebootDevice)">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">restart_alt</span> {{ t('device.reboot') }}
             </button>
-            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="rootDevice">
+            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" :disabled="!selectedDevice" @click="rootDevice">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">shield</span> Root
             </button>
-            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="confirmThen(t('device.remountConfirm'), remountDevice)">
+            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" :disabled="!selectedDevice" @click="confirmThen(t('device.remountConfirm'), remountDevice)">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">published_with_changes</span> Remount
             </button>
           </div>
@@ -109,7 +109,7 @@
                   @mousedown.prevent @click="selectTextHistory(h)">{{ h }}</button>
               </div>
             </div>
-            <button class="bg-white/30 border border-white/50 text-on-surface px-4 py-1.5 rounded-xl font-label-md text-label-md hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="sendText" :disabled="!inputTextValue.trim()">{{ t('device.send') }}</button>
+            <button class="bg-white/30 border border-white/50 text-on-surface px-4 py-1.5 rounded-xl font-label-md text-label-md hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="sendText" :disabled="!selectedDevice || !inputTextValue.trim()">{{ t('device.send') }}</button>
           </div>
           <hr class="border-outline-variant/30 my-1">
           <div class="flex flex-wrap gap-2">
@@ -118,7 +118,7 @@
             </button>
             <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none"
               :class="isRecording ? 'bg-error/10 text-error border border-error/20' : ''"
-              :disabled="recordingLoading" @click="toggleRecording">
+              :disabled="!selectedDevice || recordingLoading" @click="toggleRecording">
               <span v-if="recordingLoading" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
               <span v-else class="material-symbols-outlined text-[14px]">{{ isRecording ? 'stop' : 'videocam' }}</span>
               {{ recordingLoading ? (isRecording ? t('device.stopping') : t('device.starting')) : (isRecording ? t('device.stopRecording') : t('device.screenrec')) }}
@@ -127,7 +127,7 @@
               :disabled="!selectedDevice || logPrepActive" @click="clearLogcatLogs">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">delete_sweep</span> {{ t('device.clearLogs') }}
             </button>
-            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="restartAdbServer">
+            <button class="bg-white/30 border border-white/50 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" :disabled="!selectedDevice" @click="restartAdbServer">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">power_settings_new</span> {{ t('device.restartAdb') }}
             </button>
           </div>
@@ -138,7 +138,7 @@
           <div class="flex flex-wrap gap-2">
             <button class="bg-white/30 border border-white/50 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm select-none"
               :class="logcatRunning ? 'bg-error/20 text-error border-error/30 hover:bg-error/30' : ''"
-              :disabled="logPrepActive" @click="toggleLogcat">
+              :disabled="!selectedDevice || logPrepActive" @click="toggleLogcat">
               <span class="material-symbols-outlined text-[14px]" :class="logcatRunning ? 'text-error' : 'text-on-surface-variant'">{{ logcatRunning ? 'stop' : 'assignment' }}</span>
               <span v-if="logcatRunning" class="flex items-center gap-1.5">
                 {{ t('device.stop') }} <span class="font-mono text-[11px] opacity-80">{{ logcatElapsed }}s</span>
@@ -147,7 +147,7 @@
             </button>
             <button class="bg-white/30 border border-white/50 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm select-none"
               :class="diagRunning ? 'bg-error/20 text-error border-error/30 hover:bg-error/30' : ''"
-              :disabled="logPrepActive" @click="toggleDiagnostic">
+              :disabled="!selectedDevice || logPrepActive" @click="toggleDiagnostic">
               <span class="material-symbols-outlined text-[14px]" :class="diagRunning ? 'text-error' : 'text-on-surface-variant'">{{ diagRunning ? 'stop' : 'work' }}</span>
               <span v-if="diagRunning" class="flex items-center gap-1.5">
                 {{ t('device.stop') }} <span class="font-mono text-[11px] opacity-80">{{ diagElapsed }}s</span>
@@ -156,7 +156,7 @@
             </button>
             <button class="bg-white/30 border border-white/50 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm select-none"
               :class="bootLogcatRunning ? 'bg-error/20 text-error border-error/30 hover:bg-error/30' : ''"
-              :disabled="logPrepActive" @click="toggleBootLogcat">
+              :disabled="!selectedDevice || logPrepActive" @click="toggleBootLogcat">
               <span class="material-symbols-outlined text-[14px]" :class="bootLogcatRunning ? 'text-error' : 'text-on-surface-variant'">{{ bootLogcatRunning ? 'stop' : 'pest_control' }}</span>
               <span v-if="bootLogcatRunning" class="flex items-center gap-1.5">
                 {{ t('device.stop') }} <span class="font-mono text-[11px] opacity-80">{{ bootLogcatElapsed }}s</span>
@@ -184,7 +184,7 @@
                     <span class="font-caption text-caption text-on-surface-variant/60 font-normal text-sm">({{ sortedApps.length }})</span>
                   </h3>
                   <div class="flex items-center gap-2 text-sm text-on-surface-variant">
-                    <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="refreshPackageList" :disabled="pkgLoading">
+                    <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="refreshPackageList" :disabled="!selectedDevice || pkgLoading">
                       <span v-if="pkgLoading" class="w-3 h-3 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
                       <span v-else class="material-symbols-outlined text-[14px]">refresh</span>{{ t('device.refresh') }}
                     </button>
@@ -192,10 +192,10 @@
                       <input type="checkbox" v-model="showThirdParty" class="rounded border-outline-variant text-secondary focus:ring-secondary mr-1 w-3.5 h-3.5 accent-secondary select-text" @change="refreshPackageList" />
                       {{ t('device.thirdPartyApps') }}
                     </label>
-                    <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="apkDialogOpen = true">
+                    <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" :disabled="!selectedDevice" @click="apkDialogOpen = true">
                       <span class="material-symbols-outlined text-[14px]">file_upload</span> {{ t('device.installApk') }}
                     </button>
-                    <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="getCurrentForegroundApp" :disabled="loadingForeground">
+                    <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="getCurrentForegroundApp" :disabled="!selectedDevice || loadingForeground">
                       <span v-if="loadingForeground" class="inline-block w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
                       <span v-else class="material-symbols-outlined text-[14px]">center_focus_strong</span> {{ t('device.foregroundApp') }}
                     </button>
@@ -214,7 +214,7 @@
                       @mousedown.prevent @click="selectAppSearchHistory(h)">{{ h }}</button>
                   </div>
                 </div>
-                <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="queryAppPath">
+                <button class="bg-white/30 border border-white/50 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" :disabled="!selectedDevice" @click="queryAppPath">
                   <span class="material-symbols-outlined text-[14px]">folder_open</span> {{ t('device.path') }}
                 </button>
                 <div v-if="totalPages > 1" class="flex items-center gap-2 text-sm text-on-surface bg-white/30 border border-white/50 rounded-xl px-3 py-1 ml-auto backdrop-blur-sm">
@@ -317,11 +317,12 @@
             </div>
             <button class="glass-button px-4 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1 select-none"
               :class="isMirroring ? 'bg-error/10 text-error border border-error/20' : ''"
+              :disabled="!selectedDevice"
               @click="toggleMirror">
               <span class="material-symbols-outlined text-[16px]">{{ isMirroring ? 'stop' : 'play_arrow' }}</span>
               {{ isMirroring ? t('device.stopMirror') : t('device.startMirror') }}
             </button>
-            <button v-if="isMirroring" class="glass-button p-1.5 rounded-lg flex items-center select-none ml-1" title="Open in separate window" @click="mirrorPopout">
+            <button v-if="isMirroring" class="glass-button p-1.5 rounded-lg flex items-center select-none ml-1" title="Open in separate window" :disabled="!selectedDevice" @click="mirrorPopout">
               <span class="material-symbols-outlined text-[16px]">open_in_new</span>
             </button>
           </div>
@@ -347,7 +348,7 @@
           <h3 class="font-label-md text-label-md text-on-surface mb-2 lg:mb-3 xl:mb-4 2xl:mb-5 flex items-center gap-1.5 select-none">
             <span class="material-symbols-outlined text-[14px] lg:text-[16px] xl:text-[18px] 2xl:text-[22px] select-none">gamepad</span><span class="select-none">{{ t('device.remoteControl') }}</span>
           </h3>
-          <div class="flex gap-2 lg:gap-4 xl:gap-6 2xl:gap-8 items-start justify-center">
+          <div class="flex gap-2 lg:gap-4 xl:gap-6 2xl:gap-8 items-start justify-center" :class="{ 'remote-disabled': !selectedDevice }">
             <!-- Left: Back, Home, Settings -->
             <div class="flex flex-col gap-1 lg:gap-1.5">
               <button class="glass-button px-2 py-1 lg:px-3 lg:py-1.5 xl:px-4 xl:py-2 2xl:px-6 2xl:py-3 rounded-lg font-caption text-caption text-[10px] lg:text-[11px] xl:text-[13px] 2xl:text-[15px] flex items-center gap-1 select-none" @click="sendKey('4')">
@@ -421,7 +422,7 @@
               <span class="material-symbols-outlined text-[16px] select-none">folder_open</span><span class="select-none">{{ t('device.fileManager') }}</span>
             </h3>
             <div class="flex gap-1.5">
-              <button class="glass-button px-2.5 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1 select-none" @click="uploadFile">
+              <button class="glass-button px-2.5 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1 select-none" :disabled="!selectedDevice" @click="uploadFile">
                 <span class="material-symbols-outlined text-[14px]">upload</span>{{ t('device.upload') }}
               </button>
             </div>
@@ -2846,4 +2847,44 @@ onUnmounted(() => {
 .text-caption { font-size: 15px !important; font-weight: 400 !important; }
 .text-label-md { font-size: 16px !important; }
 .glass-button { font-weight: 400 !important; }
+
+/* Enhanced button borders with depth (inset shadow, not border, to preserve dynamic border-error states) */
+.glass-panel button:not(.glass-button):not(.no-border) {
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.09),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+/* Disabled state for inline buttons */
+button:disabled,
+button:disabled:hover {
+  opacity: 0.4 !important;
+  cursor: not-allowed !important;
+  filter: grayscale(0.5);
+  transform: none !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-color: rgba(0, 0, 0, 0.04) !important;
+  box-shadow: none !important;
+  animation: none !important;
+  pointer-events: auto !important;
+}
+
+/* Disabled state for glass-button */
+.glass-button:disabled,
+.glass-button:disabled:hover {
+  opacity: 0.4 !important;
+  cursor: not-allowed !important;
+  filter: grayscale(0.5);
+  transform: none !important;
+  box-shadow: none !important;
+  animation: none !important;
+}
+
+/* Disabled area for remote control section */
+.remote-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
 </style>
