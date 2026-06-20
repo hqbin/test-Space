@@ -1,5 +1,6 @@
 mod adb;
 mod mirror;
+mod proxy;
 mod script_exec;
 mod serial_port;
 mod zip_util;
@@ -504,6 +505,7 @@ pub fn run() {
         })
         .manage(MirrorState(Mutex::new(None)))
         .manage(ScriptManager::new())
+        .manage(proxy::ProxyState::new())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -615,6 +617,21 @@ pub fn run() {
             write_text_file,
             write_script_file,
             read_text_file,
+            proxy::proxy_start,
+            proxy::proxy_stop,
+            proxy::proxy_set_breakpoint,
+            proxy::proxy_continue,
+            proxy::proxy_add_rewrite_rule,
+            proxy::proxy_remove_rewrite_rule,
+            proxy::proxy_update_rewrite_rule,
+            proxy::proxy_clear_rewrite_rules,
+            proxy::proxy_get_captured,
+            proxy::proxy_get_status,
+            proxy::proxy_get_ca_cert,
+            proxy::proxy_set_device_proxy,
+            proxy::proxy_clear_device_proxy,
+            proxy::proxy_install_cert,
+            proxy::proxy_replay,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

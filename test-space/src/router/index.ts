@@ -33,6 +33,11 @@ const router = createRouter({
           ],
         },
         {
+          path: "api-space",
+          name: "api-space",
+          component: () => import("@/views/api-space/ApiSpacePage.vue"),
+        },
+        {
           path: "script-space",
           name: "script-space",
           component: () => import("@/views/script-space/ScriptSpacePage.vue"),

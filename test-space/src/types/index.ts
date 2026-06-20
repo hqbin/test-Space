@@ -138,3 +138,50 @@ export interface NoteLink {
   targetNoteId: string
   createdAt: string
 }
+
+// ── API Proxy ──────────────────────────────────────────────
+
+export interface ApiCapturedRequest {
+  id: string
+  method: string
+  url: string
+  host: string
+  path: string
+  query: string | null
+  request_headers: string[][]       // [[name, value], ...]
+  request_body: string | null
+  response_status_code: number | null
+  response_status_text: string | null
+  response_headers: string[][] | null
+  response_body: string | null
+  start_time: number
+  end_time: number | null
+  duration: number | null           // milliseconds
+  is_https: boolean
+  request_size: number
+  response_size: number
+}
+
+export interface ApiRewriteRule {
+  id: string
+  name: string
+  enabled: boolean
+  url_pattern: string
+  match_type: 'contains' | 'regex' | 'prefix'
+  action_type: 'modify_request_header' | 'modify_request_body'
+    | 'modify_response_header' | 'modify_response_body'
+    | 'drop' | 'redirect' | 'replace_status'
+  header_name: string | null
+  header_value: string | null
+  body_search: string | null
+  body_replace: string | null
+  redirect_url: string | null
+  status_code: number | null
+}
+
+export interface ApiProxyStatus {
+  running: boolean
+  port: number | null
+  breakpoint_enabled: boolean
+  captured_count: number
+}
