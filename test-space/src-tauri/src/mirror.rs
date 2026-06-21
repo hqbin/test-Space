@@ -9,7 +9,6 @@ use std::time::Duration;
 use std::os::windows::process::CommandExt;
 
 use base64::Engine;
-use serde::Serialize;
 use tauri::Emitter;
 
 fn adb_cmd() -> Command {
@@ -17,13 +16,6 @@ fn adb_cmd() -> Command {
     #[cfg(target_os = "windows")]
     { cmd.creation_flags(0x08000000); }
     cmd
-}
-
-#[derive(Clone, Serialize)]
-struct FramePayload {
-    data: String,
-    key: bool,
-    pts: i64,
 }
 
 pub fn push_server(serial: &str, jar_path: &str) -> Result<(), String> {
@@ -118,7 +110,7 @@ fn build_avcc(sps: &[u8], pps: &[u8]) -> Vec<u8> {
     avcc
 }
 
-pub fn connect_and_stream(app_handle: tauri::AppHandle, running: Arc<AtomicBool>, port: u16, win_label: &str) -> Result<(), String> {
+pub fn connect_and_stream(app_handle: tauri::AppHandle, running: Arc<AtomicBool>, port: u16, _serial: &str, win_label: &str, on_frame: tauri::ipc::Channel<crate::FrameData>) -> Result<(), String> {
     let addr = format!("127.0.0.1:{}", port);
     let mut stream: Option<TcpStream> = None;
     for i in 0..30 {
@@ -148,7 +140,6 @@ pub fn connect_and_stream(app_handle: tauri::AppHandle, running: Arc<AtomicBool>
     let mut temp_buf = vec![0u8; 256 * 1024]; // 256KB read buffer
     let mut pending: Vec<u8> = Vec::new();
     let engine = base64::engine::general_purpose::STANDARD;
-    let stream_start = std::time::Instant::now();
 
     let _ = app_handle.emit_to(win_label, "mirror:ready", "h264");
 
@@ -213,10 +204,7 @@ pub fn connect_and_stream(app_handle: tauri::AppHandle, running: Arc<AtomicBool>
                 let mut combined = std::mem::take(&mut pending);
                 combined.extend_from_slice(&avcc_nal);
                 let frame_b64 = engine.encode(&combined);
-                let is_key = nal_type == 5;
-                let frame_pts = stream_start.elapsed().as_micros() as i64;
-                let payload = FramePayload { data: frame_b64, key: is_key, pts: frame_pts };
-                let _ = app_handle.emit_to(win_label, "mirror:frame", payload);
+                let _ = on_frame.send(crate::FrameData { data: frame_b64, key: nal_type == 5 });
             } else if !config_sent {
                 // Before config, buffer everything
                 pending.extend_from_slice(&avcc_nal);

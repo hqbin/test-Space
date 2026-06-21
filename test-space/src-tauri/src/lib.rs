@@ -22,6 +22,12 @@ use tauri_plugin_single_instance::init as single_instance_init;
 
 struct MirrorState(Mutex<HashMap<String, (Arc<AtomicBool>, u16)>>);
 
+#[derive(Clone, serde::Serialize)]
+pub struct FrameData {
+    pub data: String,
+    pub key: bool,
+}
+
 static NEXT_MIRROR_PORT: AtomicU16 = AtomicU16::new(27183);
 
 #[tauri::command]
@@ -108,7 +114,13 @@ async fn adb_screenshot(serial: String, save_path: String) -> Result<String, Str
 }
 
 #[tauri::command]
-async fn adb_mirror_start(serial: String, window: tauri::Window, app: tauri::AppHandle, state: tauri::State<'_, MirrorState>) -> Result<(), String> {
+async fn adb_mirror_start(
+    serial: String,
+    window: tauri::Window,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, MirrorState>,
+    on_frame: tauri::ipc::Channel<FrameData>,
+) -> Result<(), String> {
     let port = NEXT_MIRROR_PORT.fetch_add(1, Ordering::Relaxed);
     let running = Arc::new(AtomicBool::new(true));
     state.0.lock().unwrap().insert(serial.clone(), (running.clone(), port));
@@ -153,7 +165,7 @@ async fn adb_mirror_start(serial: String, window: tauri::Window, app: tauri::App
                 if attempt > 0 {
                     std::thread::sleep(Duration::from_secs(2));
                 }
-                stream_result = mirror::connect_and_stream(app_c.clone(), running_c.clone(), port, &win_label);
+                stream_result = mirror::connect_and_stream(app_c.clone(), running_c.clone(), port, &serial_c, &win_label, on_frame.clone());
                 if stream_result.is_ok() { break; }
             }
             mirror::remove_forward(&serial_c, port);
@@ -171,7 +183,7 @@ async fn adb_mirror_start(serial: String, window: tauri::Window, app: tauri::App
             match adb::screenshot(&serial_c, "") {
                 Ok(data_url) => {
                     let b64 = data_url.strip_prefix("data:image/png;base64,").unwrap_or(&data_url).to_string();
-                    let _ = app_c.emit_to(&win_label, "mirror:frame_data", &b64);
+                    let _ = on_frame.send(FrameData { data: b64, key: true });
                 }
                 Err(e) => {
                     let _ = app_c.emit_to(&win_label, "mirror:error", &format!("截图失败: {}", e));

@@ -2667,37 +2667,31 @@ async function startMirror() {
       } catch (e) { console.error("[mirror] Config failed:", e); }
     }, listenTarget));
 
-    listeners.push(await listen<{ data: string; key: boolean; pts: number }>("mirror:frame", (event) => {
-      if (!useScrcpy || !videoDecoder || !decoderConfigured) return;
-      try {
+    const { Channel } = await import("@tauri-apps/api/core");
+    const onFrame = new Channel<{ data: string; key: boolean }>();
+    onFrame.onmessage = (frameData: { data: string; key: boolean }) => {
+      if (useScrcpy && videoDecoder && decoderConfigured) {
         videoDecoder.decode(new EncodedVideoChunk({
-          type: event.payload.key ? "key" : "delta",
-          timestamp: event.payload.pts / 1000,
-          data: base64ToBytes(event.payload.data),
+          type: frameData.key ? "key" : "delta",
+          timestamp: performance.now() * 1000,
+          data: base64ToBytes(frameData.data),
         }));
-      } catch (e) {}
-    }, listenTarget));
-
-    listeners.push(await listen<string>("mirror:frame_data", (event) => {
-      console.log("[mirror] frame_data received, len:", event.payload.length, "useScrcpy:", useScrcpy);
-      if (useScrcpy) { console.log("[mirror] frame_data dropped - scrcpy mode"); return; }
-      if (!isMirroring.value) { console.log("[mirror] frame_data dropped - not mirroring"); return; }
-      const canvas = mirrorCanvas.value;
-      if (!canvas || !mirrorCtx) { console.log("[mirror] frame_data dropped - no canvas/ctx"); return; }
-      const img = new window.Image();
-      img.onload = () => {
-        console.log("[mirror] image loaded:", img.width, "x", img.height);
+      } else if (!useScrcpy && isMirroring.value) {
+        const canvas = mirrorCanvas.value;
         if (!canvas || !mirrorCtx) return;
-        canvas.width = img.width;
-        canvas.height = img.height;
-        mirrorWidth.value = img.width;
-        mirrorHeight.value = img.height;
-        mirrorCtx.drawImage(img, 0, 0);
-        mirrorFrameCount.value++;
-      };
-      img.onerror = () => { console.error("[mirror] image decode error"); };
-      img.src = `data:image/png;base64,${event.payload}`;
-    }, listenTarget));
+        const img = new window.Image();
+        img.onload = () => {
+          if (!canvas || !mirrorCtx) return;
+          canvas.width = img.width;
+          canvas.height = img.height;
+          mirrorWidth.value = img.width;
+          mirrorHeight.value = img.height;
+          mirrorCtx.drawImage(img, 0, 0);
+          mirrorFrameCount.value++;
+        };
+        img.src = `data:image/png;base64,${frameData.data}`;
+      }
+    };
 
     listeners.push(await listen<string>("mirror:diagnostic", (event) => {
       console.log("[mirror] diagnostic:", event.payload);
@@ -2730,7 +2724,7 @@ async function startMirror() {
     mirrorUnlisten = listeners;
     mirrorUnlisten.push(() => { if (videoDecoder) { console.log("[mirror] closing decoder"); videoDecoder.close(); } });
     console.log("[mirror] invoking adb_mirror_start");
-    await invoke("adb_mirror_start", { serial: selectedDevice.value.serial });
+    await invoke("adb_mirror_start", { serial: selectedDevice.value.serial, onFrame });
     console.log("[mirror] invoke returned successfully");
   } catch (e) {
     console.error("[mirror] invoke failed:", e);

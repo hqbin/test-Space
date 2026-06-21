@@ -82,7 +82,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
 import { listen } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, Channel } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
 const appWindow = getCurrentWebviewWindow();
@@ -175,32 +175,29 @@ onMounted(async () => {
     } catch {}
   }, listenTarget));
 
-  unlisteners.push(await listen<{ data: string; key: boolean; pts: number }>("mirror:frame", (e) => {
-    if (!useScrcpy || !videoDecoder || !decoderConfigured) return;
-    try {
+  const onFrame = new Channel<{ data: string; key: boolean }>();
+  onFrame.onmessage = (frameData: { data: string; key: boolean }) => {
+    if (useScrcpy && videoDecoder && decoderConfigured) {
       videoDecoder.decode(new EncodedVideoChunk({
-        type: e.payload.key ? "key" : "delta",
-        timestamp: e.payload.pts / 1000,
-        data: Uint8Array.from(atob(e.payload.data), c => c.charCodeAt(0)),
+        type: frameData.key ? "key" : "delta",
+        timestamp: performance.now() * 1000,
+        data: Uint8Array.from(atob(frameData.data), c => c.charCodeAt(0)),
       }));
-    } catch {}
-  }, listenTarget));
-
-  unlisteners.push(await listen<string>("mirror:frame_data", (e) => {
-    if (useScrcpy) return;
-    const c = mirrorCanvas.value; if (!c || !ctx) return;
-    const img = new window.Image();
-    img.onload = () => {
-      c.width = img.width; c.height = img.height;
-      mirrorW = img.width; mirrorH = img.height;
-      ctx!.drawImage(img, 0, 0);
-    };
-    img.src = `data:image/png;base64,${e.payload}`;
-  }, listenTarget));
+    } else if (!useScrcpy) {
+      const c = mirrorCanvas.value; if (!c || !ctx) return;
+      const img = new window.Image();
+      img.onload = () => {
+        c.width = img.width; c.height = img.height;
+        mirrorW = img.width; mirrorH = img.height;
+        ctx!.drawImage(img, 0, 0);
+      };
+      img.src = `data:image/png;base64,${frameData.data}`;
+    }
+  };
 
   unlisteners.push(await listen("mirror:ready", () => {}, listenTarget));
 
-  await invoke("adb_mirror_start", { serial });
+  await invoke("adb_mirror_start", { serial, onFrame });
 });
 
 onUnmounted(() => {
