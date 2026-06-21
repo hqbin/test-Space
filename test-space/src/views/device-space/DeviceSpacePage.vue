@@ -322,6 +322,13 @@
               <span class="material-symbols-outlined text-[16px]">{{ isMirroring ? 'stop' : 'play_arrow' }}</span>
               {{ isMirroring ? t('device.stopMirror') : t('device.startMirror') }}
             </button>
+            <button class="glass-button px-2 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1 select-none ml-1"
+              :disabled="!selectedDevice"
+              :title="qualityMode === 'smooth' ? '流畅优先' : '画质优先'"
+              @click="toggleQualityMode">
+              <span class="material-symbols-outlined text-[14px]">hdr_weak</span>
+              <span class="text-[11px] leading-none whitespace-nowrap">{{ qualityMode === 'smooth' ? '流畅' : '画质' }}</span>
+            </button>
             <button v-if="isMirroring" class="glass-button p-1.5 rounded-lg flex items-center select-none ml-1" title="Open in separate window" :disabled="!selectedDevice" @click="mirrorPopout">
               <span class="material-symbols-outlined text-[16px]">open_in_new</span>
             </button>
@@ -1584,6 +1591,10 @@ const mirrorHeight = ref(0);
 const deviceWidth = ref(0);
 const deviceHeight = ref(0);
 const mirrorPopoutActive = ref(false);
+const qualityMode = ref<'smooth' | 'quality'>('smooth');
+function toggleQualityMode() {
+  qualityMode.value = qualityMode.value === 'smooth' ? 'quality' : 'smooth';
+}
 
 let mirrorTapX1 = 0, mirrorTapY1 = 0, mirrorTapping = false;
 
@@ -1664,7 +1675,7 @@ async function mirrorPopout() {
   } catch {}
 
   const win = new WebviewWindow(`mirror-${serial}`, {
-    url: `/mirror?serial=${serial}`,
+    url: `/mirror?serial=${serial}&quality=${qualityMode.value}`,
     title: `Screen Mirror - ${serial}`,
     width: winWidth,
     height: winHeight + 220, // extra space for remote control bar
@@ -2598,12 +2609,6 @@ async function toggleMirror() {
   if (isMirroring.value) { await stopMirror(); }
   else { await startMirror(); }
 }
-function base64ToBytes(b64: string): Uint8Array {
-  const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
 async function startMirror() {
   console.log("[mirror] startMirror called");
   if (!selectedDevice.value) { console.log("[mirror] no device selected, abort"); return; }
@@ -2614,7 +2619,6 @@ async function startMirror() {
 
   let useScrcpy = false;
   let videoDecoder: VideoDecoder | null = null;
-  let decoderConfigured = false;
 
   try {
     const { listen } = await import("@tauri-apps/api/event");
@@ -2648,37 +2652,53 @@ async function startMirror() {
             frame.close();
             mirrorFrameCount.value++;
           },
-          error: (e: any) => { console.error("[mirror] WebCodecs error:", e); }
+          error: (e: any) => { console.error("[mirror] WebCodecs error:", e); gotKeyFrame = false; }
         });
       }
     }, listenTarget));
 
-    listeners.push(await listen<string>("mirror:config", (event) => {
-      console.log("[mirror] config event received, payload length:", event.payload.length);
-      if (!useScrcpy || !videoDecoder || decoderConfigured) { console.log("[mirror] config skipped:", { useScrcpy, hasDecoder: !!videoDecoder, decoderConfigured }); return; }
-      try {
-        videoDecoder.configure({
-          codec: "avc1.42E01E",
-          description: base64ToBytes(event.payload),
-          codedWidth: 1280, codedHeight: 720,
-        });
-        decoderConfigured = true;
-        console.log("[mirror] VideoDecoder configured successfully");
-      } catch (e) { console.error("[mirror] Config failed:", e); }
-    }, listenTarget));
-
     const { Channel } = await import("@tauri-apps/api/core");
-    const onFrame = new Channel<{ data: string; key: boolean }>();
-    onFrame.onmessage = (frameData: { data: string; key: boolean }) => {
+    let gotKeyFrame = false;
+    let decoderConfigured = false;
+    const serial = selectedDevice.value.serial;
+
+    const onFrame = new Channel<ArrayBuffer>();
+    onFrame.onmessage = (raw: ArrayBuffer) => {
+      if (!isMirroring.value) return;
+      if (!raw || raw.byteLength === 0) return;
+      const bytes = new Uint8Array(raw);
+      // Byte 0xFF marks decoder config (avcC), 0x00/0x01 marks frame key flag
+      if (bytes[0] === 0xFF) {
+        if (useScrcpy && videoDecoder && !decoderConfigured) {
+          try {
+            videoDecoder.configure({
+              codec: "avc1.42E01E",
+              description: bytes.subarray(1),
+              codedWidth: 1280, codedHeight: 720,
+            });
+            decoderConfigured = true;
+            console.log("[mirror] VideoDecoder configured successfully");
+          } catch (e) { console.error("[mirror] Config failed:", e); }
+        }
+        return;
+      }
+      const isKey = bytes[0] === 1;
+      const frameData = bytes.subarray(1);
+
+      if (isKey) gotKeyFrame = true;
+      if (!gotKeyFrame) return;
+
       if (useScrcpy && videoDecoder && decoderConfigured) {
         videoDecoder.decode(new EncodedVideoChunk({
-          type: frameData.key ? "key" : "delta",
+          type: isKey ? "key" : "delta",
           timestamp: performance.now() * 1000,
-          data: base64ToBytes(frameData.data),
+          data: frameData,
         }));
-      } else if (!useScrcpy && isMirroring.value) {
+      } else if (!useScrcpy) {
         const canvas = mirrorCanvas.value;
         if (!canvas || !mirrorCtx) return;
+        const blob = new Blob([frameData], { type: "image/png" });
+        const url = URL.createObjectURL(blob);
         const img = new window.Image();
         img.onload = () => {
           if (!canvas || !mirrorCtx) return;
@@ -2688,8 +2708,10 @@ async function startMirror() {
           mirrorHeight.value = img.height;
           mirrorCtx.drawImage(img, 0, 0);
           mirrorFrameCount.value++;
+          URL.revokeObjectURL(url);
         };
-        img.src = `data:image/png;base64,${frameData.data}`;
+        img.onerror = () => URL.revokeObjectURL(url);
+        img.src = url;
       }
     };
 
@@ -2724,7 +2746,13 @@ async function startMirror() {
     mirrorUnlisten = listeners;
     mirrorUnlisten.push(() => { if (videoDecoder) { console.log("[mirror] closing decoder"); videoDecoder.close(); } });
     console.log("[mirror] invoking adb_mirror_start");
-    await invoke("adb_mirror_start", { serial: selectedDevice.value.serial, onFrame });
+    await invoke("adb_mirror_start", {
+      serial: selectedDevice.value.serial,
+      onFrame,
+      maxSize: qualityMode.value === 'quality' ? 1080 : 960,
+      videoBitRate: qualityMode.value === 'quality' ? 5_000_000 : 3_000_000,
+      maxFps: qualityMode.value === 'quality' ? 24 : 15,
+    });
     console.log("[mirror] invoke returned successfully");
   } catch (e) {
     console.error("[mirror] invoke failed:", e);

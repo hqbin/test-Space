@@ -89,6 +89,8 @@ const appWindow = getCurrentWebviewWindow();
 const listenTarget = { target: { kind: 'WebviewWindow' as const, label: appWindow.label } };
 
 const serial = new URLSearchParams(window.location.search).get("serial") || "";
+const quality = new URLSearchParams(window.location.search).get("quality") || "smooth";
+const qualityMode = quality === 'quality' ? 'quality' : 'smooth';
 const mirrorCanvas = ref<HTMLCanvasElement | null>(null);
 let ctx: CanvasRenderingContext2D | null = null;
 let unlisteners: (() => void)[] = [];
@@ -98,6 +100,7 @@ let useScrcpy = false;
 let tapX1 = 0, tapY1 = 0, tapping = false;
 let mirrorW = 0, mirrorH = 0;
 let devW = 0, devH = 0;
+
 
 async function sendKey(keycode: string) {
   try { await invoke("adb_input_keyevent", { serial, keycode }); } catch {}
@@ -158,46 +161,68 @@ onMounted(async () => {
           ctx.drawImage(frame, 0, 0);
           frame.close();
         },
-        error: () => {},
+        error: () => { gotKeyFrame = false; },
       });
     }
   }, listenTarget));
 
-  unlisteners.push(await listen<string>("mirror:config", (e) => {
-    if (!videoDecoder || decoderConfigured) return;
-    try {
-      videoDecoder.configure({
-        codec: "avc1.42E01E",
-        description: Uint8Array.from(atob(e.payload), c => c.charCodeAt(0)),
-        codedWidth: 1280, codedHeight: 720,
-      });
-      decoderConfigured = true;
-    } catch {}
-  }, listenTarget));
+  let gotKeyFrame = false;
+  let decoderConfigured = false;
 
-  const onFrame = new Channel<{ data: string; key: boolean }>();
-  onFrame.onmessage = (frameData: { data: string; key: boolean }) => {
+  const onFrame = new Channel<ArrayBuffer>();
+  onFrame.onmessage = (raw: ArrayBuffer) => {
+    if (!raw || raw.byteLength === 0) return;
+    const bytes = new Uint8Array(raw);
+    if (bytes[0] === 0xFF) {
+      if (useScrcpy && videoDecoder && !decoderConfigured) {
+        try {
+          videoDecoder.configure({
+            codec: "avc1.42E01E",
+            description: bytes.subarray(1),
+            codedWidth: 1280, codedHeight: 720,
+          });
+          decoderConfigured = true;
+        } catch {}
+      }
+      return;
+    }
+    const isKey = bytes[0] === 1;
+    const frameData = bytes.subarray(1);
+
+    if (isKey) gotKeyFrame = true;
+    if (!gotKeyFrame) return;
+
     if (useScrcpy && videoDecoder && decoderConfigured) {
       videoDecoder.decode(new EncodedVideoChunk({
-        type: frameData.key ? "key" : "delta",
+        type: isKey ? "key" : "delta",
         timestamp: performance.now() * 1000,
-        data: Uint8Array.from(atob(frameData.data), c => c.charCodeAt(0)),
+        data: frameData,
       }));
     } else if (!useScrcpy) {
       const c = mirrorCanvas.value; if (!c || !ctx) return;
+      const blob = new Blob([frameData], { type: "image/png" });
+      const url = URL.createObjectURL(blob);
       const img = new window.Image();
       img.onload = () => {
         c.width = img.width; c.height = img.height;
         mirrorW = img.width; mirrorH = img.height;
         ctx!.drawImage(img, 0, 0);
+        URL.revokeObjectURL(url);
       };
-      img.src = `data:image/png;base64,${frameData.data}`;
+      img.onerror = () => URL.revokeObjectURL(url);
+      img.src = url;
     }
   };
 
   unlisteners.push(await listen("mirror:ready", () => {}, listenTarget));
 
-  await invoke("adb_mirror_start", { serial, onFrame });
+  await invoke("adb_mirror_start", {
+    serial,
+    onFrame,
+    maxSize: qualityMode === 'quality' ? 1080 : 960,
+    videoBitRate: qualityMode === 'quality' ? 5_000_000 : 3_000_000,
+    maxFps: qualityMode === 'quality' ? 24 : 15,
+  });
 });
 
 onUnmounted(() => {

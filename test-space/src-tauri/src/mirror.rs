@@ -8,7 +8,6 @@ use std::time::Duration;
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 
-use base64::Engine;
 use tauri::Emitter;
 
 fn adb_cmd() -> Command {
@@ -54,11 +53,18 @@ pub fn remove_forward(serial: &str, port: u16) {
         .output();
 }
 
-pub fn start_server(serial: &str) -> Result<(), String> {
-    let args = "CLASSPATH=/data/local/tmp/scrcpy-server.jar app_process / com.genymobile.scrcpy.Server 3.3.4 log_level=info max_size=960 video_bit_rate=3000000 max_fps=15 tunnel_forward=true raw_stream=true send_device_meta=false send_codec_meta=false audio=false control=false cleanup=true";
+pub fn start_server(serial: &str, max_size: u16, video_bit_rate: u32, max_fps: u8) -> Result<(), String> {
+    let args = format!(
+        "CLASSPATH=/data/local/tmp/scrcpy-server.jar app_process / \
+         com.genymobile.scrcpy.Server 3.3.4 log_level=info \
+         max_size={max_size} video_bit_rate={video_bit_rate} max_fps={max_fps} \
+         tunnel_forward=true raw_stream=true \
+         send_device_meta=false send_codec_meta=false \
+         audio=false control=false cleanup=true"
+    );
 
     let mut child =     adb_cmd()
-        .args(["-s", serial, "shell", args])
+        .args(["-s", serial, "shell", &args])
         .stderr(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
@@ -110,7 +116,13 @@ fn build_avcc(sps: &[u8], pps: &[u8]) -> Vec<u8> {
     avcc
 }
 
-pub fn connect_and_stream(app_handle: tauri::AppHandle, running: Arc<AtomicBool>, port: u16, _serial: &str, win_label: &str, on_frame: tauri::ipc::Channel<crate::FrameData>) -> Result<(), String> {
+pub fn connect_and_stream(
+    app_handle: tauri::AppHandle,
+    running: Arc<AtomicBool>,
+    port: u16,
+    win_label: &str,
+    on_frame: tauri::ipc::Channel<Vec<u8>>,
+) -> Result<(), String> {
     let addr = format!("127.0.0.1:{}", port);
     let mut stream: Option<TcpStream> = None;
     for i in 0..30 {
@@ -136,10 +148,9 @@ pub fn connect_and_stream(app_handle: tauri::AppHandle, running: Arc<AtomicBool>
     let mut sps = Vec::new();
     let mut pps = Vec::new();
     let mut config_sent = false;
-    let mut buf = vec![0u8; 0];
+    let mut raw_buf = vec![0u8; 0];
     let mut temp_buf = vec![0u8; 256 * 1024]; // 256KB read buffer
     let mut pending: Vec<u8> = Vec::new();
-    let engine = base64::engine::general_purpose::STANDARD;
 
     let _ = app_handle.emit_to(win_label, "mirror:ready", "h264");
 
@@ -152,40 +163,41 @@ pub fn connect_and_stream(app_handle: tauri::AppHandle, running: Arc<AtomicBool>
             Err(_) => break,
         };
 
-        buf.extend_from_slice(&temp_buf[..n]);
+        raw_buf.extend_from_slice(&temp_buf[..n]);
 
         // Parse NAL units from the buffer using Annex B start codes
         let mut consumed = 0;
         let mut pos = 0;
-        while pos + 4 <= buf.len() {
-            let start = find_nal_start(&buf, pos);
-            if start + 4 > buf.len() { break; }
+        while pos + 4 <= raw_buf.len() {
+            let start = find_nal_start(&raw_buf, pos);
+            if start + 4 > raw_buf.len() { break; }
 
-            let sc_len = if start + 3 < buf.len() && buf[start] == 0 && buf[start+1] == 0 && buf[start+2] == 0 && buf[start+3] == 1 {
+            let sc_len = if start + 3 < raw_buf.len() && raw_buf[start] == 0 && raw_buf[start+1] == 0 && raw_buf[start+2] == 0 && raw_buf[start+3] == 1 {
                 4
             } else {
                 3
             };
 
             let nal_data_start = start + sc_len;
-            if nal_data_start >= buf.len() { break; }
-            let nal_type = buf[nal_data_start] & 0x1f;
+            if nal_data_start >= raw_buf.len() { break; }
+            let nal_type = raw_buf[nal_data_start] & 0x1f;
 
-            let next = find_nal_start(&buf, nal_data_start + 1);
-            if next >= buf.len() { break; }
+            let next = find_nal_start(&raw_buf, nal_data_start + 1);
+            if next >= raw_buf.len() { break; }
 
             let is_vcl = nal_type == 1 || nal_type == 5; // slice or IDR
 
             if !config_sent {
                 if nal_type == 7 {
-                    sps = buf[nal_data_start..next].to_vec();
+                    sps = raw_buf[nal_data_start..next].to_vec();
                 } else if nal_type == 8 {
-                    pps = buf[nal_data_start..next].to_vec();
+                    pps = raw_buf[nal_data_start..next].to_vec();
                 }
                 if !sps.is_empty() && !pps.is_empty() {
                     let avcc = build_avcc(&sps, &pps);
-                    let avcc_b64 = engine.encode(&avcc);
-                    let _ = app_handle.emit_to(win_label, "mirror:config", avcc_b64);
+                    let mut config_payload = vec![0xFF]; // marker for decoder config
+                    config_payload.extend_from_slice(&avcc);
+                    let _ = on_frame.send(config_payload);
                     config_sent = true;
                 }
             }
@@ -194,7 +206,7 @@ pub fn connect_and_stream(app_handle: tauri::AppHandle, running: Arc<AtomicBool>
             let nal_len = next - nal_data_start;
             let mut avcc_nal = Vec::with_capacity(4 + nal_len);
             avcc_nal.extend_from_slice(&(nal_len as u32).to_be_bytes());
-            avcc_nal.extend_from_slice(&buf[nal_data_start..next]);
+            avcc_nal.extend_from_slice(&raw_buf[nal_data_start..next]);
 
             if nal_type == 7 || nal_type == 8 {
                 // Buffer SPS/PPS to combine with the next VCL NAL
@@ -203,8 +215,11 @@ pub fn connect_and_stream(app_handle: tauri::AppHandle, running: Arc<AtomicBool>
                 // Flush pending SPS/PPS + this VCL NAL as one access unit
                 let mut combined = std::mem::take(&mut pending);
                 combined.extend_from_slice(&avcc_nal);
-                let frame_b64 = engine.encode(&combined);
-                let _ = on_frame.send(crate::FrameData { data: frame_b64, key: nal_type == 5 });
+                let is_key = nal_type == 5;
+                // Prepend 1-byte key flag, then send raw bytes directly via Channel
+                let mut payload = vec![if is_key { 1 } else { 0 }];
+                payload.extend_from_slice(&combined);
+                let _ = on_frame.send(payload);
             } else if !config_sent {
                 // Before config, buffer everything
                 pending.extend_from_slice(&avcc_nal);
@@ -213,10 +228,10 @@ pub fn connect_and_stream(app_handle: tauri::AppHandle, running: Arc<AtomicBool>
             pos = next;
         }
 
-        if consumed < buf.len() {
-            buf = buf[consumed..].to_vec();
+        if consumed < raw_buf.len() {
+            raw_buf = raw_buf[consumed..].to_vec();
         } else {
-            buf.clear();
+            raw_buf.clear();
         }
     }
 

@@ -8,6 +8,7 @@ mod zip_util;
 use script_exec::{ScriptManager, script_spawn, script_kill};
 use serial_port::SerialState;
 use std::collections::HashMap;
+use base64::Engine;
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::Arc;
 use tauri::menu::{Menu, MenuItem};
@@ -21,12 +22,6 @@ use tauri::Manager;
 use tauri_plugin_single_instance::init as single_instance_init;
 
 struct MirrorState(Mutex<HashMap<String, (Arc<AtomicBool>, u16)>>);
-
-#[derive(Clone, serde::Serialize)]
-pub struct FrameData {
-    pub data: String,
-    pub key: bool,
-}
 
 static NEXT_MIRROR_PORT: AtomicU16 = AtomicU16::new(27183);
 
@@ -119,8 +114,14 @@ async fn adb_mirror_start(
     window: tauri::Window,
     app: tauri::AppHandle,
     state: tauri::State<'_, MirrorState>,
-    on_frame: tauri::ipc::Channel<FrameData>,
+    on_frame: tauri::ipc::Channel<Vec<u8>>,
+    max_size: Option<u16>,
+    video_bit_rate: Option<u32>,
+    max_fps: Option<u8>,
 ) -> Result<(), String> {
+    let max_size = max_size.unwrap_or(960);
+    let video_bit_rate = video_bit_rate.unwrap_or(3_000_000);
+    let max_fps = max_fps.unwrap_or(15);
     let port = NEXT_MIRROR_PORT.fetch_add(1, Ordering::Relaxed);
     let running = Arc::new(AtomicBool::new(true));
     state.0.lock().unwrap().insert(serial.clone(), (running.clone(), port));
@@ -148,7 +149,7 @@ async fn adb_mirror_start(
             if let Err(e) = mirror::setup_forward(&serial_c, port) {
                 let _ = app_c.emit_to(&win_label, "mirror:diagnostic", &format!("ADB forward failed: {}", e));
                 false
-            } else if let Err(e) = mirror::start_server(&serial_c) {
+            } else if let Err(e) = mirror::start_server(&serial_c, max_size, video_bit_rate, max_fps) {
                 let _ = app_c.emit_to(&win_label, "mirror:diagnostic", &format!("scrcpy-server start failed: {}", e));
                 false
             } else {
@@ -165,7 +166,7 @@ async fn adb_mirror_start(
                 if attempt > 0 {
                     std::thread::sleep(Duration::from_secs(2));
                 }
-                stream_result = mirror::connect_and_stream(app_c.clone(), running_c.clone(), port, &serial_c, &win_label, on_frame.clone());
+                stream_result = mirror::connect_and_stream(app_c.clone(), running_c.clone(), port, &win_label, on_frame.clone());
                 if stream_result.is_ok() { break; }
             }
             mirror::remove_forward(&serial_c, port);
@@ -182,8 +183,12 @@ async fn adb_mirror_start(
         while running_c.load(Ordering::Relaxed) {
             match adb::screenshot(&serial_c, "") {
                 Ok(data_url) => {
-                    let b64 = data_url.strip_prefix("data:image/png;base64,").unwrap_or(&data_url).to_string();
-                    let _ = on_frame.send(FrameData { data: b64, key: true });
+                    let png_base64 = data_url.strip_prefix("data:image/png;base64,").unwrap_or(&data_url);
+                    if let Ok(raw) = base64::engine::general_purpose::STANDARD.decode(png_base64) {
+                        let mut payload = vec![1u8]; // key flag = true
+                        payload.extend_from_slice(&raw);
+                        let _ = on_frame.send(payload);
+                    }
                 }
                 Err(e) => {
                     let _ = app_c.emit_to(&win_label, "mirror:error", &format!("截图失败: {}", e));
