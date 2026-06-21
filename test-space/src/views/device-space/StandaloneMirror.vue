@@ -1,11 +1,81 @@
 <template>
-  <div class="w-screen h-screen bg-black overflow-hidden">
-    <canvas ref="mirrorCanvas" class="w-full h-full object-contain block"
-      @mousedown="onPointerDown"
-      @mouseup="onPointerUp"
-      @touchstart.prevent="onPointerDown($event.touches[0])"
-      @touchend.prevent="onPointerUp($event.changedTouches[0])"
-      @contextmenu.prevent="onRightClick"></canvas>
+  <div class="w-screen h-screen bg-black flex flex-col overflow-hidden select-none">
+    <!-- Mirror canvas area -->
+    <div class="flex-1 min-h-0 relative">
+      <canvas ref="mirrorCanvas" class="w-full h-full object-contain block"
+        @mousedown="onPointerDown"
+        @mouseup="onPointerUp"
+        @touchstart.prevent="onPointerDown($event.touches[0])"
+        @touchend.prevent="onPointerUp($event.changedTouches[0])"
+        @contextmenu.prevent="onRightClick"></canvas>
+    </div>
+
+    <!-- Remote Control Bar -->
+    <div class="bg-[#1a1c1d] border-t border-white/10 flex-shrink-0 px-2 py-2">
+      <!-- Row 1: System buttons + D-pad -->
+      <div class="flex items-center justify-center gap-3 mb-2">
+        <!-- Left: Back, Home, Settings -->
+        <div class="flex gap-1">
+          <button class="remote-btn" @click="sendKey('4')">
+            <span class="material-symbols-outlined text-lg">arrow_back</span>
+          </button>
+          <button class="remote-btn" @click="sendKey('3')">
+            <span class="material-symbols-outlined text-lg">home</span>
+          </button>
+          <button class="remote-btn" @click="sendKey('176')">
+            <span class="material-symbols-outlined text-lg">settings</span>
+          </button>
+        </div>
+        <!-- Center: D-pad -->
+        <div class="relative w-[108px] h-[108px] flex-none">
+          <div class="absolute top-0 left-1/2 -translate-x-1/2">
+            <button class="dpad-btn" @click="sendKey('19')">
+              <span class="material-symbols-outlined text-base">keyboard_arrow_up</span>
+            </button>
+          </div>
+          <div class="absolute bottom-0 left-1/2 -translate-x-1/2">
+            <button class="dpad-btn" @click="sendKey('20')">
+              <span class="material-symbols-outlined text-base">keyboard_arrow_down</span>
+            </button>
+          </div>
+          <div class="absolute left-0 top-1/2 -translate-y-1/2">
+            <button class="dpad-btn" @click="sendKey('21')">
+              <span class="material-symbols-outlined text-base">keyboard_arrow_left</span>
+            </button>
+          </div>
+          <div class="absolute right-0 top-1/2 -translate-y-1/2">
+            <button class="dpad-btn" @click="sendKey('22')">
+              <span class="material-symbols-outlined text-base">keyboard_arrow_right</span>
+            </button>
+          </div>
+          <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+            <button class="dpad-btn w-8 h-8 bg-white/10 rounded-full flex items-center justify-center" @click="sendKey('23')">
+              <span class="material-symbols-outlined text-base text-white/90">check</span>
+            </button>
+          </div>
+        </div>
+        <!-- Right: Power + Volume -->
+        <div class="flex gap-1">
+          <button class="remote-btn !bg-red-500/20 !text-red-400" @click="sendKey('26')">
+            <span class="material-symbols-outlined text-lg">power_settings_new</span>
+          </button>
+          <button class="remote-btn" @click="sendKey('24')">
+            <span class="material-symbols-outlined text-lg">volume_up</span>
+          </button>
+          <button class="remote-btn" @click="sendKey('25')">
+            <span class="material-symbols-outlined text-lg">volume_down</span>
+          </button>
+          <button class="remote-btn" @click="sendKey('164')">
+            <span class="material-symbols-outlined text-lg">volume_off</span>
+          </button>
+        </div>
+      </div>
+      <!-- Row 2: Numpad 0-9 -->
+      <div class="flex items-center justify-center gap-1">
+        <button v-for="n in 9" :key="n" class="numpad-btn" @click="sendKey(String(7 + n))">{{ n }}</button>
+        <button class="numpad-btn" @click="sendKey('0')">0</button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -13,6 +83,10 @@
 import { ref, onMounted, onUnmounted } from "vue";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+
+const appWindow = getCurrentWebviewWindow();
+const listenTarget = { target: { kind: 'WebviewWindow' as const, label: appWindow.label } };
 
 const serial = new URLSearchParams(window.location.search).get("serial") || "";
 const mirrorCanvas = ref<HTMLCanvasElement | null>(null);
@@ -24,6 +98,10 @@ let useScrcpy = false;
 let tapX1 = 0, tapY1 = 0, tapping = false;
 let mirrorW = 0, mirrorH = 0;
 let devW = 0, devH = 0;
+
+async function sendKey(keycode: string) {
+  try { await invoke("adb_input_keyevent", { serial, keycode }); } catch {}
+}
 
 function canvasCoords(e: { clientX: number; clientY: number }) {
   const c = mirrorCanvas.value;
@@ -83,7 +161,7 @@ onMounted(async () => {
         error: () => {},
       });
     }
-  }));
+  }, listenTarget));
 
   unlisteners.push(await listen<string>("mirror:config", (e) => {
     if (!videoDecoder || decoderConfigured) return;
@@ -95,7 +173,7 @@ onMounted(async () => {
       });
       decoderConfigured = true;
     } catch {}
-  }));
+  }, listenTarget));
 
   unlisteners.push(await listen<{ data: string; key: boolean; pts: number }>("mirror:frame", (e) => {
     if (!useScrcpy || !videoDecoder || !decoderConfigured) return;
@@ -106,7 +184,7 @@ onMounted(async () => {
         data: Uint8Array.from(atob(e.payload.data), c => c.charCodeAt(0)),
       }));
     } catch {}
-  }));
+  }, listenTarget));
 
   unlisteners.push(await listen<string>("mirror:frame_data", (e) => {
     if (useScrcpy) return;
@@ -118,9 +196,9 @@ onMounted(async () => {
       ctx!.drawImage(img, 0, 0);
     };
     img.src = `data:image/png;base64,${e.payload}`;
-  }));
+  }, listenTarget));
 
-  unlisteners.push(await listen("mirror:ready", () => {}));
+  unlisteners.push(await listen("mirror:ready", () => {}, listenTarget));
 
   await invoke("adb_mirror_start", { serial });
 });
@@ -128,7 +206,79 @@ onMounted(async () => {
 onUnmounted(() => {
   for (const u of unlisteners) u();
   unlisteners = [];
-  invoke("adb_mirror_stop").catch(() => {});
+  invoke("adb_mirror_stop", { serial }).catch(() => {});
   if (videoDecoder) { videoDecoder.close(); videoDecoder = null; }
 });
 </script>
+
+<style scoped>
+.remote-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+.remote-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  transform: scale(1.08);
+}
+.remote-btn:active {
+  transform: scale(0.95);
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.dpad-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+.dpad-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  transform: scale(1.12);
+}
+.dpad-btn:active {
+  transform: scale(0.92);
+}
+
+.numpad-btn {
+  width: 30px;
+  height: 26px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 11px;
+  font-family: monospace;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+.numpad-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.95);
+  transform: scale(1.08);
+}
+.numpad-btn:active {
+  transform: scale(0.95);
+}
+</style>

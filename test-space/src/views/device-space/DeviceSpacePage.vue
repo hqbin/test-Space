@@ -841,11 +841,15 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useAdb, type DeviceProperties } from "@/composables/useAdb";
 import { useI18n } from "@/composables/useI18n";
 
 const { t } = useI18n();
 // preview dialog & drag-drop keys will be in useI18n.ts
+
+const appWindow = getCurrentWebviewWindow();
+const listenTarget = { target: { kind: 'WebviewWindow' as const, label: appWindow.label } };
 
 interface ScriptResult { stdout: string; stderr: string; exit_code: number; }
 import { addInputHistory, getInputHistory, saveLogSession, getRunningLogSessions, removeLogSession } from "@/services/database";
@@ -1579,6 +1583,7 @@ const mirrorWidth = ref(0);
 const mirrorHeight = ref(0);
 const deviceWidth = ref(0);
 const deviceHeight = ref(0);
+const mirrorPopoutActive = ref(false);
 
 let mirrorTapX1 = 0, mirrorTapY1 = 0, mirrorTapping = false;
 
@@ -1643,13 +1648,28 @@ async function mirrorPopout() {
   await stopMirror();
   if (!selectedDevice.value) return;
   const serial = selectedDevice.value.serial;
+
+  // Query device display size for orientation-adaptive window
+  let winWidth = 480, winHeight = 800;
+  try {
+    const [dw, dh] = await invoke<[number, number]>("adb_get_display_size", { serial });
+    const isLandscape = dw > dh;
+    if (isLandscape) {
+      winWidth = 854;
+      winHeight = Math.round(854 * (dh / dw));
+    } else {
+      winHeight = 800;
+      winWidth = Math.round(800 * (dw / dh));
+    }
+  } catch {}
+
   const win = new WebviewWindow(`mirror-${serial}`, {
     url: `/mirror?serial=${serial}`,
     title: `Screen Mirror - ${serial}`,
-    width: 480,
-    height: 800,
+    width: winWidth,
+    height: winHeight + 220, // extra space for remote control bar
   });
-  win.once('tauri://created', () => {});
+  win.once('tauri://created', () => { mirrorPopoutActive.value = true; });
   win.once('tauri://error', (e) => { console.error("[mirror] popout failed:", e); });
 }
 
@@ -2631,7 +2651,7 @@ async function startMirror() {
           error: (e: any) => { console.error("[mirror] WebCodecs error:", e); }
         });
       }
-    }));
+    }, listenTarget));
 
     listeners.push(await listen<string>("mirror:config", (event) => {
       console.log("[mirror] config event received, payload length:", event.payload.length);
@@ -2645,7 +2665,7 @@ async function startMirror() {
         decoderConfigured = true;
         console.log("[mirror] VideoDecoder configured successfully");
       } catch (e) { console.error("[mirror] Config failed:", e); }
-    }));
+    }, listenTarget));
 
     listeners.push(await listen<{ data: string; key: boolean; pts: number }>("mirror:frame", (event) => {
       if (!useScrcpy || !videoDecoder || !decoderConfigured) return;
@@ -2656,7 +2676,7 @@ async function startMirror() {
           data: base64ToBytes(event.payload.data),
         }));
       } catch (e) {}
-    }));
+    }, listenTarget));
 
     listeners.push(await listen<string>("mirror:frame_data", (event) => {
       console.log("[mirror] frame_data received, len:", event.payload.length, "useScrcpy:", useScrcpy);
@@ -2677,7 +2697,7 @@ async function startMirror() {
       };
       img.onerror = () => { console.error("[mirror] image decode error"); };
       img.src = `data:image/png;base64,${event.payload}`;
-    }));
+    }, listenTarget));
 
     listeners.push(await listen<string>("mirror:diagnostic", (event) => {
       console.log("[mirror] diagnostic:", event.payload);
@@ -2693,19 +2713,19 @@ async function startMirror() {
       else if (msg.startsWith("scrcpy: Failed to read codec meta") || msg.includes("Failed to read codec meta")) mirrorErrorMsg.value = t("device.mirrorDiagStreamFailed");
       else if (msg.startsWith("scrcpy:")) mirrorErrorMsg.value = t("device.mirrorDiagStreamFailed");
       else mirrorErrorMsg.value = msg;
-    }));
+    }, listenTarget));
 
     listeners.push(await listen<string>("mirror:error", async (event) => {
       console.log("[mirror] error event:", event.payload);
       mirrorErrorMsg.value = event.payload;
       showToast(event.payload, "error");
       await stopMirror();
-    }));
+    }, listenTarget));
 
     listeners.push(await listen("mirror:ready", () => {
       console.log("[mirror] ready event");
       if (useScrcpy) showToast(t("device.mirrorStarted"), "success");
-    }));
+    }, listenTarget));
 
     mirrorUnlisten = listeners;
     mirrorUnlisten.push(() => { if (videoDecoder) { console.log("[mirror] closing decoder"); videoDecoder.close(); } });
@@ -2720,9 +2740,11 @@ async function startMirror() {
 }
 async function stopMirror() {
   console.log("[mirror] stopMirror called");
+  const serial = selectedDevice.value?.serial;
+  if (!serial) return;
   try {
     const { invoke } = await import("@tauri-apps/api/core");
-    await invoke("adb_mirror_stop");
+    await invoke("adb_mirror_stop", { serial });
     console.log("[mirror] adb_mirror_stop called");
   } catch (e) { console.error("[mirror] stop error:", e); }
   for (const u of mirrorUnlisten) { u(); }
@@ -2827,9 +2849,15 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener('resize', recalcAppPageSize);
   if ((window as any).__appListResizeObserver) (window as any).__appListResizeObserver.disconnect();
-  for (const u of mirrorUnlisten) { u(); }
-  mirrorUnlisten = [];
-  import("@tauri-apps/api/core").then(m => m.invoke("adb_mirror_stop")).catch(() => {});
+  // Don't stop mirror if standalone popout window is active
+  if (!mirrorPopoutActive.value) {
+    for (const u of mirrorUnlisten) { u(); }
+    mirrorUnlisten = [];
+    const serial = selectedDevice.value?.serial;
+    if (serial) {
+      import("@tauri-apps/api/core").then(m => m.invoke("adb_mirror_stop", { serial })).catch(() => {});
+    }
+  }
   if (logcatTimeoutId) clearTimeout(logcatTimeoutId);
   if (diagTimeoutId) clearTimeout(diagTimeoutId);
   if (bootLogcatTimeoutId) clearTimeout(bootLogcatTimeoutId);

@@ -7,7 +7,8 @@ mod zip_util;
 
 use script_exec::{ScriptManager, script_spawn, script_kill};
 use serial_port::SerialState;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::Arc;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
@@ -19,7 +20,9 @@ use tauri::Emitter;
 use tauri::Manager;
 use tauri_plugin_single_instance::init as single_instance_init;
 
-struct MirrorState(Mutex<Option<Arc<AtomicBool>>>);
+struct MirrorState(Mutex<HashMap<String, (Arc<AtomicBool>, u16)>>);
+
+static NEXT_MIRROR_PORT: AtomicU16 = AtomicU16::new(27183);
 
 #[tauri::command]
 fn adb_list_devices() -> Vec<adb::DeviceInfo> {
@@ -105,22 +108,17 @@ async fn adb_screenshot(serial: String, save_path: String) -> Result<String, Str
 }
 
 #[tauri::command]
-async fn adb_mirror_start(serial: String, app: tauri::AppHandle, state: tauri::State<'_, MirrorState>) -> Result<(), String> {
-    {
-        if let Some(flag) = state.0.lock().unwrap().take() {
-            flag.store(false, Ordering::Relaxed);
-        }
-    }
-    tokio::time::sleep(Duration::from_millis(300)).await;
-
+async fn adb_mirror_start(serial: String, window: tauri::Window, app: tauri::AppHandle, state: tauri::State<'_, MirrorState>) -> Result<(), String> {
+    let port = NEXT_MIRROR_PORT.fetch_add(1, Ordering::Relaxed);
     let running = Arc::new(AtomicBool::new(true));
-    *state.0.lock().unwrap() = Some(running.clone());
+    state.0.lock().unwrap().insert(serial.clone(), (running.clone(), port));
 
     // Resolve scrcpy-server path before spawning
     let jar_str = app.path().resource_dir()
         .map(|d| d.join("bin/scrcpy-server").to_string_lossy().to_string())
         .unwrap_or_default();
 
+    let win_label = window.label().to_string();
     let serial_c = serial.clone();
     let running_c = running.clone();
     let app_c = app.clone();
@@ -128,18 +126,18 @@ async fn adb_mirror_start(serial: String, app: tauri::AppHandle, state: tauri::S
     tokio::task::spawn_blocking(move || {
         // Try scrcpy-server; if any step fails or config not received, fall back to legacy
         let scrcpy_ok = if jar_str.is_empty() {
-            let _ = app_c.emit("mirror:diagnostic", "scrcpy-server jar not found in app resources");
+            let _ = app_c.emit_to(&win_label, "mirror:diagnostic", "scrcpy-server jar not found in app resources");
             false
         } else if let Err(e) = mirror::push_server(&serial_c, &jar_str) {
-            let _ = app_c.emit("mirror:diagnostic", &format!("scrcpy-server push failed: {}", e));
+            let _ = app_c.emit_to(&win_label, "mirror:diagnostic", &format!("scrcpy-server push failed: {}", e));
             false
         } else {
-            mirror::remove_forward(&serial_c);
-            if let Err(e) = mirror::setup_forward(&serial_c) {
-                let _ = app_c.emit("mirror:diagnostic", &format!("ADB forward failed: {}", e));
+            mirror::remove_forward(&serial_c, port);
+            if let Err(e) = mirror::setup_forward(&serial_c, port) {
+                let _ = app_c.emit_to(&win_label, "mirror:diagnostic", &format!("ADB forward failed: {}", e));
                 false
             } else if let Err(e) = mirror::start_server(&serial_c) {
-                let _ = app_c.emit("mirror:diagnostic", &format!("scrcpy-server start failed: {}", e));
+                let _ = app_c.emit_to(&win_label, "mirror:diagnostic", &format!("scrcpy-server start failed: {}", e));
                 false
             } else {
                 true
@@ -147,36 +145,36 @@ async fn adb_mirror_start(serial: String, app: tauri::AppHandle, state: tauri::S
         };
 
         if scrcpy_ok {
-            let _ = app_c.emit("mirror:mode", "scrcpy");
-            let _ = app_c.emit("mirror:ready", "");
+            let _ = app_c.emit_to(&win_label, "mirror:mode", "scrcpy");
+            let _ = app_c.emit_to(&win_label, "mirror:ready", "");
             let mut stream_result = Err("not started".into());
             for attempt in 0..3 {
                 if !running_c.load(Ordering::Relaxed) { break; }
                 if attempt > 0 {
                     std::thread::sleep(Duration::from_secs(2));
                 }
-                stream_result = mirror::connect_and_stream(app_c.clone(), running_c.clone());
+                stream_result = mirror::connect_and_stream(app_c.clone(), running_c.clone(), port, &win_label);
                 if stream_result.is_ok() { break; }
             }
-            mirror::remove_forward(&serial_c);
+            mirror::remove_forward(&serial_c, port);
             if let Ok(()) = stream_result {
                 running_c.store(false, Ordering::Relaxed);
                 return;
             }
             if let Err(ref msg) = stream_result {
-                let _ = app_c.emit("mirror:diagnostic", &format!("scrcpy: {}", msg));
+                let _ = app_c.emit_to(&win_label, "mirror:diagnostic", &format!("scrcpy: {}", msg));
             }
         }
-        let _ = app_c.emit("mirror:mode", "legacy");
+        let _ = app_c.emit_to(&win_label, "mirror:mode", "legacy");
 
         while running_c.load(Ordering::Relaxed) {
             match adb::screenshot(&serial_c, "") {
                 Ok(data_url) => {
                     let b64 = data_url.strip_prefix("data:image/png;base64,").unwrap_or(&data_url).to_string();
-                    let _ = app_c.emit("mirror:frame_data", &b64);
+                    let _ = app_c.emit_to(&win_label, "mirror:frame_data", &b64);
                 }
                 Err(e) => {
-                    let _ = app_c.emit("mirror:error", &format!("截图失败: {}", e));
+                    let _ = app_c.emit_to(&win_label, "mirror:error", &format!("截图失败: {}", e));
                     break;
                 }
             }
@@ -190,9 +188,10 @@ async fn adb_mirror_start(serial: String, app: tauri::AppHandle, state: tauri::S
 }
 
 #[tauri::command]
-fn adb_mirror_stop(state: tauri::State<'_, MirrorState>) -> Result<(), String> {
-    if let Some(flag) = state.0.lock().unwrap().take() {
+fn adb_mirror_stop(serial: String, state: tauri::State<'_, MirrorState>) -> Result<(), String> {
+    if let Some((flag, port)) = state.0.lock().unwrap().remove(&serial) {
         flag.store(false, Ordering::Relaxed);
+        mirror::remove_forward(&serial, port);
     }
     Ok(())
 }
@@ -503,7 +502,7 @@ pub fn run() {
         .manage(SerialState {
             port: Mutex::new(None),
         })
-        .manage(MirrorState(Mutex::new(None)))
+        .manage(MirrorState(Mutex::new(HashMap::new())))
         .manage(ScriptManager::new())
         .manage(proxy::ProxyState::new())
         .setup(|app| {

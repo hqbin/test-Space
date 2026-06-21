@@ -43,9 +43,10 @@ pub fn push_server(serial: &str, jar_path: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub fn setup_forward(serial: &str) -> Result<(), String> {
+pub fn setup_forward(serial: &str, port: u16) -> Result<(), String> {
+    let addr = format!("tcp:{}", port);
     let output =     adb_cmd()
-        .args(["-s", serial, "forward", "tcp:27183", "localabstract:scrcpy"])
+        .args(["-s", serial, "forward", &addr, "localabstract:scrcpy"])
         .output()
         .map_err(|e| format!("ADB forward failed: {}", e))?;
     if !output.status.success() {
@@ -54,9 +55,10 @@ pub fn setup_forward(serial: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub fn remove_forward(serial: &str) {
+pub fn remove_forward(serial: &str, port: u16) {
+    let addr = format!("tcp:{}", port);
     let _ =     adb_cmd()
-        .args(["-s", serial, "forward", "--remove", "tcp:27183"])
+        .args(["-s", serial, "forward", "--remove", &addr])
         .output();
 }
 
@@ -116,11 +118,12 @@ fn build_avcc(sps: &[u8], pps: &[u8]) -> Vec<u8> {
     avcc
 }
 
-pub fn connect_and_stream(app_handle: tauri::AppHandle, running: Arc<AtomicBool>) -> Result<(), String> {
+pub fn connect_and_stream(app_handle: tauri::AppHandle, running: Arc<AtomicBool>, port: u16, win_label: &str) -> Result<(), String> {
+    let addr = format!("127.0.0.1:{}", port);
     let mut stream: Option<TcpStream> = None;
     for i in 0..30 {
         if !running.load(Ordering::Relaxed) { return Ok(()); }
-        match TcpStream::connect_timeout(&"127.0.0.1:27183".parse().unwrap(), Duration::from_secs(1)) {
+        match TcpStream::connect_timeout(&addr.parse().unwrap(), Duration::from_secs(1)) {
             Ok(s) => { stream = Some(s); break; }
             Err(_) => {
                 if i == 29 { return Err("Server not ready after 30s".into()); }
@@ -147,7 +150,7 @@ pub fn connect_and_stream(app_handle: tauri::AppHandle, running: Arc<AtomicBool>
     let engine = base64::engine::general_purpose::STANDARD;
     let stream_start = std::time::Instant::now();
 
-    let _ = app_handle.emit("mirror:ready", "h264");
+    let _ = app_handle.emit_to(win_label, "mirror:ready", "h264");
 
     loop {
         if !running.load(Ordering::Relaxed) { break; }
@@ -190,7 +193,7 @@ pub fn connect_and_stream(app_handle: tauri::AppHandle, running: Arc<AtomicBool>
                 if !sps.is_empty() && !pps.is_empty() {
                     let avcc = build_avcc(&sps, &pps);
                     let avcc_b64 = engine.encode(&avcc);
-                    let _ = app_handle.emit("mirror:config", avcc_b64);
+                    let _ = app_handle.emit_to(win_label, "mirror:config", avcc_b64);
                     config_sent = true;
                 }
             }
@@ -212,7 +215,7 @@ pub fn connect_and_stream(app_handle: tauri::AppHandle, running: Arc<AtomicBool>
                 let is_key = nal_type == 5;
                 let frame_pts = stream_start.elapsed().as_micros() as i64;
                 let payload = FramePayload { data: frame_b64, key: is_key, pts: frame_pts };
-                let _ = app_handle.emit("mirror:frame", payload);
+                let _ = app_handle.emit_to(win_label, "mirror:frame", payload);
             } else if !config_sent {
                 // Before config, buffer everything
                 pending.extend_from_slice(&avcc_nal);
