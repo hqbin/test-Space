@@ -240,6 +240,11 @@ pub async fn proxy_start(
         let server_result = proxy.bind(
             ("0.0.0.0", proxy_port),
             service_fn(move |req: Request<Incoming>| {
+                // IMMEDIATE flush print BEFORE any async work
+                use std::io::Write;
+                let _ = std::io::stderr().write_all(b"[proxy-debug] service_fn CALLED\n");
+                let _ = std::io::stderr().flush();
+
                 let state = sf_state.clone();
                 let app_handle = sf_app.clone();
                 let client = client.clone();
@@ -555,7 +560,9 @@ pub async fn proxy_start(
                 }).await.map_err(|e| e.to_string())?;
 
                 match remount_result {
-                    Ok(ref msg) if msg.contains("remount succeeded") => {
+                    Ok(ref msg) if msg.contains("remount succeeded")
+                        || msg.contains("remount of")
+                        || msg.trim().is_empty() => {
                         messages.push("🔄 系统分区已重新挂载（可写）".to_string());
 
                         match compute_cert_hashes(&cert_pem) {

@@ -21,7 +21,8 @@ use tauri::Emitter;
 use tauri::Manager;
 use tauri_plugin_single_instance::init as single_instance_init;
 
-struct MirrorState(Mutex<HashMap<String, (Arc<AtomicBool>, u16)>>);
+type MirrorKey = (String, String); // (serial, window_label)
+struct MirrorState(Mutex<HashMap<MirrorKey, (Arc<AtomicBool>, u16)>>);
 
 static NEXT_MIRROR_PORT: AtomicU16 = AtomicU16::new(27183);
 
@@ -124,14 +125,14 @@ async fn adb_mirror_start(
     let max_fps = max_fps.unwrap_or(15);
     let port = NEXT_MIRROR_PORT.fetch_add(1, Ordering::Relaxed);
     let running = Arc::new(AtomicBool::new(true));
-    state.0.lock().unwrap().insert(serial.clone(), (running.clone(), port));
+    let win_label = window.label().to_string();
+    state.0.lock().unwrap().insert((serial.clone(), win_label.clone()), (running.clone(), port));
 
     // Resolve scrcpy-server path before spawning
     let jar_str = app.path().resource_dir()
         .map(|d| d.join("bin/scrcpy-server").to_string_lossy().to_string())
         .unwrap_or_default();
 
-    let win_label = window.label().to_string();
     let serial_c = serial.clone();
     let running_c = running.clone();
     let app_c = app.clone();
@@ -205,8 +206,9 @@ async fn adb_mirror_start(
 }
 
 #[tauri::command]
-fn adb_mirror_stop(serial: String, state: tauri::State<'_, MirrorState>) -> Result<(), String> {
-    if let Some((flag, port)) = state.0.lock().unwrap().remove(&serial) {
+fn adb_mirror_stop(serial: String, window: tauri::Window, state: tauri::State<'_, MirrorState>) -> Result<(), String> {
+    let win_label = window.label().to_string();
+    if let Some((flag, port)) = state.0.lock().unwrap().remove(&(serial.clone(), win_label)) {
         flag.store(false, Ordering::Relaxed);
         mirror::remove_forward(&serial, port);
     }
