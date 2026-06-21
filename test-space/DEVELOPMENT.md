@@ -1142,7 +1142,9 @@ npm run build
 | 13 | **顶部浮动导航** | 导航栏为 fixed 顶部浮动条，鼠标移到屏幕顶部触发，移出后自动收起；不占页面空间、不影响内容布局 |
 | 14 | **字体 > 11px** | 界面正文字号不得低于 13px，标注类文字（`caption`）不得低于 12px |
 | 15 | **glass-panel 内 fixed 定位** | `glass-panel` 使用 `backdrop-filter: blur()` 会创建包含块，`position: fixed` 子元素被裁剪；下拉框/弹窗必须 `<Teleport to="body">` 脱离 glass-panel |
-| 16 | **设备下拉框自定义** | 设备选择不得使用原生 `<select>`，必须使用自定义下拉面板（匹配应用搜索历史样式：`bg-white border shadow-lg`），Teleport 到 body + `getBoundingClientRect()` 坐标定位 |
+| 16 | **设备下拉框自定义** | 设备选择不得使用原生 `<select>`，必须使用自定义下拉面板（匹配应用搜索历史样式：`bg-white shadow-lg` 无边框），Teleport 到 body + `getBoundingClientRect()` 坐标定位 |
+| 17 | **下拉列表无边框** | 所有输入框下拉列表（快捷操作输入历史、应用搜索历史、远程路径历史、设备选择下拉等）不得使用 `border` 类，仅用 `bg-white shadow-lg rounded-lg` 保持干净悬浮效果。边框线会让下拉列表显得粗糙臃肿，与玻璃态设计语言冲突 |
+| 18 | **下拉条目 no-border** | `glass-panel` 内的 `<button>` 默认被 scoped CSS 加 `inset box-shadow` 模拟边框。若下拉条目（`<button>`）在 `.glass-panel` 内部（未 Teleport 到 body），必须添加 `no-border` 类排除该效果，否则条目间会出现分割线。Teleport 到 body 的下拉框天然不受影响 |
 
 ---
 

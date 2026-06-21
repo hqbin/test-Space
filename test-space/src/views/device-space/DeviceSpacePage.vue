@@ -104,8 +104,8 @@
               <input ref="textInputRef" v-model="inputTextValue"
                 class="w-full bg-white/50 border border-outline-variant/60 rounded-full px-3 py-1.5 font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all select-text"
                 :placeholder="t('device.textHint')" @keyup.enter="sendText" @focus="showTextHistory = true" @blur="hideTextHistoryDelayed" />
-              <div v-if="showTextHistory && textHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-outline-variant rounded-lg p-1 max-h-32 overflow-y-auto shadow-lg">
-                <button v-for="h in textHistory" :key="h" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none"
+              <div v-if="showTextHistory && textHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white rounded-lg p-1 max-h-32 overflow-y-auto custom-scrollbar shadow-lg">
+                <button v-for="h in textHistory" :key="h" class="w-full flex items-center gap-2 px-2 py-1.5 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none text-left no-border"
                   @mousedown.prevent @click="selectTextHistory(h)">{{ h }}</button>
               </div>
             </div>
@@ -209,8 +209,8 @@
                     <input v-model="queryPackageName" class="bg-transparent border-none outline-none w-full font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-0 p-0 select-text"
                       :placeholder="t('device.searchApp')" @input="onAppSearchInput" @keyup.enter="queryAppPath" @focus="loadAppSearchHistory" @blur="hideAppSearchHistoryDelayed" />
                   </div>
-                  <div v-if="showAppSearchHistory && appSearchHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-outline-variant rounded-lg p-1 max-h-32 overflow-y-auto shadow-lg">
-                    <button v-for="h in appSearchHistory" :key="h" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none"
+                  <div v-if="showAppSearchHistory && appSearchHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white rounded-lg p-1 max-h-32 overflow-y-auto custom-scrollbar shadow-lg">
+                    <button v-for="h in appSearchHistory" :key="h" class="w-full flex items-center gap-2 px-2 py-1.5 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none text-left no-border"
                       @mousedown.prevent @click="selectAppSearchHistory(h)">{{ h }}</button>
                   </div>
                 </div>
@@ -438,8 +438,8 @@
             <input v-model="remotePath" ref="remotePathInputRef"
               class="w-full bg-white border border-outline-variant rounded-lg px-3 py-1.5 font-body-sm text-body-sm text-on-surface font-mono focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all select-text"
               :placeholder="t('device.remotePathHint')" @focus="showRemotePathHistory = true" @blur="hideRemotePathHistoryDelayed" @keyup.enter="navigateToPath" />
-            <div v-if="showRemotePathHistory && remotePathHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-outline-variant rounded-lg p-1 max-h-32 overflow-y-auto shadow-lg">
-              <button v-for="h in remotePathHistory" :key="h" class="w-full text-left px-2 py-1 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none"
+            <div v-if="showRemotePathHistory && remotePathHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white rounded-lg p-1 max-h-32 overflow-y-auto custom-scrollbar shadow-lg">
+              <button v-for="h in remotePathHistory" :key="h" class="w-full flex items-center gap-2 px-2 py-1.5 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none text-left no-border"
                 @mousedown.prevent @click="selectRemotePathHistory(h)">{{ h }}</button>
             </div>
           </div>
@@ -482,7 +482,7 @@
     <!-- Device Dropdown (teleported to body to escape glass-panel backdrop-filter) -->
     <Teleport to="body">
       <div v-if="showDeviceDropdown" class="fixed inset-0 z-50" @click="showDeviceDropdown = false"></div>
-      <div v-if="showDeviceDropdown" class="fixed z-50 bg-white border border-outline-variant rounded-lg p-1 max-h-48 overflow-y-auto custom-scrollbar shadow-lg min-w-[200px]"
+      <div v-if="showDeviceDropdown" class="fixed z-50 bg-white rounded-lg p-1 max-h-48 overflow-y-auto custom-scrollbar shadow-lg min-w-[200px]"
         :style="{ top: deviceDropdownPos.top + 'px', left: deviceDropdownPos.left + 'px' }">
         <button v-for="d in devices" :key="d.serial"
           class="w-full flex items-center gap-2 px-2 py-1.5 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none text-left"
@@ -780,7 +780,7 @@
                 </div>
               </div>
               <div class="pt-3 border-t border-outline-variant/30">
-                <button class="text-sm text-on-surface-variant hover:text-secondary flex items-center gap-1 transition-colors select-none" @click="addCustomCommand">
+                <button class="text-sm text-on-surface-variant hover:text-secondary flex items-center gap-1 transition-colors select-none no-border" @click="addCustomCommand">
                   <span class="material-symbols-outlined text-[16px]">add</span>{{ t('device.addShortcut') }}
                 </button>
               </div>

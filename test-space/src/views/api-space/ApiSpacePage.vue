@@ -30,15 +30,34 @@
       <div class="w-px h-6 bg-white/20" />
 
       <div class="flex items-center gap-2">
-        <select v-model="deviceSerial" class="glass-input rounded-xl px-3 py-1.5 text-body-md min-w-[140px] max-w-[200px]">
-          <option value="">{{ devices.length > 0 ? t('api.selectDevice') : t('api.noDevice') }}</option>
-          <option v-for="d in devices" :key="d.serial" :value="d.serial">{{ d.model || d.serial }}</option>
-        </select>
+        <div ref="deviceDropdownRef" class="relative">
+          <button class="glass-input rounded-xl px-3 py-1.5 text-body-md min-w-[140px] max-w-[200px] flex items-center gap-2 cursor-pointer select-none" @click="openDeviceDropdown">
+            <span class="w-2 h-2 rounded-full shrink-0" :class="deviceSerial ? 'bg-green-500' : 'bg-gray-300'" />
+            <span class="truncate flex-1 text-left">{{ deviceSerial ? deviceName(deviceSerial) : t('api.selectDevice') }}</span>
+            <span class="material-symbols-outlined text-[14px] text-on-surface-variant">expand_more</span>
+          </button>
+        </div>
         <button class="glass-hover rounded-xl px-2 py-1.5 flex items-center gap-1" @click="refreshDevices" title="Refresh">
           <span class="material-symbols-outlined text-[16px]">refresh</span>
         </button>
       </div>
     </div>
+
+    <!-- Device Dropdown (Teleport to body) -->
+    <Teleport to="body">
+      <div v-if="showDeviceDropdown" class="fixed inset-0 z-50" @click="showDeviceDropdown = false" />
+      <div v-if="showDeviceDropdown" class="fixed z-50 bg-white rounded-lg p-1 max-h-48 overflow-y-auto custom-scrollbar shadow-lg min-w-[200px]"
+        :style="{ top: deviceDropdownPos.top + 'px', left: deviceDropdownPos.left + 'px', width: deviceDropdownPos.width + 'px' }">
+        <button v-for="d in devices" :key="d.serial"
+          class="w-full flex items-center gap-2 px-2 py-1.5 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none text-left no-border"
+          @mousedown.prevent @click="selectDevice(d)">
+          <span class="w-2 h-2 rounded-full shrink-0 bg-green-500" />
+          <span class="truncate flex-1">{{ d.model || d.serial }}</span>
+          <span class="text-[10px] text-on-surface-variant/50 truncate max-w-[80px]">{{ d.serial }}</span>
+        </button>
+        <div v-if="devices.length === 0" class="px-2 py-1.5 text-caption text-on-surface-variant/50">{{ t('api.noDevice') }}</div>
+      </div>
+    </Teleport>
 
     <!-- Filter Bar -->
     <div class="glass-panel rounded-xl px-5 py-2.5 flex items-center gap-3 flex-wrap">
@@ -46,27 +65,56 @@
         <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[16px] text-on-surface-variant">search</span>
         <input v-model="searchQuery" class="glass-input rounded-xl pl-9 pr-3 py-1.5 w-full text-body-md" :placeholder="t('api.filter')" />
       </div>
-      <select v-model="methodFilter" class="glass-input rounded-xl px-3 py-1.5 text-body-md min-w-[90px]">
-        <option value="">{{ t('api.filterMethod') }}</option>
-        <option>GET</option>
-        <option>POST</option>
-        <option>PUT</option>
-        <option>DELETE</option>
-        <option>PATCH</option>
-      </select>
-      <select v-model="statusFilter" class="glass-input rounded-xl px-3 py-1.5 text-body-md min-w-[90px]">
-        <option value="">{{ t('api.filterStatus') }}</option>
-        <option value="2xx">2xx</option>
-        <option value="3xx">3xx</option>
-        <option value="4xx">4xx</option>
-        <option value="5xx">5xx</option>
-      </select>
+      <!-- Method Filter Dropdown -->
+      <div ref="methodDropdownRef" class="relative">
+        <button class="glass-input rounded-xl px-3 py-1.5 text-body-md min-w-[90px] flex items-center gap-2 cursor-pointer select-none" @click="openMethodDropdown">
+          <span class="flex-1 text-left">{{ methodFilter || t('api.filterMethod') }}</span>
+          <span class="material-symbols-outlined text-[14px] text-on-surface-variant">expand_more</span>
+        </button>
+      </div>
+      <!-- Status Filter Dropdown -->
+      <div ref="statusDropdownRef" class="relative">
+        <button class="glass-input rounded-xl px-3 py-1.5 text-body-md min-w-[90px] flex items-center gap-2 cursor-pointer select-none" @click="openStatusDropdown">
+          <span class="flex-1 text-left">{{ statusFilter || t('api.filterStatus') }}</span>
+          <span class="material-symbols-outlined text-[14px] text-on-surface-variant">expand_more</span>
+        </button>
+      </div>
       <span class="text-caption text-on-surface-variant whitespace-nowrap">{{ t('api.capturedCount', { count: String(filteredList.length) }) }}</span>
       <button v-if="api.capturedRequests.value.length > 0" class="glass-hover rounded-xl px-3 py-1.5 flex items-center gap-1" @click="handleClear">
         <span class="material-symbols-outlined text-[16px]">delete_sweep</span>
         <span class="font-label-md">{{ t('api.clear') }}</span>
       </button>
     </div>
+
+    <!-- Method Dropdown (Teleport to body) -->
+    <Teleport to="body">
+      <div v-if="showMethodDropdown" class="fixed inset-0 z-50" @click="showMethodDropdown = false" />
+      <div v-if="showMethodDropdown" class="fixed z-50 bg-white rounded-lg p-1 max-h-48 overflow-y-auto custom-scrollbar shadow-lg"
+        :style="{ top: methodDropdownPos.top + 'px', left: methodDropdownPos.left + 'px', width: methodDropdownPos.width + 'px' }">
+        <button class="w-full flex items-center gap-2 px-2 py-1.5 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none text-left no-border"
+          @mousedown.prevent @click="methodFilter = ''; showMethodDropdown = false">{{ t('api.filterMethod') }}</button>
+        <button v-for="m in methodOptions" :key="m"
+          class="w-full flex items-center gap-2 px-2 py-1.5 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none text-left no-border"
+          @mousedown.prevent @click="methodFilter = m; showMethodDropdown = false">
+          <span class="font-mono" :class="methodTextClass(m)">{{ m }}</span>
+        </button>
+      </div>
+    </Teleport>
+
+    <!-- Status Dropdown (Teleport to body) -->
+    <Teleport to="body">
+      <div v-if="showStatusDropdown" class="fixed inset-0 z-50" @click="showStatusDropdown = false" />
+      <div v-if="showStatusDropdown" class="fixed z-50 bg-white rounded-lg p-1 max-h-48 overflow-y-auto custom-scrollbar shadow-lg"
+        :style="{ top: statusDropdownPos.top + 'px', left: statusDropdownPos.left + 'px', width: statusDropdownPos.width + 'px' }">
+        <button class="w-full flex items-center gap-2 px-2 py-1.5 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none text-left no-border"
+          @mousedown.prevent @click="statusFilter = ''; showStatusDropdown = false">{{ t('api.filterStatus') }}</button>
+        <button v-for="s in statusOptions" :key="s"
+          class="w-full flex items-center gap-2 px-2 py-1.5 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none text-left no-border"
+          @mousedown.prevent @click="statusFilter = s; showStatusDropdown = false">
+          {{ s }}
+        </button>
+      </div>
+    </Teleport>
 
     <!-- Main Content: Request List + Detail Panel -->
     <div class="flex-1 flex gap-4 min-h-0 overflow-hidden">
@@ -352,6 +400,49 @@ const resultDialog = ref<DialogState>({ show: false, title: "", message: "" })
 const devices = ref<{ serial: string; model: string }[]>([])
 const deviceSerial = ref("")
 
+const showDeviceDropdown = ref(false)
+const deviceDropdownPos = ref({ top: 0, left: 0, width: 0 })
+const deviceDropdownRef = ref<HTMLDivElement | null>(null)
+function openDeviceDropdown() {
+  const el = deviceDropdownRef.value
+  if (!el) return
+  const r = el.getBoundingClientRect()
+  deviceDropdownPos.value = { top: r.bottom + 4, left: r.left, width: r.width }
+  showDeviceDropdown.value = true
+}
+function selectDevice(d: { serial: string; model: string }) {
+  deviceSerial.value = d.serial
+  showDeviceDropdown.value = false
+}
+function deviceName(serial: string) {
+  const d = devices.value.find(x => x.serial === serial)
+  return d ? (d.model || d.serial) : serial
+}
+
+const showMethodDropdown = ref(false)
+const showStatusDropdown = ref(false)
+const methodDropdownRef = ref<HTMLDivElement | null>(null)
+const statusDropdownRef = ref<HTMLDivElement | null>(null)
+const methodDropdownPos = ref({ top: 0, left: 0, width: 0 })
+const statusDropdownPos = ref({ top: 0, left: 0, width: 0 })
+const methodOptions = ["GET", "POST", "PUT", "DELETE", "PATCH"]
+const statusOptions = ["2xx", "3xx", "4xx", "5xx"]
+
+function openMethodDropdown() {
+  const el = methodDropdownRef.value
+  if (!el) return
+  const r = el.getBoundingClientRect()
+  methodDropdownPos.value = { top: r.bottom + 4, left: r.left, width: r.width }
+  showMethodDropdown.value = true
+}
+function openStatusDropdown() {
+  const el = statusDropdownRef.value
+  if (!el) return
+  const r = el.getBoundingClientRect()
+  statusDropdownPos.value = { top: r.bottom + 4, left: r.left, width: r.width }
+  showStatusDropdown.value = true
+}
+
 async function refreshDevices() {
   try {
     const list = await invoke<{ serial: string; model: string }[]>("adb_list_devices")
@@ -407,6 +498,17 @@ function methodClass(method: string): string {
     PATCH: "bg-purple-500/10 text-purple-600",
   }
   return map[method] || "bg-gray-500/10 text-gray-600"
+}
+
+function methodTextClass(method: string): string {
+  const map: Record<string, string> = {
+    GET: "text-blue-600",
+    POST: "text-emerald-600",
+    PUT: "text-orange-600",
+    DELETE: "text-red-600",
+    PATCH: "text-purple-600",
+  }
+  return map[method] || "text-gray-600"
 }
 
 function statusClass(code: number): string {
