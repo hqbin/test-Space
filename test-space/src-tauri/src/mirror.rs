@@ -177,10 +177,11 @@ pub fn connect_and_stream(app_handle: tauri::AppHandle, running: Arc<AtomicBool>
             };
 
             let nal_data_start = start + sc_len;
+            if nal_data_start >= buf.len() { break; }
             let nal_type = buf[nal_data_start] & 0x1f;
 
             let next = find_nal_start(&buf, nal_data_start + 1);
-            if next > buf.len() { break; }
+            if next >= buf.len() { break; }
 
             let is_vcl = nal_type == 1 || nal_type == 5; // slice or IDR
 
