@@ -16,6 +16,8 @@ use http_mitm_proxy::moka::sync::Cache;
 use serde::{Serialize, Deserialize};
 use tauri::Emitter;
 use tauri::Manager;
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 
 pub struct ProxyState {
     pub inner: Arc<ProxyInner>,
@@ -236,7 +238,7 @@ pub async fn proxy_start(
         let client = DefaultClient::new();
 
         let server_result = proxy.bind(
-            ("127.0.0.1", proxy_port),
+            ("0.0.0.0", proxy_port),
             service_fn(move |req: Request<Incoming>| {
                 let state = sf_state.clone();
                 let app_handle = sf_app.clone();
@@ -255,6 +257,8 @@ pub async fn proxy_start(
                     let path = uri.path().to_string();
                     let query = uri.query().map(|q| q.to_string());
                     let method = req.method().to_string();
+
+                    eprintln!("[proxy] >>> {} {} (host={})", method, url, host);
 
                     let (mut req_parts, req_body) = req.into_parts();
                     let req_body_bytes = read_body_bytes(req_body).await;
@@ -362,18 +366,33 @@ pub async fn proxy_start(
 
                     let rebuilt_req = Request::from_parts(req_parts, rebuild_body);
 
-                    let response_result = client.send_request(rebuilt_req).await;
+                    // DefaultClient::send_request() requires the full URL (with scheme + host)
+                    // to know where to connect. HTTP proxy requests arrive with absolute-form
+                    // URI (http://host/path); hyper internally converts to origin-form on the wire.
+                    eprintln!("[proxy] --> forwarding {} to upstream", url);
+                    let send_fut = client.send_request(rebuilt_req);
+                    let response_result = tokio::time::timeout(Duration::from_secs(30), send_fut).await;
                     let (response, end_time, duration) = match response_result {
-                        Ok((res, _upgrade)) => {
+                        Ok(Ok((res, _upgrade))) => {
                             let end = get_timestamp();
                             let dur = ((end - start_time) * 1000.0 * 100.0).round() / 100.0;
+                            eprintln!("[proxy] <<< {} {} ({}ms)", url, res.status(), dur);
                             (res, Some(end), Some(dur))
                         }
-                        Err(e) => {
+                        Ok(Err(e)) => {
+                            eprintln!("[proxy] ERROR {}: {}", url, e);
                             return Ok(Response::builder()
                                 .status(502)
                                 .header("X-Proxy", "TestSpace-Error")
                                 .body(box_body(Bytes::from(format!("Proxy error: {}", e))))
+                                .unwrap());
+                        }
+                        Err(_) => {
+                            eprintln!("[proxy] TIMEOUT {} (30s)", url);
+                            return Ok(Response::builder()
+                                .status(504)
+                                .header("X-Proxy", "TestSpace-Timeout")
+                                .body(box_body(Bytes::from("Proxy upstream request timed out after 30s")))
                                 .unwrap());
                         }
                     };
@@ -527,7 +546,7 @@ pub async fn proxy_start(
         }).await.map_err(|e| e.to_string())?;
 
         match root_result {
-            Ok(ref root_out) if root_out.contains("already root") || root_out.contains("already running as root") => {
+            Ok(ref root_out) if root_out.contains("already root") || root_out.contains("running as root") || root_out.contains("restarting adbd") || root_out.trim().is_empty() => {
                 messages.push("🔓 设备已获取 Root 权限".to_string());
 
                 let remount_serial = serial.clone();
@@ -539,18 +558,19 @@ pub async fn proxy_start(
                     Ok(ref msg) if msg.contains("remount succeeded") => {
                         messages.push("🔄 系统分区已重新挂载（可写）".to_string());
 
-                        match compute_cert_hash(&cert_pem) {
-                            Ok(hash) => {
-                                let install_serial = serial.clone();
-                                let install_hash = hash.clone();
+                        match compute_cert_hashes(&cert_pem) {
+                            Ok((md5_hash, sha256_hash)) => {
+                                let serial_for_install = serial.clone();
+                                let md5 = md5_hash.clone();
+                                let sha256 = sha256_hash.clone();
                                 match tokio::task::spawn_blocking(move || {
-                                    install_system_cert(&install_serial, &install_hash)
+                                    install_system_cert(&serial_for_install, &md5, &sha256)
                                 }).await.map_err(|e| e.to_string())? {
-                                    Ok(()) => messages.push(format!(
-                                        "✅ 系统 CA 证书安装成功\n   位置：/system/etc/security/cacerts/{}.0\n   建议重启设备以完全生效。", hash
+                                    Ok(used_hash) => messages.push(format!(
+                                        "✅ 系统 CA 证书安装成功\n   位置：/system/etc/security/cacerts/{}.0\n   建议重启设备以完全生效。", used_hash
                                     )),
                                     Err(e) => messages.push(format!(
-                                        "⚠️ 自动安装证书失败：{}\n   手动安装：adb shell cat /sdcard/testspace-ca-cert.pem > /system/etc/security/cacerts/{}.0", e, hash
+                                        "⚠️ 自动安装证书失败：{}\n   手动安装：adb shell cat /sdcard/testspace-ca-cert.pem > /system/etc/security/cacerts/{}.0\n   或：adb shell cat /sdcard/testspace-ca-cert.pem > /system/etc/security/cacerts/{}.0", e, md5_hash, sha256_hash
                                     )),
                                 }
                             }
@@ -564,33 +584,63 @@ pub async fn proxy_start(
             }
             _ => {
                 messages.push("⚠️ 未获取到 Root 权限，尝试安装用户证书。\n   请查看设备屏幕并确认安装 CA 证书。".to_string());
-                let intent_serial = serial.clone();
-                let _ = tokio::task::spawn_blocking(move || {
-                    crate::adb::shell_command(&intent_serial,
-                        "am start -n com.android.certinstaller/.CertInstallerMain \
+                let cert_intents = [
+                    format!(
+                        "cp /sdcard/testspace-ca-cert.pem /sdcard/Download/ 2>/dev/null; \
+                         am start -n com.android.certinstaller/.CertInstallerMain \
                          -a android.intent.action.VIEW \
                          -t application/x-x509-ca-cert \
-                         -d file:///sdcard/testspace-ca-cert.pem"
-                    )
-                }).await;
+                         -d file:///sdcard/Download/testspace-ca-cert.pem"
+                    ),
+                    "am start -n com.android.certinstaller/.CertInstallerMain -a android.intent.action.VIEW -t application/x-x509-ca-cert -d file:///sdcard/testspace-ca-cert.pem".to_string(),
+                    "am start -a android.settings.SECURITY_SETTINGS".to_string(),
+                ];
+                for intent in &cert_intents {
+                    let sp_serial = serial.clone();
+                    let cmd = intent.clone();
+                    if let Ok(result) = tokio::task::spawn_blocking(move || {
+                        crate::adb::shell_command(&sp_serial, &cmd)
+                    }).await.map_err(|e| e.to_string()).and_then(|r| r) {
+                        if !result.contains("Error") && !result.contains("not found") {
+                            break;
+                        }
+                    }
+                }
                 messages.push("   ⚠️ 用户证书——仅对信任用户 CA 的应用生效。".to_string());
             }
         }
 
-        match get_local_ip() {
-            Ok(host) => {
-                let proxy_serial = serial.clone();
-                let proxy_host = host.clone();
-                match tokio::task::spawn_blocking(move || {
-                    crate::adb::shell_command(&proxy_serial,
-                        &format!("settings put global http_proxy {}:{}", proxy_host, port)
-                    )
-                }).await.map_err(|e| e.to_string())? {
-                    Ok(_) => messages.push(format!("📡 设备代理已设置为 {}:{}", host, port)),
-                    Err(e) => messages.push(format!("⚠️ 设置设备代理失败：{}", e)),
-                }
-            }
-            Err(e) => messages.push(format!("⚠️ 无法获取本机 IP：{}", e)),
+        // Determine the best address for the device to reach this host.
+        // For emulators: 10.0.2.2 (standard Android emulator gateway → host loopback)
+        // For USB devices without WiFi: adb reverse + 127.0.0.1 is ideal, but some
+        // emulators (e.g. LeiDian) have broken adb reverse that reports success
+        // without actually forwarding data. So we try adb reverse anyway (it works
+        // on real devices), but always use a routable IP (LAN or emulator gateway).
+        let emulator_gateway = "10.0.2.2";
+        let host_for_device = match get_local_ip() {
+            Ok(ip) => ip,
+            Err(_) => emulator_gateway.to_string(),
+        };
+
+        // Set up ADB reverse tunnel (works over USB, no WiFi needed, for real devices)
+        let reverse_serial = serial.clone();
+        let _reverse_ok = tokio::task::spawn_blocking(move || {
+            let mut cmd = std::process::Command::new("adb");
+            #[cfg(target_os = "windows")]
+            cmd.creation_flags(0x08000000);
+            cmd.args(["-s", &reverse_serial, "reverse", &format!("tcp:{}", port), &format!("tcp:{}", port)]);
+            let _ = cmd.output();
+        }).await;
+
+        let proxy_host = host_for_device.clone();
+        let proxy_serial = serial.clone();
+        match tokio::task::spawn_blocking(move || {
+            crate::adb::shell_command(&proxy_serial,
+                &format!("settings put global http_proxy {}:{}", proxy_host, port)
+            )
+        }).await.map_err(|e| e.to_string())? {
+            Ok(_) => messages.push(format!("📡 设备代理已设置为 {}:{}", host_for_device, port)),
+            Err(e) => messages.push(format!("⚠️ 设置设备代理失败：{}", e)),
         }
     }
 
@@ -608,6 +658,18 @@ pub async fn proxy_stop(
     }
     let mut messages = vec![];
     if let Some(ref serial) = device_serial {
+        // Clear ADB reverse if it was set
+        let _: Result<_, _> = tokio::task::spawn_blocking({
+            let rev_serial = serial.clone();
+            move || {
+                let mut cmd = std::process::Command::new("adb");
+                #[cfg(target_os = "windows")]
+                cmd.creation_flags(0x08000000);
+                cmd.args(["-s", &rev_serial, "reverse", "--remove-all"]);
+                let _ = cmd.output();
+            }
+        }).await;
+
         let clear_serial = serial.clone();
         match tokio::task::spawn_blocking(move || {
             crate::adb::shell_command(&clear_serial, "settings put global http_proxy :0")
@@ -619,6 +681,8 @@ pub async fn proxy_stop(
     if let Some(tx) = inner.shutdown_tx.lock().unwrap().take() {
         let _ = tx.send(());
     }
+    // Give the proxy task a moment to process the shutdown signal
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     inner.running.store(false, Ordering::Release);
     *inner.port.lock().unwrap() = None;
     messages.push("🛑 代理已停止".to_string());
@@ -753,34 +817,59 @@ pub async fn proxy_clear_device_proxy(
     }
 }
 
-fn compute_cert_hash(cert_pem: &str) -> Result<String, String> {
+/// Returns (md5_hash, sha256_hash) for the certificate subject.
+/// Android 7-9 uses the MD5-based hash (subject_hash_old).
+/// Android 10+ uses SHA-256-based hash (subject_hash in Conscrypt/BoringSSL).
+fn compute_cert_hashes(cert_pem: &str) -> Result<(String, String), String> {
     use md5::{Md5, Digest};
+    use sha2::Sha256;
     let pem_data = pem::parse(cert_pem).map_err(|e| format!("PEM parse error: {}", e))?;
     let pem_bytes = pem_data.contents();
     let (_, cert) = x509_parser::parse_x509_certificate(pem_bytes)
         .map_err(|e| format!("X509 parse error: {}", e))?;
     let subject_raw = cert.subject().as_raw();
-    let mut hasher = Md5::new();
-    hasher.update(subject_raw);
-    let hash = hasher.finalize();
-    let value = u32::from_le_bytes([hash[0], hash[1], hash[2], hash[3]]);
-    Ok(format!("{:08x}", value))
+
+    let mut md5 = Md5::new();
+    md5.update(subject_raw);
+    let md5_hash = md5.finalize();
+    let md5_value = u32::from_le_bytes([md5_hash[0], md5_hash[1], md5_hash[2], md5_hash[3]]);
+
+    let mut sha256 = Sha256::new();
+    sha256.update(subject_raw);
+    let sha256_hash = sha256.finalize();
+    let sha256_value = u32::from_le_bytes([sha256_hash[0], sha256_hash[1], sha256_hash[2], sha256_hash[3]]);
+
+    Ok((format!("{:08x}", md5_value), format!("{:08x}", sha256_value)))
 }
 
 fn adb_shell_blocking(serial: &str, cmd: &str) -> Result<String, String> {
     crate::adb::shell_command(serial, cmd)
 }
 
-fn install_system_cert(serial: &str, hash: &str) -> Result<(), String> {
+/// Install the CA certificate as a system cert.
+/// Tries both MD5 hash (Android 7-9) and SHA-256 hash (Android 10+).
+/// Returns the successfully installed hash, or an error if both fail.
+fn install_system_cert(serial: &str, md5_hash: &str, sha256_hash: &str) -> Result<String, String> {
     let cert_src = "/sdcard/testspace-ca-cert.pem";
-    let cert_dst = format!("/system/etc/security/cacerts/{}.0", hash);
-    adb_shell_blocking(serial, &format!("cat {} > {}", cert_src, cert_dst))?;
-    adb_shell_blocking(serial, &format!("chmod 644 {}", cert_dst))?;
-    let selinux = adb_shell_blocking(serial, &format!("selinuxenabled 2>/dev/null && echo yes || echo no"));
-    if selinux.as_ref().map(|s| s.trim() == "yes").unwrap_or(false) {
-        let _ = adb_shell_blocking(serial, &format!("chcon u:object_r:system_file:s0 {}", cert_dst));
+    let mut last_err = String::new();
+
+    for hash in [md5_hash, sha256_hash] {
+        let cert_dst = format!("/system/etc/security/cacerts/{}.0", hash);
+        let result = (|| -> Result<(), String> {
+            adb_shell_blocking(serial, &format!("cat {} > {}", cert_src, cert_dst))?;
+            adb_shell_blocking(serial, &format!("chmod 644 {}", cert_dst))?;
+            let selinux = adb_shell_blocking(serial, "selinuxenabled 2>/dev/null && echo yes || echo no");
+            if selinux.as_ref().map(|s| s.trim() == "yes").unwrap_or(false) {
+                let _ = adb_shell_blocking(serial, &format!("chcon u:object_r:system_file:s0 {}", cert_dst));
+            }
+            Ok(())
+        })();
+        match result {
+            Ok(()) => return Ok(hash.to_string()),
+            Err(e) => last_err = e,
+        }
     }
-    Ok(())
+    Err(format!("Both MD5 and SHA256 cert installation failed. Last error: {}", last_err))
 }
 
 #[tauri::command]
@@ -809,29 +898,31 @@ pub async fn proxy_install_cert(
     }).await.map_err(|e| e.to_string())?;
 
     let root_output = root_result?;
-    if root_output.contains("already root") || root_output.contains("already running as root") {
+    if root_output.contains("already root") || root_output.contains("running as root") || root_output.contains("restarting adbd") || root_output.trim().is_empty() {
         let remount_result = tokio::task::spawn_blocking({
             let serial = serial.clone();
             move || crate::adb::remount_device(&serial)
         }).await.map_err(|e| e.to_string())?;
 
+        let (md5_hash, sha256_hash) = compute_cert_hashes(&cert_pem)?;
+
         if remount_result.as_ref().map(|s| s.contains("remount succeeded")).unwrap_or(false) {
-            let hash = compute_cert_hash(&cert_pem)?;
             let install_serial = serial.clone();
-            let install_hash = hash.clone();
+            let md5 = md5_hash.clone();
+            let sha256 = sha256_hash.clone();
             let install_result = tokio::task::spawn_blocking(move || {
-                install_system_cert(&install_serial, &install_hash)
+                install_system_cert(&install_serial, &md5, &sha256)
             }).await.map_err(|e| e.to_string())?;
 
             match install_result {
-                Ok(()) => {
+                Ok(used_hash) => {
                     Ok(format!(
                         "✅ Certificate installed successfully!\n\n\
                          Location: /system/etc/security/cacerts/{}.0\n\n\
                          A reboot is recommended for the certificate to take effect.\n\
                          Run 'adb reboot' to complete installation.\n\
                          Note: Some apps may not trust the certificate until reboot.",
-                        hash
+                        used_hash
                     ))
                 }
                 Err(e) => {
@@ -842,12 +933,11 @@ pub async fn proxy_install_cert(
                          1. adb shell cat /sdcard/testspace-ca-cert.pem > /system/etc/security/cacerts/{}.0\n\
                          2. adb shell chmod 644 /system/etc/security/cacerts/{}.0\n\
                          3. adb reboot",
-                        e, hash, hash
+                        e, md5_hash, md5_hash
                     ))
                 }
             }
         } else {
-            let hash = compute_cert_hash(&cert_pem).unwrap_or_else(|_| "XXXXXXXX".to_string());
             Ok(format!(
                 "Certificate pushed to /sdcard/testspace-ca-cert.pem\n\
                  \n⚠️ REMOUNT FAILED\n\
@@ -862,26 +952,60 @@ pub async fn proxy_install_cert(
                  Option B (user cert - limited trust):\n\
                  Settings → Security → Install from storage → select /sdcard/testspace-ca-cert.pem\n\
                  (Most Android 7+ apps will NOT trust user certificates)",
-                hash, hash
+                md5_hash, sha256_hash
             ))
         }
     } else {
-        let install_cmd = format!(
-            "am start -n com.android.certinstaller/.CertInstallerMain \
-             -a android.intent.action.VIEW \
-             -t application/x-x509-ca-cert \
-             -d file:///sdcard/testspace-ca-cert.pem"
-        );
-        let _ = tokio::task::spawn_blocking({
-            let serial = serial.clone();
-            move || crate::adb::shell_command(&serial, &install_cmd)
-        }).await;
+        // Try multiple methods to launch the cert installer, in case one doesn't work
+        let cert_intents = [
+            // Method 1: Copy to Download first (more accessible on Android 10+)
+            format!(
+                "cp /sdcard/testspace-ca-cert.pem /sdcard/Download/ 2>/dev/null; \
+                 am start -n com.android.certinstaller/.CertInstallerMain \
+                 -a android.intent.action.VIEW \
+                 -t application/x-x509-ca-cert \
+                 -d file:///sdcard/Download/testspace-ca-cert.pem"
+            ),
+            // Method 2: Fall back to /sdcard/ root
+            format!(
+                "am start -n com.android.certinstaller/.CertInstallerMain \
+                 -a android.intent.action.VIEW \
+                 -t application/x-x509-ca-cert \
+                 -d file:///sdcard/testspace-ca-cert.pem"
+            ),
+            // Method 3: Use Settings Security intent
+            "am start -a android.settings.SECURITY_SETTINGS".to_string(),
+        ];
 
-        Ok("Certificate pushed to /sdcard/testspace-ca-cert.pem\n\
-            Cert installer launched on device.\n\
-            ⚠️ User certificate - only apps that trust user certs will work.\n\
-            For full HTTPS interception (all apps), root + system cert required.\n\
-            Check device screen and enter a certificate name to install.".to_string())
+        let mut cert_launched = false;
+        for intent in &cert_intents {
+            let sp_serial = serial.clone();
+            let cmd = intent.clone();
+            if let Ok(result) = tokio::task::spawn_blocking(move || {
+                crate::adb::shell_command(&sp_serial, &cmd)
+            }).await.map_err(|e| e.to_string()).and_then(|r| r) {
+                if !result.contains("Error") && !result.contains("not found") {
+                    cert_launched = true;
+                    break;
+                }
+            }
+        }
+
+        if cert_launched {
+            Ok("Certificate pushed to /sdcard/testspace-ca-cert.pem\n\
+                Cert installer launched on device.\n\
+                ⚠️ User certificate - only apps that trust user certs will work.\n\
+                For full HTTPS interception (all apps), root + system cert required.\n\
+                Check device screen and enter a certificate name to install.".to_string())
+        } else {
+            Ok("Certificate pushed to /sdcard/testspace-ca-cert.pem\n\
+                ⚠️ Could not auto-launch cert installer on device.\n\
+                Please manually install:\n\
+                1. Settings → Security → Install from storage\n\
+                2. Select /sdcard/testspace-ca-cert.pem\n\
+                ⚠️ User certificates only work with apps that explicitly trust them.\n\
+                For full HTTPS interception, root + system cert is required.".to_string())
+        }
     }
 }
 
