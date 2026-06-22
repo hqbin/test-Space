@@ -16,6 +16,7 @@ export function useApiProxy() {
   const isStarting = ref(false)
   const isStopping = ref(false)
   const isReplaying = ref(false)
+  const debugLogs = ref<string[]>([])
 
   let unlistens: (() => void)[] = []
 
@@ -46,6 +47,11 @@ export function useApiProxy() {
 
     unlistens.push(await listen<string>("proxy:error", (e) => {
       console.error("Proxy error:", e.payload)
+      debugLogs.value.push(`[ERROR] ${e.payload}`)
+    }))
+
+    unlistens.push(await listen<string>("proxy:debug", (e) => {
+      debugLogs.value.push(e.payload)
     }))
   }
 
@@ -134,7 +140,7 @@ export function useApiProxy() {
 
   return {
     status, capturedRequests, selectedRequest, rewriteRules,
-    isStarting, isStopping, isReplaying,
+    isStarting, isStopping, isReplaying, debugLogs,
     running, breakpointEnabled, currentPort,
     init, cleanup,
     startProxy, stopProxy, toggleBreakpoint, continueRequest,

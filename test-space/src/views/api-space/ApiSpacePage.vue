@@ -119,7 +119,7 @@
     <!-- Main Content: Request List + Detail Panel -->
     <div class="flex-1 flex gap-4 min-h-0 overflow-hidden">
       <!-- Request List -->
-      <div class="glass-panel rounded-xl w-[380px] min-w-[320px] flex flex-col overflow-hidden">
+      <div class="glass-panel rounded-xl w-[480px] min-w-[400px] flex flex-col overflow-hidden">
         <div class="flex-1 overflow-y-auto custom-scrollbar p-2">
           <div v-if="filteredList.length === 0" class="flex flex-col items-center justify-center h-full text-on-surface-variant gap-2">
             <span class="material-symbols-outlined text-[48px] opacity-40">dns</span>
@@ -264,6 +264,27 @@
       </div>
     </div>
 
+    <!-- Debug Logs Panel -->
+    <div class="glass-panel rounded-xl">
+      <div class="flex items-center justify-between px-5 py-2.5 cursor-pointer select-none" @click="showDebugLogs = !showDebugLogs">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-[18px] text-on-surface-variant">bug_report</span>
+          <span class="font-label-md font-semibold">{{ t('api.debugLogs') }}</span>
+          <span v-if="api.debugLogs.value.length > 0" class="text-caption text-on-surface-variant">({{ api.debugLogs.value.length }})</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button class="glass-hover rounded-lg px-2.5 py-1 flex items-center gap-1" @click.stop="api.debugLogs.value = []">
+            <span class="font-label-md">{{ t('api.clear') }}</span>
+          </button>
+          <span class="material-symbols-outlined text-[18px] text-on-surface-variant transition-transform" :class="{ 'rotate-180': showDebugLogs }">expand_more</span>
+        </div>
+      </div>
+      <div v-show="showDebugLogs" class="px-5 pb-3 max-h-[150px] overflow-y-auto custom-scrollbar">
+        <div v-if="api.debugLogs.value.length === 0" class="text-caption text-on-surface-variant py-2 text-center">{{ t('api.noDebugLogs') }}</div>
+        <pre v-for="(log, i) in api.debugLogs.value" :key="i" class="font-mono text-caption text-on-surface py-0.5 border-b border-white/5 last:border-0">{{ log }}</pre>
+      </div>
+    </div>
+
     <!-- Rule Editor Dialog -->
     <Teleport to="body">
       <div v-if="showRuleEditor" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/20 backdrop-blur-sm" @click.self="showRuleEditor = false">
@@ -363,7 +384,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue"
+import { ref, computed, watch, onMounted, onUnmounted } from "vue"
 import { invoke } from "@tauri-apps/api/core"
 import { useI18n } from "@/composables/useI18n"
 import { useApiProxy } from "@/composables/useApiProxy"
@@ -386,6 +407,7 @@ const breakpointRequestId = ref("")
 const breakpointHeaders = ref("")
 const breakpointBody = ref("")
 const breakpointUrlPattern = ref("")
+const showDebugLogs = ref(false)
 
 const ruleForm = ref({
   name: "", url_pattern: "", action_type: "modify_request_header",
@@ -666,6 +688,11 @@ onMounted(async () => {
   await api.init()
   await api.getCaptured()
   await refreshDevices()
+})
+
+// Auto-expand debug panel when logs arrive
+watch(() => api.debugLogs.value.length, (n, o) => {
+  if (n > o) showDebugLogs.value = true
 })
 
 onUnmounted(() => {

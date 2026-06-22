@@ -16,8 +16,6 @@ use http_mitm_proxy::moka::sync::Cache;
 use serde::{Serialize, Deserialize};
 use tauri::Emitter;
 use tauri::Manager;
-#[cfg(target_os = "windows")]
-use std::os::windows::process::CommandExt;
 
 pub struct ProxyState {
     pub inner: Arc<ProxyInner>,
@@ -182,6 +180,7 @@ pub async fn proxy_start(
     }
 
     let port = find_available_port()?;
+    app.emit("proxy:debug", format!("[proxy] 分配端口: {}", port)).ok();
 
     let app_data_dir = app.path().app_data_dir()
         .map_err(|e| format!("Cannot get app data dir: {}", e))?;
@@ -234,17 +233,17 @@ pub async fn proxy_start(
     let sf_app = app_handle.clone();
 
     tokio::spawn(async move {
+        // 初始化 rustls crypto provider（必须在创建 MitmProxy 之前）
+        let _ = rustls::crypto::CryptoProvider::install_default(
+            rustls::crypto::ring::default_provider()
+        );
+
         let proxy = MitmProxy::new(Some(root_issuer), Some(Cache::new(128)));
         let client = DefaultClient::new();
 
         let server_result = proxy.bind(
             ("0.0.0.0", proxy_port),
             service_fn(move |req: Request<Incoming>| {
-                // IMMEDIATE flush print BEFORE any async work
-                use std::io::Write;
-                let _ = std::io::stderr().write_all(b"[proxy-debug] service_fn CALLED\n");
-                let _ = std::io::stderr().flush();
-
                 let state = sf_state.clone();
                 let app_handle = sf_app.clone();
                 let client = client.clone();
@@ -252,7 +251,7 @@ pub async fn proxy_start(
                 async move {
                     let start_time = get_timestamp();
                     let request_id = Uuid::new_v4().to_string();
-                    let _remote_addr = req.extensions().get::<RemoteAddr>()
+                    let remote_addr = req.extensions().get::<RemoteAddr>()
                         .map(|r| r.0)
                         .unwrap_or("0.0.0.0:0".parse().unwrap());
                     let uri = req.uri().clone();
@@ -263,7 +262,9 @@ pub async fn proxy_start(
                     let query = uri.query().map(|q| q.to_string());
                     let method = req.method().to_string();
 
-                    eprintln!("[proxy] >>> {} {} (host={})", method, url, host);
+                    let log_msg = format!("[proxy] >>> {} {} (host={}, from={})", method, url, host, remote_addr);
+                    eprintln!("{}", log_msg);
+                    app_handle.emit("proxy:debug", &log_msg).ok();
 
                     let (mut req_parts, req_body) = req.into_parts();
                     let req_body_bytes = read_body_bytes(req_body).await;
@@ -374,18 +375,24 @@ pub async fn proxy_start(
                     // DefaultClient::send_request() requires the full URL (with scheme + host)
                     // to know where to connect. HTTP proxy requests arrive with absolute-form
                     // URI (http://host/path); hyper internally converts to origin-form on the wire.
-                    eprintln!("[proxy] --> forwarding {} to upstream", url);
+                    let fwd_log = format!("[proxy] --> forwarding {} to upstream", url);
+                    eprintln!("{}", fwd_log);
+                    app_handle.emit("proxy:debug", &fwd_log).ok();
                     let send_fut = client.send_request(rebuilt_req);
                     let response_result = tokio::time::timeout(Duration::from_secs(30), send_fut).await;
                     let (response, end_time, duration) = match response_result {
                         Ok(Ok((res, _upgrade))) => {
                             let end = get_timestamp();
                             let dur = ((end - start_time) * 1000.0 * 100.0).round() / 100.0;
-                            eprintln!("[proxy] <<< {} {} ({}ms)", url, res.status(), dur);
+                            let ok_log = format!("[proxy] <<< {} {} ({}ms)", url, res.status(), dur);
+                            eprintln!("{}", ok_log);
+                            app_handle.emit("proxy:debug", &ok_log).ok();
                             (res, Some(end), Some(dur))
                         }
                         Ok(Err(e)) => {
-                            eprintln!("[proxy] ERROR {}: {}", url, e);
+                            let err_log = format!("[proxy] ERROR {}: {}", url, e);
+                            eprintln!("{}", err_log);
+                            app_handle.emit("proxy:debug", &err_log).ok();
                             return Ok(Response::builder()
                                 .status(502)
                                 .header("X-Proxy", "TestSpace-Error")
@@ -393,7 +400,9 @@ pub async fn proxy_start(
                                 .unwrap());
                         }
                         Err(_) => {
-                            eprintln!("[proxy] TIMEOUT {} (30s)", url);
+                            let timeout_log = format!("[proxy] TIMEOUT {} (30s)", url);
+                            eprintln!("{}", timeout_log);
+                            app_handle.emit("proxy:debug", &timeout_log).ok();
                             return Ok(Response::builder()
                                 .status(504)
                                 .header("X-Proxy", "TestSpace-Timeout")
@@ -516,11 +525,19 @@ pub async fn proxy_start(
 
         match server_result {
             Ok(server_handle) => {
-                let _ = shutdown_rx.await;
-                drop(server_handle);
+                app_handle.emit("proxy:debug", format!("[proxy] 代理服务器已在 0.0.0.0:{} 监听", proxy_port)).ok();
+                // server_handle 是 accept 循环的 future，必须 poll 它才能接受连接
+                tokio::select! {
+                    _ = server_handle => {
+                        eprintln!("[proxy] 服务器 accept 循环意外结束");
+                    }
+                    _ = shutdown_rx => {
+                        eprintln!("[proxy] 收到关闭信号");
+                    }
+                }
             }
             Err(e) => {
-                app_handle.emit("proxy:error", format!("Failed to start proxy: {}", e)).ok();
+                app_handle.emit("proxy:error", format!("启动代理失败: {}", e)).ok();
             }
         }
 
@@ -528,126 +545,68 @@ pub async fn proxy_start(
     });
 
     *inner.port.lock().unwrap() = Some(port);
-    let mut messages = vec![format!("✅ 代理已启动，端口：{}", port)];
+    let mut messages = vec![format!("代理已启动，端口：{}", port)];
 
     if let Some(ref serial) = device_serial {
-        let tmp_dir = std::env::temp_dir();
-        let cert_path = tmp_dir.join("testspace-ca-cert.pem");
-        std::fs::write(&cert_path, &cert_pem)
-            .map_err(|e| format!("写入证书失败：{}", e))?;
+        // 1. 推送 CA 证书
+        {
+            let tmp_dir = std::env::temp_dir();
+            let cert_path = tmp_dir.join("testspace-ca-cert.pem");
+            std::fs::write(&cert_path, &cert_pem)
+                .map_err(|e| format!("写入证书失败：{}", e))?;
 
-        let push_serial = serial.clone();
-        let cp = cert_path.to_string_lossy().to_string();
-        match tokio::task::spawn_blocking(move || {
-            crate::adb::push_file(&push_serial, &cp, "/sdcard/testspace-ca-cert.pem")
-        }).await.map_err(|e| e.to_string())? {
-            Ok(_) => messages.push("📄 CA 证书已推送到设备".to_string()),
-            Err(e) => messages.push(format!("⚠️ 推送证书失败：{}", e)),
+            let push_serial = serial.clone();
+            let cp = cert_path.to_string_lossy().to_string();
+            match tokio::task::spawn_blocking(move || {
+                crate::adb::push_file(&push_serial, &cp, "/sdcard/testspace-ca-cert.pem")
+            }).await.map_err(|e| e.to_string())? {
+                Ok(_) => app.emit("proxy:debug", "[proxy] 证书已推送到设备").ok(),
+                Err(e) => app.emit("proxy:error", format!("推送证书失败：{}", e)).ok(),
+            };
         }
 
-        let root_serial = serial.clone();
-        let root_result = tokio::task::spawn_blocking(move || {
-            crate::adb::root_device(&root_serial)
-        }).await.map_err(|e| e.to_string())?;
-
-        match root_result {
-            Ok(ref root_out) if root_out.contains("already root") || root_out.contains("running as root") || root_out.contains("restarting adbd") || root_out.trim().is_empty() => {
-                messages.push("🔓 设备已获取 Root 权限".to_string());
-
-                let remount_serial = serial.clone();
-                let remount_result = tokio::task::spawn_blocking(move || {
-                    crate::adb::remount_device(&remount_serial)
-                }).await.map_err(|e| e.to_string())?;
-
-                match remount_result {
-                    Ok(ref msg) if msg.contains("remount succeeded")
-                        || msg.contains("remount of")
-                        || msg.trim().is_empty() => {
-                        messages.push("🔄 系统分区已重新挂载（可写）".to_string());
-
-                        match compute_cert_hashes(&cert_pem) {
-                            Ok((md5_hash, sha256_hash)) => {
-                                let serial_for_install = serial.clone();
-                                let md5 = md5_hash.clone();
-                                let sha256 = sha256_hash.clone();
-                                match tokio::task::spawn_blocking(move || {
-                                    install_system_cert(&serial_for_install, &md5, &sha256)
-                                }).await.map_err(|e| e.to_string())? {
-                                    Ok(used_hash) => messages.push(format!(
-                                        "✅ 系统 CA 证书安装成功\n   位置：/system/etc/security/cacerts/{}.0\n   建议重启设备以完全生效。", used_hash
-                                    )),
-                                    Err(e) => messages.push(format!(
-                                        "⚠️ 自动安装证书失败：{}\n   手动安装：adb shell cat /sdcard/testspace-ca-cert.pem > /system/etc/security/cacerts/{}.0\n   或：adb shell cat /sdcard/testspace-ca-cert.pem > /system/etc/security/cacerts/{}.0", e, md5_hash, sha256_hash
-                                    )),
-                                }
-                            }
-                            Err(e) => messages.push(format!("⚠️ 计算证书哈希失败：{}", e)),
-                        }
-                    }
-                    _ => {
-                        messages.push("⚠️ 重新挂载失败，无法安装系统证书。\n   尝试：adb root && adb disable-verity && adb reboot".to_string());
+        // 2. Root + 安装系统证书（不用重启，直接生效）
+        let cert_ok = try_install_system_cert(serial, &cert_pem, &app).await;
+        if cert_ok {
+            messages.push("✅ 系统 CA 证书已安装".to_string());
+        } else {
+            // root/remount 失败，尝试直接拉起用户证书安装
+            app.emit("proxy:debug", "[proxy] 尝试用户证书模式...").ok();
+            let cert_intents = [
+                "cp /sdcard/testspace-ca-cert.pem /sdcard/Download/ 2>/dev/null; \
+                 am start -n com.android.certinstaller/.CertInstallerMain \
+                 -a android.intent.action.VIEW \
+                 -t application/x-x509-ca-cert \
+                 -d file:///sdcard/Download/testspace-ca-cert.pem",
+                "am start -n com.android.certinstaller/.CertInstallerMain -a android.intent.action.VIEW -t application/x-x509-ca-cert -d file:///sdcard/testspace-ca-cert.pem",
+                "am start -a android.settings.SECURITY_SETTINGS",
+            ];
+            for intent in &cert_intents {
+                let sp_serial = serial.clone();
+                let cmd = intent.to_string();
+                if let Ok(Ok(out)) = tokio::task::spawn_blocking(move || {
+                    crate::adb::shell_command(&sp_serial, &cmd)
+                }).await {
+                    if !out.contains("Error") && !out.contains("not found") {
+                        break;
                     }
                 }
             }
-            _ => {
-                messages.push("⚠️ 未获取到 Root 权限，尝试安装用户证书。\n   请查看设备屏幕并确认安装 CA 证书。".to_string());
-                let cert_intents = [
-                    format!(
-                        "cp /sdcard/testspace-ca-cert.pem /sdcard/Download/ 2>/dev/null; \
-                         am start -n com.android.certinstaller/.CertInstallerMain \
-                         -a android.intent.action.VIEW \
-                         -t application/x-x509-ca-cert \
-                         -d file:///sdcard/Download/testspace-ca-cert.pem"
-                    ),
-                    "am start -n com.android.certinstaller/.CertInstallerMain -a android.intent.action.VIEW -t application/x-x509-ca-cert -d file:///sdcard/testspace-ca-cert.pem".to_string(),
-                    "am start -a android.settings.SECURITY_SETTINGS".to_string(),
-                ];
-                for intent in &cert_intents {
-                    let sp_serial = serial.clone();
-                    let cmd = intent.clone();
-                    if let Ok(result) = tokio::task::spawn_blocking(move || {
-                        crate::adb::shell_command(&sp_serial, &cmd)
-                    }).await.map_err(|e| e.to_string()).and_then(|r| r) {
-                        if !result.contains("Error") && !result.contains("not found") {
-                            break;
-                        }
-                    }
-                }
-                messages.push("   ⚠️ 用户证书——仅对信任用户 CA 的应用生效。".to_string());
-            }
+            messages.push("⚠️ 用户证书模式（仅部分应用可抓 HTTPS）".to_string());
         }
 
-        // Determine the best address for the device to reach this host.
-        // For emulators: 10.0.2.2 (standard Android emulator gateway → host loopback)
-        // For USB devices without WiFi: adb reverse + 127.0.0.1 is ideal, but some
-        // emulators (e.g. LeiDian) have broken adb reverse that reports success
-        // without actually forwarding data. So we try adb reverse anyway (it works
-        // on real devices), but always use a routable IP (LAN or emulator gateway).
-        let emulator_gateway = "10.0.2.2";
-        let host_for_device = match get_local_ip() {
-            Ok(ip) => ip,
-            Err(_) => emulator_gateway.to_string(),
-        };
-
-        // Set up ADB reverse tunnel (works over USB, no WiFi needed, for real devices)
-        let reverse_serial = serial.clone();
-        let _reverse_ok = tokio::task::spawn_blocking(move || {
-            let mut cmd = std::process::Command::new("adb");
-            #[cfg(target_os = "windows")]
-            cmd.creation_flags(0x08000000);
-            cmd.args(["-s", &reverse_serial, "reverse", &format!("tcp:{}", port), &format!("tcp:{}", port)]);
-            let _ = cmd.output();
-        }).await;
-
-        let proxy_host = host_for_device.clone();
+        // 3. 设置设备代理
+        let proxy_host = get_local_ip().unwrap_or_else(|_| "127.0.0.1".to_string());
+        app.emit("proxy:debug", format!("[proxy] 使用 LAN IP: {} 设置设备代理", proxy_host)).ok();
         let proxy_serial = serial.clone();
+        let proxy_host_clone = proxy_host.clone();
         match tokio::task::spawn_blocking(move || {
             crate::adb::shell_command(&proxy_serial,
-                &format!("settings put global http_proxy {}:{}", proxy_host, port)
+                &format!("settings put global http_proxy {}:{}", proxy_host_clone, port)
             )
         }).await.map_err(|e| e.to_string())? {
-            Ok(_) => messages.push(format!("📡 设备代理已设置为 {}:{}", host_for_device, port)),
-            Err(e) => messages.push(format!("⚠️ 设置设备代理失败：{}", e)),
+            Ok(_) => messages.push(format!("📡 设备代理已指向 {}:{}", proxy_host, port)),
+            Err(e) => messages.push(format!("⚠️ 设置代理失败：{}", e)),
         }
     }
 
@@ -665,18 +624,6 @@ pub async fn proxy_stop(
     }
     let mut messages = vec![];
     if let Some(ref serial) = device_serial {
-        // Clear ADB reverse if it was set
-        let _: Result<_, _> = tokio::task::spawn_blocking({
-            let rev_serial = serial.clone();
-            move || {
-                let mut cmd = std::process::Command::new("adb");
-                #[cfg(target_os = "windows")]
-                cmd.creation_flags(0x08000000);
-                cmd.args(["-s", &rev_serial, "reverse", "--remove-all"]);
-                let _ = cmd.output();
-            }
-        }).await;
-
         let clear_serial = serial.clone();
         match tokio::task::spawn_blocking(move || {
             crate::adb::shell_command(&clear_serial, "settings put global http_proxy :0")
@@ -821,6 +768,96 @@ pub async fn proxy_clear_device_proxy(
     match result {
         Ok(_) => Ok(format!("Proxy cleared on device {}", serial)),
         Err(e) => Err(format!("Failed to clear proxy: {}", e)),
+    }
+}
+
+/// 尝试 root 设备、remount 系统分区、安装系统 CA 证书。
+/// 返回 true 表示证书已成功安装到 /system/etc/security/cacerts/。
+async fn try_install_system_cert(serial: &str, cert_pem: &str, app: &tauri::AppHandle) -> bool {
+    let root_result = tokio::task::spawn_blocking({
+        let s = serial.to_string();
+        move || crate::adb::root_device(&s)
+    }).await;
+
+    let root_ok = match &root_result {
+        Ok(Ok(ref out)) => out.contains("already root")
+            || out.contains("running as root")
+            || out.contains("restarting adbd")
+            || out.trim().is_empty(),
+        _ => false,
+    };
+
+    if !root_ok {
+        app.emit("proxy:debug", "[proxy] adb root 失败，跳过系统证书安装").ok();
+        return false;
+    }
+
+    app.emit("proxy:debug", "[proxy] 设备已获取 root 权限").ok();
+
+    // adb root 后 adbd 会重启，等一会
+    std::thread::sleep(std::time::Duration::from_secs(2));
+
+    let remount_result = tokio::task::spawn_blocking({
+        let s = serial.to_string();
+        move || crate::adb::remount_device(&s)
+    }).await;
+
+    let remount_ok = match remount_result {
+        Ok(Ok(ref msg)) => msg.contains("remount succeeded")
+            || msg.contains("remount of")
+            || msg.trim().is_empty(),
+        _ => false,
+    };
+
+    if !remount_ok {
+        // 尝试 disable-verity 后再 remount
+        app.emit("proxy:debug", "[proxy] remount 失败，尝试 disable-verity...").ok();
+        let dis_serial = serial.to_string();
+        let _ = tokio::task::spawn_blocking(move || {
+            crate::adb::shell_command(&dis_serial, "avbctl disable-verification")
+        }).await;
+        std::thread::sleep(std::time::Duration::from_secs(1));
+
+        // retry remount
+        let remount_serial2 = serial.to_string();
+        let remount2 = tokio::task::spawn_blocking(move || {
+            crate::adb::remount_device(&remount_serial2)
+        }).await;
+
+        let remount_ok2 = match remount2 {
+            Ok(Ok(ref msg)) => msg.contains("remount succeeded")
+                || msg.contains("remount of")
+                || msg.trim().is_empty(),
+            _ => false,
+        };
+
+        if !remount_ok2 {
+            app.emit("proxy:debug", "[proxy] 无法 remount 系统分区").ok();
+            return false;
+        }
+    }
+
+    app.emit("proxy:debug", "[proxy] 系统分区可写，安装证书...").ok();
+
+    let hashes = match compute_cert_hashes(cert_pem) {
+        Ok(h) => h,
+        Err(_) => return false,
+    };
+    let (md5_hash, sha256_hash) = hashes;
+
+    let install_result = tokio::task::spawn_blocking({
+        let s = serial.to_string();
+        let md5 = md5_hash.clone();
+        let sha256 = sha256_hash.clone();
+        move || install_system_cert(&s, &md5, &sha256)
+    }).await;
+
+    match install_result {
+        Ok(Ok(_)) => {
+            app.emit("proxy:debug", "[proxy] 系统证书安装成功").ok();
+            true
+        }
+        _ => false,
     }
 }
 

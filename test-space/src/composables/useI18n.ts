@@ -566,6 +566,8 @@ const messages: Record<Lang, Record<string, string>> = {
     "api.detailPanel": "详情",
     "api.selectDevice": "选择设备",
     "api.noDevice": "无设备连接",
+    "api.debugLogs": "调试日志",
+    "api.noDebugLogs": "暂无调试日志",
   },
   en: {
     // Sidebar
@@ -1128,6 +1130,8 @@ const messages: Record<Lang, Record<string, string>> = {
     "api.detailPanel": "Details",
     "api.selectDevice": "Select Device",
     "api.noDevice": "No Device",
+    "api.debugLogs": "Debug Logs",
+    "api.noDebugLogs": "No debug logs",
   },
 };
 
