@@ -216,12 +216,21 @@
               </div>
               <div v-if="selectedRequest.request_body">
                 <div class="flex items-center justify-between text-label-md font-semibold text-on-surface mb-2">
-                  <span>{{ t('api.body') }} <span class="text-caption text-on-surface-variant font-normal">({{ formatSize(selectedRequest.request_size) }})</span></span>
-                  <button class="glass-hover rounded-lg px-2 py-0.5 flex items-center gap-1 text-caption" @click="copyText(tryFormatJson(selectedRequest.request_body))">
+                  <span>{{ t('api.body') }} <span class="text-caption text-on-surface-variant font-normal">({{ formatSize(selectedRequest.request_size) }})</span>
+                    <span v-if="selectedRequest.request_body_is_base64" class="text-caption text-amber-500 font-normal"> [Binary]</span>
+                  </span>
+                  <button v-if="!selectedRequest.request_body_is_base64" class="glass-hover rounded-lg px-2 py-0.5 flex items-center gap-1 text-caption" @click="copyText(tryFormatJson(selectedRequest.request_body))">
                     <span class="material-symbols-outlined text-[14px]">content_copy</span> Copy
                   </button>
                 </div>
+                <template v-if="!selectedRequest.request_body_is_base64">
                   <pre class="bg-white/[0.06] rounded-xl p-3 font-mono text-caption text-on-surface overflow-x-auto whitespace-pre-wrap break-all custom-scrollbar"><code>{{ tryFormatJson(selectedRequest.request_body) }}</code></pre>
+                </template>
+                <template v-else>
+                  <div class="bg-white/[0.06] rounded-xl p-3 font-mono text-caption text-on-surface-variant text-center">
+                    [Binary request body — {{ formatSize(selectedRequest.request_size) }}]
+                  </div>
+                </template>
               </div>
             </div>
 
@@ -258,12 +267,36 @@
                 </div>
                 <div v-if="selectedRequest.response_body">
                   <div class="flex items-center justify-between text-label-md font-semibold text-on-surface mb-2">
-                    <span>{{ t('api.resBody') }} <span class="text-caption text-on-surface-variant font-normal">({{ formatSize(selectedRequest.response_size) }})</span></span>
-                    <button class="glass-hover rounded-lg px-2 py-0.5 flex items-center gap-1 text-caption" @click="copyText(tryFormatJson(selectedRequest.response_body))">
+                    <span>{{ t('api.resBody') }} <span class="text-caption text-on-surface-variant font-normal">({{ formatSize(selectedRequest.response_size) }})</span>
+                      <span v-if="selectedRequest.response_body_is_base64" class="text-caption text-amber-500 font-normal"> [Binary]</span>
+                    </span>
+                    <button v-if="!selectedRequest.response_body_is_base64" class="glass-hover rounded-lg px-2 py-0.5 flex items-center gap-1 text-caption" @click="copyText(tryFormatJson(selectedRequest.response_body))">
                       <span class="material-symbols-outlined text-[14px]">content_copy</span> Copy
                     </button>
                   </div>
-                  <pre class="bg-white/[0.06] rounded-xl p-3 font-mono text-caption text-on-surface overflow-x-auto whitespace-pre-wrap break-all custom-scrollbar"><code>{{ tryFormatJson(selectedRequest.response_body) }}</code></pre>
+                  <template v-if="!selectedRequest.response_body_is_base64">
+                    <pre class="bg-white/[0.06] rounded-xl p-3 font-mono text-caption text-on-surface overflow-x-auto whitespace-pre-wrap break-all custom-scrollbar"><code>{{ tryFormatJson(selectedRequest.response_body) }}</code></pre>
+                  </template>
+                  <template v-else-if="responseBodyIsImage">
+                    <div class="bg-white/[0.06] rounded-xl p-3 flex items-center justify-center">
+                      <img :src="responseBodyImageSrc" class="max-w-full max-h-[400px] object-contain rounded-lg" alt="Response image" />
+                    </div>
+                  </template>
+                  <template v-else-if="responseBodyIsVideo">
+                    <div class="bg-white/[0.06] rounded-xl p-3 flex items-center justify-center">
+                      <video controls class="max-w-full max-h-[400px] rounded-lg" :src="responseBodyMediaSrc"></video>
+                    </div>
+                  </template>
+                  <template v-else-if="responseBodyIsAudio">
+                    <div class="bg-white/[0.06] rounded-xl p-3">
+                      <audio controls class="w-full" :src="responseBodyMediaSrc"></audio>
+                    </div>
+                  </template>
+                  <template v-else>
+                    <div class="bg-white/[0.06] rounded-xl p-3 font-mono text-caption text-on-surface-variant text-center">
+                      [Binary data — {{ formatSize(selectedRequest.response_size) }} — {{ responseContentType || 'unknown' }}]
+                    </div>
+                  </template>
                 </div>
               </template>
             </div>
@@ -286,64 +319,74 @@
 
     <!-- Rule Editor Dialog -->
     <Teleport to="body">
-      <div v-if="showRuleEditor" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/20 backdrop-blur-sm" @click.self="showRuleEditor = false">
-        <div class="glass-panel rounded-2xl p-6 w-[500px] max-h-[80vh] overflow-y-auto" @click.stop>
-          <div class="text-headline-md font-semibold mb-4">{{ editingRule ? t('api.editRule') : t('api.addRule') }}</div>
-          <div class="space-y-3">
-            <div>
-              <label class="text-label-md text-on-surface-variant block mb-1">{{ t('api.ruleName') }}</label>
-              <input v-model="ruleForm.name" class="glass-input rounded-xl px-3 py-2 w-full text-body-md" />
+      <Transition name="fade">
+        <div v-if="showRuleEditor" class="fixed inset-0 z-[100] flex items-center justify-center" @click.self="showRuleEditor = false">
+          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
+          <div class="glass-panel rounded-[2rem] p-6 w-full max-w-md relative z-10 bg-white/90 max-h-[80vh] flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-1.5 select-none">
+                <span class="material-symbols-outlined text-[16px]">rule</span>{{ editingRule ? t('api.editRule') : t('api.addRule') }}
+              </h3>
+              <button class="glass-button p-1 rounded select-none" @click="showRuleEditor = false">
+                <span class="material-symbols-outlined text-[18px]">close</span>
+              </button>
             </div>
-            <div>
-              <label class="text-label-md text-on-surface-variant block mb-1">{{ t('api.rulePattern') }}</label>
-              <input v-model="ruleForm.url_pattern" class="glass-input rounded-xl px-3 py-2 w-full text-body-md font-mono" placeholder="/api/..." />
-            </div>
-            <div class="flex gap-3">
-              <div class="flex-1">
-                <label class="text-label-md text-on-surface-variant block mb-1">匹配方式</label>
-                <select v-model="ruleForm.match_type" class="glass-input rounded-xl px-3 py-2 w-full text-body-md">
-                  <option value="contains">包含 (contains)</option>
-                  <option value="exact">精确 (exact)</option>
-                  <option value="prefix">前缀 (prefix)</option>
-                  <option value="regex">正则 (regex)</option>
-                </select>
+            <div class="flex flex-col gap-3 overflow-y-auto custom-scrollbar">
+              <div>
+                <label class="text-label-md text-on-surface-variant block mb-1">{{ t('api.ruleName') }}</label>
+                <input v-model="ruleForm.name" class="bg-white/80 border border-outline-variant rounded-lg px-3 py-2 font-caption text-caption text-on-surface font-mono focus:ring-2 focus:ring-secondary/30 w-full select-text" />
               </div>
-              <div class="flex-1">
-                <label class="text-label-md text-on-surface-variant block mb-1">{{ t('api.filterMethod') }}</label>
-                <select v-model="ruleForm.action_type" class="glass-input rounded-xl px-3 py-2 w-full text-body-md">
-                  <option value="modify_request_header">Modify Request Header</option>
-                  <option value="modify_request_body">Modify Request Body</option>
-                  <option value="modify_response_header">Modify Response Header</option>
-                  <option value="modify_response_body">Modify Response Body</option>
-                  <option value="drop">Drop Request</option>
-                </select>
+              <div>
+                <label class="text-label-md text-on-surface-variant block mb-1">{{ t('api.rulePattern') }}</label>
+                <input v-model="ruleForm.url_pattern" class="bg-white/80 border border-outline-variant rounded-lg px-3 py-2 font-caption text-caption text-on-surface font-mono focus:ring-2 focus:ring-secondary/30 w-full select-text" placeholder="/api/..." />
+              </div>
+              <div class="flex gap-3">
+                <div class="flex-1">
+                  <label class="text-label-md text-on-surface-variant block mb-1">匹配方式</label>
+                  <select v-model="ruleForm.match_type" class="bg-white/80 border border-outline-variant rounded-lg px-3 py-2 font-caption text-caption text-on-surface w-full select-text">
+                    <option value="contains">包含 (contains)</option>
+                    <option value="exact">精确 (exact)</option>
+                    <option value="prefix">前缀 (prefix)</option>
+                    <option value="regex">正则 (regex)</option>
+                  </select>
+                </div>
+                <div class="flex-1">
+                  <label class="text-label-md text-on-surface-variant block mb-1">{{ t('api.filterMethod') }}</label>
+                  <select v-model="ruleForm.action_type" class="bg-white/80 border border-outline-variant rounded-lg px-3 py-2 font-caption text-caption text-on-surface w-full select-text">
+                    <option value="modify_request_header">Modify Request Header</option>
+                    <option value="modify_request_body">Modify Request Body</option>
+                    <option value="modify_response_header">Modify Response Header</option>
+                    <option value="modify_response_body">Modify Response Body</option>
+                    <option value="drop">Drop Request</option>
+                  </select>
+                </div>
+              </div>
+              <div class="flex gap-3">
+                <div class="flex-1">
+                  <label class="text-label-md text-on-surface-variant block mb-1">Header Name</label>
+                  <input v-model="ruleForm.header_name" class="bg-white/80 border border-outline-variant rounded-lg px-3 py-2 font-caption text-caption text-on-surface font-mono focus:ring-2 focus:ring-secondary/30 w-full select-text" placeholder="e.g. Authorization" />
+                </div>
+                <div class="flex-1">
+                  <label class="text-label-md text-on-surface-variant block mb-1">Header Value</label>
+                  <input v-model="ruleForm.header_value" class="bg-white/80 border border-outline-variant rounded-lg px-3 py-2 font-caption text-caption text-on-surface focus:ring-2 focus:ring-secondary/30 w-full select-text" placeholder="new value" />
+                </div>
+              </div>
+              <div>
+                <label class="text-label-md text-on-surface-variant block mb-1">Body Search</label>
+                <input v-model="ruleForm.body_search" class="bg-white/80 border border-outline-variant rounded-lg px-3 py-2 font-caption text-caption text-on-surface font-mono focus:ring-2 focus:ring-secondary/30 w-full select-text" placeholder="text to find" />
+              </div>
+              <div>
+                <label class="text-label-md text-on-surface-variant block mb-1">Body Replace</label>
+                <input v-model="ruleForm.body_replace" class="bg-white/80 border border-outline-variant rounded-lg px-3 py-2 font-caption text-caption text-on-surface focus:ring-2 focus:ring-secondary/30 w-full select-text" placeholder="replacement text" />
               </div>
             </div>
-            <div class="flex gap-3">
-              <div class="flex-1">
-                <label class="text-label-md text-on-surface-variant block mb-1">Header Name</label>
-                <input v-model="ruleForm.header_name" class="glass-input rounded-xl px-3 py-2 w-full text-body-md font-mono" placeholder="e.g. Authorization" />
-              </div>
-              <div class="flex-1">
-                <label class="text-label-md text-on-surface-variant block mb-1">Header Value</label>
-                <input v-model="ruleForm.header_value" class="glass-input rounded-xl px-3 py-2 w-full text-body-md" placeholder="new value" />
-              </div>
+            <div class="flex justify-end gap-3 mt-5 pt-3 border-t border-outline-variant/30">
+              <button class="glass-hover rounded-xl px-4 py-2 select-none" @click="showRuleEditor = false">{{ t('settings.cancel') }}</button>
+              <button class="glass-button rounded-xl px-4 py-2 select-none" @click="saveRule">{{ t('settings.confirm') }}</button>
             </div>
-            <div>
-              <label class="text-label-md text-on-surface-variant block mb-1">Body Search</label>
-              <input v-model="ruleForm.body_search" class="glass-input rounded-xl px-3 py-2 w-full text-body-md font-mono" placeholder="text to find" />
-            </div>
-            <div>
-              <label class="text-label-md text-on-surface-variant block mb-1">Body Replace</label>
-              <input v-model="ruleForm.body_replace" class="glass-input rounded-xl px-3 py-2 w-full text-body-md" placeholder="replacement text" />
-            </div>
-          </div>
-          <div class="flex justify-end gap-3 mt-5">
-            <button class="glass-hover rounded-xl px-4 py-2" @click="showRuleEditor = false">{{ t('settings.cancel') }}</button>
-            <button class="glass-button rounded-xl px-4 py-2" @click="saveRule">{{ t('settings.confirm') }}</button>
           </div>
         </div>
-      </div>
+      </Transition>
     </Teleport>
 
     <!-- Breakpoint Edit Dialog -->
@@ -358,7 +401,8 @@
             </div>
             <div>
               <label class="text-label-md text-on-surface-variant block mb-1">{{ t('api.body') }}</label>
-              <textarea v-model="breakpointBody" class="glass-input rounded-xl px-3 py-2 w-full text-body-md font-mono" rows="8" placeholder="Request/Response body" />
+              <textarea v-if="!bodyIsBinaryForBreakpoint" v-model="breakpointBody" class="glass-input rounded-xl px-3 py-2 w-full text-body-md font-mono" rows="8" placeholder="Request/Response body" />
+              <div v-else class="bg-white/[0.06] rounded-xl p-3 font-mono text-caption text-on-surface-variant text-center">[Binary body — cannot edit in text mode]</div>
             </div>
           </div>
           <div class="flex justify-end gap-3">
@@ -378,15 +422,25 @@
 
     <!-- Result Dialog -->
     <Teleport to="body">
-      <div v-if="resultDialog.show" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/20 backdrop-blur-sm" @click.self="resultDialog.show = false">
-        <div class="glass-panel rounded-2xl p-6 w-[600px] max-h-[70vh] overflow-y-auto" @click.stop>
-          <div class="text-headline-md font-semibold mb-2">{{ resultDialog.title }}</div>
-          <pre class="text-body-md text-on-surface whitespace-pre-wrap font-mono text-caption bg-white/5 rounded-xl p-3 max-h-[400px] overflow-y-auto custom-scrollbar">{{ resultDialog.message }}</pre>
-          <div class="flex justify-end mt-4">
-            <button class="glass-button rounded-xl px-4 py-2" @click="resultDialog.show = false">{{ t('settings.confirm') }}</button>
+      <Transition name="fade">
+        <div v-if="resultDialog.show" class="fixed inset-0 z-[100] flex items-center justify-center" @click.self="resultDialog.show = false">
+          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
+          <div class="glass-panel rounded-[2rem] p-6 w-full max-w-md relative z-10 bg-white/90 max-h-[80vh] flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-1.5 select-none">
+                <span class="material-symbols-outlined text-[16px]">info</span>{{ resultDialog.title }}
+              </h3>
+              <button class="glass-button p-1 rounded select-none" @click="resultDialog.show = false">
+                <span class="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+            <pre class="flex-1 overflow-y-auto text-body-md text-on-surface whitespace-pre-wrap font-mono text-caption bg-white/30 rounded-xl p-3 custom-scrollbar select-text">{{ resultDialog.message }}</pre>
+            <div class="flex justify-end mt-4 pt-3 border-t border-outline-variant/30">
+              <button class="glass-button rounded-xl px-4 py-2 select-none" @click="resultDialog.show = false">{{ t('settings.confirm') }}</button>
+            </div>
           </div>
         </div>
-      </div>
+      </Transition>
     </Teleport>
   </div>
 </template>
@@ -497,11 +551,11 @@ const rawContent = computed(() => {
   const req = selectedRequest.value
   let out = `${req.method} ${req.url} HTTP/1.1\n`
   for (const h of req.request_headers) out += `${h[0]}: ${h[1]}\n`
-  if (req.request_body) out += `\n${req.request_body}\n`
+  if (req.request_body) out += `\n${req.request_body_is_base64 ? '[Binary request body]' : req.request_body}\n`
   if (req.response_status_code) {
     out += `\n--- Response ---\nHTTP/1.1 ${req.response_status_code} ${req.response_status_text}\n`
     if (req.response_headers) for (const h of req.response_headers) out += `${h[0]}: ${h[1]}\n`
-    if (req.response_body) out += `\n${req.response_body}\n`
+    if (req.response_body) out += `\n${req.response_body_is_base64 ? '[Binary response body]' : req.response_body}\n`
   }
   return out
 })
@@ -548,6 +602,55 @@ function formatSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
 }
+
+function findHeader(headers: string[][] | null, name: string): string | null {
+  if (!headers) return null
+  const lower = name.toLowerCase()
+  for (const [key, value] of headers) {
+    if (key.toLowerCase() === lower) return value
+  }
+  return null
+}
+
+const responseContentType = computed(() => {
+  if (!selectedRequest.value?.response_headers) return null
+  return findHeader(selectedRequest.value.response_headers, 'content-type')
+})
+
+const responseBodyIsImage = computed(() => {
+  const ct = responseContentType.value
+  return ct ? ct.startsWith('image/') : false
+})
+
+const responseBodyIsVideo = computed(() => {
+  const ct = responseContentType.value
+  return ct ? ct.startsWith('video/') : false
+})
+
+const responseBodyIsAudio = computed(() => {
+  const ct = responseContentType.value
+  return ct ? ct.startsWith('audio/') : false
+})
+
+const responseBodyImageSrc = computed(() => {
+  if (!responseBodyIsImage.value || !selectedRequest.value?.response_body_is_base64) return ''
+  const ct = responseContentType.value
+  return `data:${ct};base64,${selectedRequest.value.response_body}`
+})
+
+const responseBodyMediaSrc = computed(() => {
+  if (!selectedRequest.value?.response_body_is_base64) return ''
+  const ct = responseContentType.value
+  if (!ct) return ''
+  if (!ct.startsWith('video/') && !ct.startsWith('audio/')) return ''
+  return `data:${ct};base64,${selectedRequest.value.response_body}`
+})
+
+const bodyIsBinaryForBreakpoint = computed(() => {
+  if (!selectedRequest.value) return false
+  if (breakpointPhase.value === 'request') return selectedRequest.value.request_body_is_base64
+  return selectedRequest.value.response_body_is_base64
+})
 
 function tryFormatJson(str: string): string {
   try {
@@ -728,5 +831,13 @@ onUnmounted(() => {
 .glass-panel {
   backdrop-filter: blur(60px);
   -webkit-backdrop-filter: blur(60px);
+}
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

@@ -150,10 +150,12 @@ export interface ApiCapturedRequest {
   query: string | null
   request_headers: string[][]       // [[name, value], ...]
   request_body: string | null
+  request_body_is_base64: boolean
   response_status_code: number | null
   response_status_text: string | null
   response_headers: string[][] | null
   response_body: string | null
+  response_body_is_base64: boolean
   start_time: number
   end_time: number | null
   duration: number | null           // milliseconds

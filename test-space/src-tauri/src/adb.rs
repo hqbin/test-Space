@@ -114,21 +114,6 @@ pub fn shell_command(serial: &str, command: &str) -> Result<String, String> {
     }
 }
 
-pub fn install_apk(serial: &str, apk_path: &str, reinstall: bool) -> Result<String, String> {
-    let mut args = vec!["-s", serial, "install"];
-    if reinstall { args.push("-r"); }
-    args.push(apk_path);
-    let output = adb_cmd()
-        .args(&args)
-        .output()
-        .map_err(|e| format!("ADB install failed: {}", e))?;
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
-    }
-}
-
 pub fn uninstall_apk(serial: &str, package: &str) -> Result<String, String> {
     let output = adb_cmd()
         .args(["-s", serial, "uninstall", package])

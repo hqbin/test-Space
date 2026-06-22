@@ -14,6 +14,7 @@ use http_mitm_proxy::hyper::body::Incoming;
 use http_body_util::{BodyExt, Full};
 use http_body_util::combinators::BoxBody;
 use bytes::Bytes;
+use base64::Engine;
 use http_mitm_proxy::moka::sync::Cache;
 use serde::{Serialize, Deserialize};
 use tauri::Emitter;
@@ -71,10 +72,12 @@ pub struct CapturedRequest {
     pub query: Option<String>,
     pub request_headers: Vec<Vec<String>>,
     pub request_body: Option<String>,
+    pub request_body_is_base64: bool,
     pub response_status_code: Option<u16>,
     pub response_status_text: Option<String>,
     pub response_headers: Option<Vec<Vec<String>>>,
     pub response_body: Option<String>,
+    pub response_body_is_base64: bool,
     pub start_time: f64,
     pub end_time: Option<f64>,
     pub duration: Option<f64>,
@@ -115,6 +118,19 @@ fn headers_to_vec(headers: &http_mitm_proxy::hyper::http::HeaderMap) -> Vec<Vec<
         ]);
     }
     result
+}
+
+fn body_to_string(bytes: &[u8]) -> (Option<String>, bool) {
+    if bytes.is_empty() {
+        return (None, false);
+    }
+    match String::from_utf8(bytes.to_vec()) {
+        Ok(s) => (Some(s), false),
+        Err(_) => {
+            let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+            (Some(encoded), true)
+        }
+    }
 }
 
 fn find_available_port() -> Result<u16, String> {
@@ -318,11 +334,7 @@ pub async fn proxy_start(
                     let (mut req_parts, req_body) = req.into_parts();
                     let req_body_original = read_body_bytes(req_body).await;
                     let req_body_bytes = decompress_body(get_content_encoding(&req_parts.headers).as_deref(), &req_body_original);
-                    let req_body_str = if req_body_bytes.is_empty() {
-                        None
-                    } else {
-                        Some(String::from_utf8_lossy(&req_body_bytes).to_string())
-                    };
+                    let (req_body_str, req_body_is_base64) = body_to_string(&req_body_bytes);
 
                     let req_headers = headers_to_vec(&req_parts.headers);
                     let req_size = req_body_original.len() as u64;
@@ -336,10 +348,12 @@ pub async fn proxy_start(
                         query: query.clone(),
                         request_headers: req_headers.clone(),
                         request_body: req_body_str.clone(),
+                        request_body_is_base64: req_body_is_base64,
                         response_status_code: None,
                         response_status_text: None,
                         response_headers: None,
                         response_body: None,
+                        response_body_is_base64: false,
                         start_time,
                         end_time: None,
                         duration: None,
@@ -481,11 +495,7 @@ pub async fn proxy_start(
                     let res_body_original = read_body_bytes(res_body).await;
                     let body_encoding = get_content_encoding(&res_parts.headers);
                     let res_body_bytes = decompress_body(body_encoding.as_deref(), &res_body_original);
-                    let res_body_str = if res_body_bytes.is_empty() {
-                        None
-                    } else {
-                        Some(String::from_utf8_lossy(&res_body_bytes).to_string())
-                    };
+                    let (res_body_str, res_body_is_base64) = body_to_string(&res_body_bytes);
 
                     let res_headers = headers_to_vec(&res_parts.headers);
                     let status_code = res_parts.status.as_u16();
@@ -499,6 +509,7 @@ pub async fn proxy_start(
                         response_status_text: Some(status_text),
                         response_headers: Some(res_headers.clone()),
                         response_body: res_body_str.clone(),
+                        response_body_is_base64: res_body_is_base64,
                         end_time,
                         duration,
                         response_size: res_size,
@@ -1242,7 +1253,7 @@ pub async fn proxy_replay(
     let duration = ((end_time - start_time) * 1000.0 * 100.0).round() / 100.0;
     let res_body_bytes = read_body_bytes(res_body).await;
     let res_body_bytes = decompress_body(get_content_encoding(&res_parts.headers).as_deref(), &res_body_bytes);
-    let res_body_str = if res_body_bytes.is_empty() { None } else { Some(String::from_utf8_lossy(&res_body_bytes).to_string()) };
+    let (res_body_str, res_body_is_base64) = body_to_string(&res_body_bytes);
 
     Ok(CapturedRequest {
         id: Uuid::new_v4().to_string(),
@@ -1250,6 +1261,7 @@ pub async fn proxy_replay(
         response_status_text: Some(res_parts.status.canonical_reason().unwrap_or("Unknown").to_string()),
         response_headers: Some(headers_to_vec(&res_parts.headers)),
         response_body: res_body_str,
+        response_body_is_base64: res_body_is_base64,
         end_time: Some(end_time),
         duration: Some(duration),
         response_size: res_body_bytes.len() as u64,

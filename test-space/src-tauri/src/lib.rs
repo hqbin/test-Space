@@ -643,6 +643,7 @@ pub fn run() {
             proxy::proxy_remove_rewrite_rule,
             proxy::proxy_update_rewrite_rule,
             proxy::proxy_clear_rewrite_rules,
+            proxy::proxy_get_rewrite_rules,
             proxy::proxy_get_captured,
             proxy::proxy_get_status,
             proxy::proxy_get_ca_cert,
