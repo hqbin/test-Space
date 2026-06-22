@@ -1,5 +1,6 @@
 import type Database from '@tauri-apps/plugin-sql'
 import type { InputHistoryEntry, LogSession, NoteSpace, NoteFolder, NoteItem, NoteVersion, NoteLink } from '@/types'
+import type { ApiRewriteRule } from '@/types'
 
 let db: Database | null = null
 let dbPromise: Promise<Database> | null = null
@@ -685,12 +686,28 @@ export async function deleteScript(id: string) {
   await d.execute('DELETE FROM scripts WHERE id = ?', [id])
 }
 
+export async function saveProxyRules(rules: ApiRewriteRule[]) {
+  const d = await getDb()
+  await d.execute(
+    'INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)',
+    ['proxy_rules', JSON.stringify(rules)]
+  )
+}
+
+export async function loadProxyRules(): Promise<ApiRewriteRule[]> {
+  const d = await getDb()
+  const rows = await d.select<{ value: string }[]>(
+    "SELECT value FROM app_settings WHERE key = 'proxy_rules'"
+  )
+  return rows.length > 0 ? safeJsonParse<ApiRewriteRule[]>(rows[0].value, []) : []
+}
+
 export interface AppBackup {
   version: string
   exportedAt: string
   fieldRuleSets: any[]
   caseFiles: any[]
-  recentFiles: any[]
+  recentFiles: string[]
   favorites: string[]
   settings: Record<string, string>
   inputHistory: InputHistoryEntry[]
@@ -701,6 +718,7 @@ export interface AppBackup {
   noteVersions: NoteVersion[]
   noteLinks: NoteLink[]
   scripts: ScriptItem[]
+  proxyRules?: ApiRewriteRule[]
 }
 
 export async function exportAllData(): Promise<AppBackup> {
@@ -726,8 +744,9 @@ export async function exportAllData(): Promise<AppBackup> {
     'SELECT id, source_note_id as sourceNoteId, target_note_id as targetNoteId, created_at as createdAt FROM note_links'
   )
   const scripts = await listScripts()
+  const proxyRules = await loadProxyRules()
   return {
-    version: '1.3',
+    version: '1.4',
     exportedAt: new Date().toISOString(),
     fieldRuleSets,
     caseFiles,
@@ -742,6 +761,7 @@ export async function exportAllData(): Promise<AppBackup> {
     noteVersions,
     noteLinks,
     scripts,
+    proxyRules: proxyRules.length > 0 ? proxyRules : undefined,
   }
 }
 
@@ -811,6 +831,17 @@ export async function importAllData(backup: AppBackup) {
       await d.execute('INSERT INTO app_settings (key, value) VALUES (?, ?)', [key, value])
     } catch (e: any) {
       failures.push(`INSERT app_settings(${key}): ${e.message || e}`)
+    }
+  }
+  // Restore proxy rules
+  if (backup.proxyRules && backup.proxyRules.length > 0) {
+    try {
+      await d.execute(
+        'INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)',
+        ['proxy_rules', JSON.stringify(backup.proxyRules)]
+      )
+    } catch (e: any) {
+      failures.push(`INSERT proxy_rules: ${e.message || e}`)
     }
   }
   if (failures.length > 0) {

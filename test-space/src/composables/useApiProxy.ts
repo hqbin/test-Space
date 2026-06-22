@@ -2,6 +2,7 @@ import { ref, computed } from "vue"
 import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
 import type { ApiCapturedRequest, ApiRewriteRule, ApiProxyStatus } from "@/types"
+import * as db from "@/services/database"
 
 export interface BreakpointEvent {
   type: "request" | "response"
@@ -27,11 +28,34 @@ export function useApiProxy() {
 
   let unlistens: (() => void)[] = []
 
+  async function syncRulesToDb() {
+    try {
+      await db.saveProxyRules(rewriteRules.value)
+    } catch { /* ok */ }
+  }
+
   async function loadRules() {
     try {
       const rules = await invoke<ApiRewriteRule[]>("proxy_get_rewrite_rules")
       rewriteRules.value = rules
-    } catch { /* ok */ }
+      if (rules.length > 0) {
+        await syncRulesToDb()
+      } else {
+        // Fall back to DB if Rust backend has no rules
+        const dbRules = await db.loadProxyRules()
+        if (dbRules.length > 0) {
+          rewriteRules.value = dbRules
+          // Push DB rules to Rust backend
+          for (const rule of dbRules) {
+            try { await invoke("proxy_add_rewrite_rule", { rule }) } catch {}
+          }
+        }
+      }
+    } catch {
+      // Rust backend unavailable, load from DB
+      const dbRules = await db.loadProxyRules()
+      rewriteRules.value = dbRules
+    }
   }
 
   async function init() {
@@ -147,22 +171,26 @@ export function useApiProxy() {
   async function addRule(rule: ApiRewriteRule) {
     await invoke("proxy_add_rewrite_rule", { rule })
     rewriteRules.value.push(rule)
+    await syncRulesToDb()
   }
 
   async function removeRule(ruleId: string) {
     await invoke("proxy_remove_rewrite_rule", { ruleId })
     rewriteRules.value = rewriteRules.value.filter(r => r.id !== ruleId)
+    await syncRulesToDb()
   }
 
   async function updateRule(rule: ApiRewriteRule) {
     await invoke("proxy_update_rewrite_rule", { rule })
     const idx = rewriteRules.value.findIndex(r => r.id === rule.id)
     if (idx !== -1) rewriteRules.value[idx] = rule
+    await syncRulesToDb()
   }
 
   async function clearRules() {
     await invoke("proxy_clear_rewrite_rules")
     rewriteRules.value = []
+    await syncRulesToDb()
   }
 
   async function replay(captured: ApiCapturedRequest): Promise<ApiCapturedRequest> {
