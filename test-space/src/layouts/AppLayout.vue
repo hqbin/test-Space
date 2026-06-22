@@ -3,8 +3,8 @@
     class="min-h-screen font-body-md text-body-md text-on-surface antialiased selection:bg-secondary-fixed selection:text-on-secondary-fixed app-content select-none"
     :style="bgStyle"
   >
-    <Sidebar />
-    <main class="px-margin-page box-border min-h-screen">
+    <TitleBar />
+    <main class="px-margin-page pt-10 box-border min-h-screen">
       <router-view />
     </main>
   </div>
@@ -13,7 +13,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRoute } from "vue-router";
-import Sidebar from "./Sidebar.vue";
+import TitleBar from "./TitleBar.vue";
 
 const route = useRoute();
 

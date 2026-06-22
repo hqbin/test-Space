@@ -186,8 +186,9 @@ html.dark .app-content {
 }
 
 /* Top navigation bar */
-html.dark .top-bar {
-  background: rgba(13, 13, 26, 0.88) !important;
+html.dark .top-bar,
+html.dark .title-bar {
+  background: rgba(13, 13, 26, 0.92) !important;
   backdrop-filter: blur(60px);
   -webkit-backdrop-filter: blur(60px);
   border-bottom-color: rgba(255, 255, 255, 0.05) !important;
