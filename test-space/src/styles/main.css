@@ -48,22 +48,17 @@
   }
 
   .glass-button {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.4) 10%, rgba(255, 255, 255, 0.1) 100%);
+    background: rgba(255, 255, 255, 0.3);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.3);
+    border: 1px solid rgba(128, 128, 160, 0.3);
     transition: all 0.2s ease;
     color: rgba(0, 0, 0, 0.87);
   }
   .glass-button:hover {
-    background: linear-gradient(135deg, rgba(218, 225, 255, 0.5) 10%, rgba(200, 210, 255, 0.3) 100%);
+    background: rgba(218, 225, 255, 0.5);
+    border-color: rgba(128, 128, 160, 0.5);
     transform: scale(1.08);
-    box-shadow:
-      0 2px 4px rgba(160, 170, 240, 0.08),
-      0 8px 16px rgba(160, 170, 240, 0.12),
-      0 24px 48px rgba(160, 170, 240, 0.10),
-      0 48px 80px rgba(160, 170, 240, 0.06);
-    animation: glass-breath 1.5s ease-in-out infinite;
   }
   @keyframes glass-breath {
     0%, 100% {
@@ -228,7 +223,7 @@ html.dark .glass-card-active {
 }
 
 html.dark .glass-button {
-  background: linear-gradient(135deg, rgba(35, 35, 70, 0.6) 10%, rgba(22, 22, 45, 0.4) 100%);
+  background: rgba(35, 35, 70, 0.5);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-color: rgba(255, 255, 255, 0.07);
@@ -237,11 +232,9 @@ html.dark .glass-button {
 }
 
 html.dark .glass-button:hover {
-  background: linear-gradient(135deg, rgba(55, 55, 105, 0.6) 10%, rgba(38, 38, 75, 0.4) 100%);
+  background: rgba(55, 55, 105, 0.6);
+  border-color: rgba(150, 150, 220, 0.3);
   transform: scale(1.08);
-  box-shadow:
-    0 2px 8px rgba(76, 74, 202, 0.1),
-    0 8px 24px rgba(76, 74, 202, 0.08);
 }
 
 html.dark .glass-active {
