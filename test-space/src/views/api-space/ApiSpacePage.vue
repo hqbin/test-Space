@@ -1,5 +1,31 @@
 <template>
   <div class="h-screen flex flex-col gap-4 py-4 select-none overflow-hidden">
+    <!-- Rewrite Rules Dropdown (below control bar) -->
+    <div v-if="showRules" class="glass-panel rounded-xl px-5 py-3">
+      <div class="flex items-center justify-between mb-2">
+        <span class="font-label-md font-semibold">{{ t('api.rules') }}</span>
+        <button class="glass-hover rounded-lg px-2.5 py-1 flex items-center gap-1" @click="showRuleEditor = true">
+          <span class="material-symbols-outlined text-[14px]">add</span>
+          <span class="font-label-md">{{ t('api.addRule') }}</span>
+        </button>
+      </div>
+      <div class="space-y-1 max-h-[120px] overflow-y-auto custom-scrollbar">
+        <div v-if="localRules.length === 0" class="text-caption text-on-surface-variant py-2 text-center">{{ t('api.noRules') }}</div>
+        <div v-for="rule in localRules" :key="rule.id" class="flex items-center gap-2 bg-white/5 rounded-lg px-3 py-1.5">
+          <button class="text-[16px]" :class="rule.enabled ? 'text-green-500' : 'text-on-surface-variant'" @click="toggleRule(rule)">
+            <span class="material-symbols-outlined">{{ rule.enabled ? 'toggle_on' : 'toggle_off' }}</span>
+          </button>
+          <span class="font-mono text-caption flex-1 truncate">{{ rule.name }} — <span class="text-on-surface-variant">{{ rule.url_pattern }}</span></span>
+          <button class="glass-hover rounded-lg p-1 text-on-surface-variant" @click="editRule(rule)">
+            <span class="material-symbols-outlined text-[14px]">edit</span>
+          </button>
+          <button class="glass-hover rounded-lg p-1 text-on-surface-variant" @click="deleteRule(rule.id)">
+            <span class="material-symbols-outlined text-[14px]">close</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Control Bar -->
     <div class="glass-panel rounded-xl px-5 py-3 flex items-center gap-4 flex-wrap">
       <button v-if="!api.running.value" class="glass-button px-5 py-2 rounded-xl flex items-center gap-2" :disabled="api.isStarting.value" @click="handleStart">
@@ -41,6 +67,16 @@
           <span class="material-symbols-outlined text-[16px]">refresh</span>
         </button>
       </div>
+
+      <div class="w-px h-6 bg-white/20" />
+
+      <button class="glass-hover rounded-xl px-3 py-2 flex items-center gap-2"
+        :class="showRules ? 'glass-active' : ''"
+        @click="showRules = !showRules">
+        <span class="material-symbols-outlined text-[18px]">rule</span>
+        <span class="font-label-md whitespace-nowrap">Rules</span>
+        <span v-if="localRules.length > 0" class="text-caption text-on-surface-variant bg-white/10 rounded-full px-1.5 py-0.5">{{ localRules.filter(r => r.enabled).length }}/{{ localRules.length }}</span>
+      </button>
     </div>
 
     <!-- Device Dropdown (Teleport to body) -->
@@ -119,7 +155,7 @@
     <!-- Main Content: Request List + Detail Panel -->
     <div class="flex-1 flex gap-4 min-h-0 overflow-hidden">
       <!-- Request List -->
-      <div class="glass-panel rounded-xl w-[480px] min-w-[400px] flex flex-col overflow-hidden">
+      <div class="glass-panel rounded-lg flex-[0_0_40%] min-w-[360px] max-w-[50%] flex flex-col overflow-hidden">
         <div class="flex-1 overflow-y-auto custom-scrollbar p-2">
           <div v-if="filteredList.length === 0" class="flex flex-col items-center justify-center h-full text-on-surface-variant gap-2">
             <span class="material-symbols-outlined text-[48px] opacity-40">dns</span>
@@ -150,8 +186,8 @@
       </div>
 
       <!-- Detail Panel -->
-      <div class="glass-panel rounded-xl flex-1 flex flex-col overflow-hidden min-w-0">
-        <div v-if="!selectedRequest" class="flex items-center justify-center h-full text-on-surface-variant gap-2">
+      <div class="glass-panel rounded-lg flex-1 flex flex-col overflow-hidden min-w-0">
+        <div v-if="!selectedRequest" class="flex items-center justify-center h-full text-on-surface-variant gap-2 select-text">
           <span class="material-symbols-outlined text-[48px] opacity-40">touch_app</span>
           <span class="text-body-md">{{ t('api.detailPanel') }}</span>
         </div>
@@ -176,20 +212,30 @@
           </div>
 
           <!-- Detail Content -->
-          <div class="flex-1 overflow-y-auto custom-scrollbar p-4">
+          <div class="flex-1 overflow-y-auto custom-scrollbar p-4 select-text">
             <!-- Request Tab -->
             <div v-if="activeDetailTab === 'request'">
               <div class="mb-4">
-                <div class="text-label-md font-semibold text-on-surface mb-2">{{ t('api.headers') }}</div>
-                <div class="bg-white/5 rounded-xl p-3 font-mono text-caption">
+                <div class="flex items-center justify-between text-label-md font-semibold text-on-surface mb-2">
+                  <span>{{ t('api.headers') }}</span>
+                  <button class="glass-hover rounded-lg px-2 py-0.5 flex items-center gap-1 text-caption" @click="copyText(formatHeaders(selectedRequest.request_headers))">
+                    <span class="material-symbols-outlined text-[14px]">content_copy</span> Copy
+                  </button>
+                </div>
+                <div class="bg-white/[0.06] rounded-xl p-3 font-mono text-caption">
                   <div v-for="h in selectedRequest.request_headers" :key="h[0]" class="mb-0.5">
                     <span class="text-primary">{{ h[0] }}</span>: <span class="text-on-surface">{{ h[1] }}</span>
                   </div>
                 </div>
               </div>
               <div v-if="selectedRequest.request_body">
-                <div class="text-label-md font-semibold text-on-surface mb-2">{{ t('api.body') }} <span class="text-caption text-on-surface-variant font-normal">({{ formatSize(selectedRequest.request_size) }})</span></div>
-                <pre class="bg-[#1a1c2e]/80 rounded-xl p-3 font-mono text-caption text-on-surface overflow-x-auto whitespace-pre-wrap max-h-[400px] custom-scrollbar"><code>{{ tryFormatJson(selectedRequest.request_body) }}</code></pre>
+                <div class="flex items-center justify-between text-label-md font-semibold text-on-surface mb-2">
+                  <span>{{ t('api.body') }} <span class="text-caption text-on-surface-variant font-normal">({{ formatSize(selectedRequest.request_size) }})</span></span>
+                  <button class="glass-hover rounded-lg px-2 py-0.5 flex items-center gap-1 text-caption" @click="copyText(tryFormatJson(selectedRequest.request_body))">
+                    <span class="material-symbols-outlined text-[14px]">content_copy</span> Copy
+                  </button>
+                </div>
+                <pre class="bg-white/[0.06] rounded-xl p-3 font-mono text-caption text-on-surface overflow-x-auto whitespace-pre-wrap break-all max-h-[400px] custom-scrollbar"><code>{{ tryFormatJson(selectedRequest.request_body) }}</code></pre>
               </div>
             </div>
 
@@ -207,83 +253,46 @@
                   <span class="text-caption text-on-surface-variant">{{ formatSize(selectedRequest.response_size) }}</span>
                 </div>
                 <div class="mb-4">
-                  <div class="text-label-md font-semibold text-on-surface mb-2">{{ t('api.resHeaders') }}</div>
-                  <div class="bg-white/5 rounded-xl p-3 font-mono text-caption">
+                  <div class="flex items-center justify-between text-label-md font-semibold text-on-surface mb-2">
+                    <span>{{ t('api.resHeaders') }}</span>
+                    <button class="glass-hover rounded-lg px-2 py-0.5 flex items-center gap-1 text-caption" @click="copyText(formatHeaders(selectedRequest.response_headers ?? []))">
+                      <span class="material-symbols-outlined text-[14px]">content_copy</span> Copy
+                    </button>
+                  </div>
+                  <div class="bg-white/[0.06] rounded-xl p-3 font-mono text-caption">
                     <div v-for="h in selectedRequest.response_headers" :key="h[0]" class="mb-0.5">
                       <span class="text-secondary">{{ h[0] }}</span>: <span class="text-on-surface">{{ h[1] }}</span>
                     </div>
                   </div>
                 </div>
                 <div v-if="selectedRequest.response_body">
-                  <div class="text-label-md font-semibold text-on-surface mb-2">{{ t('api.resBody') }} <span class="text-caption text-on-surface-variant font-normal">({{ formatSize(selectedRequest.response_size) }})</span></div>
-                  <pre class="bg-[#1a1c2e]/80 rounded-xl p-3 font-mono text-caption text-on-surface overflow-x-auto whitespace-pre-wrap max-h-[400px] custom-scrollbar"><code>{{ tryFormatJson(selectedRequest.response_body) }}</code></pre>
+                  <div class="flex items-center justify-between text-label-md font-semibold text-on-surface mb-2">
+                    <span>{{ t('api.resBody') }} <span class="text-caption text-on-surface-variant font-normal">({{ formatSize(selectedRequest.response_size) }})</span></span>
+                    <button class="glass-hover rounded-lg px-2 py-0.5 flex items-center gap-1 text-caption" @click="copyText(tryFormatJson(selectedRequest.response_body))">
+                      <span class="material-symbols-outlined text-[14px]">content_copy</span> Copy
+                    </button>
+                  </div>
+                  <pre class="bg-white/[0.06] rounded-xl p-3 font-mono text-caption text-on-surface overflow-x-auto whitespace-pre-wrap break-all max-h-[400px] custom-scrollbar"><code>{{ tryFormatJson(selectedRequest.response_body) }}</code></pre>
                 </div>
               </template>
             </div>
 
             <!-- Raw Tab -->
             <div v-if="activeDetailTab === 'raw'">
-              <div class="text-label-md font-semibold text-on-surface mb-2">{{ selectedRequest.method }} {{ selectedRequest.url }}</div>
-              <pre class="bg-[#1a1c2e]/80 rounded-xl p-3 font-mono text-caption text-on-surface overflow-x-auto whitespace-pre-wrap max-h-[600px] custom-scrollbar"><code>{{ rawContent }}</code></pre>
+              <div class="flex items-center justify-between text-label-md font-semibold text-on-surface mb-2">
+                <span>{{ selectedRequest.method }} {{ selectedRequest.url }}</span>
+                <button class="glass-hover rounded-lg px-2 py-0.5 flex items-center gap-1 text-caption" @click="copyText(rawContent)">
+                  <span class="material-symbols-outlined text-[14px]">content_copy</span> Copy
+                </button>
+              </div>
+              <pre class="bg-white/[0.06] rounded-xl p-3 font-mono text-caption text-on-surface overflow-x-auto whitespace-pre-wrap break-all max-h-[600px] custom-scrollbar"><code>{{ rawContent }}</code></pre>
             </div>
           </div>
         </template>
       </div>
     </div>
 
-    <!-- Rewrite Rules Panel -->
-    <div class="glass-panel rounded-xl">
-      <div class="flex items-center justify-between px-5 py-2.5 cursor-pointer select-none" @click="showRules = !showRules">
-        <div class="flex items-center gap-2">
-          <span class="material-symbols-outlined text-[18px] text-on-surface-variant">rule</span>
-          <span class="font-label-md font-semibold">{{ t('api.rules') }}</span>
-          <span v-if="localRules.length > 0" class="text-caption text-on-surface-variant">({{ localRules.filter(r => r.enabled).length }}/{{ localRules.length }})</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <button class="glass-hover rounded-lg px-2.5 py-1 flex items-center gap-1" @click.stop="showRuleEditor = true">
-            <span class="material-symbols-outlined text-[14px]">add</span>
-            <span class="font-label-md">{{ t('api.addRule') }}</span>
-          </button>
-          <span class="material-symbols-outlined text-[18px] text-on-surface-variant transition-transform" :class="{ 'rotate-180': showRules }">expand_more</span>
-        </div>
-      </div>
-      <div v-show="showRules" class="px-5 pb-3 space-y-1.5 max-h-[120px] overflow-y-auto custom-scrollbar">
-        <div v-if="localRules.length === 0" class="text-caption text-on-surface-variant py-2 text-center">{{ t('api.noRules') }}</div>
-        <div v-for="rule in localRules" :key="rule.id" class="flex items-center gap-2 bg-white/5 rounded-lg px-3 py-1.5">
-          <button class="text-[16px]" :class="rule.enabled ? 'text-green-500' : 'text-on-surface-variant'" @click="toggleRule(rule)">
-            <span class="material-symbols-outlined">{{ rule.enabled ? 'toggle_on' : 'toggle_off' }}</span>
-          </button>
-          <span class="font-mono text-caption flex-1 truncate">{{ rule.name }} — <span class="text-on-surface-variant">{{ rule.url_pattern }}</span></span>
-          <button class="glass-hover rounded-lg p-1 text-on-surface-variant" @click="editRule(rule)">
-            <span class="material-symbols-outlined text-[14px]">edit</span>
-          </button>
-          <button class="glass-hover rounded-lg p-1 text-on-surface-variant" @click="deleteRule(rule.id)">
-            <span class="material-symbols-outlined text-[14px]">close</span>
-          </button>
-        </div>
-      </div>
-    </div>
 
-    <!-- Debug Logs Panel -->
-    <div class="glass-panel rounded-xl">
-      <div class="flex items-center justify-between px-5 py-2.5 cursor-pointer select-none" @click="showDebugLogs = !showDebugLogs">
-        <div class="flex items-center gap-2">
-          <span class="material-symbols-outlined text-[18px] text-on-surface-variant">bug_report</span>
-          <span class="font-label-md font-semibold">{{ t('api.debugLogs') }}</span>
-          <span v-if="api.debugLogs.value.length > 0" class="text-caption text-on-surface-variant">({{ api.debugLogs.value.length }})</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <button class="glass-hover rounded-lg px-2.5 py-1 flex items-center gap-1" @click.stop="api.debugLogs.value = []">
-            <span class="font-label-md">{{ t('api.clear') }}</span>
-          </button>
-          <span class="material-symbols-outlined text-[18px] text-on-surface-variant transition-transform" :class="{ 'rotate-180': showDebugLogs }">expand_more</span>
-        </div>
-      </div>
-      <div v-show="showDebugLogs" class="px-5 pb-3 max-h-[150px] overflow-y-auto custom-scrollbar">
-        <div v-if="api.debugLogs.value.length === 0" class="text-caption text-on-surface-variant py-2 text-center">{{ t('api.noDebugLogs') }}</div>
-        <pre v-for="(log, i) in api.debugLogs.value" :key="i" class="font-mono text-caption text-on-surface py-0.5 border-b border-white/5 last:border-0">{{ log }}</pre>
-      </div>
-    </div>
 
     <!-- Rule Editor Dialog -->
     <Teleport to="body">
@@ -384,7 +393,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from "vue"
+import { ref, computed, onMounted, onUnmounted } from "vue"
 import { invoke } from "@tauri-apps/api/core"
 import { useI18n } from "@/composables/useI18n"
 import { useApiProxy } from "@/composables/useApiProxy"
@@ -407,7 +416,6 @@ const breakpointRequestId = ref("")
 const breakpointHeaders = ref("")
 const breakpointBody = ref("")
 const breakpointUrlPattern = ref("")
-const showDebugLogs = ref(false)
 
 const ruleForm = ref({
   name: "", url_pattern: "", action_type: "modify_request_header",
@@ -563,6 +571,16 @@ function tryFormatJson(str: string): string {
   }
 }
 
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch { /* fallback */ }
+}
+
+function formatHeaders(headers: string[][]): string {
+  return headers.map(h => `${h[0]}: ${h[1]}`).join("\n")
+}
+
 async function handleStart() {
   try {
     const msg = await api.startProxy(deviceSerial.value || undefined)
@@ -688,11 +706,6 @@ onMounted(async () => {
   await api.init()
   await api.getCaptured()
   await refreshDevices()
-})
-
-// Auto-expand debug panel when logs arrive
-watch(() => api.debugLogs.value.length, (n, o) => {
-  if (n > o) showDebugLogs.value = true
 })
 
 onUnmounted(() => {
