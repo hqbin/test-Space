@@ -1,10 +1,10 @@
 <template>
   <div
-    class="min-h-screen font-body-md text-body-md text-on-surface antialiased selection:bg-secondary-fixed selection:text-on-secondary-fixed app-content select-none"
+    class="w-screen h-screen rounded-2xl overflow-hidden flex flex-col font-body-md text-body-md text-on-surface antialiased selection:bg-secondary-fixed selection:text-on-secondary-fixed app-content select-none shadow-[0_0_0_0.5px_rgba(0,0,0,0.12)]"
     :style="bgStyle"
   >
     <TitleBar />
-    <main class="px-margin-page pt-10 box-border min-h-screen">
+    <main class="px-margin-page pt-2 box-border flex-1 overflow-y-auto min-h-0">
       <router-view />
     </main>
   </div>

@@ -1,5 +1,5 @@
 <template>
-  <div class="flex h-screen -mx-margin-page overflow-hidden pb-4 box-border select-none">
+  <div class="flex h-full -mx-margin-page overflow-hidden pb-4 box-border select-none">
     <!-- Left: Search + File Tree -->
     <div class="flex-shrink-0 flex flex-col w-64 ml-3 overflow-hidden rounded-xl bg-white/10 backdrop-blur-[60px] border border-white/50 shadow-lg">
       <div class="p-3 border-b border-glass-border-light/50">

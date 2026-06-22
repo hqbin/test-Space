@@ -8,6 +8,7 @@
     -moz-osx-font-smoothing: grayscale;
     overflow: hidden;
     height: 100%;
+    background: transparent !important;
   }
   ::selection {
     background-color: #e2dfff;
@@ -172,7 +173,7 @@ html.dark {
   color-scheme: dark;
 }
 html.dark body {
-  background: #0d0d1a;
+  background: transparent !important;
   color: #e8e8f0;
   transition: background-color 0.35s ease, color 0.35s ease;
 }

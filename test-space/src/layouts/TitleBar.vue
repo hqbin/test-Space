@@ -1,10 +1,10 @@
 <template>
-  <div class="fixed top-0 left-0 right-0 z-50 h-9 flex items-center bg-glass-surface/15 backdrop-blur-[60px] border-b border-glass-border-light shadow-sm title-bar px-2">
-    <div class="flex items-center gap-0 h-full select-none">
+  <div class="h-10 shrink-0 flex items-center bg-glass-surface/15 backdrop-blur-[60px] border-b border-glass-border-light shadow-sm title-bar px-3">
+    <div class="flex items-center gap-1 h-full select-none">
       <router-link v-for="item in navItems" :key="item.path" :to="item.path"
-        class="glass-hover rounded-lg px-2 py-0.5 flex items-center gap-1 transition-colors"
+        class="glass-hover rounded-lg px-3 py-1 flex items-center gap-1.5 transition-colors"
         :class="isActive(item.path) ? 'glass-active font-semibold' : 'text-on-surface-variant'">
-        <span class="material-symbols-outlined text-[14px]"
+        <span class="material-symbols-outlined text-[15px]"
           :style="{ fontVariationSettings: `'FILL' ${isActive(item.path) ? 1 : 0}` }">{{ item.icon }}</span>
         <span class="font-label-xs text-label-xs whitespace-nowrap">{{ t(item.labelKey) }}</span>
       </router-link>
@@ -13,21 +13,21 @@
     <div data-tauri-drag-region class="flex-1 h-full cursor-grab active:cursor-grabbing"></div>
 
     <router-link to="/settings"
-      class="glass-hover rounded-lg px-2 py-0.5 flex items-center gap-1 transition-colors text-on-surface-variant select-none"
+      class="glass-hover rounded-lg px-3 py-1 flex items-center gap-1.5 transition-colors text-on-surface-variant select-none"
       :class="isActive('/settings') ? 'glass-active font-semibold' : ''">
-      <span class="material-symbols-outlined text-[14px]"
+      <span class="material-symbols-outlined text-[15px]"
         :style="{ fontVariationSettings: `'FILL' ${isActive('/settings') ? 1 : 0}` }">settings</span>
     </router-link>
 
-    <div class="flex items-center h-full ml-1 select-none">
-      <button @click="minimize" class="window-btn h-full px-2 flex items-center justify-center hover:bg-white/20 transition-colors rounded-lg" :title="t('nav.minimize')">
-        <span class="material-symbols-outlined text-[14px] text-on-surface-variant">horizontal_rule</span>
+    <div class="flex items-center h-full ml-2 select-none">
+      <button @click="minimize" class="window-btn h-full px-2.5 flex items-center justify-center hover:bg-white/20 transition-colors rounded-lg" :title="t('nav.minimize')">
+        <span class="material-symbols-outlined text-[15px] text-on-surface-variant">horizontal_rule</span>
       </button>
-      <button @click="toggleMaximize" class="window-btn h-full px-2 flex items-center justify-center hover:bg-white/20 transition-colors rounded-lg" :title="isMax ? t('nav.restore') : t('nav.maximize')">
-        <span class="material-symbols-outlined text-[14px] text-on-surface-variant">{{ isMax ? 'fullscreen_exit' : 'crop_square' }}</span>
+      <button @click="toggleMaximize" class="window-btn h-full px-2.5 flex items-center justify-center hover:bg-white/20 transition-colors rounded-lg" :title="isMax ? t('nav.restore') : t('nav.maximize')">
+        <span class="material-symbols-outlined text-[15px] text-on-surface-variant">{{ isMax ? 'fullscreen_exit' : 'crop_square' }}</span>
       </button>
-      <button @click="closeWindow" class="window-btn h-full px-2 flex items-center justify-center hover:bg-red-500/20 transition-colors rounded-lg group" :title="t('nav.close')">
-        <span class="material-symbols-outlined text-[14px] text-on-surface-variant group-hover:text-red-500">close</span>
+      <button @click="closeWindow" class="window-btn h-full px-2.5 flex items-center justify-center hover:bg-red-500/20 transition-colors rounded-lg group" :title="t('nav.close')">
+        <span class="material-symbols-outlined text-[15px] text-on-surface-variant group-hover:text-red-500">close</span>
       </button>
     </div>
   </div>

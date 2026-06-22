@@ -1,5 +1,5 @@
 <template>
-  <div class="h-screen flex flex-col -mx-margin-page pb-2 box-border select-none">
+  <div class="h-full flex flex-col -mx-margin-page pb-2 box-border select-none">
     <!-- Toolbar -->
     <div class="flex items-center gap-3 mb-2 flex-shrink-0 ml-3">
       <!-- Type dropdown -->

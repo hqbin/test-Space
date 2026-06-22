@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col h-screen -mx-margin-page select-none">
+  <div class="flex flex-col h-full -mx-margin-page select-none">
     <!-- Toolbar -->
     <div class="flex items-center gap-1 px-4 py-2 bg-white/20 backdrop-blur-sm border-b border-white/20 shrink-0 overflow-x-auto custom-scrollbar">
       <button class="glass-button px-3 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1 shrink-0 select-none" title="Back to Home" @click="goHome">
