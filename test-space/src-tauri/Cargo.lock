@@ -88,6 +88,7 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "encoding_rs",
+ "flate2",
  "http-body-util",
  "http-mitm-proxy",
  "log",

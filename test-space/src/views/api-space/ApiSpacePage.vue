@@ -221,7 +221,7 @@
                     <span class="material-symbols-outlined text-[14px]">content_copy</span> Copy
                   </button>
                 </div>
-                <pre class="bg-white/[0.06] rounded-xl p-3 font-mono text-caption text-on-surface overflow-x-auto whitespace-pre-wrap break-all max-h-[400px] custom-scrollbar"><code>{{ tryFormatJson(selectedRequest.request_body) }}</code></pre>
+                  <pre class="bg-white/[0.06] rounded-xl p-3 font-mono text-caption text-on-surface overflow-x-auto whitespace-pre-wrap break-all custom-scrollbar"><code>{{ tryFormatJson(selectedRequest.request_body) }}</code></pre>
               </div>
             </div>
 
@@ -263,7 +263,7 @@
                       <span class="material-symbols-outlined text-[14px]">content_copy</span> Copy
                     </button>
                   </div>
-                  <pre class="bg-white/[0.06] rounded-xl p-3 font-mono text-caption text-on-surface overflow-x-auto whitespace-pre-wrap break-all max-h-[400px] custom-scrollbar"><code>{{ tryFormatJson(selectedRequest.response_body) }}</code></pre>
+                  <pre class="bg-white/[0.06] rounded-xl p-3 font-mono text-caption text-on-surface overflow-x-auto whitespace-pre-wrap break-all custom-scrollbar"><code>{{ tryFormatJson(selectedRequest.response_body) }}</code></pre>
                 </div>
               </template>
             </div>
@@ -275,7 +275,7 @@
                   <span class="material-symbols-outlined text-[14px]">content_copy</span> Copy
                 </button>
               </div>
-              <pre class="bg-white/[0.06] rounded-xl p-3 font-mono text-caption text-on-surface overflow-x-auto whitespace-pre-wrap break-all max-h-[600px] custom-scrollbar"><code>{{ rawContent }}</code></pre>
+              <pre class="bg-white/[0.06] rounded-xl p-3 font-mono text-caption text-on-surface overflow-x-auto whitespace-pre-wrap break-all custom-scrollbar"><code>{{ rawContent }}</code></pre>
             </div>
           </div>
         </template>
@@ -589,7 +589,7 @@ async function handleStop() {
 async function handleRequestClick(req: ApiCapturedRequest) {
   selectedRequest.value = req
   const isPending = api.pendingBreakpoints.value.has(req.id) || api.pendingBreakpoints.value.has(`${req.id}_resp`)
-  if (isPending) {
+  if (isPending && !showBreakpointEditor.value) {
     const phase = api.pendingBreakpoints.value.has(`${req.id}_resp`) ? "response" : "request"
     openBreakpointEditor(req, phase)
   }

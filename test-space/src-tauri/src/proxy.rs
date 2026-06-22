@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::io::Read;
 use tokio::sync::oneshot;
 use tokio::time::{timeout, Duration};
 use uuid::Uuid;
@@ -148,6 +149,32 @@ async fn read_body_bytes(body: Incoming) -> Bytes {
     }
 }
 
+fn get_content_encoding(headers: &http_mitm_proxy::hyper::http::HeaderMap) -> Option<String> {
+    headers.get("content-encoding")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+}
+
+fn decompress_body(encoding: Option<&str>, data: &[u8]) -> Vec<u8> {
+    match encoding {
+        Some("gzip") => {
+            let mut decoder = flate2::read::GzDecoder::new(data);
+            let mut out = Vec::new();
+            decoder.read_to_end(&mut out).unwrap_or(0);
+            if !out.is_empty() { return out; }
+            data.to_vec()
+        }
+        Some("deflate") => {
+            let mut decoder = flate2::read::ZlibDecoder::new(data);
+            let mut out = Vec::new();
+            decoder.read_to_end(&mut out).unwrap_or(0);
+            if !out.is_empty() { return out; }
+            data.to_vec()
+        }
+        _ => data.to_vec(),
+    }
+}
+
 fn url_matches(url: &str, pattern: &str, match_type: &str) -> bool {
     match match_type {
         "exact" => url == pattern,
@@ -290,16 +317,17 @@ pub async fn proxy_start(
 
                     let (mut req_parts, req_body) = req.into_parts();
                     let req_body_bytes = read_body_bytes(req_body).await;
+                    let req_body_bytes = decompress_body(get_content_encoding(&req_parts.headers).as_deref(), &req_body_bytes);
                     let req_body_str = if req_body_bytes.is_empty() {
                         None
                     } else {
-                        String::from_utf8(req_body_bytes.to_vec()).ok()
+                        Some(String::from_utf8_lossy(&req_body_bytes).to_string())
                     };
 
                     let req_headers = headers_to_vec(&req_parts.headers);
                     let req_size = req_body_bytes.len() as u64;
 
-                    let captured = CapturedRequest {
+                    let mut captured = CapturedRequest {
                         id: request_id.clone(),
                         method: method.clone(),
                         url: url.clone(),
@@ -322,7 +350,7 @@ pub async fn proxy_start(
 
                     app_handle.emit("proxy:request", &captured).ok();
 
-                    let mut rebuild_body = box_body(req_body_bytes.clone());
+                    let mut rebuild_body = box_body(Bytes::from(req_body_bytes.clone()));
 
                     // Apply request rewrite rules
                     let rules = state.rewrite_rules.lock().unwrap().clone();
@@ -346,12 +374,14 @@ pub async fn proxy_start(
                                         req_parts.headers.insert(n, v);
                                     }
                                 }
+                                captured.request_headers = headers_to_vec(&req_parts.headers);
                             }
                             "modify_request_body" => {
                                 if let (Some(search), Some(replace)) = (&rule.body_search, &rule.body_replace) {
                                     if let Some(body_str) = &req_body_str {
                                         let new_body = body_str.replace(search, replace);
-                                        rebuild_body = box_body(Bytes::from(new_body));
+                                        rebuild_body = box_body(Bytes::from(new_body.clone()));
+                                        captured.request_body = Some(new_body);
                                     }
                                 }
                             }
@@ -389,9 +419,11 @@ pub async fn proxy_start(
                                                         }
                                                     }
                                                 }
+                                                captured.request_headers = headers_to_vec(&req_parts.headers);
                                             }
                                             if let Some(body_str) = action.get("body").and_then(|v| v.as_str()) {
                                                 rebuild_body = box_body(Bytes::from(body_str.to_string()));
+                                                captured.request_body = Some(body_str.to_string());
                                             }
                                         }
                                         _ => {}
@@ -445,10 +477,11 @@ pub async fn proxy_start(
 
                     let (mut res_parts, res_body) = response.into_parts();
                     let res_body_bytes = read_body_bytes(res_body).await;
+                    let res_body_bytes = decompress_body(get_content_encoding(&res_parts.headers).as_deref(), &res_body_bytes);
                     let res_body_str = if res_body_bytes.is_empty() {
                         None
                     } else {
-                        String::from_utf8(res_body_bytes.to_vec()).ok()
+                        Some(String::from_utf8_lossy(&res_body_bytes).to_string())
                     };
 
                     let res_headers = headers_to_vec(&res_parts.headers);
@@ -458,7 +491,7 @@ pub async fn proxy_start(
                         .to_string();
                     let res_size = res_body_bytes.len() as u64;
 
-                    let full_captured = CapturedRequest {
+                    let mut full_captured = CapturedRequest {
                         response_status_code: Some(status_code),
                         response_status_text: Some(status_text),
                         response_headers: Some(res_headers.clone()),
@@ -480,7 +513,7 @@ pub async fn proxy_start(
 
                     app_handle.emit("proxy:response", &full_captured).ok();
 
-                    let mut final_body = box_body(res_body_bytes.clone());
+                    let mut final_body = box_body(Bytes::from(res_body_bytes.clone()));
                     let mut final_status = status_code;
 
                     // Apply response rewrite rules
@@ -498,12 +531,14 @@ pub async fn proxy_start(
                                         res_parts.headers.insert(n, v);
                                     }
                                 }
+                                full_captured.response_headers = Some(headers_to_vec(&res_parts.headers));
                             }
                             "modify_response_body" => {
                                 if let (Some(search), Some(replace)) = (&rule.body_search, &rule.body_replace) {
                                     if let Some(body_str) = &res_body_str {
                                         let new_body = body_str.replace(search, replace);
-                                        final_body = box_body(Bytes::from(new_body));
+                                        final_body = box_body(Bytes::from(new_body.clone()));
+                                        full_captured.response_body = Some(new_body);
                                     }
                                 }
                             }
@@ -542,12 +577,14 @@ pub async fn proxy_start(
                                                         }
                                                     }
                                                 }
+                                                full_captured.response_headers = Some(headers_to_vec(&res_parts.headers));
                                             }
                                             if let Some(s) = action.get("status_code").and_then(|v| v.as_u64()) {
                                                 final_status = s as u16;
                                             }
                                             if let Some(body_str) = action.get("body").and_then(|v| v.as_str()) {
                                                 final_body = box_body(Bytes::from(body_str.to_string()));
+                                                full_captured.response_body = Some(body_str.to_string());
                                             }
                                         }
                                         _ => {}
@@ -1155,7 +1192,8 @@ pub async fn proxy_replay(
     let end_time = get_timestamp();
     let duration = ((end_time - start_time) * 1000.0 * 100.0).round() / 100.0;
     let res_body_bytes = read_body_bytes(res_body).await;
-    let res_body_str = if res_body_bytes.is_empty() { None } else { String::from_utf8(res_body_bytes.to_vec()).ok() };
+    let res_body_bytes = decompress_body(get_content_encoding(&res_parts.headers).as_deref(), &res_body_bytes);
+    let res_body_str = if res_body_bytes.is_empty() { None } else { Some(String::from_utf8_lossy(&res_body_bytes).to_string()) };
 
     Ok(CapturedRequest {
         id: Uuid::new_v4().to_string(),

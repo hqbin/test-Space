@@ -50,13 +50,18 @@ export function useApiProxy() {
       if (idx !== -1) {
         capturedRequests.value[idx] = e.payload
       }
+      if (selectedRequest.value?.id === e.payload.id) {
+        selectedRequest.value = e.payload
+      }
     }))
 
     unlistens.push(await listen<ApiCapturedRequest>("proxy:breakpoint:request", (e) => {
       const set = new Set(pendingBreakpoints.value)
       set.add(e.payload.id)
       pendingBreakpoints.value = set
-      selectedRequest.value = e.payload
+      if (selectedRequest.value?.id === e.payload.id) {
+        selectedRequest.value = e.payload
+      }
       breakpointEvent.value = { type: "request", data: e.payload }
     }))
 
@@ -65,7 +70,9 @@ export function useApiProxy() {
       const respId = `${e.payload.id}_resp`
       set.add(respId)
       pendingBreakpoints.value = set
-      selectedRequest.value = e.payload
+      if (selectedRequest.value?.id === e.payload.id) {
+        selectedRequest.value = e.payload
+      }
       breakpointEvent.value = { type: "response", data: e.payload }
     }))
 
