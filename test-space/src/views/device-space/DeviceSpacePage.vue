@@ -1823,8 +1823,8 @@ async function rootDevice() {
     appendCmdExec(t("device.executingAdbRoot"));
     const r = await adbRoot(selectedDevice.value.serial);
     appendCmdExec(r);
-    finishCmdExec("");
-    showToast(r);
+    finishCmdExec(t("device.rootDone"));
+    showToast(t("device.rootDone"));
   } catch (e: any) { finishCmdExec(t('device.rootFailedWith', { e: String(e) })); showToast(t('device.rootFailedWith', { e: String(e) }), "error"); }
 }
 async function remountDevice() {
@@ -1834,8 +1834,8 @@ async function remountDevice() {
     appendCmdExec(t("device.executingRemount"));
     const r = await adbRemount(selectedDevice.value.serial);
     appendCmdExec(r);
-    finishCmdExec("");
-    showToast(r);
+    finishCmdExec(t("device.remountDone"));
+    showToast(t("device.remountDone"));
   } catch (e: any) { finishCmdExec(t('device.remountFailedWith', { e: String(e) })); showToast(t('device.remountFailedWith', { e: String(e) }), "error"); }
 }
 async function sendKey(keycode: string) {
