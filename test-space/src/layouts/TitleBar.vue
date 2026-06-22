@@ -1,5 +1,5 @@
 <template>
-  <div class="h-10 shrink-0 flex items-center bg-glass-surface/15 backdrop-blur-[60px] border-b border-glass-border-light shadow-sm title-bar px-3">
+  <div class="h-12 shrink-0 flex items-center bg-glass-surface/15 backdrop-blur-[60px] border-b border-glass-border-light shadow-sm title-bar px-3">
     <div class="flex items-center gap-1 h-full select-none">
       <router-link v-for="item in navItems" :key="item.path" :to="item.path"
         class="glass-hover rounded-lg px-3 py-1.5 flex items-center gap-1.5 transition-colors"
@@ -13,7 +13,7 @@
     <div data-tauri-drag-region class="flex-1 h-full cursor-grab active:cursor-grabbing"></div>
 
     <router-link to="/settings"
-      class="glass-hover rounded-lg px-3 py-1 flex items-center gap-1.5 transition-colors text-on-surface-variant select-none"
+      class="glass-hover rounded-lg px-3 py-1.5 flex items-center gap-1.5 transition-colors text-on-surface-variant select-none"
       :class="isActive('/settings') ? 'glass-active font-semibold' : ''">
       <span class="material-symbols-outlined text-[15px]"
         :style="{ fontVariationSettings: `'FILL' ${isActive('/settings') ? 1 : 0}` }">settings</span>
