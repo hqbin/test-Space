@@ -35,6 +35,7 @@ onMounted(async () => {
   window.addEventListener("keydown", onKeydown);
   try {
     const appWindow = getCurrentWindow();
+    await appWindow.setShadow(false);
     await appWindow.setIcon("icons/32x32.png");
   } catch {}
 });

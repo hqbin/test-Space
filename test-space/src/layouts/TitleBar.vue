@@ -2,7 +2,7 @@
   <div class="h-10 shrink-0 flex items-center bg-glass-surface/15 backdrop-blur-[60px] border-b border-glass-border-light shadow-sm title-bar px-3">
     <div class="flex items-center gap-1 h-full select-none">
       <router-link v-for="item in navItems" :key="item.path" :to="item.path"
-        class="glass-hover rounded-lg px-3 py-1 flex items-center gap-1.5 transition-colors"
+        class="glass-hover rounded-lg px-3 py-1.5 flex items-center gap-1.5 transition-colors"
         :class="isActive(item.path) ? 'glass-active font-semibold' : 'text-on-surface-variant'">
         <span class="material-symbols-outlined text-[15px]"
           :style="{ fontVariationSettings: `'FILL' ${isActive(item.path) ? 1 : 0}` }">{{ item.icon }}</span>
