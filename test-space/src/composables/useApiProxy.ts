@@ -3,6 +3,11 @@ import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
 import type { ApiCapturedRequest, ApiRewriteRule, ApiProxyStatus } from "@/types"
 
+export interface BreakpointEvent {
+  type: "request" | "response"
+  data: ApiCapturedRequest
+}
+
 export function useApiProxy() {
   const status = ref<ApiProxyStatus>({
     running: false,
@@ -17,14 +22,24 @@ export function useApiProxy() {
   const isStopping = ref(false)
   const isReplaying = ref(false)
   const debugLogs = ref<string[]>([])
+  const breakpointEvent = ref<BreakpointEvent | null>(null)
+  const pendingBreakpoints = ref<Set<string>>(new Set())
 
   let unlistens: (() => void)[] = []
+
+  async function loadRules() {
+    try {
+      const rules = await invoke<ApiRewriteRule[]>("proxy_get_rewrite_rules")
+      rewriteRules.value = rules
+    } catch { /* ok */ }
+  }
 
   async function init() {
     try {
       const s = await invoke<ApiProxyStatus>("proxy_get_status")
       status.value = s
     } catch { /* ok */ }
+    await loadRules()
 
     unlistens.push(await listen<ApiCapturedRequest>("proxy:request", (e) => {
       capturedRequests.value.unshift(e.payload)
@@ -38,11 +53,20 @@ export function useApiProxy() {
     }))
 
     unlistens.push(await listen<ApiCapturedRequest>("proxy:breakpoint:request", (e) => {
+      const set = new Set(pendingBreakpoints.value)
+      set.add(e.payload.id)
+      pendingBreakpoints.value = set
       selectedRequest.value = e.payload
+      breakpointEvent.value = { type: "request", data: e.payload }
     }))
 
     unlistens.push(await listen<ApiCapturedRequest>("proxy:breakpoint:response", (e) => {
+      const set = new Set(pendingBreakpoints.value)
+      const respId = `${e.payload.id}_resp`
+      set.add(respId)
+      pendingBreakpoints.value = set
       selectedRequest.value = e.payload
+      breakpointEvent.value = { type: "response", data: e.payload }
     }))
 
     unlistens.push(await listen<string>("proxy:error", (e) => {
@@ -53,6 +77,13 @@ export function useApiProxy() {
     unlistens.push(await listen<string>("proxy:debug", (e) => {
       debugLogs.value.push(e.payload)
     }))
+  }
+
+  function markBreakpointResolved(requestId: string) {
+    const set = new Set(pendingBreakpoints.value)
+    set.delete(requestId)
+    set.delete(`${requestId}_resp`)
+    pendingBreakpoints.value = set
   }
 
   function cleanup() {
@@ -138,14 +169,17 @@ export function useApiProxy() {
   const breakpointEnabled = computed(() => status.value.breakpoint_enabled)
   const currentPort = computed(() => status.value.port)
 
+  const pendingCount = computed(() => pendingBreakpoints.value.size)
+
   return {
     status, capturedRequests, selectedRequest, rewriteRules,
     isStarting, isStopping, isReplaying, debugLogs,
-    running, breakpointEnabled, currentPort,
+    running, breakpointEnabled, currentPort, breakpointEvent,
+    pendingBreakpoints, pendingCount, markBreakpointResolved,
     init, cleanup,
     startProxy, stopProxy, toggleBreakpoint, continueRequest,
     getCaptured, clearCaptured,
     addRule, removeRule, updateRule, clearRules,
-    replay,
+    replay, loadRules,
   }
 }

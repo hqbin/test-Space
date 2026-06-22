@@ -45,13 +45,17 @@
 
       <div class="w-px h-6 bg-white/20" />
 
-      <button class="glass-hover rounded-xl px-3 py-2 flex items-center gap-2"
+      <button class="glass-hover rounded-xl px-3 py-2 flex items-center gap-2 relative"
         :class="api.breakpointEnabled.value ? 'glass-active' : ''"
         @click="api.toggleBreakpoint(!api.breakpointEnabled.value, breakpointUrlPattern)">
         <span class="material-symbols-outlined text-[18px]">error_outline</span>
         <span class="font-label-md whitespace-nowrap">{{ t('api.breakpoint') }}</span>
+        <span v-if="api.pendingCount.value > 0"
+          class="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1">
+          {{ api.pendingCount.value }}
+        </span>
       </button>
-      <input v-if="api.running.value" v-model="breakpointUrlPattern" class="glass-input rounded-xl px-3 py-1.5 text-body-md font-mono w-[140px]" placeholder="/api/..." title="仅拦截匹配该路径的请求（留空则拦截全部）" />
+      <input v-if="api.running.value" v-model="breakpointUrlPattern" class="glass-input rounded-xl px-3 py-1.5 text-body-md font-mono w-[140px]" placeholder="/api/..." title="输入 URL 路径，仅拦截匹配的请求（留空则拦截全部）" />
 
       <div class="w-px h-6 bg-white/20" />
 
@@ -99,22 +103,21 @@
     <div class="glass-panel rounded-xl px-5 py-2.5 flex items-center gap-3 flex-wrap">
       <div class="relative flex-1 min-w-[200px]">
         <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[16px] text-on-surface-variant">search</span>
-        <input v-model="searchQuery" class="glass-input rounded-xl pl-9 pr-3 py-1.5 w-full text-body-md" :placeholder="t('api.filter')" />
+        <input v-model="searchQuery" class="glass-input rounded-xl pl-9 pr-3 py-1.5 w-full text-body-md"
+          :placeholder="t('api.filter')"
+          @focus="showSearchHistory = searchHistory.length > 0"
+          @blur="delayHideSearchHistory()"
+          @keydown.enter="addSearchQuery(searchQuery)" />
+        <div v-if="showSearchHistory && searchHistory.length > 0"
+          class="absolute top-full left-0 right-0 mt-1 z-50 bg-white border shadow-lg rounded-lg max-h-48 overflow-y-auto">
+          <button v-for="q in searchHistory" :key="q"
+            class="w-full text-left px-3 py-1.5 text-caption text-on-surface hover:bg-gray-100 truncate"
+            @mousedown.prevent="searchQuery = q; showSearchHistory = false">
+            {{ q }}
+          </button>
+        </div>
       </div>
-      <!-- Method Filter Dropdown -->
-      <div ref="methodDropdownRef" class="relative">
-        <button class="glass-input rounded-xl px-3 py-1.5 text-body-md min-w-[90px] flex items-center gap-2 cursor-pointer select-none" @click="openMethodDropdown">
-          <span class="flex-1 text-left">{{ methodFilter || t('api.filterMethod') }}</span>
-          <span class="material-symbols-outlined text-[14px] text-on-surface-variant">expand_more</span>
-        </button>
-      </div>
-      <!-- Status Filter Dropdown -->
-      <div ref="statusDropdownRef" class="relative">
-        <button class="glass-input rounded-xl px-3 py-1.5 text-body-md min-w-[90px] flex items-center gap-2 cursor-pointer select-none" @click="openStatusDropdown">
-          <span class="flex-1 text-left">{{ statusFilter || t('api.filterStatus') }}</span>
-          <span class="material-symbols-outlined text-[14px] text-on-surface-variant">expand_more</span>
-        </button>
-      </div>
+
       <span class="text-caption text-on-surface-variant whitespace-nowrap">{{ t('api.capturedCount', { count: String(filteredList.length) }) }}</span>
       <button v-if="api.capturedRequests.value.length > 0" class="glass-hover rounded-xl px-3 py-1.5 flex items-center gap-1" @click="handleClear">
         <span class="material-symbols-outlined text-[16px]">delete_sweep</span>
@@ -122,35 +125,7 @@
       </button>
     </div>
 
-    <!-- Method Dropdown (Teleport to body) -->
-    <Teleport to="body">
-      <div v-if="showMethodDropdown" class="fixed inset-0 z-50" @click="showMethodDropdown = false" />
-      <div v-if="showMethodDropdown" class="fixed z-50 bg-white rounded-lg p-1 max-h-48 overflow-y-auto custom-scrollbar shadow-lg"
-        :style="{ top: methodDropdownPos.top + 'px', left: methodDropdownPos.left + 'px', width: methodDropdownPos.width + 'px' }">
-        <button class="w-full flex items-center gap-2 px-2 py-1.5 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none text-left no-border"
-          @mousedown.prevent @click="methodFilter = ''; showMethodDropdown = false">{{ t('api.filterMethod') }}</button>
-        <button v-for="m in methodOptions" :key="m"
-          class="w-full flex items-center gap-2 px-2 py-1.5 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none text-left no-border"
-          @mousedown.prevent @click="methodFilter = m; showMethodDropdown = false">
-          <span class="font-mono" :class="methodTextClass(m)">{{ m }}</span>
-        </button>
-      </div>
-    </Teleport>
-
-    <!-- Status Dropdown (Teleport to body) -->
-    <Teleport to="body">
-      <div v-if="showStatusDropdown" class="fixed inset-0 z-50" @click="showStatusDropdown = false" />
-      <div v-if="showStatusDropdown" class="fixed z-50 bg-white rounded-lg p-1 max-h-48 overflow-y-auto custom-scrollbar shadow-lg"
-        :style="{ top: statusDropdownPos.top + 'px', left: statusDropdownPos.left + 'px', width: statusDropdownPos.width + 'px' }">
-        <button class="w-full flex items-center gap-2 px-2 py-1.5 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none text-left no-border"
-          @mousedown.prevent @click="statusFilter = ''; showStatusDropdown = false">{{ t('api.filterStatus') }}</button>
-        <button v-for="s in statusOptions" :key="s"
-          class="w-full flex items-center gap-2 px-2 py-1.5 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none text-left no-border"
-          @mousedown.prevent @click="statusFilter = s; showStatusDropdown = false">
-          {{ s }}
-        </button>
-      </div>
-    </Teleport>
+<!-- (method/status filters removed) -->
 
     <!-- Main Content: Request List + Detail Panel -->
     <div class="flex-1 flex gap-4 min-h-0 overflow-hidden">
@@ -163,9 +138,17 @@
           </div>
           <div v-for="req in filteredList" :key="req.id"
             class="rounded-xl px-3 py-2.5 mb-1 cursor-pointer transition-all select-none"
-            :class="selectedRequest?.id === req.id ? 'glass-card-active' : 'glass-hover'"
-            @click="selectedRequest = req">
+            :class="{
+              'glass-card-active': selectedRequest?.id === req.id,
+              'glass-hover': selectedRequest?.id !== req.id,
+              'ring-2 ring-red-400/50': api.pendingBreakpoints.value.has(req.id) || api.pendingBreakpoints.value.has(req.id + '_resp')
+            }"
+            @click="handleRequestClick(req)">
             <div class="flex items-center gap-2 mb-1">
+              <span v-if="api.pendingBreakpoints.value.has(req.id) || api.pendingBreakpoints.value.has(req.id + '_resp')"
+                class="font-mono text-[10px] px-1.5 py-0.5 rounded-md font-bold bg-red-500/15 text-red-600">
+                ⏸ BP
+              </span>
               <span class="font-mono text-caption px-1.5 py-0.5 rounded-md font-semibold whitespace-nowrap"
                 :class="methodClass(req.method)">{{ req.method }}</span>
               <span v-if="req.response_status_code" class="font-mono text-caption px-1.5 py-0.5 rounded-md whitespace-nowrap"
@@ -215,6 +198,9 @@
           <div class="flex-1 overflow-y-auto custom-scrollbar p-4 select-text">
             <!-- Request Tab -->
             <div v-if="activeDetailTab === 'request'">
+              <div class="mb-3 p-3 bg-white/[0.06] rounded-xl font-mono text-caption text-on-surface break-all">
+                {{ selectedRequest.method }} {{ selectedRequest.url }}
+              </div>
               <div class="mb-4">
                 <div class="flex items-center justify-between text-label-md font-semibold text-on-surface mb-2">
                   <span>{{ t('api.headers') }}</span>
@@ -246,11 +232,16 @@
               </div>
               <template v-else>
                 <div class="flex items-center gap-3 mb-4">
-                  <span class="font-mono text-headline-md font-bold" :class="statusTextClass(selectedRequest.response_status_code)">
+                  <span class="font-mono text-body-md" :class="statusTextClass(selectedRequest.response_status_code)">
                     {{ selectedRequest.response_status_code }} {{ selectedRequest.response_status_text }}
                   </span>
                   <span class="text-caption text-on-surface-variant">{{ selectedRequest.duration?.toFixed(1) }}ms</span>
                   <span class="text-caption text-on-surface-variant">{{ formatSize(selectedRequest.response_size) }}</span>
+                  <div class="flex-1" />
+                  <button class="glass-hover rounded-lg px-2.5 py-1.5 flex items-center gap-1" @click="openBreakpointEditor(selectedRequest, 'response')">
+                    <span class="material-symbols-outlined text-[16px]">edit</span>
+                    <span class="font-label-md">{{ t('api.edit') }}</span>
+                  </button>
                 </div>
                 <div class="mb-4">
                   <div class="flex items-center justify-between text-label-md font-semibold text-on-surface mb-2">
@@ -279,8 +270,7 @@
 
             <!-- Raw Tab -->
             <div v-if="activeDetailTab === 'raw'">
-              <div class="flex items-center justify-between text-label-md font-semibold text-on-surface mb-2">
-                <span>{{ selectedRequest.method }} {{ selectedRequest.url }}</span>
+              <div class="flex justify-end mb-2">
                 <button class="glass-hover rounded-lg px-2 py-0.5 flex items-center gap-1 text-caption" @click="copyText(rawContent)">
                   <span class="material-symbols-outlined text-[14px]">content_copy</span> Copy
                 </button>
@@ -309,6 +299,15 @@
               <input v-model="ruleForm.url_pattern" class="glass-input rounded-xl px-3 py-2 w-full text-body-md font-mono" placeholder="/api/..." />
             </div>
             <div class="flex gap-3">
+              <div class="flex-1">
+                <label class="text-label-md text-on-surface-variant block mb-1">匹配方式</label>
+                <select v-model="ruleForm.match_type" class="glass-input rounded-xl px-3 py-2 w-full text-body-md">
+                  <option value="contains">包含 (contains)</option>
+                  <option value="exact">精确 (exact)</option>
+                  <option value="prefix">前缀 (prefix)</option>
+                  <option value="regex">正则 (regex)</option>
+                </select>
+              </div>
               <div class="flex-1">
                 <label class="text-label-md text-on-surface-variant block mb-1">{{ t('api.filterMethod') }}</label>
                 <select v-model="ruleForm.action_type" class="glass-input rounded-xl px-3 py-2 w-full text-body-md">
@@ -393,7 +392,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue"
+import { ref, computed, watch, onMounted, onUnmounted } from "vue"
 import { invoke } from "@tauri-apps/api/core"
 import { useI18n } from "@/composables/useI18n"
 import { useApiProxy } from "@/composables/useApiProxy"
@@ -403,8 +402,27 @@ const { t } = useI18n()
 const api = useApiProxy()
 
 const searchQuery = ref("")
-const methodFilter = ref("")
-const statusFilter = ref("")
+const searchHistory = ref<string[]>(loadSearchHistory())
+const showSearchHistory = ref(false)
+
+function loadSearchHistory(): string[] {
+  try { return JSON.parse(localStorage.getItem('api_search_history') || '[]') } catch { return [] }
+}
+function saveSearchHistory() {
+  localStorage.setItem('api_search_history', JSON.stringify(searchHistory.value.slice(0, 20)))
+}
+function addSearchQuery(q: string) {
+  if (!q.trim()) return
+  const set = new Set(searchHistory.value)
+  set.delete(q.trim())
+  searchHistory.value = [q.trim(), ...set].slice(0, 20)
+  saveSearchHistory()
+}
+let searchHideTimer = 0
+function delayHideSearchHistory() {
+  searchHideTimer = window.setTimeout(() => { showSearchHistory.value = false }, 200)
+}
+
 const selectedRequest = ref<ApiCapturedRequest | null>(null)
 const activeDetailTab = ref("request")
 const showRules = ref(false)
@@ -418,7 +436,7 @@ const breakpointBody = ref("")
 const breakpointUrlPattern = ref("")
 
 const ruleForm = ref({
-  name: "", url_pattern: "", action_type: "modify_request_header",
+  name: "", url_pattern: "", match_type: "contains", action_type: "modify_request_header",
   header_name: "", header_value: "", body_search: "", body_replace: "",
 })
 
@@ -449,30 +467,6 @@ function deviceName(serial: string) {
   return d ? (d.model || d.serial) : serial
 }
 
-const showMethodDropdown = ref(false)
-const showStatusDropdown = ref(false)
-const methodDropdownRef = ref<HTMLDivElement | null>(null)
-const statusDropdownRef = ref<HTMLDivElement | null>(null)
-const methodDropdownPos = ref({ top: 0, left: 0, width: 0 })
-const statusDropdownPos = ref({ top: 0, left: 0, width: 0 })
-const methodOptions = ["GET", "POST", "PUT", "DELETE", "PATCH"]
-const statusOptions = ["2xx", "3xx", "4xx", "5xx"]
-
-function openMethodDropdown() {
-  const el = methodDropdownRef.value
-  if (!el) return
-  const r = el.getBoundingClientRect()
-  methodDropdownPos.value = { top: r.bottom + 4, left: r.left, width: r.width }
-  showMethodDropdown.value = true
-}
-function openStatusDropdown() {
-  const el = statusDropdownRef.value
-  if (!el) return
-  const r = el.getBoundingClientRect()
-  statusDropdownPos.value = { top: r.bottom + 4, left: r.left, width: r.width }
-  showStatusDropdown.value = true
-}
-
 async function refreshDevices() {
   try {
     const list = await invoke<{ serial: string; model: string }[]>("adb_list_devices")
@@ -494,13 +488,6 @@ const filteredList = computed(() => {
   if (searchQuery.value) {
     const q = searchQuery.value.toLowerCase()
     list = list.filter(r => r.url.toLowerCase().includes(q) || r.host.toLowerCase().includes(q) || r.path.toLowerCase().includes(q))
-  }
-  if (methodFilter.value) {
-    list = list.filter(r => r.method === methodFilter.value)
-  }
-  if (statusFilter.value) {
-    const code = parseInt(statusFilter.value)
-    list = list.filter(r => r.response_status_code !== null && Math.floor(r.response_status_code / 100) === code / 100)
   }
   return list
 })
@@ -599,6 +586,15 @@ async function handleStop() {
   }
 }
 
+async function handleRequestClick(req: ApiCapturedRequest) {
+  selectedRequest.value = req
+  const isPending = api.pendingBreakpoints.value.has(req.id) || api.pendingBreakpoints.value.has(`${req.id}_resp`)
+  if (isPending) {
+    const phase = api.pendingBreakpoints.value.has(`${req.id}_resp`) ? "response" : "request"
+    openBreakpointEditor(req, phase)
+  }
+}
+
 async function handleClear() {
   await api.clearCaptured()
   selectedRequest.value = null
@@ -615,14 +611,23 @@ async function handleReplay() {
   }
 }
 
+function openBreakpointEditor(req: ApiCapturedRequest, phase: "request" | "response") {
+  selectedRequest.value = req
+  if (phase === "response" && req.response_headers) {
+    breakpointHeaders.value = req.response_headers.map(h => `${h[0]}: ${h[1]}`).join("\n")
+    breakpointBody.value = req.response_body || ""
+  } else {
+    breakpointHeaders.value = req.request_headers.map(h => `${h[0]}: ${h[1]}`).join("\n")
+    breakpointBody.value = req.request_body || ""
+  }
+  breakpointRequestId.value = req.id
+  breakpointPhase.value = phase
+  showBreakpointEditor.value = true
+}
+
 function handleEditRequest() {
   if (!selectedRequest.value) return
-  const req = selectedRequest.value
-  breakpointHeaders.value = req.request_headers.map(h => `${h[0]}: ${h[1]}`).join("\n")
-  breakpointBody.value = req.request_body || ""
-  breakpointRequestId.value = req.id
-  breakpointPhase.value = "request"
-  showBreakpointEditor.value = true
+  openBreakpointEditor(selectedRequest.value, "request")
 }
 
 async function breakpointAction(action: string) {
@@ -641,11 +646,11 @@ async function breakpointAction(action: string) {
     if (breakpointBody.value) actionData.body = breakpointBody.value
   }
 
-  // Continue breakpoint or just add to captured
   if (selectedRequest.value) {
     const reqId = breakpointPhase.value === "request" ? breakpointRequestId.value : `${breakpointRequestId.value}_resp`
     try {
       await api.continueRequest(reqId, actionData)
+      api.markBreakpointResolved(breakpointRequestId.value)
     } catch { /* maybe not needed */ }
   }
 }
@@ -660,6 +665,7 @@ function editRule(rule: ApiRewriteRule) {
   ruleForm.value = {
     name: rule.name,
     url_pattern: rule.url_pattern,
+    match_type: rule.match_type,
     action_type: rule.action_type,
     header_name: rule.header_name || "",
     header_value: rule.header_value || "",
@@ -680,14 +686,12 @@ function saveRule() {
     name: ruleForm.value.name,
     enabled: true,
     url_pattern: ruleForm.value.url_pattern,
-    match_type: "contains",
+    match_type: ruleForm.value.match_type as ApiRewriteRule["match_type"],
     action_type: ruleForm.value.action_type as ApiRewriteRule["action_type"],
     header_name: ruleForm.value.header_name || null,
     header_value: ruleForm.value.header_value || null,
     body_search: ruleForm.value.body_search || null,
     body_replace: ruleForm.value.body_replace || null,
-    redirect_url: null,
-    status_code: null,
   }
   if (editingRule.value) {
     api.updateRule(rule)
@@ -699,8 +703,14 @@ function saveRule() {
   }
   showRuleEditor.value = false
   editingRule.value = null
-  ruleForm.value = { name: "", url_pattern: "", action_type: "modify_request_header", header_name: "", header_value: "", body_search: "", body_replace: "" }
+  ruleForm.value = { name: "", url_pattern: "", match_type: "contains", action_type: "modify_request_header", header_name: "", header_value: "", body_search: "", body_replace: "" }
 }
+
+watch(() => api.breakpointEvent.value, (evt) => {
+  if (evt) {
+    api.breakpointEvent.value = null
+  }
+})
 
 onMounted(async () => {
   await api.init()

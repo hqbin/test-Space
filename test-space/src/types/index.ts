@@ -167,16 +167,14 @@ export interface ApiRewriteRule {
   name: string
   enabled: boolean
   url_pattern: string
-  match_type: 'contains' | 'regex' | 'prefix'
+  match_type: 'contains' | 'regex' | 'prefix' | 'exact'
   action_type: 'modify_request_header' | 'modify_request_body'
     | 'modify_response_header' | 'modify_response_body'
-    | 'drop' | 'redirect' | 'replace_status'
+    | 'drop'
   header_name: string | null
   header_value: string | null
   body_search: string | null
   body_replace: string | null
-  redirect_url: string | null
-  status_code: number | null
 }
 
 export interface ApiProxyStatus {

@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::oneshot;
 use tokio::time::{timeout, Duration};
@@ -38,6 +39,7 @@ pub struct ProxyInner {
     pub port: Mutex<Option<u16>>,
     pub ca_cert_pem: Mutex<Option<String>>,
     pub ca_key_pem: Mutex<Option<String>>,
+    pub app_data_dir: Mutex<Option<PathBuf>>,
 }
 
 impl ProxyInner {
@@ -53,6 +55,7 @@ impl ProxyInner {
             port: Mutex::new(None),
             ca_cert_pem: Mutex::new(None),
             ca_key_pem: Mutex::new(None),
+            app_data_dir: Mutex::new(None),
         }
     }
 }
@@ -148,7 +151,15 @@ async fn read_body_bytes(body: Incoming) -> Bytes {
 fn url_matches(url: &str, pattern: &str, match_type: &str) -> bool {
     match match_type {
         "exact" => url == pattern,
+        "prefix" => url.starts_with(pattern),
+        "regex" => regex::Regex::new(pattern).map(|r| r.is_match(url)).unwrap_or(false),
         _ => url.contains(pattern),
+    }
+}
+
+fn save_rules_to_file(rules: &[RewriteRule], dir: &std::path::Path) {
+    if let Ok(json) = serde_json::to_string(rules) {
+        let _ = std::fs::write(dir.join("rewrite-rules.json"), json);
     }
 }
 
@@ -186,6 +197,17 @@ pub async fn proxy_start(
         .map_err(|e| format!("Cannot get app data dir: {}", e))?;
     std::fs::create_dir_all(&app_data_dir)
         .map_err(|e| format!("Cannot create app data dir: {}", e))?;
+
+    // 加载持久化的重写规则
+    let rules_path = app_data_dir.join("rewrite-rules.json");
+    if rules_path.exists() {
+        if let Ok(json) = std::fs::read_to_string(&rules_path) {
+            if let Ok(rules) = serde_json::from_str::<Vec<RewriteRule>>(&json) {
+                *inner.rewrite_rules.lock().unwrap() = rules;
+            }
+        }
+    }
+    *inner.app_data_dir.lock().unwrap() = Some(app_data_dir.clone());
 
     let ca_cert_path = app_data_dir.join("mitm-ca-cert.pem");
     let ca_key_path = app_data_dir.join("mitm-ca-key.pem");
@@ -356,7 +378,17 @@ pub async fn proxy_start(
                                             .body(box_body(Bytes::from("Request dropped by breakpoint")))
                                             .unwrap()),
                                         "modify" => {
-                                            if let Some(_headers) = action.get("headers").and_then(|v| v.as_object()) {
+                                            if let Some(headers) = action.get("headers").and_then(|v| v.as_object()) {
+                                                for (name, value) in headers {
+                                                    if let (Ok(n), Some(v)) = (
+                                                        http_mitm_proxy::hyper::http::HeaderName::from_bytes(name.as_bytes()),
+                                                        value.as_str(),
+                                                    ) {
+                                                        if let Ok(val) = http_mitm_proxy::hyper::http::HeaderValue::from_str(v) {
+                                                            req_parts.headers.insert(n, val);
+                                                        }
+                                                    }
+                                                }
                                             }
                                             if let Some(body_str) = action.get("body").and_then(|v| v.as_str()) {
                                                 rebuild_body = box_body(Bytes::from(body_str.to_string()));
@@ -499,6 +531,18 @@ pub async fn proxy_start(
                                             .body(box_body(Bytes::from("Response dropped by breakpoint")))
                                             .unwrap()),
                                         "modify" => {
+                                            if let Some(headers) = action.get("headers").and_then(|v| v.as_object()) {
+                                                for (name, value) in headers {
+                                                    if let (Ok(n), Some(v)) = (
+                                                        http_mitm_proxy::hyper::http::HeaderName::from_bytes(name.as_bytes()),
+                                                        value.as_str(),
+                                                    ) {
+                                                        if let Ok(val) = http_mitm_proxy::hyper::http::HeaderValue::from_str(v) {
+                                                            res_parts.headers.insert(n, val);
+                                                        }
+                                                    }
+                                                }
+                                            }
                                             if let Some(s) = action.get("status_code").and_then(|v| v.as_u64()) {
                                                 final_status = s as u16;
                                             }
@@ -668,11 +712,22 @@ pub async fn proxy_continue(
 }
 
 #[tauri::command]
+pub async fn proxy_get_rewrite_rules(
+    state: tauri::State<'_, ProxyState>,
+) -> Result<Vec<RewriteRule>, String> {
+    Ok(state.inner.rewrite_rules.lock().unwrap().clone())
+}
+
+#[tauri::command]
 pub async fn proxy_add_rewrite_rule(
     state: tauri::State<'_, ProxyState>,
     rule: RewriteRule,
 ) -> Result<(), String> {
-    state.inner.rewrite_rules.lock().unwrap().push(rule);
+    let mut rules = state.inner.rewrite_rules.lock().unwrap();
+    rules.push(rule.clone());
+    if let Some(dir) = state.inner.app_data_dir.lock().unwrap().as_ref() {
+        save_rules_to_file(&rules, dir);
+    }
     Ok(())
 }
 
@@ -681,7 +736,11 @@ pub async fn proxy_remove_rewrite_rule(
     state: tauri::State<'_, ProxyState>,
     rule_id: String,
 ) -> Result<(), String> {
-    state.inner.rewrite_rules.lock().unwrap().retain(|r| r.id != rule_id);
+    let mut rules = state.inner.rewrite_rules.lock().unwrap();
+    rules.retain(|r| r.id != rule_id);
+    if let Some(dir) = state.inner.app_data_dir.lock().unwrap().as_ref() {
+        save_rules_to_file(&rules, dir);
+    }
     Ok(())
 }
 
@@ -694,6 +753,9 @@ pub async fn proxy_update_rewrite_rule(
     if let Some(existing) = rules.iter_mut().find(|r| r.id == rule.id) {
         *existing = rule;
     }
+    if let Some(dir) = state.inner.app_data_dir.lock().unwrap().as_ref() {
+        save_rules_to_file(&rules, dir);
+    }
     Ok(())
 }
 
@@ -701,7 +763,11 @@ pub async fn proxy_update_rewrite_rule(
 pub async fn proxy_clear_rewrite_rules(
     state: tauri::State<'_, ProxyState>,
 ) -> Result<(), String> {
-    state.inner.rewrite_rules.lock().unwrap().clear();
+    let mut rules = state.inner.rewrite_rules.lock().unwrap();
+    rules.clear();
+    if let Some(dir) = state.inner.app_data_dir.lock().unwrap().as_ref() {
+        save_rules_to_file(&rules, dir);
+    }
     Ok(())
 }
 
@@ -711,11 +777,11 @@ pub async fn proxy_get_captured(
     clear: bool,
 ) -> Result<Vec<CapturedRequest>, String> {
     let mut captured = state.inner.captured_requests.lock().unwrap();
-    let result = captured.clone();
     if clear {
         captured.clear();
+        return Ok(Vec::new());
     }
-    Ok(result)
+    Ok(captured.clone())
 }
 
 #[tauri::command]

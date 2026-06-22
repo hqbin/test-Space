@@ -94,6 +94,7 @@ dependencies = [
  "md-5",
  "pem",
  "rcgen",
+ "regex",
  "rustls",
  "serde",
  "serde_json",

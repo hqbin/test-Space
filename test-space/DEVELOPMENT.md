@@ -1758,3 +1758,87 @@ Windows MSI 安装包根据**版本号**判断是否可以覆盖安装：
 |--------|------|
 | `npx vue-tsc --noEmit` | ✅ 通过 |
 | `npx vite build` | ✅ 通过 |
+
+---
+
+### Phase 23 — Api Space MITM 代理（已完成 ✅）
+
+> 新增 Api Space 页面，集成 `http-mitm-proxy` 实现中间人代理，支持 HTTPS 解密、断点调试、重写规则。
+
+#### 23.1 代理核心（`src-tauri/src/proxy.rs`）
+
+| 功能 | 说明 | 状态 |
+|------|------|------|
+| `http-mitm-proxy` 集成 | 基于 `http-mitm-proxy = "0.18"` + `rustls = { features = ["ring"] }` 实现 HTTPS 中间人代理 | ✅ |
+| 自动生成 CA 证书 | 首次启动在 `app_data_dir` 生成 CA 公私钥（`mitm-ca-cert.pem` / `mitm-ca-key.pem`），持久化复用 | ✅ |
+| 请求/响应捕获 | 通过 Tauri `emit` 将 `proxy:request` / `proxy:response` 事件发送到前端 | ✅ |
+| 断点拦截 | `proxy:breakpoint:request` / `proxy:breakpoint:response` 事件 + `oneshot::channel` 300s 超时等待用户操作 | ✅ |
+| 断点操作 | 支持 `forward`、`drop`、`modify`（修改 headers/body/status_code） | ✅ |
+| 重写规则引擎 | `url_matches()` 支持 `contains` / `exact` / `prefix` / `regex` 四种匹配方式；按 `modify_request_header/body`、`modify_response_header/body`、`drop` 五种动作实时拦截 | ✅ |
+| ADB 一键部署 | `adb root` → `adb remount` → push CA cert → 设置代理（LAN IP:port） | ✅ |
+
+#### 23.2 代理 Bug 修复
+
+| 问题 | 修复 | 状态 |
+|------|------|------|
+| `proxy.bind()` 返回的 `server_handle` future 被 `drop(server_handle)` 丢弃，accept 循环从未运行，代理端口无响应 | `tokio::select! { _ = server_handle => {}, _ = shutdown_rx => {} }` 轮询 `server_handle` | ✅ |
+| `rustls::CryptoProvider` panic — 未设置默认加密提供者 | `CryptoProvider::install_default(rustls::crypto::ring::default_provider())` 在 `MitmProxy::new()` 之前调用 | ✅ |
+| ADB reverse 方式被用户否决，改为 LAN IP 广播 | 移除 `adb reverse tcp:...`，改用 `0.0.0.0` 绑定 + LAN IP 设置到设备代理 | ✅ |
+| 断点请求修改未应用 headers | `action.get("headers").and_then(\|v\| v.as_object())` 解析后循环 `req_parts.headers.insert(n, val)` | ✅ |
+| 断点响应修改未应用 headers | 同上逻辑，改为操作 `res_parts.headers` | ✅ |
+| 重写规则 `match_type` 硬编码「contains」 | `url_matches()` 新增 `"regex"`（`regex::Regex::new`）和 `"prefix"`（`starts_with`）支持 | ✅ |
+| 重写规则不持久化（重启丢失） | `save_rules_to_file()` / 启动时从 `app_data_dir/rewrite-rules.json` 加载；CRUD 命令均同步写入文件 | ✅ |
+| 缺少获取规则列表的命令 | 新增 `proxy_get_rewrite_rules` Tauri 命令 | ✅ |
+
+#### 23.3 Rust 依赖变更（`src-tauri/Cargo.toml`）
+
+```toml
+http-mitm-proxy = "0.18"
+rustls = { version = "0.23", features = ["ring"] }
+regex = "1"
+```
+
+#### 23.4 TypeScript 类型变更（`src/types/index.ts`）
+
+| 变更 | 说明 |
+|------|------|
+| 移除 `redirect` / `replace_status` | 从 `ApiRewriteRule.action_type` 联合类型中删除，Rust 侧未实现且不计划实现 |
+| 新增 `exact` match_type | 原已有 `contains` / `regex` / `prefix`，新增 `exact` |
+
+#### 23.5 Composable 变更（`useApiProxy.ts`）
+
+| 变更 | 说明 |
+|------|------|
+| 新增 `breakpointEvent` ref + `BreakpointEvent` 接口 | 监听 `proxy:breakpoint:request/response` 事件时同时设置 `breakpointEvent.value = { type, data }` |
+| 新增 `loadRules()` | 调用 `proxy_get_rewrite_rules` 从后端加载持久化规则，在 `init()` 中自动调用 |
+| 导出 `loadRules` | 供组件手动刷新规则列表 |
+
+#### 23.6 页面组件变更（`ApiSpacePage.vue`）
+
+| 变更 | 说明 |
+|------|------|
+| 移除方法/状态码筛选 | 删除了 `methodFilter`、`statusFilter` ref 及对应两个下拉按钮（Method/Status 筛选器） |
+| 新增匹配方式下拉 | 在规则编辑器中新增「匹配方式」select：包含/精确/前缀/正则 |
+| 修复 `handleEditRequest` | 统一为 `openBreakpointEditor(req, phase)`，支持 request 和 response 两种断点编辑 |
+| 断点编辑器自动打开 | `watch(api.breakpointEvent)` 自动弹出断点编辑框，无需手动点「Edit」按钮 |
+| 响应 Tab 编辑按钮 | 响应详情右侧新增 Edit Response 按钮，调用 `openBreakpointEditor(selectedRequest, 'response')` |
+| 完整 URL 展示 | 请求标签页顶部显示 `{{ method }} {{ url }}` 完整请求行 |
+| 规则持久化 | `saveRule()` / `editRule()` / `deleteRule()` 均通过 `api.addRule/updateRule/removeRule` 自动写入文件 |
+
+#### 23.7 UI 调整
+
+| 调整 | 说明 |
+|------|------|
+| 左侧面板宽度 | `w-[480px]` → `flex:[0_0_40%] min-w-[360px] max-w-[50%]` 响应式百分比宽度 |
+| 调试日志面板 | 移除底部调试日志面板 |
+| 重写规则位置 | 从底部面板移到控制栏下拉按钮（设备选择器右侧） |
+| 代码块可读性 | `bg-[#1a1c2e]/80` → `bg-white/[0.06]` 亮背景深色文字；新增 Copy 按钮（请求头/响应头/请求体/响应体/Raw Tab） |
+| 长文本换行 | `<pre>` 添加 `break-all`，JSON 和长字符串自动换行 |
+| 圆角统一 | `rounded-xl` → `rounded-lg`（两个主面板） |
+| 右侧面板可选 | 内容区 `select-text`（全局 `select-none` 下按钮不受影响） |
+
+**编译验证**：
+| 检查项 | 结果 |
+|--------|------|
+| `cargo check` | ✅ 通过（1 warning: `proxy_get_rewrite_rules` 未被引用，函数已暴露为 Tauri 命令，前端调用正常） |
+| `npm run build` (vue-tsc + vite) | ✅ 通过 |
