@@ -316,8 +316,8 @@ pub async fn proxy_start(
                     app_handle.emit("proxy:debug", &log_msg).ok();
 
                     let (mut req_parts, req_body) = req.into_parts();
-                    let req_body_bytes = read_body_bytes(req_body).await;
-                    let req_body_bytes = decompress_body(get_content_encoding(&req_parts.headers).as_deref(), &req_body_bytes);
+                    let req_body_original = read_body_bytes(req_body).await;
+                    let req_body_bytes = decompress_body(get_content_encoding(&req_parts.headers).as_deref(), &req_body_original);
                     let req_body_str = if req_body_bytes.is_empty() {
                         None
                     } else {
@@ -325,7 +325,7 @@ pub async fn proxy_start(
                     };
 
                     let req_headers = headers_to_vec(&req_parts.headers);
-                    let req_size = req_body_bytes.len() as u64;
+                    let req_size = req_body_original.len() as u64;
 
                     let mut captured = CapturedRequest {
                         id: request_id.clone(),
@@ -348,11 +348,9 @@ pub async fn proxy_start(
                         response_size: 0,
                     };
 
-                    app_handle.emit("proxy:request", &captured).ok();
+                    let mut rebuild_body = box_body(Bytes::from(req_body_original.clone()));
 
-                    let mut rebuild_body = box_body(Bytes::from(req_body_bytes.clone()));
-
-                    // Apply request rewrite rules
+                    // Apply request rewrite rules BEFORE emitting
                     let rules = state.rewrite_rules.lock().unwrap().clone();
                     for rule in &rules {
                         if !rule.enabled { continue; }
@@ -382,12 +380,15 @@ pub async fn proxy_start(
                                         let new_body = body_str.replace(search, replace);
                                         rebuild_body = box_body(Bytes::from(new_body.clone()));
                                         captured.request_body = Some(new_body);
+                                        req_parts.headers.remove("content-encoding");
                                     }
                                 }
                             }
                             _ => {}
                         }
                     }
+
+                    app_handle.emit("proxy:request", &captured).ok();
 
                     // Breakpoint check (request)
                     if state.breakpoint_enabled.load(Ordering::Acquire) {
@@ -424,6 +425,7 @@ pub async fn proxy_start(
                                             if let Some(body_str) = action.get("body").and_then(|v| v.as_str()) {
                                                 rebuild_body = box_body(Bytes::from(body_str.to_string()));
                                                 captured.request_body = Some(body_str.to_string());
+                                                req_parts.headers.remove("content-encoding");
                                             }
                                         }
                                         _ => {}
@@ -476,8 +478,9 @@ pub async fn proxy_start(
                     };
 
                     let (mut res_parts, res_body) = response.into_parts();
-                    let res_body_bytes = read_body_bytes(res_body).await;
-                    let res_body_bytes = decompress_body(get_content_encoding(&res_parts.headers).as_deref(), &res_body_bytes);
+                    let res_body_original = read_body_bytes(res_body).await;
+                    let body_encoding = get_content_encoding(&res_parts.headers);
+                    let res_body_bytes = decompress_body(body_encoding.as_deref(), &res_body_original);
                     let res_body_str = if res_body_bytes.is_empty() {
                         None
                     } else {
@@ -502,25 +505,25 @@ pub async fn proxy_start(
                         ..captured
                     };
 
-                    {
-                        let mut stored = state.captured_requests.lock().unwrap();
-                        stored.push(full_captured.clone());
-                        let overflow = stored.len().saturating_sub(1000);
-                        if overflow > 0 {
-                            stored.drain(0..overflow);
-                        }
-                    }
-
-                    app_handle.emit("proxy:response", &full_captured).ok();
-
-                    let mut final_body = box_body(Bytes::from(res_body_bytes.clone()));
+                    let mut final_body = box_body(Bytes::from(res_body_original.clone()));
                     let mut final_status = status_code;
 
-                    // Apply response rewrite rules
+                    // Apply response rewrite rules BEFORE storing/emitting
                     let rules = state.rewrite_rules.lock().unwrap().clone();
+                    let bp_log = format!("[proxy] {} rules loaded, url={}", rules.len(), url);
+                    eprintln!("{}", bp_log);
+                    app_handle.emit("proxy:debug", &bp_log).ok();
                     for rule in &rules {
                         if !rule.enabled { continue; }
-                        if !url_matches(&url, &rule.url_pattern, &rule.match_type) { continue; }
+                        if !url_matches(&url, &rule.url_pattern, &rule.match_type) {
+                            let mlog = format!("[proxy] rule '{}' mismatch: pattern='{}' actual='{}'", rule.name, rule.url_pattern, url);
+                            eprintln!("{}", mlog);
+                            app_handle.emit("proxy:debug", &mlog).ok();
+                            continue;
+                        }
+                        let mlog = format!("[proxy] rule '{}' matched! action={}", rule.name, rule.action_type);
+                        eprintln!("{}", mlog);
+                        app_handle.emit("proxy:debug", &mlog).ok();
                         match rule.action_type.as_str() {
                             "modify_response_header" => {
                                 if let (Some(name), Some(value)) = (&rule.header_name, &rule.header_value) {
@@ -536,15 +539,31 @@ pub async fn proxy_start(
                             "modify_response_body" => {
                                 if let (Some(search), Some(replace)) = (&rule.body_search, &rule.body_replace) {
                                     if let Some(body_str) = &res_body_str {
-                                        let new_body = body_str.replace(search, replace);
+                                        let found = body_str.contains(search.as_str());
+                                        let blog = format!("[proxy] body search='{}' found={} body_len={}", search, found, body_str.len());
+                                        eprintln!("{}", blog);
+                                        app_handle.emit("proxy:debug", &blog).ok();
+                                        let new_body = body_str.replace(search.as_str(), replace.as_str());
                                         final_body = box_body(Bytes::from(new_body.clone()));
                                         full_captured.response_body = Some(new_body);
+                                        res_parts.headers.remove("content-encoding");
                                     }
                                 }
                             }
                             _ => {}
                         }
                     }
+
+                    {
+                        let mut stored = state.captured_requests.lock().unwrap();
+                        stored.push(full_captured.clone());
+                        let overflow = stored.len().saturating_sub(1000);
+                        if overflow > 0 {
+                            stored.drain(0..overflow);
+                        }
+                    }
+
+                    app_handle.emit("proxy:response", &full_captured).ok();
 
                     // Breakpoint check (response)
                     if state.breakpoint_enabled.load(Ordering::Acquire) {
@@ -565,7 +584,7 @@ pub async fn proxy_start(
                                             .header("X-Proxy", "TestSpace")
                                             .body(box_body(Bytes::from("Response dropped by breakpoint")))
                                             .unwrap()),
-                                        "modify" => {
+                                         "modify" => {
                                             if let Some(headers) = action.get("headers").and_then(|v| v.as_object()) {
                                                 for (name, value) in headers {
                                                     if let (Ok(n), Some(v)) = (
@@ -585,7 +604,18 @@ pub async fn proxy_start(
                                             if let Some(body_str) = action.get("body").and_then(|v| v.as_str()) {
                                                 final_body = box_body(Bytes::from(body_str.to_string()));
                                                 full_captured.response_body = Some(body_str.to_string());
+                                                res_parts.headers.remove("content-encoding");
                                             }
+                                            // Re-emit after breakpoint modification
+                                            {
+                                                let mut stored = state.captured_requests.lock().unwrap();
+                                                if let Some(last) = stored.last_mut() {
+                                                    if last.id == full_captured.id {
+                                                        *last = full_captured.clone();
+                                                    }
+                                                }
+                                            }
+                                            app_handle.emit("proxy:response", &full_captured).ok();
                                         }
                                         _ => {}
                                     }
@@ -750,9 +780,28 @@ pub async fn proxy_continue(
 
 #[tauri::command]
 pub async fn proxy_get_rewrite_rules(
+    app: tauri::AppHandle,
     state: tauri::State<'_, ProxyState>,
 ) -> Result<Vec<RewriteRule>, String> {
-    Ok(state.inner.rewrite_rules.lock().unwrap().clone())
+    // Ensure app_data_dir is set
+    if state.inner.app_data_dir.lock().unwrap().is_none() {
+        if let Ok(dir) = app.path().app_data_dir() {
+            let _ = std::fs::create_dir_all(&dir);
+            *state.inner.app_data_dir.lock().unwrap() = Some(dir);
+        }
+    }
+    let mut rules = state.inner.rewrite_rules.lock().unwrap();
+    if rules.is_empty() {
+        if let Some(dir) = state.inner.app_data_dir.lock().unwrap().as_ref() {
+            let path = dir.join("rewrite-rules.json");
+            if let Ok(json) = std::fs::read_to_string(&path) {
+                if let Ok(loaded) = serde_json::from_str::<Vec<RewriteRule>>(&json) {
+                    *rules = loaded;
+                }
+            }
+        }
+    }
+    Ok(rules.clone())
 }
 
 #[tauri::command]

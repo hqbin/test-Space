@@ -124,6 +124,9 @@ export function useApiProxy() {
   async function toggleBreakpoint(enabled: boolean, urlPattern?: string) {
     await invoke("proxy_set_breakpoint", { enabled, urlPattern: urlPattern || null })
     status.value = { ...status.value, breakpoint_enabled: enabled }
+    if (!enabled) {
+      pendingBreakpoints.value = new Set()
+    }
   }
 
   async function continueRequest(requestId: string, action: Record<string, any>) {

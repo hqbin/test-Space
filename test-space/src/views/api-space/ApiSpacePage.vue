@@ -423,7 +423,7 @@ function delayHideSearchHistory() {
   searchHideTimer = window.setTimeout(() => { showSearchHistory.value = false }, 200)
 }
 
-const selectedRequest = ref<ApiCapturedRequest | null>(null)
+const selectedRequest = api.selectedRequest
 const activeDetailTab = ref("request")
 const showRules = ref(false)
 const showRuleEditor = ref(false)
@@ -715,6 +715,7 @@ watch(() => api.breakpointEvent.value, (evt) => {
 onMounted(async () => {
   await api.init()
   await api.getCaptured()
+  localRules.value = [...api.rewriteRules.value]
   await refreshDevices()
 })
 
