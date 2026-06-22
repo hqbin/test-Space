@@ -4,7 +4,7 @@
     <div v-if="showRules" class="glass-panel rounded-xl px-5 py-3">
       <div class="flex items-center justify-between mb-2">
         <span class="font-label-md font-semibold">{{ t('api.rules') }}</span>
-        <button class="glass-hover rounded-lg px-2.5 py-1 flex items-center gap-1" @click="showRuleEditor = true">
+        <button class="bg-white/30 border border-white/30 rounded-lg px-2.5 py-1 flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all select-none" @click="showRuleEditor = true">
           <span class="material-symbols-outlined text-[14px]">add</span>
           <span class="font-label-md">{{ t('api.addRule') }}</span>
         </button>
@@ -28,11 +28,11 @@
 
     <!-- Control Bar -->
     <div class="glass-panel rounded-xl px-5 py-3 flex items-center gap-4 flex-wrap">
-      <button v-if="!api.running.value" class="glass-button px-5 py-2 rounded-xl flex items-center gap-2" :disabled="api.isStarting.value" @click="handleStart">
+      <button v-if="!api.running.value" class="bg-white/30 border border-white/30 px-5 py-2 rounded-xl flex items-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all select-none" :disabled="api.isStarting.value" @click="handleStart">
         <span class="material-symbols-outlined text-[18px]">play_arrow</span>
         <span class="font-label-md whitespace-nowrap">{{ api.isStarting.value ? 'Starting...' : t('api.start') }}</span>
       </button>
-      <button v-else class="glass-button px-5 py-2 rounded-xl flex items-center gap-2 !bg-red-500/20 !border-red-400/30" :disabled="api.isStopping.value" @click="handleStop">
+      <button v-else class="bg-white/30 border border-white/30 px-5 py-2 rounded-xl flex items-center gap-2 hover:bg-red-500/10 hover:border-red-400/30 hover:scale-105 transition-all select-none" :disabled="api.isStopping.value" @click="handleStop">
         <span class="material-symbols-outlined text-[18px]">stop</span>
         <span class="font-label-md whitespace-nowrap">{{ api.isStopping.value ? 'Stopping...' : t('api.stop') }}</span>
       </button>
@@ -45,8 +45,8 @@
 
       <div class="w-px h-6 bg-white/20" />
 
-      <button class="glass-hover rounded-xl px-3 py-2 flex items-center gap-2 relative"
-        :class="api.breakpointEnabled.value ? 'glass-active' : ''"
+      <button class="bg-white/30 border border-white/30 rounded-xl px-3 py-2 flex items-center gap-2 transition-all relative select-none"
+        :class="api.breakpointEnabled.value ? 'glass-active' : 'hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105'"
         @click="api.toggleBreakpoint(!api.breakpointEnabled.value, breakpointUrlPattern)">
         <span class="material-symbols-outlined text-[18px]">error_outline</span>
         <span class="font-label-md whitespace-nowrap">{{ t('api.breakpoint') }}</span>
@@ -55,27 +55,27 @@
           {{ api.pendingCount.value }}
         </span>
       </button>
-      <input v-if="api.running.value" v-model="breakpointUrlPattern" class="glass-input rounded-xl px-3 py-1.5 text-body-md font-mono w-[140px]" placeholder="/api/..." title="输入 URL 路径，仅拦截匹配的请求（留空则拦截全部）" />
+      <input v-if="api.running.value" v-model="breakpointUrlPattern" class="bg-white/50 border border-outline-variant/60 rounded-xl px-3 py-1.5 text-body-md font-mono w-[140px] focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all select-text" placeholder="/api/..." title="输入 URL 路径，仅拦截匹配的请求（留空则拦截全部）" />
 
       <div class="w-px h-6 bg-white/20" />
 
       <div class="flex items-center gap-2">
         <div ref="deviceDropdownRef" class="relative">
-          <button class="glass-input rounded-xl px-3 py-1.5 text-body-md min-w-[140px] max-w-[200px] flex items-center gap-2 cursor-pointer select-none" @click="openDeviceDropdown">
+          <button class="bg-white/50 border border-outline-variant/60 rounded-xl px-3 py-1.5 text-body-md min-w-[140px] max-w-[200px] flex items-center gap-2 cursor-pointer select-none hover:bg-white/70 transition-all" @click="openDeviceDropdown">
             <span class="w-2 h-2 rounded-full shrink-0" :class="deviceSerial ? 'bg-green-500' : 'bg-gray-300'" />
             <span class="truncate flex-1 text-left">{{ deviceSerial ? deviceName(deviceSerial) : t('api.selectDevice') }}</span>
             <span class="material-symbols-outlined text-[14px] text-on-surface-variant">expand_more</span>
           </button>
         </div>
-        <button class="glass-hover rounded-xl px-2 py-1.5 flex items-center gap-1" @click="refreshDevices" title="Refresh">
+        <button class="bg-white/30 border border-white/30 rounded-xl px-2 py-1.5 flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all select-none" @click="refreshDevices" title="Refresh">
           <span class="material-symbols-outlined text-[16px]">refresh</span>
         </button>
       </div>
 
       <div class="w-px h-6 bg-white/20" />
 
-      <button class="glass-hover rounded-xl px-3 py-2 flex items-center gap-2"
-        :class="showRules ? 'glass-active' : ''"
+      <button class="bg-white/30 border border-white/30 rounded-xl px-3 py-2 flex items-center gap-2 transition-all select-none"
+        :class="showRules ? 'glass-active' : 'hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105'"
         @click="showRules = !showRules">
         <span class="material-symbols-outlined text-[18px]">rule</span>
         <span class="font-label-md whitespace-nowrap">Rules</span>
@@ -103,7 +103,7 @@
     <div class="glass-panel rounded-xl px-5 py-2.5 flex items-center gap-3 flex-wrap">
       <div class="relative flex-1 min-w-[200px]">
         <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[16px] text-on-surface-variant">search</span>
-        <input v-model="searchQuery" class="glass-input rounded-xl pl-9 pr-3 py-1.5 w-full text-body-md"
+        <input v-model="searchQuery" class="bg-white/50 border border-outline-variant/60 rounded-xl pl-9 pr-3 py-1.5 w-full text-body-md focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all select-text"
           :placeholder="t('api.filter')"
           @focus="showSearchHistory = searchHistory.length > 0"
           @blur="delayHideSearchHistory()"
@@ -119,7 +119,7 @@
       </div>
 
       <span class="text-caption text-on-surface-variant whitespace-nowrap">{{ t('api.capturedCount', { count: String(filteredList.length) }) }}</span>
-      <button v-if="api.capturedRequests.value.length > 0" class="glass-hover rounded-xl px-3 py-1.5 flex items-center gap-1" @click="handleClear">
+      <button v-if="api.capturedRequests.value.length > 0" class="bg-white/30 border border-white/30 rounded-xl px-3 py-1.5 flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all select-none" @click="handleClear">
         <span class="material-symbols-outlined text-[16px]">delete_sweep</span>
         <span class="font-label-md">{{ t('api.clear') }}</span>
       </button>
@@ -178,17 +178,17 @@
           <!-- Detail Tabs -->
           <div class="flex items-center gap-1 px-4 pt-3 pb-2 border-b border-white/10 flex-shrink-0">
             <button v-for="tab in detailTabs" :key="tab.key"
-              class="rounded-lg px-3 py-1.5 text-body-md transition-colors"
-              :class="activeDetailTab === tab.key ? 'glass-active font-semibold' : 'text-on-surface-variant glass-hover'"
+              class="rounded-lg px-3 py-1.5 text-body-md transition-all"
+              :class="activeDetailTab === tab.key ? 'glass-active font-semibold' : 'text-on-surface-variant bg-white/30 border border-white/30 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105'"
               @click="activeDetailTab = tab.key">
               {{ tab.label }}
             </button>
             <div class="flex-1" />
-            <button class="glass-hover rounded-lg px-2.5 py-1.5 flex items-center gap-1" @click="handleEditRequest">
+            <button class="bg-white/30 border border-white/30 rounded-lg px-2.5 py-1.5 flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all select-none" @click="handleEditRequest">
               <span class="material-symbols-outlined text-[16px]">edit</span>
               <span class="font-label-md">{{ t('api.edit') }}</span>
             </button>
-            <button class="glass-hover rounded-lg px-2.5 py-1.5 flex items-center gap-1" :class="{ 'opacity-50 pointer-events-none': api.isReplaying.value }" @click="handleReplay">
+            <button class="bg-white/30 border border-white/30 rounded-lg px-2.5 py-1.5 flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all select-none" :class="{ 'opacity-50 pointer-events-none': api.isReplaying.value }" @click="handleReplay">
               <span class="material-symbols-outlined text-[16px]">replay</span>
               <span class="font-label-md">{{ api.isReplaying.value ? t('api.replaying') : t('api.replay') }}</span>
             </button>
@@ -204,7 +204,7 @@
               <div class="mb-4">
                 <div class="flex items-center justify-between text-label-md font-semibold text-on-surface mb-2">
                   <span>{{ t('api.headers') }}</span>
-                  <button class="glass-hover rounded-lg px-2 py-0.5 flex items-center gap-1 text-caption" @click="copyText(formatHeaders(selectedRequest.request_headers))">
+                  <button class="bg-white/30 border border-white/30 rounded-lg px-2 py-0.5 flex items-center gap-1 text-caption hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all select-none" @click="copyText(formatHeaders(selectedRequest.request_headers))">
                     <span class="material-symbols-outlined text-[14px]">content_copy</span> Copy
                   </button>
                 </div>
@@ -219,7 +219,7 @@
                   <span>{{ t('api.body') }} <span class="text-caption text-on-surface-variant font-normal">({{ formatSize(selectedRequest.request_size) }})</span>
                     <span v-if="selectedRequest.request_body_is_base64" class="text-caption text-amber-500 font-normal"> [Binary]</span>
                   </span>
-                  <button v-if="!selectedRequest.request_body_is_base64" class="glass-hover rounded-lg px-2 py-0.5 flex items-center gap-1 text-caption" @click="copyText(tryFormatJson(selectedRequest.request_body))">
+                  <button v-if="!selectedRequest.request_body_is_base64" class="bg-white/30 border border-white/30 rounded-lg px-2 py-0.5 flex items-center gap-1 text-caption hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all select-none" @click="copyText(tryFormatJson(selectedRequest.request_body))">
                     <span class="material-symbols-outlined text-[14px]">content_copy</span> Copy
                   </button>
                 </div>
@@ -247,7 +247,7 @@
                   <span class="text-caption text-on-surface-variant">{{ selectedRequest.duration?.toFixed(1) }}ms</span>
                   <span class="text-caption text-on-surface-variant">{{ formatSize(selectedRequest.response_size) }}</span>
                   <div class="flex-1" />
-                  <button class="glass-hover rounded-lg px-2.5 py-1.5 flex items-center gap-1" @click="openBreakpointEditor(selectedRequest, 'response')">
+                  <button class="bg-white/30 border border-white/30 rounded-lg px-2.5 py-1.5 flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all select-none" @click="openBreakpointEditor(selectedRequest, 'response')">
                     <span class="material-symbols-outlined text-[16px]">edit</span>
                     <span class="font-label-md">{{ t('api.edit') }}</span>
                   </button>
@@ -255,7 +255,7 @@
                 <div class="mb-4">
                   <div class="flex items-center justify-between text-label-md font-semibold text-on-surface mb-2">
                     <span>{{ t('api.resHeaders') }}</span>
-                    <button class="glass-hover rounded-lg px-2 py-0.5 flex items-center gap-1 text-caption" @click="copyText(formatHeaders(selectedRequest.response_headers ?? []))">
+                    <button class="bg-white/30 border border-white/30 rounded-lg px-2 py-0.5 flex items-center gap-1 text-caption hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all select-none" @click="copyText(formatHeaders(selectedRequest.response_headers ?? []))">
                       <span class="material-symbols-outlined text-[14px]">content_copy</span> Copy
                     </button>
                   </div>
@@ -270,7 +270,7 @@
                     <span>{{ t('api.resBody') }} <span class="text-caption text-on-surface-variant font-normal">({{ formatSize(selectedRequest.response_size) }})</span>
                       <span v-if="selectedRequest.response_body_is_base64" class="text-caption text-amber-500 font-normal"> [Binary]</span>
                     </span>
-                    <button v-if="!selectedRequest.response_body_is_base64" class="glass-hover rounded-lg px-2 py-0.5 flex items-center gap-1 text-caption" @click="copyText(tryFormatJson(selectedRequest.response_body))">
+                    <button v-if="!selectedRequest.response_body_is_base64" class="bg-white/30 border border-white/30 rounded-lg px-2 py-0.5 flex items-center gap-1 text-caption hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all select-none" @click="copyText(tryFormatJson(selectedRequest.response_body))">
                       <span class="material-symbols-outlined text-[14px]">content_copy</span> Copy
                     </button>
                   </div>
@@ -304,7 +304,7 @@
             <!-- Raw Tab -->
             <div v-if="activeDetailTab === 'raw'">
               <div class="flex justify-end mb-2">
-                <button class="glass-hover rounded-lg px-2 py-0.5 flex items-center gap-1 text-caption" @click="copyText(rawContent)">
+                <button class="bg-white/30 border border-white/30 rounded-lg px-2 py-0.5 flex items-center gap-1 text-caption hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all select-none" @click="copyText(rawContent)">
                   <span class="material-symbols-outlined text-[14px]">content_copy</span> Copy
                 </button>
               </div>

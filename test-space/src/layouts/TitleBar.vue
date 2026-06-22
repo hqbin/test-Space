@@ -20,13 +20,13 @@
     </router-link>
 
     <div class="flex items-center h-full ml-2 select-none">
-      <button @click="minimize" class="window-btn h-full px-2.5 flex items-center justify-center hover:bg-white/20 transition-colors rounded-lg" :title="t('nav.minimize')">
-        <span class="material-symbols-outlined text-[15px] text-on-surface-variant">horizontal_rule</span>
+      <button @click="minimize" class="window-btn h-full px-2.5 flex items-center justify-center transition-all rounded-lg group hover:scale-110" :title="t('nav.minimize')">
+        <span class="material-symbols-outlined text-[15px] text-on-surface-variant window-btn-icon">horizontal_rule</span>
       </button>
-      <button @click="toggleMaximize" class="window-btn h-full px-2.5 flex items-center justify-center hover:bg-white/20 transition-colors rounded-lg" :title="isMax ? t('nav.restore') : t('nav.maximize')">
-        <span class="material-symbols-outlined text-[15px] text-on-surface-variant">{{ isMax ? 'fullscreen_exit' : 'crop_square' }}</span>
+      <button @click="toggleMaximize" class="window-btn h-full px-2.5 flex items-center justify-center transition-all rounded-lg group hover:scale-110" :title="isMax ? t('nav.restore') : t('nav.maximize')">
+        <span class="material-symbols-outlined text-[15px] text-on-surface-variant window-btn-icon">{{ isMax ? 'fullscreen_exit' : 'crop_square' }}</span>
       </button>
-      <button @click="closeWindow" class="window-btn h-full px-2.5 flex items-center justify-center hover:bg-red-500/20 transition-colors rounded-lg group" :title="t('nav.close')">
+      <button @click="closeWindow" class="window-btn h-full px-2.5 flex items-center justify-center transition-all rounded-lg group hover:scale-110" :title="t('nav.close')">
         <span class="material-symbols-outlined text-[15px] text-on-surface-variant group-hover:text-red-500">close</span>
       </button>
     </div>
@@ -98,3 +98,15 @@ onUnmounted(() => {
   if (unlistenResize) unlistenResize();
 });
 </script>
+
+<style scoped>
+.window-btn {
+  transition: all 0.2s ease;
+}
+.window-btn:hover .window-btn-icon {
+  color: #f97316;
+}
+html.dark .window-btn:hover .window-btn-icon {
+  color: #fb923c;
+}
+</style>

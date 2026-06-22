@@ -13,6 +13,12 @@ const messages: Record<Lang, Record<string, string>> = {
     "nav.case": "用例",
     "nav.settings": "设置",
 
+    // Window controls
+    "nav.minimize": "最小化",
+    "nav.maximize": "最大化",
+    "nav.restore": "还原",
+    "nav.close": "关闭",
+
     // Scripts page
     "scripts.search": "搜索...",
     "scripts.noScripts": "暂无脚本",
@@ -576,6 +582,12 @@ const messages: Record<Lang, Record<string, string>> = {
     "nav.scripts": "Scripts",
     "nav.case": "Case",
     "nav.settings": "Settings",
+
+    // Window controls
+    "nav.minimize": "Minimize",
+    "nav.maximize": "Maximize",
+    "nav.restore": "Restore",
+    "nav.close": "Close",
 
     // Scripts page
     "scripts.search": "Search...",
