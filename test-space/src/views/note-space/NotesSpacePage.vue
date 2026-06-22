@@ -176,15 +176,15 @@
     </div>
 
     <!-- Center: TipTap Editor -->
-    <div class="flex-1 flex flex-col overflow-hidden bg-transparent pt-4 pl-3 pr-3">
+    <div class="flex-1 flex flex-col bg-transparent pt-4 pl-3 pr-3">
       <!-- Empty state when no note selected -->
-      <div v-if="!selectedNoteId" class="flex-1 glass-panel rounded-xl overflow-hidden flex items-center justify-center shadow-md">
+      <div v-if="!selectedNoteId" class="flex-1 glass-panel rounded-xl flex items-center justify-center shadow-md">
         <div class="text-center">
           <span class="material-symbols-outlined text-[48px] text-on-surface-variant/30">note_add</span>
           <p class="font-body-md text-body-md text-on-surface-variant/50 mt-3">{{ t('notes.selectNote') }}</p>
         </div>
       </div>
-      <div v-else class="flex-1 glass-panel rounded-xl overflow-hidden flex flex-col shadow-md">
+      <div v-else class="flex-1 glass-panel rounded-xl flex flex-col shadow-md">
         <div class="sticky top-0 z-10 bg-white/60 backdrop-blur-md border-b border-glass-border-light/30 px-4 py-2 flex items-center gap-2">
           <input             v-model="noteTitle"
             :placeholder="t('notes.noteTitle')"
