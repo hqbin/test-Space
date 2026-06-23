@@ -138,6 +138,16 @@ async fn adb_mirror_start(
     let app_c = app.clone();
 
     tokio::task::spawn_blocking(move || {
+        // Pre-root so that subsequent adb root calls (e.g. proxy)
+        // find adbd already running as root and won't restart it,
+        // which would break the mirror's ADB forward.
+        if let Err(e) = crate::adb::root_device(&serial_c) {
+            let _ = app_c.emit_to(&win_label, "mirror:diagnostic",
+                &format!("adb root 失败 (后续如有 root 操作可能导致镜像断开): {}", e));
+        } else {
+            let _ = app_c.emit_to(&win_label, "mirror:diagnostic", "adb root 成功 (adbd 已提前升权)");
+        }
+
         // Try scrcpy-server; if any step fails or config not received, fall back to legacy
         let scrcpy_ok = if jar_str.is_empty() {
             let _ = app_c.emit_to(&win_label, "mirror:diagnostic", "scrcpy-server jar not found in app resources");
