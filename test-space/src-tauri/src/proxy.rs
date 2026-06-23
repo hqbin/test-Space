@@ -32,12 +32,14 @@ impl ProxyState {
 
 pub struct ProxyInner {
     pub running: AtomicBool,
+    pub stopped: AtomicBool,
     pub breakpoint_enabled: AtomicBool,
     pub breakpoint_url_pattern: Mutex<Option<String>>,
     pub pending_breakpoints: Mutex<HashMap<String, oneshot::Sender<serde_json::Value>>>,
     pub rewrite_rules: Mutex<Vec<RewriteRule>>,
     pub captured_requests: Mutex<Vec<CapturedRequest>>,
     pub shutdown_tx: Mutex<Option<oneshot::Sender<()>>>,
+    pub join_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
     pub port: Mutex<Option<u16>>,
     pub ca_cert_pem: Mutex<Option<String>>,
     pub ca_key_pem: Mutex<Option<String>>,
@@ -48,12 +50,14 @@ impl ProxyInner {
     pub fn new() -> Self {
         Self {
             running: AtomicBool::new(false),
+            stopped: AtomicBool::new(false),
             breakpoint_enabled: AtomicBool::new(false),
             breakpoint_url_pattern: Mutex::new(None),
             pending_breakpoints: Mutex::new(HashMap::new()),
             rewrite_rules: Mutex::new(Vec::new()),
             captured_requests: Mutex::new(Vec::new()),
             shutdown_tx: Mutex::new(None),
+            join_handle: Mutex::new(None),
             port: Mutex::new(None),
             ca_cert_pem: Mutex::new(None),
             ca_key_pem: Mutex::new(None),
@@ -284,8 +288,6 @@ pub async fn proxy_start(
     let ca_params = make_ca_params();
     let root_issuer = rcgen::Issuer::new(ca_params, ca_key);
 
-    inner.running.store(true, Ordering::Release);
-
     let state_for_handler = inner.clone();
     let app_handle = app.clone();
 
@@ -297,7 +299,7 @@ pub async fn proxy_start(
     let sf_state = state_for_handler.clone();
     let sf_app = app_handle.clone();
 
-    tokio::spawn(async move {
+    let handle = tokio::spawn(async move {
         // 初始化 rustls crypto provider（必须在创建 MitmProxy 之前）
         let _ = rustls::crypto::CryptoProvider::install_default(
             rustls::crypto::ring::default_provider()
@@ -314,6 +316,15 @@ pub async fn proxy_start(
                 let client = client.clone();
 
                 async move {
+                    // Reject requests if proxy is being stopped
+                    if state.stopped.load(Ordering::Acquire) {
+                        return Ok(Response::builder()
+                            .status(502)
+                            .header("X-Proxy", "TestSpace-Stopped")
+                            .body(box_body(Bytes::from("Proxy is stopping")))
+                            .unwrap());
+                    }
+
                     let start_time = get_timestamp();
                     let request_id = Uuid::new_v4().to_string();
                     let remote_addr = req.extensions().get::<RemoteAddr>()
@@ -666,6 +677,13 @@ pub async fn proxy_start(
         state_for_handler.running.store(false, Ordering::Release);
     });
 
+    *inner.join_handle.lock().unwrap() = Some(handle);
+
+    // Mark running only after shutdown_tx + join_handle are both stored,
+    // so proxy_stop can always find them when running == true
+    inner.stopped.store(false, Ordering::Release);
+    inner.running.store(true, Ordering::Release);
+
     *inner.port.lock().unwrap() = Some(port);
     let mut messages = vec![format!("代理已启动，端口：{}", port)];
 
@@ -744,23 +762,52 @@ pub async fn proxy_stop(
     if !inner.running.load(Ordering::Acquire) {
         return Err("代理未运行".to_string());
     }
+
+    // Mark stopped immediately so in-flight connections abort processing
+    inner.stopped.store(true, Ordering::Release);
+
     let mut messages = vec![];
     if let Some(ref serial) = device_serial {
-        let clear_serial = serial.clone();
-        match tokio::task::spawn_blocking(move || {
-            crate::adb::shell_command(&clear_serial, "settings put global http_proxy :0")
-        }).await.map_err(|e| e.to_string())? {
-            Ok(_) => messages.push(format!("📡 设备 {} 的代理已清除", serial)),
-            Err(e) => messages.push(format!("⚠️ 清除设备代理失败：{}", e)),
+        // Clear proxy via multiple methods (different Android versions store proxy in different ways)
+        let clear_cmds = [
+            "settings put global http_proxy :0",
+            "settings delete global http_proxy",
+            "settings delete global global_http_proxy_host",
+            "settings delete global global_http_proxy_port",
+            "settings delete global global_http_proxy_exclusion_list",
+            "cmd connectivity proxy clear",
+        ];
+        for cmd in &clear_cmds {
+            let _ = tokio::task::spawn_blocking({
+                let c = serial.to_string();
+                let cmd = cmd.to_string();
+                move || crate::adb::shell_command(&c, &cmd)
+            }).await;
         }
+
+        messages.push(format!("📡 设备 {} 的代理已清除", serial));
+        messages.push("💡 如网络仍未恢复，请手动开关一次 WiFi 或飞行模式".to_string());
     }
+
+    // Send shutdown signal to proxy task
     if let Some(tx) = inner.shutdown_tx.lock().unwrap().take() {
         let _ = tx.send(());
     }
-    // Give the proxy task a moment to process the shutdown signal
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // Wait for the proxy task to actually complete (max 5s)
+    let join_handle = inner.join_handle.lock().unwrap().take();
+    if let Some(handle) = join_handle {
+        timeout(Duration::from_secs(5), handle).await.ok();
+    }
+
+    // Force-clean all proxy state regardless of task exit status
     inner.running.store(false, Ordering::Release);
     *inner.port.lock().unwrap() = None;
+    *inner.shutdown_tx.lock().unwrap() = None;
+    inner.breakpoint_enabled.store(false, Ordering::Release);
+    *inner.breakpoint_url_pattern.lock().unwrap() = None;
+    inner.pending_breakpoints.lock().unwrap().clear();
+    *inner.captured_requests.lock().unwrap() = Vec::new();
     messages.push("🛑 代理已停止".to_string());
     Ok(messages.join("\n"))
 }

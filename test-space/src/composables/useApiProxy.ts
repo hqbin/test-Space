@@ -26,6 +26,9 @@ export function useApiProxy() {
   const breakpointEvent = ref<BreakpointEvent | null>(null)
   const pendingBreakpoints = ref<Set<string>>(new Set())
 
+  // When set to true, new events from in-flight connections are discarded
+  let stopped = false
+
   let unlistens: (() => void)[] = []
 
   async function syncRulesToDb() {
@@ -64,12 +67,15 @@ export function useApiProxy() {
       status.value = s
     } catch { /* ok */ }
     await loadRules()
+    stopped = false
 
     unlistens.push(await listen<ApiCapturedRequest>("proxy:request", (e) => {
+      if (stopped) return
       capturedRequests.value.unshift(e.payload)
     }))
 
     unlistens.push(await listen<ApiCapturedRequest>("proxy:response", (e) => {
+      if (stopped) return
       const idx = capturedRequests.value.findIndex(r => r.id === e.payload.id)
       if (idx !== -1) {
         capturedRequests.value[idx] = e.payload
@@ -80,6 +86,7 @@ export function useApiProxy() {
     }))
 
     unlistens.push(await listen<ApiCapturedRequest>("proxy:breakpoint:request", (e) => {
+      if (stopped) return
       const set = new Set(pendingBreakpoints.value)
       set.add(e.payload.id)
       pendingBreakpoints.value = set
@@ -90,6 +97,7 @@ export function useApiProxy() {
     }))
 
     unlistens.push(await listen<ApiCapturedRequest>("proxy:breakpoint:response", (e) => {
+      if (stopped) return
       const set = new Set(pendingBreakpoints.value)
       const respId = `${e.payload.id}_resp`
       set.add(respId)
@@ -101,11 +109,13 @@ export function useApiProxy() {
     }))
 
     unlistens.push(await listen<string>("proxy:error", (e) => {
+      if (stopped) return
       console.error("Proxy error:", e.payload)
       debugLogs.value.push(`[ERROR] ${e.payload}`)
     }))
 
     unlistens.push(await listen<string>("proxy:debug", (e) => {
+      if (stopped) return
       debugLogs.value.push(e.payload)
     }))
   }
@@ -123,6 +133,7 @@ export function useApiProxy() {
   }
 
   async function startProxy(deviceSerial?: string) {
+    stopped = false
     isStarting.value = true
     try {
       const msg = await invoke<string>("proxy_start", { deviceSerial: deviceSerial || null })
@@ -135,10 +146,14 @@ export function useApiProxy() {
   }
 
   async function stopProxy(deviceSerial?: string) {
+    stopped = true
     isStopping.value = true
     try {
       const msg = await invoke<string>("proxy_stop", { deviceSerial: deviceSerial || null })
-      status.value = { ...status.value, running: false, port: null }
+      status.value = { running: false, port: null, breakpoint_enabled: false, captured_count: 0 }
+      capturedRequests.value = []
+      pendingBreakpoints.value = new Set()
+      selectedRequest.value = null
       return msg
     } finally {
       isStopping.value = false
