@@ -1,5 +1,5 @@
 <template>
-  <div class="h-full flex flex-col gap-4 py-4 select-none overflow-hidden">
+  <div class="h-full flex flex-col gap-4 pt-0 pb-4 select-none overflow-hidden">
     <!-- Rewrite Rules Dropdown (below control bar) -->
     <div v-if="showRules" class="glass-panel rounded-xl px-5 py-3">
       <div class="flex items-center justify-between mb-2">
