@@ -19,10 +19,10 @@
       <div class="px-3 py-1.5 border-b border-glass-border-light/50 flex justify-between items-center">
         <span class="font-label-md text-label-md text-on-surface font-semibold text-[12px]">{{ t('notes.directory') }}</span>
         <div class="flex gap-1">
-          <button class="glass-button p-0.5 select-none" :title="t('notes.newFolder')" @click="createFolder">
+          <button class="glass-button !border-0 p-0.5 select-none" :title="t('notes.newFolder')" @click="createFolder">
             <span class="material-symbols-outlined text-[14px]">create_new_folder</span>
           </button>
-          <button class="glass-button p-0.5 select-none" :title="t('notes.newNoteAction')" @click="createNote">
+          <button class="glass-button !border-0 p-0.5 select-none" :title="t('notes.newNoteAction')" @click="createNote">
             <span class="material-symbols-outlined text-[14px]">note_add</span>
           </button>
         </div>
@@ -87,7 +87,7 @@
               <span class="material-symbols-outlined text-[13px] text-secondary">description</span>
               <span class="font-body-md text-body-md text-[12px] flex-1 truncate">{{ note.title || t('notes.untitled') }}</span>
               <span class="material-symbols-outlined text-[12px] text-secondary">star</span>
-              <button class="glass-button p-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.delete')" @click.stop="confirmDeleteNote(note)">
+              <button class="glass-button !border-0 p-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.delete')" @click.stop="confirmDeleteNote(note)">
                 <span class="material-symbols-outlined text-[11px]">delete</span>
               </button>
             </div>
@@ -115,13 +115,13 @@
             >
               <span class="material-symbols-outlined text-[14px]">{{ expandedFolders[folder.id] ? 'folder_open' : 'folder' }}</span>
               <span class="font-body-md text-body-md text-[12px] flex-1 truncate">{{ folder.name }}</span>
-              <button class="glass-button p-0.5 rounded opacity-0 group-hover:opacity-100 select-none" title="Add" @click.stop="openFolderAddDropdown(folder.id, $event)">
+              <button class="glass-button !border-0 p-0.5 rounded opacity-0 group-hover:opacity-100 select-none" title="Add" @click.stop="openFolderAddDropdown(folder.id, $event)">
                 <span class="material-symbols-outlined text-[13px]">add</span>
               </button>
-              <button class="glass-button p-0.5 rounded opacity-0 group-hover:opacity-100 select-none" :title="t('notes.rename')" @click.stop="startRenameFolder(folder)">
+              <button class="glass-button !border-0 p-0.5 rounded opacity-0 group-hover:opacity-100 select-none" :title="t('notes.rename')" @click.stop="startRenameFolder(folder)">
                 <span class="material-symbols-outlined text-[12px]">edit</span>
               </button>
-              <button class="glass-button p-0.5 rounded opacity-0 group-hover:opacity-100 select-none" :title="t('notes.delete')" @click.stop="deleteFolder(folder.id)">
+              <button class="glass-button !border-0 p-0.5 rounded opacity-0 group-hover:opacity-100 select-none" :title="t('notes.delete')" @click.stop="deleteFolder(folder.id)">
                 <span class="material-symbols-outlined text-[12px]">delete</span>
               </button>
             </div>
@@ -138,7 +138,7 @@
                   <span class="material-symbols-outlined text-[13px] text-secondary">description</span>
                   <span class="font-body-md text-body-md text-[12px] flex-1 truncate">{{ note.title || t('notes.untitled') }}</span>
                   <span v-if="note.isFavorite" class="material-symbols-outlined text-[12px] text-secondary">star</span>
-                  <button class="glass-button p-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.delete')" @click.stop="confirmDeleteNote(note)">
+                  <button class="glass-button !border-0 p-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.delete')" @click.stop="confirmDeleteNote(note)">
                     <span class="material-symbols-outlined text-[11px]">delete</span>
                   </button>
                 </div>
@@ -165,7 +165,7 @@
             >
               <span class="material-symbols-outlined text-[13px] text-secondary">description</span>
               <span class="font-body-md text-body-md text-[12px] flex-1 truncate">{{ note.title || t('notes.untitled') }}</span>
-              <button class="glass-button p-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.delete')" @click.stop="confirmDeleteNote(note)">
+              <button class="glass-button !border-0 p-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.delete')" @click.stop="confirmDeleteNote(note)">
                 <span class="material-symbols-outlined text-[11px]">delete</span>
               </button>
             </div>

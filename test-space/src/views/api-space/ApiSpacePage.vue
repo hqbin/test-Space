@@ -137,7 +137,7 @@
             <span class="text-body-md">{{ t('api.noRequests') }}</span>
           </div>
           <div v-for="req in filteredList" :key="req.id"
-            class="rounded-xl px-3 py-2.5 mb-1 cursor-pointer transition-all select-none"
+            class="rounded-xl px-3 py-2.5 mb-1 cursor-pointer transition-all select-none api-request-item"
             :class="{
               'glass-card-active': selectedRequest?.id === req.id,
               'glass-hover': selectedRequest?.id !== req.id,
@@ -831,6 +831,9 @@ onUnmounted(() => {
 .glass-panel {
   backdrop-filter: blur(60px);
   -webkit-backdrop-filter: blur(60px);
+}
+.api-request-item.glass-hover:hover {
+  transform: scale(1.01);
 }
 .fade-enter-active,
 .fade-leave-active {
