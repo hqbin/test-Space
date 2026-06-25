@@ -779,15 +779,11 @@
               <div v-else class="flex-1 overflow-y-auto space-y-2">
                   <div v-for="(cmd, idx) in customCommands" :key="idx"
                     class="flex items-center justify-between gap-2 p-3 bg-white/30 rounded-xl">
-                    <div class="flex items-center gap-1 min-w-0">
-                      <div class="flex flex-col gap-0 shrink-0">
-                        <button class="glass-button p-0.5 rounded select-none flex items-center justify-center" :class="idx === 0 ? 'opacity-20 cursor-not-allowed' : ''" :disabled="idx === 0" :title="t('device.moveUp') || '上移'" @click="moveCustomCommand(idx, -1)">
-                          <span class="material-symbols-outlined text-[14px]">arrow_upward</span>
-                        </button>
-                        <button class="glass-button p-0.5 rounded select-none flex items-center justify-center" :class="idx === customCommands.length - 1 ? 'opacity-20 cursor-not-allowed' : ''" :disabled="idx === customCommands.length - 1" :title="t('device.moveDown') || '下移'" @click="moveCustomCommand(idx, 1)">
-                          <span class="material-symbols-outlined text-[14px]">arrow_downward</span>
-                        </button>
-                      </div>
+                    <div class="flex items-center gap-2 min-w-0">
+                      <input type="number" min="1" :max="customCommands.length"
+                        class="w-9 h-7 text-center bg-white/60 border border-outline-variant/40 rounded-md font-mono text-caption text-on-surface select-text [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        :value="idx + 1"
+                        @change="setCommandOrder(idx, parseInt(($event.target as HTMLInputElement).value))" />
                       <div class="font-caption text-caption text-on-surface leading-tight truncate">{{ cmd.name }}</div>
                     </div>
                     <div class="flex gap-2 shrink-0">
@@ -1204,12 +1200,10 @@ async function saveCustomCommand() {
 }
 function cancelEditCommand() { editingCmdIndex.value = null; }
 async function removeCustomCommand(idx: number) { customCommands.value.splice(idx, 1); await saveCustomCommands(); }
-async function moveCustomCommand(idx: number, direction: -1 | 1) {
-  const target = idx + direction;
-  if (target < 0 || target >= customCommands.value.length) return;
-  const temp = customCommands.value[idx];
-  customCommands.value[idx] = customCommands.value[target];
-  customCommands.value[target] = temp;
+async function setCommandOrder(idx: number, newPos: number) {
+  if (isNaN(newPos) || newPos < 1 || newPos > customCommands.value.length || newPos === idx + 1) return;
+  const item = customCommands.value.splice(idx, 1)[0];
+  customCommands.value.splice(newPos - 1, 0, item);
   await saveCustomCommands();
 }
 

@@ -746,7 +746,7 @@ export async function exportAllData(): Promise<AppBackup> {
   const scripts = await listScripts()
   const proxyRules = await loadProxyRules()
   return {
-    version: '1.4',
+    version: '1.5',
     exportedAt: new Date().toISOString(),
     fieldRuleSets,
     caseFiles,
