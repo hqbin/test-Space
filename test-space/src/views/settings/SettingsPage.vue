@@ -561,7 +561,7 @@ async function handleImport() {
 }
 
 onMounted(async () => {
-  initLanguage();
+  await initLanguage();
   await loadTheme();
   try {
     appVersion.value = await getVersion();

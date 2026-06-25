@@ -31,7 +31,7 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 onMounted(async () => {
-  initLanguage();
+  await initLanguage();
   window.addEventListener("keydown", onKeydown);
   try {
     const appWindow = getCurrentWindow();

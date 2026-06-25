@@ -1,4 +1,5 @@
 import { ref, computed } from "vue";
+import { getSetting, setSetting } from "@/services/database";
 
 export type Lang = "zh" | "en";
 
@@ -210,6 +211,8 @@ const messages: Record<Lang, Record<string, string>> = {
     "device.addShortcut": "添加快捷指令",
     "device.editShortcut": "编辑快捷指令",
     "device.manageShortcuts": "管理快捷指令",
+    "device.moveUp": "上移",
+    "device.moveDown": "下移",
     "device.rebootConfirm2": "重启设备?",
     "device.executingCmd": "执行指令",
     "device.cmdNoOutput": "(命令执行完成，无输出)",
@@ -784,6 +787,8 @@ const messages: Record<Lang, Record<string, string>> = {
     "device.addShortcut": "Add Shortcut",
     "device.editShortcut": "Edit Shortcut",
     "device.manageShortcuts": "Manage Shortcuts",
+    "device.moveUp": "Move Up",
+    "device.moveDown": "Move Down",
     "device.rebootConfirm2": "Reboot device?",
     "device.executingCmd": "Executing command",
     "device.cmdNoOutput": "(Command completed, no output)",
@@ -1166,14 +1171,14 @@ export function useI18n() {
     return val;
   }
 
-  function setLanguage(l: Lang) {
+  async function setLanguage(l: Lang) {
     lang.value = l;
-    try { localStorage.setItem("app-lang", l); } catch {}
+    try { await setSetting('app_lang', l); } catch {}
   }
 
-  function initLanguage() {
+  async function initLanguage() {
     try {
-      const saved = localStorage.getItem("app-lang") as Lang | null;
+      const saved = await getSetting('app_lang');
       if (saved === "zh" || saved === "en") lang.value = saved;
     } catch {}
   }

@@ -28,7 +28,7 @@
             <div class="w-10 h-10 rounded-xl bg-secondary-fixed/30 flex items-center justify-center">
               <span class="material-symbols-outlined text-secondary text-[22px]" style="font-variation-settings: 'FILL' 1">description</span>
             </div>
-            <button class="glass-button p-1.5 rounded-lg text-on-surface-variant/40 select-none" @click.stop="store.toggleFavorite(file.path)">
+            <button class="p-1.5 rounded-lg text-on-surface-variant/40 hover:text-secondary transition-colors select-none" @click.stop="store.toggleFavorite(file.path)">
               <span class="material-symbols-outlined text-[18px] text-secondary" style="font-variation-settings: 'FILL' 1">star</span>
             </button>
           </div>
@@ -62,14 +62,14 @@
               <span class="material-symbols-outlined text-secondary text-[22px]" style="font-variation-settings: 'FILL' 1">description</span>
             </div>
             <div class="flex gap-1">
-              <button class="glass-button p-1.5 rounded-lg text-on-surface-variant/40 select-none" @click.stop="store.toggleFavorite(file.path)">
+              <button class="p-1.5 rounded-lg text-on-surface-variant/40 hover:text-secondary transition-colors select-none" @click.stop="store.toggleFavorite(file.path)">
                 <span
                   class="material-symbols-outlined text-[18px]"
                   :class="store.favorites.includes(file.path) ? 'text-secondary' : 'text-on-surface-variant/30'"
                   :style="{ fontVariationSettings: `'FILL' ${store.favorites.includes(file.path) ? 1 : 0}` }"
                 >star</span>
               </button>
-              <button class="glass-button p-1.5 rounded-lg text-on-surface-variant/40 select-none" @click.stop="confirmRemoveRecent(file)">
+              <button class="p-1.5 rounded-lg text-on-surface-variant/40 hover:text-error transition-colors select-none" @click.stop="confirmRemoveRecent(file)">
                 <span class="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>

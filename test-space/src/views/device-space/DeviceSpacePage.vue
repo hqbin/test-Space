@@ -777,18 +777,28 @@
             <div v-else class="flex flex-col gap-2 flex-1 min-h-0">
               <div v-if="customCommands.length === 0" class="text-xs text-on-surface-variant/50 italic p-4 text-center">{{ t('device.noCmds') }}</div>
               <div v-else class="flex-1 overflow-y-auto space-y-2">
-                <div v-for="(cmd, idx) in customCommands" :key="idx"
-                  class="flex items-center justify-between gap-2 p-3 bg-white/30 rounded-xl">
-                  <div class="font-caption text-caption text-on-surface leading-tight truncate min-w-0">{{ cmd.name }}</div>
-                  <div class="flex gap-2 shrink-0">
-                    <button class="glass-button px-2.5 py-1.5 rounded-lg flex items-center gap-1 text-caption font-caption select-none" :title="t('device.edit')" @click="startEditCustomCommand(idx)">
-                      <span class="material-symbols-outlined text-[14px]">edit</span>{{ t('device.edit') }}
-                    </button>
-                    <button class="glass-button px-2.5 py-1.5 rounded-lg flex items-center gap-1 text-caption font-caption text-error select-none" :title="t('device.delete')" @click="confirmThen(`${t('device.delete')}「${cmd.name}」?`, async () => removeCustomCommand(idx))">
-                      <span class="material-symbols-outlined text-[14px]">delete</span>{{ t('device.delete') }}
-                    </button>
+                  <div v-for="(cmd, idx) in customCommands" :key="idx"
+                    class="flex items-center justify-between gap-2 p-3 bg-white/30 rounded-xl">
+                    <div class="flex items-center gap-1 min-w-0">
+                      <div class="flex flex-col gap-0 shrink-0">
+                        <button class="glass-button p-0.5 rounded select-none flex items-center justify-center" :class="idx === 0 ? 'opacity-20 cursor-not-allowed' : ''" :disabled="idx === 0" :title="t('device.moveUp') || '上移'" @click="moveCustomCommand(idx, -1)">
+                          <span class="material-symbols-outlined text-[14px]">arrow_upward</span>
+                        </button>
+                        <button class="glass-button p-0.5 rounded select-none flex items-center justify-center" :class="idx === customCommands.length - 1 ? 'opacity-20 cursor-not-allowed' : ''" :disabled="idx === customCommands.length - 1" :title="t('device.moveDown') || '下移'" @click="moveCustomCommand(idx, 1)">
+                          <span class="material-symbols-outlined text-[14px]">arrow_downward</span>
+                        </button>
+                      </div>
+                      <div class="font-caption text-caption text-on-surface leading-tight truncate">{{ cmd.name }}</div>
+                    </div>
+                    <div class="flex gap-2 shrink-0">
+                      <button class="glass-button px-2.5 py-1.5 rounded-lg flex items-center gap-1 text-caption font-caption select-none" :title="t('device.edit')" @click="startEditCustomCommand(idx)">
+                        <span class="material-symbols-outlined text-[14px]">edit</span>{{ t('device.edit') }}
+                      </button>
+                      <button class="glass-button px-2.5 py-1.5 rounded-lg flex items-center gap-1 text-caption font-caption text-error select-none" :title="t('device.delete')" @click="confirmThen(`${t('device.delete')}「${cmd.name}」?`, async () => removeCustomCommand(idx))">
+                        <span class="material-symbols-outlined text-[14px]">delete</span>{{ t('device.delete') }}
+                      </button>
+                    </div>
                   </div>
-                </div>
               </div>
               <div class="pt-3 border-t border-outline-variant/30">
                 <button class="text-sm text-on-surface-variant hover:text-secondary flex items-center gap-1 transition-colors select-none no-border" @click="addCustomCommand">
@@ -898,7 +908,7 @@ const appWindow = getCurrentWebviewWindow();
 const listenTarget = { target: { kind: 'WebviewWindow' as const, label: appWindow.label } };
 
 interface ScriptResult { stdout: string; stderr: string; exit_code: number; }
-import { addInputHistory, getInputHistory, saveLogSession, getRunningLogSessions, removeLogSession } from "@/services/database";
+import { addInputHistory, getInputHistory, saveLogSession, getRunningLogSessions, removeLogSession, getSetting, setSetting } from "@/services/database";
 
 const {
   listDevices, shell, installApk, uninstallApk, pushFile, pullFile, reboot, screenshot,
@@ -1169,14 +1179,14 @@ const editingCmdIndex = ref<number | null>(null);
 const editingCmdName = ref("");
 const editingCmdValue = ref("");
 const showCmdManager = ref(false);
-function loadCustomCommands() {
+async function loadCustomCommands() {
   try {
-    const stored = localStorage.getItem("test-space:adb-custom-commands");
+    const stored = await getSetting('adb_custom_commands');
     if (stored) customCommands.value = JSON.parse(stored);
   } catch {}
 }
-function saveCustomCommands() {
-  localStorage.setItem("test-space:adb-custom-commands", JSON.stringify(customCommands.value));
+async function saveCustomCommands() {
+  await setSetting('adb_custom_commands', JSON.stringify(customCommands.value));
 }
 function addCustomCommand() { editingCmdIndex.value = -1; editingCmdName.value = ""; editingCmdValue.value = ""; }
 function startEditCustomCommand(idx: number) {
@@ -1184,16 +1194,24 @@ function startEditCustomCommand(idx: number) {
   editingCmdName.value = customCommands.value[idx].name;
   editingCmdValue.value = customCommands.value[idx].command;
 }
-function saveCustomCommand() {
+async function saveCustomCommand() {
   if (!editingCmdName.value.trim() || !editingCmdValue.value.trim()) return;
   const cmd = { name: editingCmdName.value.trim(), command: editingCmdValue.value.trim() };
   if (editingCmdIndex.value === -1) customCommands.value.push(cmd);
   else if (editingCmdIndex.value !== null) customCommands.value[editingCmdIndex.value] = cmd;
-  saveCustomCommands();
+  await saveCustomCommands();
   editingCmdIndex.value = null;
 }
 function cancelEditCommand() { editingCmdIndex.value = null; }
-function removeCustomCommand(idx: number) { customCommands.value.splice(idx, 1); saveCustomCommands(); }
+async function removeCustomCommand(idx: number) { customCommands.value.splice(idx, 1); await saveCustomCommands(); }
+async function moveCustomCommand(idx: number, direction: -1 | 1) {
+  const target = idx + direction;
+  if (target < 0 || target >= customCommands.value.length) return;
+  const temp = customCommands.value[idx];
+  customCommands.value[idx] = customCommands.value[target];
+  customCommands.value[target] = temp;
+  await saveCustomCommands();
+}
 
 async function runOneCommand(cmd: string): Promise<string> {
   if (cmd.startsWith('adb ')) {
@@ -1737,8 +1755,6 @@ const recordingFilename = ref("");
 
 // ── Device auto-refresh ──
 let autoRefreshId: ReturnType<typeof setInterval> | null = null;
-
-// ── Custom commands stored in localStorage
 
 // ── Device operations ──
 async function scanDevices(silent = false) {
