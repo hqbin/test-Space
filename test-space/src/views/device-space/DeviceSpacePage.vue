@@ -842,6 +842,34 @@
       </Transition>
     </Teleport>
 
+    <!-- Screenshot Preview -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div v-if="showScreenshotPreview && screenshotDataUrl" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="showScreenshotPreview = false">
+          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
+          <div class="glass-panel rounded-[2rem] p-6 w-full max-w-2xl relative z-10 bg-white/60 max-h-[85vh] flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-1.5 select-none">
+                <span class="material-symbols-outlined text-[16px]">photo_camera</span>{{ t('device.screenshotPreview') }}
+              </h3>
+              <div class="flex items-center gap-2">
+                <button class="glass-button px-4 py-2 rounded-lg font-label-md text-label-md flex items-center gap-1 select-none" @click="saveScreenshot">
+                  <span class="material-symbols-outlined text-[16px]">save</span>
+                  {{ t('device.saveScreenshot') }}
+                </button>
+                <button class="glass-button p-1 rounded select-none" @click="showScreenshotPreview = false">
+                  <span class="material-symbols-outlined text-[18px]">close</span>
+                </button>
+              </div>
+            </div>
+            <div class="flex-1 min-h-0 flex items-center justify-center overflow-auto bg-black/5 rounded-xl p-3">
+              <img :src="screenshotDataUrl" class="max-w-full max-h-full object-contain rounded-lg select-none" draggable="false" />
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
     <!-- Toast -->
     <Teleport to="body">
       <Transition name="fade">
@@ -1703,6 +1731,7 @@ async function mirrorPopout() {
 
 // ── Screenshot & Recording ──
 const screenshotDataUrl = ref("");
+const showScreenshotPreview = ref(false);
 const isRecording = ref(false);
 const recordingFilename = ref("");
 
@@ -2822,16 +2851,29 @@ async function stopMirror() {
 async function takeScreenshot() {
   if (!selectedDevice.value) return;
   try {
+    showCmdExec(t("device.screenshotAction"), "adb screencap -p");
+    appendCmdExec(t("device.takingScreenshot"));
+    const dataUrl = await screenshot(selectedDevice.value.serial, "");
+    screenshotDataUrl.value = dataUrl;
+    showScreenshotPreview.value = true;
+    finishCmdExec(t("device.screenshotCaptured"));
+  } catch (e: any) { finishCmdExec(); showToast(t('device.screenshotFailedWith', { e: String(e) }), "error"); }
+}
+async function saveScreenshot() {
+  if (!screenshotDataUrl.value) return;
+  try {
     const { save } = await import("@tauri-apps/plugin-dialog");
     const dest = await save({ defaultPath: `screenshot_${Date.now()}.png`, filters: [{ name: "PNG Image", extensions: ["png"] }] });
     if (!dest) return;
-    showCmdExec(t("device.screenshotAction"), "adb screencap -p");
-    appendCmdExec(t("device.takingScreenshot"));
-    const result = await screenshot(selectedDevice.value.serial, dest);
-    appendCmdExec(result);
-    finishCmdExec(t("device.screenshotSaved"));
+    const base64Data = screenshotDataUrl.value.replace(/^data:image\/png;base64,/, "");
+    const binaryString = atob(base64Data);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+    const { writeFile } = await import("@tauri-apps/plugin-fs");
+    await writeFile(dest, bytes);
     showToast(t("device.screenshotSaved"));
-  } catch (e: any) { finishCmdExec(); showToast(t('device.screenshotFailedWith', { e: String(e) }), "error"); }
+    showScreenshotPreview.value = false;
+  } catch (e: any) { showToast(t('device.screenshotFailedWith', { e: String(e) }), "error"); }
 }
 async function takeScreenshotFromMirror() {
   await takeScreenshot();

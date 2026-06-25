@@ -4,6 +4,8 @@
 >
 > **UI/UX 一致性守则**：凡新增或修改功能，其交互控件（按钮、标签页、导航项、卡片、图标操作区等）必须统一使用本文档定义的 `.glass-button` / `.glass-hover` / `.glass-active` CSS 类，禁用 `bg-primary-container`、`bg-secondary-fixed`（作为活跃态时替换为 `glass-active`）、`text-primary`（作为可点击文字时替换为 `glass-button`）等旧样式。新页面或新控件不得自创样式模式，必须继承现有的液态玻璃设计系统。所有改动的 UI 元素在提交前须通过 `npm run build` 确保无类型/样式回归。
 >
+> **弹窗/对话框守则**：所有 Teleport 弹窗必须遵循 4.4 节定义的弹窗规范，使用 `bg-black/10 backdrop-blur-sm` 背景遮罩 + `glass-panel rounded-[2rem] bg-white/60` 弹窗主体结构，禁止使用 `bg-black/50` 等深色半透明背景。弹窗关闭按钮统一使用 `glass-button p-1 rounded` + `close` 图标。
+>
 > **功能安全守则**：每次修改已有代码时，必须评估改动的影响范围，确保不破坏相邻或依赖模块的既有功能。以"最小改动、最大兼容"为原则：优先做增量调整而非重构重写；修改公共模块（composable、API 层、store、路由守卫、布局组件）时须同时验证所有调用方是否仍正常工作；删除或重命名任何导出、路由、CSS 类或 API 字段前，必须全局搜索确认无其他引用。提交前执行 `npm run build` 通过类型检查和构建，并对修改涉及的功能路径做人工冒烟验证。
 
 ---
@@ -258,6 +260,50 @@ Device → Notes → Case → Scripts → Settings（Settings 固定在右侧）
 - 间距系统（padding-card: 32px, margin-page: 40px, gutter-grid: 24px 等）
 - 字体系统（Inter 家族，6 级字号 display-lg → caption）
 - 所有值严格对应设计文档中的 YAML 定义
+
+**弹窗/对话框规范**（Teleport 模态框）：
+
+所有弹窗必须使用以下统一结构，禁止使用半透明黑色背景 `bg-black/50`：
+
+```html
+<Teleport to="body">
+  <Transition name="fade">
+    <div v-if="show" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="close">
+      <!-- 背景遮罩层 -->
+      <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
+      <!-- 弹窗主体 -->
+      <div class="glass-panel rounded-[2rem] p-6 w-full max-w-md relative z-10 bg-white/60 max-h-[80vh] flex flex-col">
+        <!-- 标题栏 -->
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-1.5 select-none">
+            <span class="material-symbols-outlined text-[16px]">图标名</span>{{ 标题 }}
+          </h3>
+          <button class="glass-button p-1 rounded select-none" @click="close">
+            <span class="material-symbols-outlined text-[18px]">close</span>
+          </button>
+        </div>
+        <!-- 内容区 -->
+        <div class="flex-1 min-h-0 overflow-y-auto">
+          <!-- 内容 -->
+        </div>
+        <!-- 底部按钮（可选） -->
+        <div class="flex gap-2 justify-end pt-4 border-t border-outline-variant/30 mt-4">
+          <button class="glass-button px-4 py-2 rounded-lg font-label-md text-label-md select-none" @click="close">取消</button>
+          <button class="glass-button px-4 py-2 rounded-lg font-label-md text-label-md select-none" @click="confirm">确认</button>
+        </div>
+      </div>
+    </div>
+  </Transition>
+</Teleport>
+```
+
+**样式要点**：
+- 背景遮罩：`bg-black/10 backdrop-blur-sm`（10% 黑色 + 模糊）
+- 弹窗主体：`glass-panel rounded-[2rem] p-6 bg-white/60`（玻璃面板 + 60% 白色背景）
+- 最大宽度：`max-w-md`（普通弹窗）/ `max-w-2xl`（大内容弹窗如图片预览）
+- 最大高度：`max-h-[80vh]` 或 `max-h-[85vh]`，内容区 `overflow-y-auto`
+- 关闭按钮：`glass-button p-1 rounded`，使用 `close` 图标
+- 标题栏：`font-label-md text-label-md font-semibold` + Material Symbols 图标
 
 ### 4.5 Workspace 首页（已移除）
 
