@@ -14,12 +14,23 @@
         </button>
       </div>
       <div class="h-5 w-[1px] bg-glass-border-dark shrink-0 ml-auto"></div>
-      <div class="flex items-center border border-outline-variant/60 rounded-full px-4 py-2 bg-white/50 min-w-[160px] flex-1 max-w-[360px]">
-        <span class="material-symbols-outlined text-on-surface-variant text-[16px] mr-2">link</span>
-        <input v-model="connectAddress"
-          class="flex-1 bg-transparent border-none outline-none font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-0 p-0 select-text"
-          :placeholder="t('device.inputHint')" @keyup.enter="connectToDevice" />
+      <div ref="connectIpInputRef" class="relative flex-1 min-w-[160px] max-w-[360px]">
+        <div class="flex items-center border border-outline-variant/60 rounded-full px-4 py-2 bg-white/50">
+          <span class="material-symbols-outlined text-on-surface-variant text-[16px] mr-2">link</span>
+          <input v-model="connectAddress"
+            class="flex-1 bg-transparent border-none outline-none font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-0 p-0 select-text"
+            :placeholder="t('device.inputHint')" @keyup.enter="connectToDevice"
+            @focus="onConnectIpFocus" />
+        </div>
       </div>
+      <Teleport to="body">
+        <div v-if="showConnectIpHistory && connectIpHistory.length > 0" class="fixed inset-0 z-40" @click="showConnectIpHistory = false"></div>
+        <div v-if="showConnectIpHistory && connectIpHistory.length > 0" class="fixed z-50 bg-white rounded-lg p-1 max-h-32 overflow-y-auto custom-scrollbar shadow-lg"
+          :style="{ top: connectIpDropdownPos.top + 'px', left: connectIpDropdownPos.left + 'px', width: connectIpDropdownPos.width + 'px' }">
+          <button v-for="h in connectIpHistory" :key="h" class="w-full flex items-center gap-2 px-2 py-1.5 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none text-left no-border whitespace-nowrap"
+            @mousedown.prevent @click="selectConnectIpHistory(h)">{{ h }}</button>
+        </div>
+      </Teleport>
       <button class="bg-white/30 border border-outline-variant/30 px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all shrink-0 select-none backdrop-blur-sm" @click="connectToDevice" :disabled="connecting">
         <span v-if="connecting" class="w-3.5 h-3.5 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
         <span v-else class="material-symbols-outlined text-[16px]">add_link</span>{{ connecting ? t('device.connecting') : t('device.connect') }}
@@ -138,7 +149,7 @@
           <div class="flex flex-wrap gap-2">
             <button class="bg-white/30 border border-outline-variant/30 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm select-none"
               :class="logcatRunning ? 'bg-error/20 text-error border-error/30 hover:bg-error/30' : ''"
-              :disabled="!selectedDevice || logPrepActive" @click="toggleLogcat">
+              :disabled="!selectedDevice || logPrepActive || (diagRunning && !logcatRunning)" @click="toggleLogcat">
               <span class="material-symbols-outlined text-[14px]" :class="logcatRunning ? 'text-error' : 'text-on-surface-variant'">{{ logcatRunning ? 'stop' : 'assignment' }}</span>
               <span v-if="logcatRunning" class="flex items-center gap-1.5">
                 {{ t('device.stop') }} <span class="font-mono text-[11px] opacity-80">{{ logcatElapsed }}s</span>
@@ -147,7 +158,7 @@
             </button>
             <button class="bg-white/30 border border-outline-variant/30 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm select-none"
               :class="diagRunning ? 'bg-error/20 text-error border-error/30 hover:bg-error/30' : ''"
-              :disabled="!selectedDevice || logPrepActive" @click="toggleDiagnostic">
+              :disabled="!selectedDevice || logPrepActive || (logcatRunning && !diagRunning)" @click="toggleDiagnostic">
               <span class="material-symbols-outlined text-[14px]" :class="diagRunning ? 'text-error' : 'text-on-surface-variant'">{{ diagRunning ? 'stop' : 'work' }}</span>
               <span v-if="diagRunning" class="flex items-center gap-1.5">
                 {{ t('device.stop') }} <span class="font-mono text-[11px] opacity-80">{{ diagElapsed }}s</span>
@@ -156,7 +167,7 @@
             </button>
             <button class="bg-white/30 border border-outline-variant/30 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm select-none"
               :class="bootLogcatRunning ? 'bg-error/20 text-error border-error/30 hover:bg-error/30' : ''"
-              :disabled="!selectedDevice || logPrepActive" @click="toggleBootLogcat">
+              :disabled="!selectedDevice || logPrepActive || logcatRunning || diagRunning" @click="toggleBootLogcat">
               <span class="material-symbols-outlined text-[14px]" :class="bootLogcatRunning ? 'text-error' : 'text-on-surface-variant'">{{ bootLogcatRunning ? 'stop' : 'pest_control' }}</span>
               <span v-if="bootLogcatRunning" class="flex items-center gap-1.5">
                 {{ t('device.stop') }} <span class="font-mono text-[11px] opacity-80">{{ bootLogcatElapsed }}s</span>
@@ -204,7 +215,7 @@
               </div>
               <div class="flex items-center gap-4">
                 <div class="relative">
-                  <div class="flex items-center border border-outline-variant/60 rounded-full px-3 py-1.5 bg-white/50 w-64">
+                  <div class="flex items-center border border-outline-variant/60 rounded-full px-3 py-1.5 bg-white/50 w-80">
                     <span class="material-symbols-outlined text-on-surface-variant text-[16px] mr-2">search</span>
                     <input v-model="queryPackageName" class="bg-transparent border-none outline-none w-full font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-0 p-0 select-text"
                       :placeholder="t('device.searchApp')" @input="onAppSearchInput" @keyup.enter="queryAppPath" @focus="loadAppSearchHistory" @blur="hideAppSearchHistoryDelayed" />
@@ -996,6 +1007,10 @@ function toggleDeviceDropdown() {
 }
 const deviceProps = ref<DeviceProperties | null>(null);
 const connectAddress = ref("");
+const showConnectIpHistory = ref(false);
+const connectIpHistory = ref<string[]>([]);
+const connectIpInputRef = ref<HTMLElement | null>(null);
+const connectIpDropdownPos = ref({ top: 0, left: 0, width: 0 });
 
 const devicePropList = computed(() => {
   if (!deviceProps.value) return {};
@@ -1564,11 +1579,13 @@ const logcatRunning = ref(false);
 const logcatElapsed = ref(0);
 let logcatTimeoutId: ReturnType<typeof setTimeout> | null = null;
 const logcatBuffer = ref<string[]>([]);
+let logcatSerial = "";
 
 const diagRunning = ref(false);
 const diagElapsed = ref(0);
 let diagTimeoutId: ReturnType<typeof setTimeout> | null = null;
 const diagBuffer = ref<string[]>([]);
+let diagSerial = "";
 
 const bootLogcatRunning = ref(false);
 const bootLogcatElapsed = ref(0);
@@ -1674,7 +1691,7 @@ async function mirrorPopout() {
     }
   } catch {}
 
-  const win = new WebviewWindow(`mirror-${serial}`, {
+  const win = new WebviewWindow(`mirror-${serial.replace(/[^a-zA-Z0-9_-]/g, '_')}`, {
     url: `/mirror?serial=${serial}&quality=${qualityMode.value}`,
     title: `Screen Mirror - ${serial}`,
     width: winWidth,
@@ -1717,6 +1734,18 @@ async function scanDevices(silent = false) {
     if (!silent) showToast(t('device.deviceCount', { count: String(devices.value.length) }));
   } catch { if (!silent) showToast(t("device.scanFailed"), "error"); }
   finally { scanLoading.value = false; }
+}
+function onConnectIpFocus() {
+  if (connectIpHistory.value.length > 0 && connectIpInputRef.value) {
+    const r = connectIpInputRef.value.getBoundingClientRect();
+    connectIpDropdownPos.value = { top: r.bottom + 4, left: r.left, width: r.width };
+    showConnectIpHistory.value = true;
+  }
+}
+function selectConnectIpHistory(v: string) { connectAddress.value = v; showConnectIpHistory.value = false; }
+async function loadConnectIpHistory() {
+  const entries = await getInputHistory('connect_ip');
+  connectIpHistory.value = entries.map(e => e.value);
 }
 function selectDevice(device: DeviceItem) {
   selectedDevice.value = device;
@@ -2296,6 +2325,7 @@ async function toggleLogcat() {
     logcatBuffer.value = [];
     logcatRunning.value = true;
     logcatElapsed.value = 0;
+    logcatSerial = selectedDevice.value.serial;
     const session = { id: `logcat_${Date.now()}`, type: 'logcat' as const, deviceSerial: selectedDevice.value.serial, status: 'running' as const, startedAt: new Date().toISOString() };
     await saveLogSession(session);
     scheduleLogcatTimer();
@@ -2307,28 +2337,34 @@ async function toggleLogcat() {
 }
 function scheduleLogcatTimer() {
   if (!logcatRunning.value) return;
-  if (!selectedDevice.value) { logcatRunning.value = false; showToast(t("device.deviceDisconnected"), "error"); return; }
+  if (!selectedDevice.value) { stopLogcatCapture(); return; }
   logcatElapsed.value += 1;
   logcatTimeoutId = setTimeout(scheduleLogcatTimer, 1000);
 }
 async function stopLogcatCapture() {
   if (logcatTimeoutId) { clearTimeout(logcatTimeoutId); logcatTimeoutId = null; }
   logcatRunning.value = false;
-  try {
-    const raw = selectedDevice.value ? await logcat(selectedDevice.value.serial, "all", 0) : "";
-    const { save } = await import("@tauri-apps/plugin-dialog");
-    const dest = await save({ defaultPath: `logcat_${Date.now()}.txt`, filters: [{ name: "Text", extensions: ["txt"] }] });
-    if (dest) {
-      const { writeTextFile } = await import("@tauri-apps/plugin-fs");
-      await writeTextFile(dest, raw);
-    }
-  } catch {}
+  const serial = logcatSerial;
+  logcatSerial = "";
+  if (serial) {
+    try {
+      const raw = await logcat(serial, "all", 0);
+      const { save } = await import("@tauri-apps/plugin-dialog");
+      const dest = await save({ defaultPath: `logcat_${Date.now()}.txt`, filters: [{ name: "Text", extensions: ["txt"] }] });
+      if (dest) {
+        const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+        await writeTextFile(dest, raw);
+        showToast(t("device.logSaved"));
+      }
+    } catch {}
+  }
   logcatBuffer.value = [];
   try {
     const sessions = await getRunningLogSessions();
     for (const s of sessions) { if (s.type === 'logcat') await removeLogSession(s.id); }
   } catch {}
-  showToast(t("device.logCollectStopped"));
+  if (!serial) showToast(t("device.deviceDisconnected"), "error");
+  else showToast(t("device.logCollectStopped"));
 }
 
 async function toggleDiagnostic() {
@@ -2342,6 +2378,7 @@ async function toggleDiagnostic() {
     diagBuffer.value = [];
     diagRunning.value = true;
     diagElapsed.value = 0;
+    diagSerial = selectedDevice.value.serial;
     const session = { id: `diag_${Date.now()}`, type: 'diagnostic' as const, deviceSerial: selectedDevice.value.serial, status: 'running' as const, startedAt: new Date().toISOString() };
     await saveLogSession(session);
     scheduleDiagTimer();
@@ -2353,19 +2390,20 @@ async function toggleDiagnostic() {
 }
 function scheduleDiagTimer() {
   if (!diagRunning.value) return;
-  if (!selectedDevice.value) { diagRunning.value = false; showToast(t("device.deviceDisconnected"), "error"); return; }
+  if (!selectedDevice.value) { stopDiagnosticCapture(); return; }
   diagElapsed.value += 1;
   if (diagRunning.value) {
     diagTimeoutId = setTimeout(scheduleDiagTimer, 1000);
   }
 }
 async function stopDiagnosticCapture() {
-  if (!selectedDevice.value) return;
   if (diagTimeoutId) { clearTimeout(diagTimeoutId); diagTimeoutId = null; }
   diagRunning.value = false;
+  const serial = diagSerial;
+  diagSerial = "";
+  if (!serial) { showToast(t("device.deviceDisconnected"), "error"); return; }
   await yieldToUI();
   try {
-    const serial = selectedDevice.value.serial;
     showCmdExec(t("device.collectingDiag"));
     appendCmdExec(t("device.collectingLogs"));
 
@@ -2538,6 +2576,8 @@ async function scheduleBootPoll() {
           try { await adbRoot(serial); } catch {}
           try { await logcatBufferResize(serial, 256); } catch {}
           showToast(t("device.deviceReconnectedLogsGot"));
+        } else if (serial && serial.includes(':') && bootLogcatElapsed.value > 3) {
+          try { await connectDevice(serial); } catch {}
         }
         bootLogcatTimeoutId = setTimeout(scheduleBootPoll, 500);
       } else {
@@ -2847,6 +2887,7 @@ onMounted(async () => {
   loadCustomCommands();
   loadTextHistory();
   loadRemotePathHistory();
+  loadConnectIpHistory();
   // Auto-refresh devices every 5s (silent, no toast)
   autoRefreshId = setInterval(() => { if (!pkgLoading.value && !scanLoading.value && !connecting.value && !recordingLoading.value) scanDevices(true); }, 5000);
   nextTick(() => {

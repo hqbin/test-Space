@@ -101,22 +101,25 @@
 
     <!-- Filter Bar -->
     <div class="glass-panel rounded-xl px-5 py-2.5 flex items-center gap-3 flex-wrap">
-      <div class="relative flex-1 min-w-[200px]">
+      <div ref="searchInputRef" class="relative flex-1 min-w-[200px]">
         <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[16px] text-on-surface-variant">search</span>
         <input v-model="searchQuery" class="bg-white/50 border border-outline-variant/60 rounded-xl pl-9 pr-3 py-1.5 w-full text-body-md focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all select-text"
           :placeholder="t('api.filter')"
-          @focus="showSearchHistory = searchHistory.length > 0"
-          @blur="delayHideSearchHistory()"
+          @focus="onSearchFocus"
           @keydown.enter="addSearchQuery(searchQuery)" />
+      </div>
+      <Teleport to="body">
+        <div v-if="showSearchHistory && searchHistory.length > 0" class="fixed inset-0 z-40" @click="showSearchHistory = false"></div>
         <div v-if="showSearchHistory && searchHistory.length > 0"
-          class="absolute top-full left-0 right-0 mt-1 z-50 bg-white border shadow-lg rounded-lg max-h-48 overflow-y-auto">
+          class="fixed z-50 bg-white border shadow-lg rounded-lg max-h-48 overflow-y-auto"
+          :style="{ top: searchDropdownPos.top + 'px', left: searchDropdownPos.left + 'px', width: searchDropdownPos.width + 'px' }">
           <button v-for="q in searchHistory" :key="q"
-            class="w-full text-left px-3 py-1.5 text-caption text-on-surface hover:bg-gray-100 truncate"
-            @mousedown.prevent="searchQuery = q; showSearchHistory = false">
+            class="w-full text-left px-3 py-1.5 text-caption text-on-surface hover:bg-gray-100 truncate whitespace-nowrap"
+            @mousedown.prevent @click="selectSearchHistory(q)">
             {{ q }}
           </button>
         </div>
-      </div>
+      </Teleport>
 
       <span class="text-caption text-on-surface-variant whitespace-nowrap">{{ t('api.capturedCount', { count: String(filteredList.length) }) }}</span>
       <button v-if="api.capturedRequests.value.length > 0" class="bg-white/30 border border-outline-variant/30 rounded-xl px-3 py-1.5 flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all select-none" @click="handleClear">
@@ -451,30 +454,38 @@ import { invoke } from "@tauri-apps/api/core"
 import { useI18n } from "@/composables/useI18n"
 import { useApiProxy } from "@/composables/useApiProxy"
 import type { ApiCapturedRequest, ApiRewriteRule } from "@/types"
+import { addInputHistory, getInputHistory } from "@/services/database"
 
 const { t } = useI18n()
 const api = useApiProxy()
 
 const searchQuery = ref("")
-const searchHistory = ref<string[]>(loadSearchHistory())
+const searchHistory = ref<string[]>([])
 const showSearchHistory = ref(false)
+const searchInputRef = ref<HTMLElement | null>(null)
+const searchDropdownPos = ref({ top: 0, left: 0, width: 0 })
 
-function loadSearchHistory(): string[] {
-  try { return JSON.parse(localStorage.getItem('api_search_history') || '[]') } catch { return [] }
+async function loadSearchHistory() {
+  const entries = await getInputHistory('api_search');
+  searchHistory.value = entries.map(e => e.value);
 }
-function saveSearchHistory() {
-  localStorage.setItem('api_search_history', JSON.stringify(searchHistory.value.slice(0, 20)))
-}
-function addSearchQuery(q: string) {
+async function addSearchQuery(q: string) {
   if (!q.trim()) return
   const set = new Set(searchHistory.value)
   set.delete(q.trim())
   searchHistory.value = [q.trim(), ...set].slice(0, 20)
-  saveSearchHistory()
+  await addInputHistory('api_search', q.trim())
 }
-let searchHideTimer = 0
-function delayHideSearchHistory() {
-  searchHideTimer = window.setTimeout(() => { showSearchHistory.value = false }, 200)
+function onSearchFocus() {
+  if (searchHistory.value.length > 0 && searchInputRef.value) {
+    const r = searchInputRef.value.getBoundingClientRect();
+    searchDropdownPos.value = { top: r.bottom + 4, left: r.left, width: r.width };
+    showSearchHistory.value = true;
+  }
+}
+function selectSearchHistory(q: string) {
+  searchQuery.value = q;
+  showSearchHistory.value = false;
 }
 
 const selectedRequest = api.selectedRequest
@@ -820,6 +831,7 @@ onMounted(async () => {
   await api.getCaptured()
   localRules.value = [...api.rewriteRules.value]
   await refreshDevices()
+  await loadSearchHistory()
 })
 
 onUnmounted(() => {

@@ -1899,3 +1899,22 @@ regex = "1"
 | 变更 | 说明 |
 |------|------|
 | 结构与样式 | 完全对齐添加规则弹窗：`Transition` + 独立蒙层 + `bg-white/90` 白底面板 + 标题栏 icon + 关闭按钮 + 底部按钮分割线 |
+
+### Phase 25 — 日志采集断开自动保存 & IP 设备功能兼容（已完成 ✅）
+
+| 模块 | 说明 | 状态 |
+|------|------|------|
+| 日志采集设备断开自动保存 | 设备断开时 Logcat/Diagnostic 不再仅丢弃数据，改为调用 `stopLogcatCapture()` / `stopDiagnosticCapture()` 弹出文件保存对话框；新增 `logcatSerial` / `diagSerial` 变量记录启动时的序列号，确保断开后仍能通过 ADB 尝试 dump | ✅ |
+| 实时日志按钮停止态 | `scheduleLogcatTimer` 中检测到 `selectedDevice` 为空时调用 `stopLogcatCapture()` 而非仅设 false + toast | ✅ |
+| 诊断包按钮停止态 | `scheduleDiagTimer` 同理调用 `stopDiagnosticCapture()` | ✅ |
+| 日志采集互斥锁 | Logcat / Diagnostic / BootLogcat 三个按钮相互禁用：任一个运行时，另两个的"开始"按钮禁用（"停止"按钮仍可用），避免共享 logcat 环形缓冲区的竞态数据丢失 | ✅ |
+| 开机日志 IP 设备支持 | `scheduleBootPoll` 在 `wait_reconnect` 阶段检测 serial 包含 `:`（TCP 连接特征）且已断开超过 3 秒时，自动调用 `connectDevice(serial)` 重连 ADB TCP 连接 | ✅ |
+| 屏幕镜像独立窗口 IP 兼容 | `mirrorPopout` 中 WebviewWindow label 使用 `serial.replace(/[^a-zA-Z0-9_-]/g, '_')` 过滤 IP 地址中的 `.` 和 `:`，避免 Tauri 窗口标签非法导致创建失败 | ✅ |
+| i18n 新增 key | `device.logSaved` 中/英双语文案 | ✅ |
+| 翻译文件 | `src/composables/useI18n.ts` — 新增 `"device.logSaved": "日志已保存" / "Log saved"` | ✅ |
+
+**影响文件**：
+| 文件 | 修改类型 | 说明 |
+|------|----------|------|
+| `src/views/device-space/DeviceSpacePage.vue` | 逻辑修改 | 日志断开保存、TCP 重连、窗口 label 过滤、按钮互斥锁 |
+| `src/composables/useI18n.ts` | 新增翻译 | `device.logSaved` 中/英 |
