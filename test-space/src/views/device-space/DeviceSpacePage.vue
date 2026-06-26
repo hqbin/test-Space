@@ -1,5 +1,5 @@
 <template>
-  <div class="flex gap-4 h-full overflow-hidden select-none">
+  <div class="flex gap-4 flex-1 min-h-0 overflow-hidden select-none">
     <div class="flex-1 flex flex-col gap-4 min-w-0 overflow-hidden">
     <!-- Connection Bar - always visible, moved up -->
     <div class="glass-panel rounded-xl p-3 px-5 flex items-center gap-3 flex-nowrap overflow-hidden">

@@ -1,5 +1,5 @@
 <template>
-  <div class="h-full flex flex-col -mx-margin-page pb-2 box-border select-none">
+  <div class="flex flex-col flex-1 min-h-0 -mx-margin-page pb-2 box-border select-none">
     <!-- Toolbar -->
     <div class="flex items-center gap-3 mb-2 flex-shrink-0 ml-3">
       <!-- Type dropdown -->
@@ -250,7 +250,7 @@ const outputContainer = ref<HTMLElement | null>(null);
 
 // ── Dynamic pagination ────────────────────────────────
 const listContainerRef = ref<HTMLElement | null>(null);
-const pageSize = ref(999);
+const pageSize = ref(10);
 const ITEM_HEIGHT = 36;
 const PAGINATOR_H = 32;
 
@@ -648,13 +648,11 @@ onMounted(async () => {
   setScrollContainer(outputContainer.value);
   await setupRunner();
   await loadScriptList();
-  nextTick(() => {
-    updatePageSize();
-    if (listContainerRef.value) {
-      resizeObs = new ResizeObserver(updatePageSize);
-      resizeObs.observe(listContainerRef.value);
-    }
-  });
+  updatePageSize();
+  if (listContainerRef.value) {
+    resizeObs = new ResizeObserver(updatePageSize);
+    resizeObs.observe(listContainerRef.value);
+  }
 });
 
 watch([globalType, searchQuery, sortMode, sortAsc], () => { currentPage.value = 1; });

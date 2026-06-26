@@ -1,5 +1,5 @@
 <template>
-  <div class="h-full overflow-y-auto select-none px-margin-page pt-safe-area-top pb-4">
+  <div class="flex-1 min-h-0 overflow-y-auto select-none px-margin-page pt-safe-area-top pb-4">
     <div class="glass-panel rounded-xl p-padding-card shadow-md flex flex-col min-h-0 h-full">
       <!-- Language -->
       <div class="flex items-center justify-between">
