@@ -4,7 +4,7 @@
     :style="bgStyle"
   >
     <TitleBar />
-    <main class="px-margin-page pt-3 box-border flex-1 overflow-y-auto min-h-0">
+    <main class="px-margin-page pt-3 box-border flex-1 overflow-y-auto overflow-x-hidden min-h-0 flex flex-col">
       <router-view />
     </main>
   </div>

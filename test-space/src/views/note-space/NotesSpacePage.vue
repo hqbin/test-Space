@@ -1,5 +1,5 @@
 <template>
-  <div class="flex h-full -mx-margin-page overflow-hidden pb-4 box-border select-none">
+  <div class="flex flex-1 min-h-0 -mx-margin-page overflow-hidden pb-4 box-border select-none">
     <!-- Left: Search + File Tree -->
     <div class="flex-shrink-0 flex flex-col w-64 ml-3 overflow-hidden rounded-xl bg-white/10 backdrop-blur-[60px] border border-white/50 shadow-lg">
       <div class="p-3 border-b border-glass-border-light/50">
@@ -176,7 +176,7 @@
     </div>
 
     <!-- Center: TipTap Editor -->
-    <div class="flex-1 flex flex-col bg-transparent pt-4 pl-3 pr-3">
+    <div class="flex-1 min-w-0 flex flex-col bg-transparent pt-4 pl-3 pr-3">
       <!-- Empty state when no note selected -->
       <div v-if="!selectedNoteId" class="flex-1 glass-panel rounded-xl flex items-center justify-center shadow-md">
         <div class="text-center">
@@ -184,7 +184,7 @@
           <p class="font-body-md text-body-md text-on-surface-variant/50 mt-3">{{ t('notes.selectNote') }}</p>
         </div>
       </div>
-      <div v-else class="flex-1 glass-panel rounded-xl flex flex-col shadow-md">
+      <div v-else class="flex-1 min-w-0 min-h-0 glass-panel rounded-xl flex flex-col shadow-md">
         <div class="sticky top-0 z-10 bg-white/60 backdrop-blur-md border-b border-glass-border-light/30 px-4 py-2 flex items-center gap-2">
           <input             v-model="noteTitle"
             :placeholder="t('notes.noteTitle')"
@@ -266,7 +266,7 @@
             <span class="material-symbols-outlined text-[20px]">redo</span>
           </button>
         </div>
-        <div class="flex-1 overflow-y-auto custom-scrollbar" ref="editorScrollRef">
+        <div class="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar" ref="editorScrollRef">
           <div class="max-w-[850px] mx-auto py-8 px-6 min-h-full border border-glass-border-light/30 rounded-lg bg-white/30" ref="editorRef">
             <editor-content :editor="editor" class="prose-editor" />
           </div>
