@@ -528,16 +528,9 @@ export async function saveNote(note: { id: string; folderId?: string | null; tit
 
 export async function deleteNote(id: string) {
   const d = await getDb()
-  await d.execute('BEGIN TRANSACTION')
-  try {
-    await d.execute('DELETE FROM note_versions WHERE note_id = ?', [id])
-    await d.execute('DELETE FROM note_links WHERE source_note_id = ? OR target_note_id = ?', [id, id])
-    await d.execute('DELETE FROM notes WHERE id = ?', [id])
-    await d.execute('COMMIT')
-  } catch (e) {
-    await d.execute('ROLLBACK')
-    throw e
-  }
+  await d.execute('DELETE FROM note_versions WHERE note_id = ?', [id])
+  await d.execute('DELETE FROM note_links WHERE source_note_id = ? OR target_note_id = ?', [id, id])
+  await d.execute('DELETE FROM notes WHERE id = ?', [id])
 }
 
 export async function toggleNoteFavorite(id: string): Promise<boolean> {

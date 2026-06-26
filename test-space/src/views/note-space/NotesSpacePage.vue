@@ -19,10 +19,10 @@
       <div class="px-3 py-1.5 border-b border-glass-border-light/50 flex justify-between items-center">
         <span class="font-label-md text-label-md text-on-surface font-semibold text-[12px]">{{ t('notes.directory') }}</span>
         <div class="flex gap-1">
-          <button class="glass-button !border-0 p-0.5 select-none" :title="t('notes.newFolder')" @click="createFolder">
+          <button class="glass-button !border-0 px-1.5 py-0.5 select-none" :title="t('notes.newFolder')" @click="createFolder">
             <span class="material-symbols-outlined text-[14px]">create_new_folder</span>
           </button>
-          <button class="glass-button !border-0 p-0.5 select-none" :title="t('notes.newNoteAction')" @click="createNote">
+          <button class="glass-button !border-0 px-1.5 py-0.5 select-none" :title="t('notes.newNoteAction')" @click="createNote">
             <span class="material-symbols-outlined text-[14px]">note_add</span>
           </button>
         </div>
@@ -87,7 +87,7 @@
               <span class="material-symbols-outlined text-[13px] text-secondary">description</span>
               <span class="font-body-md text-body-md text-[12px] flex-1 truncate">{{ note.title || t('notes.untitled') }}</span>
               <span class="material-symbols-outlined text-[12px] text-secondary">star</span>
-              <button class="glass-button !border-0 p-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.delete')" @click.stop="confirmDeleteNote(note)">
+              <button class="glass-button !border-0 px-1.5 py-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.delete')" @mousedown.stop @click.stop="confirmDeleteNote(note)">
                 <span class="material-symbols-outlined text-[11px]">delete</span>
               </button>
             </div>
@@ -115,13 +115,13 @@
             >
               <span class="material-symbols-outlined text-[14px]">{{ expandedFolders[folder.id] ? 'folder_open' : 'folder' }}</span>
               <span class="font-body-md text-body-md text-[12px] flex-1 truncate">{{ folder.name }}</span>
-              <button class="glass-button !border-0 p-0.5 rounded opacity-0 group-hover:opacity-100 select-none" title="Add" @click.stop="openFolderAddDropdown(folder.id, $event)">
+              <button class="glass-button !border-0 px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 select-none" title="Add" @mousedown.stop @click.stop="openFolderAddDropdown(folder.id, $event)">
                 <span class="material-symbols-outlined text-[13px]">add</span>
               </button>
-              <button class="glass-button !border-0 p-0.5 rounded opacity-0 group-hover:opacity-100 select-none" :title="t('notes.rename')" @click.stop="startRenameFolder(folder)">
+              <button class="glass-button !border-0 px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 select-none" :title="t('notes.rename')" @mousedown.stop @click.stop="startRenameFolder(folder)">
                 <span class="material-symbols-outlined text-[12px]">edit</span>
               </button>
-              <button class="glass-button !border-0 p-0.5 rounded opacity-0 group-hover:opacity-100 select-none" :title="t('notes.delete')" @click.stop="deleteFolder(folder.id)">
+              <button class="glass-button !border-0 px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 select-none" :title="t('notes.delete')" @mousedown.stop @click.stop="deleteFolder(folder.id)">
                 <span class="material-symbols-outlined text-[12px]">delete</span>
               </button>
             </div>
@@ -138,7 +138,7 @@
                   <span class="material-symbols-outlined text-[13px] text-secondary">description</span>
                   <span class="font-body-md text-body-md text-[12px] flex-1 truncate">{{ note.title || t('notes.untitled') }}</span>
                   <span v-if="note.isFavorite" class="material-symbols-outlined text-[12px] text-secondary">star</span>
-                  <button class="glass-button !border-0 p-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.delete')" @click.stop="confirmDeleteNote(note)">
+                  <button class="glass-button !border-0 px-1.5 py-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.delete')" @mousedown.stop @click.stop="confirmDeleteNote(note)">
                     <span class="material-symbols-outlined text-[11px]">delete</span>
                   </button>
                 </div>
@@ -146,14 +146,13 @@
             </ul>
           </li>
         </ul>
+        <!-- Root-level notes -->
         <div
-          class="mt-3 pt-2 border-t border-glass-border-light/30"
-          :class="{ 'bg-purple-100/50 rounded-lg ring-2 ring-purple-300/50': dragOverFolderId === '__uncategorized__' }"
-          @dragover="onDragOver($event, '__uncategorized__')"
+          :class="{ 'bg-purple-100/50 rounded-lg ring-2 ring-purple-300/50': dragOverFolderId === '__root__' }"
+          @dragover="onDragOver($event, '__root__')"
           @dragleave="onDragLeave"
           @drop.stop="onDrop($event, null)"
         >
-          <div class="px-2 py-0.5 text-[10px] text-on-surface-variant/50 uppercase tracking-wider font-medium">{{ t('notes.uncategorized') }}</div>
           <div v-for="note in uncategorizedNotes" :key="note.id" class="group">
             <div
               draggable="true"
@@ -165,7 +164,7 @@
             >
               <span class="material-symbols-outlined text-[13px] text-secondary">description</span>
               <span class="font-body-md text-body-md text-[12px] flex-1 truncate">{{ note.title || t('notes.untitled') }}</span>
-              <button class="glass-button !border-0 p-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.delete')" @click.stop="confirmDeleteNote(note)">
+              <button class="glass-button !border-0 px-1.5 py-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.delete')" @mousedown.stop @click.stop="confirmDeleteNote(note)">
                 <span class="material-symbols-outlined text-[11px]">delete</span>
               </button>
             </div>
@@ -642,12 +641,14 @@ async function doDeleteSpace() {
 
 async function createFolder() {
   const id = crypto.randomUUID()
-  const parentId = selectedFolderId.value || null
+  const parentId = null
   const spaceId = selectedSpaceId.value || null
   await db.saveNoteFolder({ id, name: t('notes.newFolder'), parentId, spaceId })
   const folder: NoteFolder = { id, spaceId, name: t('notes.newFolder'), parentId, sortOrder: folders.value.length, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
   folders.value.push(folder)
   expandedFolders.value[id] = true
+  selectedFolderId.value = id
+  selectedNoteId.value = null
 }
 
 async function createSubFolder(parentId: string) {
@@ -726,6 +727,7 @@ function selectFolder(id: string) {
   searchQuery.value = ""
   searchResults.value = []
   selectedFolderId.value = id
+  selectedNoteId.value = null
   expandedFolders.value[id] = !expandedFolders.value[id]
 }
 
@@ -792,7 +794,7 @@ async function onDrop(event: DragEvent, targetFolderId: string | null) {
   if (dragNoteId) {
     const note = notes.value.find(n => n.id === dragNoteId)
     if (note) {
-      const newFolderId = targetFolderId === '__uncategorized__' ? null : targetFolderId
+      const newFolderId = targetFolderId === '__root__' ? null : targetFolderId
       if (note.folderId !== newFolderId) {
         note.folderId = newFolderId
         note.updatedAt = new Date().toISOString()
@@ -806,7 +808,7 @@ async function onDrop(event: DragEvent, targetFolderId: string | null) {
   if (dragFolderId) {
     const folder = folders.value.find(f => f.id === dragFolderId)
     if (folder) {
-      const newParentId = targetFolderId === '__uncategorized__' ? null : targetFolderId
+      const newParentId = targetFolderId === '__root__' ? null : targetFolderId
       if (newParentId !== null && (newParentId === dragFolderId || isDescendantOf(dragFolderId, newParentId))) {
         dragFolderId = null
         return
@@ -829,6 +831,7 @@ async function createNote() {
   const note: NoteItem = { id, folderId: null, title: t('notes.untitled'), content: "", tags: [], isFavorite: false, createdAt: now, updatedAt: now }
   await db.saveNote(note)
   notes.value.unshift(note)
+  selectedFolderId.value = null
   selectNoteById(note.id, "")
 }
 
@@ -838,10 +841,13 @@ async function addNoteToFolder(folderId: string) {
   const note: NoteItem = { id, folderId, title: t('notes.untitled'), content: "", tags: [], isFavorite: false, createdAt: now, updatedAt: now }
   await db.saveNote(note)
   notes.value.unshift(note)
+  expandedFolders.value[folderId] = true
+  folderAddDropdownId.value = null
   selectNoteById(note.id, "")
 }
 
 function selectNoteById(id: string, content: string) {
+  selectedFolderId.value = null
   selectedNoteId.value = id
   noteTitle.value = t('notes.untitled')
   if (editor.value) {
@@ -859,6 +865,7 @@ async function selectNote(note: NoteItem) {
     try { await saveCurrentNote() } catch { /* best effort */ }
   }
 
+  selectedFolderId.value = null
   selectedNoteId.value = note.id
   noteTitle.value = note.title
   if (editor.value) {
@@ -928,14 +935,14 @@ async function doDeleteNote() {
   const id = deleteNoteTarget.value.id
   try {
     await db.deleteNote(id)
-    notes.value = notes.value.filter(n => n.id !== id)
-    if (selectedNoteId.value === id) {
-      selectedNoteId.value = null
-      noteTitle.value = ""
-      if (editor.value) editor.value.commands.setContent("")
-    }
   } catch (e) {
     console.error('Failed to delete note:', e)
+  }
+  notes.value = notes.value.filter(n => n.id !== id)
+  if (selectedNoteId.value === id) {
+    selectedNoteId.value = null
+    noteTitle.value = ""
+    if (editor.value) editor.value.commands.setContent("")
   }
   deleteNoteTarget.value = null
 }
