@@ -1,10 +1,10 @@
 <template>
   <div class="flex-1 min-h-0 overflow-y-auto select-none px-margin-page pt-safe-area-top pb-4">
-    <div class="glass-panel rounded-xl p-padding-card shadow-md flex flex-col min-h-0 h-full">
+    <div class="glass-panel rounded-xl p-padding-card shadow-md flex flex-col min-h-0 overflow-hidden">
       <!-- Language -->
-      <div class="flex items-center justify-between">
-        <span class="font-body-md text-body-md text-on-surface font-medium">{{ t("settings.language") }}</span>
-        <div class="flex gap-2">
+      <div class="flex items-center justify-between gap-4 min-w-0">
+        <span class="font-body-md text-body-md text-on-surface font-medium shrink-0">{{ t("settings.language") }}</span>
+        <div class="flex gap-2 shrink-0">
           <button
             class="glass-button px-4 py-2 rounded-full font-label-md text-label-md select-none"
             :class="lang === 'zh' ? 'glass-active' : ''"
@@ -21,9 +21,9 @@
       <div class="border-t border-glass-border-light/30 my-5"></div>
 
       <!-- Appearance -->
-      <div class="flex items-center justify-between">
-        <span class="font-body-md text-body-md text-on-surface font-medium">{{ t("settings.theme") }}</span>
-        <div class="flex gap-2">
+      <div class="flex items-center justify-between gap-4 min-w-0">
+        <span class="font-body-md text-body-md text-on-surface font-medium shrink-0">{{ t("settings.theme") }}</span>
+        <div class="flex flex-wrap gap-2 justify-end">
           <button
             class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-2 select-none"
             :class="theme === 'light' ? 'glass-active' : ''"
@@ -46,13 +46,13 @@
       <div class="border-t border-glass-border-light/30 my-5"></div>
 
       <!-- Backup & Restore -->
-      <div>
-        <div class="flex items-center justify-between flex-wrap gap-y-3">
+      <div class="min-w-0">
+        <div class="flex flex-col gap-4">
           <span class="font-body-md text-body-md text-on-surface font-medium">{{ t("settings.backup") }}</span>
-          <div class="flex items-center gap-3">
-            <div class="relative">
+          <div class="flex flex-col gap-3 min-w-0">
+            <div class="relative min-w-0 w-full">
               <input
-                class="w-64 px-3 py-2 rounded-lg font-body-md text-body-md bg-white border border-gray-300 outline-none focus:border-gray-400"
+                class="glass-input w-full min-w-0 px-3 py-2 rounded-lg font-body-md text-body-md outline-none select-text"
                 :placeholder="t('settings.cloudDeviceIdPlaceholder')"
                 :value="isEditingDeviceId ? deviceId : (deviceDisplayName || deviceId)"
                 @focus="isEditingDeviceId = true; showDeviceDropdown = true"
@@ -61,12 +61,12 @@
               />
               <div
                 v-if="showDeviceDropdown && deviceIdList.length > 0"
-                class="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-md z-10 max-h-60 overflow-y-auto border border-gray-200 min-w-[480px]"
+                class="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-md z-10 max-h-60 overflow-y-auto border border-gray-200"
               >
                 <div
                   v-for="item in deviceIdList"
                   :key="item.id"
-                  class="px-3 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2 group"
+                  class="px-3 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2 group min-w-0"
                   @mousedown.prevent="selectDeviceId(item.id)"
                 >
                   <div class="flex-1 min-w-0 flex items-center gap-2">
@@ -97,54 +97,114 @@
                 </div>
               </div>
             </div>
-            <!-- Backup dropdown -->
-            <div class="relative">
-              <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2 select-none" @click="showBackupMenu = !showBackupMenu; showRestoreMenu = false">
-                <span class="material-symbols-outlined text-[18px]">upload</span>
-                {{ t("settings.cloudUpload") }}
-                <span class="material-symbols-outlined text-[16px]">arrow_drop_down</span>
-              </button>
-              <div v-if="showBackupMenu" class="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-md z-20 min-w-[160px] border border-gray-200">
-                <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleExport(); showBackupMenu = false">
-                  <span class="material-symbols-outlined text-[18px]">file_upload</span>
-                  {{ t("settings.exportLocal") }}
-                </div>
-                <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleCloudUpload(); showBackupMenu = false">
-                  <span class="material-symbols-outlined text-[18px]">cloud_upload</span>
-                  {{ t("settings.exportCloud") }}
+            <div class="flex flex-wrap gap-3">
+              <!-- Backup dropdown -->
+              <div class="relative">
+                <button class="glass-button px-5 py-2.5 rounded-full font-label-md text-label-md flex items-center gap-2 select-none" @click="showBackupMenu = !showBackupMenu; showRestoreMenu = false">
+                  <span class="material-symbols-outlined text-[18px]">upload</span>
+                  {{ t("settings.cloudUpload") }}
+                  <span class="material-symbols-outlined text-[16px]">arrow_drop_down</span>
+                </button>
+                <div v-if="showBackupMenu" class="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-md z-20 min-w-[160px] border border-gray-200">
+                  <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleExport(); showBackupMenu = false">
+                    <span class="material-symbols-outlined text-[18px]">file_upload</span>
+                    {{ t("settings.exportLocal") }}
+                  </div>
+                  <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleCloudUpload(); showBackupMenu = false">
+                    <span class="material-symbols-outlined text-[18px]">cloud_upload</span>
+                    {{ t("settings.exportCloud") }}
+                  </div>
                 </div>
               </div>
-            </div>
-            <!-- Restore dropdown -->
-            <div class="relative">
-              <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2 select-none" @click="showRestoreMenu = !showRestoreMenu; showBackupMenu = false">
-                <span class="material-symbols-outlined text-[18px]">download</span>
-                {{ t("settings.restore") }}
-                <span class="material-symbols-outlined text-[16px]">arrow_drop_down</span>
-              </button>
-              <div v-if="showRestoreMenu" class="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-md z-20 min-w-[160px] border border-gray-200">
-                <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleImport(); showRestoreMenu = false">
-                  <span class="material-symbols-outlined text-[18px]">file_download</span>
-                  {{ t("settings.importLocal") }}
-                </div>
-                <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleCloudRestore(); showRestoreMenu = false">
-                  <span class="material-symbols-outlined text-[18px]">cloud_download</span>
-                  {{ t("settings.importCloud") }}
-                </div>
-                <div class="border-t border-gray-100 my-1"></div>
-                <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleExportKey(); showRestoreMenu = false">
-                  <span class="material-symbols-outlined text-[18px]">key</span>
-                  {{ t("settings.exportKey") }}
-                </div>
-                <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleImportKey(); showRestoreMenu = false">
-                  <span class="material-symbols-outlined text-[18px]">vpn_key</span>
-                  {{ t("settings.importKey") }}
+              <!-- Restore dropdown -->
+              <div class="relative">
+                <button class="glass-button px-5 py-2.5 rounded-full font-label-md text-label-md flex items-center gap-2 select-none" @click="showRestoreMenu = !showRestoreMenu; showBackupMenu = false">
+                  <span class="material-symbols-outlined text-[18px]">download</span>
+                  {{ t("settings.restore") }}
+                  <span class="material-symbols-outlined text-[16px]">arrow_drop_down</span>
+                </button>
+                <div v-if="showRestoreMenu" class="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-md z-20 min-w-[160px] border border-gray-200">
+                  <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleImport(); showRestoreMenu = false">
+                    <span class="material-symbols-outlined text-[18px]">file_download</span>
+                    {{ t("settings.importLocal") }}
+                  </div>
+                  <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleCloudRestore(); showRestoreMenu = false">
+                    <span class="material-symbols-outlined text-[18px]">cloud_download</span>
+                    {{ t("settings.importCloud") }}
+                  </div>
+                  <div class="border-t border-gray-100 my-1"></div>
+                  <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleExportKey(); showRestoreMenu = false">
+                    <span class="material-symbols-outlined text-[18px]">key</span>
+                    {{ t("settings.exportKey") }}
+                  </div>
+                  <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleImportKey(); showRestoreMenu = false">
+                    <span class="material-symbols-outlined text-[18px]">vpn_key</span>
+                    {{ t("settings.importKey") }}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-        <p v-if="statusMessage" class="mt-3 font-body-md text-body-md" :class="statusIsError ? 'text-error' : 'text-success-indicator'">{{ statusMessage }}</p>
+        <p v-if="statusMessage" class="mt-3 font-body-md text-body-md text-[13px] break-words" :class="statusIsError ? 'text-error' : 'text-success-indicator'">{{ statusMessage }}</p>
+      </div>
+
+      <div class="border-t border-glass-border-light/30 my-5"></div>
+
+      <!-- AI Configuration -->
+      <div class="min-w-0">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <span class="font-body-md text-body-md text-on-surface font-medium shrink-0">{{ t("settings.aiConfig") }}</span>
+          <button
+            class="glass-button px-4 py-2 rounded-full text-[13px] select-none self-start sm:self-auto shrink-0"
+            :disabled="aiTesting"
+            @click="testAi"
+          >
+            <span v-if="aiTesting" class="material-symbols-outlined text-[16px] animate-spin align-middle mr-1">sync</span>
+            {{ t("settings.aiTest") }}
+          </button>
+        </div>
+        <div class="grid grid-cols-1 gap-4 min-w-0">
+          <div class="min-w-0">
+            <label class="text-[12px] text-on-surface-variant block mb-1">{{ t("settings.aiProvider") }}</label>
+            <select v-model="aiConfig.provider" class="glass-input w-full min-w-0 px-3 py-2 rounded-lg text-[14px] outline-none select-text" @change="onProviderChange">
+              <option value="azure">{{ t("settings.aiProviderAzure") }}</option>
+              <option value="deepseek">{{ t("settings.aiProviderDeepseek") }}</option>
+              <option value="mimo">{{ t("settings.aiProviderMimo") }}</option>
+              <option value="openai">{{ t("settings.aiProviderOpenai") }}</option>
+              <option value="custom">{{ t("settings.aiProviderCustom") }}</option>
+            </select>
+          </div>
+          <div class="min-w-0">
+            <label class="text-[12px] text-on-surface-variant block mb-1">{{ t("settings.aiEndpoint") }}</label>
+            <input v-model="aiConfig.endpoint" type="url" class="glass-input w-full min-w-0 px-3 py-2 rounded-lg text-[12px] outline-none select-text font-mono break-all" />
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 min-w-0">
+            <div class="min-w-0">
+              <label class="text-[12px] text-on-surface-variant block mb-1">{{ t("settings.aiModel") }}</label>
+              <input v-model="aiConfig.model" type="text" class="glass-input w-full min-w-0 px-3 py-2 rounded-lg text-[14px] outline-none select-text" />
+            </div>
+            <div class="min-w-0">
+              <label class="text-[12px] text-on-surface-variant block mb-1">{{ t("settings.aiAuthMode") }}</label>
+              <select v-model="aiConfig.authMode" class="glass-input w-full min-w-0 px-3 py-2 rounded-lg text-[14px] outline-none select-text">
+                <option value="api-key">api-key</option>
+                <option value="bearer">Bearer</option>
+              </select>
+            </div>
+          </div>
+          <div class="min-w-0">
+            <label class="text-[12px] text-on-surface-variant block mb-1">{{ t("settings.aiApiKey") }}</label>
+            <input v-model="aiConfig.apiKey" type="password" autocomplete="off" class="glass-input w-full min-w-0 px-3 py-2 rounded-lg text-[12px] outline-none select-text font-mono" />
+          </div>
+          <div class="min-w-0">
+            <label class="text-[12px] text-on-surface-variant block mb-1">{{ t("settings.aiMaxTokens") }}</label>
+            <input v-model.number="aiConfig.maxContextTokens" type="number" min="1000" max="32000" step="500" class="glass-input w-full min-w-0 px-3 py-2 rounded-lg text-[14px] outline-none select-text" />
+          </div>
+          <div class="flex justify-end">
+            <button class="glass-button px-6 py-2 rounded-full text-[13px] glass-active select-none" @click="saveAi">{{ t("settings.aiSave") }}</button>
+          </div>
+        </div>
+        <p v-if="aiStatusMessage" class="mt-3 font-body-md text-body-md text-[13px] break-words" :class="aiStatusIsError ? 'text-error' : 'text-success-indicator'">{{ aiStatusMessage }}</p>
       </div>
 
       <!-- Version -->
@@ -212,6 +272,14 @@ import * as cloudApi from "@/services/cloudBackup";
 import * as crypto from "@/services/crypto";
 import { useI18n } from "@/composables/useI18n";
 import { getVersion } from "@tauri-apps/api/app";
+import {
+  loadAiConfig,
+  loadAiConfigForProvider,
+  saveAiConfig,
+  type AiConfig,
+  type AiProvider,
+} from "@/services/aiSettings";
+import { testAiConnection } from "@/services/noteAi";
 
 const { lang, t, setLanguage, initLanguage } = useI18n();
 
@@ -239,6 +307,59 @@ const keyImportInput = ref("");
 const deleteDeviceIdTarget = ref<{ id: string; name: string } | null>(null);
 const renameDeviceIdTarget = ref<{ id: string; name: string } | null>(null);
 const renameInput = ref("");
+
+const aiConfig = ref<AiConfig>({
+  provider: "azure",
+  apiKey: "",
+  endpoint: "",
+  model: "",
+  maxContextTokens: 8000,
+  authMode: "api-key",
+});
+const aiStatusMessage = ref("");
+const aiStatusIsError = ref(false);
+const aiTesting = ref(false);
+const activeAiProvider = ref<AiProvider>("azure");
+
+function setAiStatus(msg: string, isError = false) {
+  aiStatusMessage.value = msg;
+  aiStatusIsError.value = isError;
+}
+
+async function onProviderChange() {
+  const nextProvider = aiConfig.value.provider as AiProvider;
+  const previousProvider = activeAiProvider.value;
+  try {
+    await saveAiConfig({ ...aiConfig.value, provider: previousProvider });
+    aiConfig.value = await loadAiConfigForProvider(nextProvider);
+    activeAiProvider.value = nextProvider;
+  } catch (e: any) {
+    setAiStatus(t("settings.aiSaveFail") + ": " + (e.message || e), true);
+  }
+}
+
+async function saveAi() {
+  try {
+    await saveAiConfig(aiConfig.value);
+    setAiStatus(t("settings.aiSaveSuccess"));
+    setTimeout(() => { if (aiStatusMessage.value === t("settings.aiSaveSuccess")) setAiStatus(""); }, 3000);
+  } catch (e: any) {
+    setAiStatus(t("settings.aiSaveFail") + ": " + (e.message || e), true);
+  }
+}
+
+async function testAi() {
+  aiTesting.value = true;
+  setAiStatus(t("settings.aiTesting"));
+  try {
+    const reply = await testAiConnection(aiConfig.value);
+    setAiStatus(t("settings.aiTestSuccess") + ": " + reply);
+  } catch (e: any) {
+    setAiStatus(t("settings.aiTestFail") + ": " + (e.message || e), true);
+  } finally {
+    aiTesting.value = false;
+  }
+}
 
 const deviceDisplayName = computed(() => {
   const item = deviceIdList.value.find(item => item.id === deviceId.value);
@@ -563,6 +684,8 @@ async function handleImport() {
 onMounted(async () => {
   await initLanguage();
   await loadTheme();
+  aiConfig.value = await loadAiConfig();
+  activeAiProvider.value = aiConfig.value.provider;
   try {
     appVersion.value = await getVersion();
   } catch {

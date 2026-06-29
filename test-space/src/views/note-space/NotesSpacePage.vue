@@ -229,12 +229,24 @@
           <button class="toolbar-btn select-none" :class="{ 'toolbar-active': editor?.isActive('strike') }" @click="editor?.chain().focus().toggleStrike().run()" title="Strikethrough">
             <span class="material-symbols-outlined text-[20px]">strikethrough_s</span>
           </button>
-          <div class="relative" ref="colorMenuRef">
-            <button class="toolbar-btn select-none relative" @click="openColorMenu" title="Text Color">
-              <span class="material-symbols-outlined text-[20px]">format_color_text</span>
-              <span class="absolute left-1.5 right-1.5 bottom-1 h-[3px] rounded" :style="{ backgroundColor: currentTextColor }"></span>
+          <div class="color-split-btn relative" ref="colorMenuRef">
+            <button
+              class="toolbar-btn color-split-main select-none"
+              title="Apply text color"
+              @click="applyCurrentTextColor"
+            >
+              <span class="color-split-letter">
+                <span class="text-[14px] font-bold leading-none">A</span>
+                <span class="color-split-bar" :style="{ backgroundColor: currentTextColor }"></span>
+              </span>
             </button>
-            <input type="color" class="hidden select-text" ref="textColorInput" :value="currentTextColor" @input="applyTextColor" />
+            <button
+              class="toolbar-btn color-split-dropdown select-none"
+              title="Choose text color"
+              @click="toggleColorMenu"
+            >
+              <span class="material-symbols-outlined text-[16px]">arrow_drop_down</span>
+            </button>
           </div>
           <div class="w-px h-4 bg-outline-variant/30 mx-1"></div>
           <button class="toolbar-btn select-none" :class="{ 'toolbar-active': editor?.isActive('heading', { level: 1 }) }" @click="editor?.chain().focus().toggleHeading({ level: 1 }).run()" title="Heading 1">
@@ -256,8 +268,11 @@
           <button class="toolbar-btn select-none" :class="{ 'toolbar-active': editor?.isActive('blockquote') }" @click="editor?.chain().focus().toggleBlockquote().run()" title="Blockquote">
             <span class="material-symbols-outlined text-[20px]">format_quote</span>
           </button>
-          <button class="toolbar-btn select-none" @click="showLinkDialog = true" :title="t('notes.insertLink')">
+          <button class="toolbar-btn select-none" @click="openLinkDialog('url')" :title="t('notes.insertLink')">
             <span class="material-symbols-outlined text-[20px]">link</span>
+          </button>
+          <button class="toolbar-btn select-none" @click="openLinkDialog('note')" :title="t('notes.insertNoteLink')">
+            <span class="material-symbols-outlined text-[20px]">note_stack</span>
           </button>
           <button class="toolbar-btn text-on-surface-variant relative overflow-hidden select-none" @click="triggerImageUpload" title="Insert Image">
             <span class="material-symbols-outlined text-[20px]">image</span>
@@ -273,7 +288,7 @@
           </button>
         </div>
         <div class="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar" ref="editorScrollRef">
-          <div class="max-w-[850px] mx-auto py-8 px-6 min-h-full border border-glass-border-light/30 rounded-lg bg-white/30" ref="editorRef">
+          <div class="max-w-[850px] mx-auto py-8 px-6 min-h-full border border-glass-border-light/30 rounded-lg bg-white/30" ref="editorRef" @click.capture="handleEditorLinkClick">
             <editor-content :editor="editor" class="prose-editor" />
           </div>
         </div>
@@ -289,6 +304,24 @@
     >
       <span class="material-symbols-outlined text-[20px] text-on-surface-variant">toc</span>
     </button>
+
+    <!-- Backlinks Toggle -->
+    <button
+      v-if="selectedNoteId && !showBacklinks"
+      class="fixed right-0 top-1/2 translate-y-8 z-50 bg-white/40 backdrop-blur-md border border-white/60 rounded-l-md px-1.5 py-3 shadow-lg hover:bg-white/60 hover:pr-2 transition-all opacity-[85%] select-none"
+      :title="t('notes.backlinks')"
+      @click="showBacklinks = true"
+    >
+      <span class="material-symbols-outlined text-[18px] text-on-surface-variant">link</span>
+    </button>
+
+    <!-- AI Assistant Panel -->
+    <NoteAiPanel
+      :ai-config="aiConfig"
+      :notes="notes"
+      @go-settings="router.push('/settings')"
+      @open-note="openNoteById"
+    />
 
     <!-- Right: Table of Contents (slide panel) -->
     <Teleport to="body">
@@ -331,32 +364,110 @@
 
     <!-- Link Dialog -->
     <Teleport to="body">
-      <div v-if="showLinkDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm" @click.self="showLinkDialog = false">
-        <div class="glass-panel rounded-2xl p-6 w-96 bg-white/60" @click.stop>
+      <div v-if="showLinkDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/10 backdrop-blur-sm" @click.self="showLinkDialog = false">
+        <div class="glass-panel rounded-[2rem] p-6 w-96 bg-white/60" @click.stop>
           <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-4 select-none">{{ t('notes.insertLink') }}</h3>
-          <div class="space-y-3">
+          <div class="flex gap-2 mb-4">
+            <button
+              class="glass-button px-3 py-1.5 rounded-full text-[12px] select-none"
+              :class="linkDialogTab === 'url' ? 'glass-active' : ''"
+              @click="linkDialogTab = 'url'"
+            >{{ t('notes.linkTabUrl') }}</button>
+            <button
+              class="glass-button px-3 py-1.5 rounded-full text-[12px] select-none"
+              :class="linkDialogTab === 'note' ? 'glass-active' : ''"
+              @click="linkDialogTab = 'note'"
+            >{{ t('notes.linkTabNote') }}</button>
+          </div>
+          <div v-if="linkDialogTab === 'url'" class="space-y-3">
             <div>
               <label class="text-[12px] text-on-surface-variant block mb-1">{{ t('notes.url') }}</label>
-              <input                 v-model="linkUrl"
-                type="url"
-                placeholder="https://example.com"
+              <input v-model="linkUrl" type="url" placeholder="https://example.com"
                 class="glass-input w-full px-3 py-2 rounded-lg text-[14px] outline-none select-text"
-                @keydown.enter="confirmLink"
-              />
+                @keydown.enter="confirmLink" />
             </div>
             <div>
               <label class="text-[12px] text-on-surface-variant block mb-1">{{ t('notes.displayText') }}</label>
-              <input                 v-model="linkText"
-                type="text"
-                placeholder="Selected text or custom"
+              <input v-model="linkText" type="text" placeholder="Selected text or custom"
                 class="glass-input w-full px-3 py-2 rounded-lg text-[14px] outline-none select-text"
-                @keydown.enter="confirmLink"
-              />
+                @keydown.enter="confirmLink" />
             </div>
+          </div>
+          <div v-else class="space-y-3">
+            <div>
+              <label class="text-[12px] text-on-surface-variant block mb-1">{{ t('notes.selectNoteToLink') }}</label>
+              <input v-model="noteLinkSearch" type="text" :placeholder="t('notes.search')"
+                class="glass-input w-full px-3 py-2 rounded-lg text-[14px] outline-none select-text mb-2" />
+              <div class="max-h-40 overflow-y-auto custom-scrollbar space-y-0.5">
+                <button
+                  v-for="n in filteredNotesForLink"
+                  :key="n.id"
+                  class="glass-hover w-full text-left px-3 py-1.5 rounded-lg text-[12px] truncate select-none"
+                  :class="selectedLinkNoteId === n.id ? 'glass-active' : ''"
+                  @click="selectedLinkNoteId = n.id; linkText = n.title || t('notes.untitled')"
+                >
+                  {{ n.title || t('notes.untitled') }}
+                </button>
+                <div v-if="filteredNotesForLink.length === 0" class="text-[11px] text-on-surface-variant/50 px-2 py-2">{{ t('notes.noNotes') }}</div>
+              </div>
+            </div>
+            <div>
+              <label class="text-[12px] text-on-surface-variant block mb-1">{{ t('notes.displayText') }}</label>
+              <input v-model="linkText" type="text"
+                class="glass-input w-full px-3 py-2 rounded-lg text-[14px] outline-none select-text"
+                @keydown.enter="confirmNoteLink" />
+            </div>
+            <p class="text-[11px] text-on-surface-variant/60">{{ t('notes.wikiLinkHint') }}</p>
           </div>
           <div class="flex justify-end gap-2 mt-6">
             <button class="glass-button px-4 py-2 rounded-full text-[13px] select-none" @click="showLinkDialog = false">{{ t('notes.cancel') }}</button>
-            <button class="glass-button px-4 py-2 rounded-full text-[13px] glass-active select-none" @click="confirmLink" :disabled="!linkUrl.trim()">{{ t('notes.apply') }}</button>
+            <button
+              v-if="linkDialogTab === 'url'"
+              class="glass-button px-4 py-2 rounded-full text-[13px] glass-active select-none"
+              @click="confirmLink" :disabled="!linkUrl.trim()"
+            >{{ t('notes.apply') }}</button>
+            <button
+              v-else
+              class="glass-button px-4 py-2 rounded-full text-[13px] glass-active select-none"
+              @click="confirmNoteLink" :disabled="!selectedLinkNoteId"
+            >{{ t('notes.apply') }}</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Backlinks Panel -->
+    <Teleport to="body">
+      <div v-if="showBacklinks" class="fixed inset-0 z-20" @click.self="showBacklinks = false">
+        <div class="absolute right-0 top-0 bottom-0 w-72 flex flex-col bg-white/70 backdrop-blur-[20px] border-l border-white/40 overflow-hidden shadow-2xl animate-toc-in">
+          <div class="p-4 border-b border-white/20 flex items-center justify-between">
+            <span class="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-2">
+              <span class="material-symbols-outlined text-[18px]">link</span>
+              {{ t('notes.backlinks') }}
+            </span>
+            <button class="glass-button p-1 rounded select-none" @click="showBacklinks = false">
+              <span class="material-symbols-outlined text-[16px]">close</span>
+            </button>
+          </div>
+          <div class="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
+            <div>
+              <div class="text-[10px] text-on-surface-variant/50 uppercase tracking-wider font-medium mb-2">{{ t('notes.outgoingLinks') }}</div>
+              <div v-if="outgoingLinkNotes.length === 0" class="text-[11px] text-on-surface-variant/40">{{ t('notes.noOutgoingLinks') }}</div>
+              <button
+                v-for="n in outgoingLinkNotes" :key="n.id"
+                class="glass-hover w-full text-left px-2.5 py-1.5 rounded-md text-[12px] truncate mb-0.5 select-none"
+                @click="selectNote(n); showBacklinks = false"
+              >{{ n.title || t('notes.untitled') }}</button>
+            </div>
+            <div>
+              <div class="text-[10px] text-on-surface-variant/50 uppercase tracking-wider font-medium mb-2">{{ t('notes.incomingLinks') }}</div>
+              <div v-if="incomingLinkNotes.length === 0" class="text-[11px] text-on-surface-variant/40">{{ t('notes.noIncomingLinks') }}</div>
+              <button
+                v-for="n in incomingLinkNotes" :key="n.id"
+                class="glass-hover w-full text-left px-2.5 py-1.5 rounded-md text-[12px] truncate mb-0.5 select-none"
+                @click="selectNote(n); showBacklinks = false"
+              >{{ n.title || t('notes.untitled') }}</button>
+            </div>
           </div>
         </div>
       </div>
@@ -402,22 +513,18 @@
         class="fixed z-[9999]"
         :style="{ left: colorMenuPos.x + 'px', top: colorMenuPos.y + 'px' }"
       >
-        <div class="bg-white rounded-xl shadow-2xl border border-gray-200/80 overflow-hidden min-w-[220px]">
+        <div class="bg-white rounded-xl shadow-2xl border border-gray-200/80 overflow-hidden min-w-[200px]">
           <div class="px-3 py-2 text-[11px] text-on-surface-variant/70 border-b border-gray-100 select-none">Text color</div>
           <div class="p-3 grid grid-cols-8 gap-2">
             <button
               v-for="c in presetTextColors"
               :key="c"
-              class="w-5 h-5 rounded-full border border-black/10 hover:scale-110 transition-transform"
+              class="w-5 h-5 rounded-full border hover:scale-110 transition-transform"
+              :class="c === currentTextColor ? 'border-secondary ring-2 ring-secondary/40' : 'border-black/10'"
               :style="{ backgroundColor: c }"
-              @mousedown.prevent="applyPresetTextColor(c)"
+              @mousedown.prevent="selectTextColor(c)"
               :title="c"
             />
-          </div>
-          <div class="border-t border-gray-100"></div>
-          <div class="flex items-center justify-between gap-2 px-3 py-2">
-            <button class="text-[12px] text-on-surface-variant hover:text-on-surface transition-colors select-none" @mousedown.prevent="clearTextColor">Clear</button>
-            <button class="text-[12px] text-secondary hover:opacity-80 transition-opacity select-none" @mousedown.prevent="triggerTextColorPicker">Custom…</button>
           </div>
         </div>
       </div>
@@ -469,15 +576,19 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
+import { useRouter } from "vue-router";
 import { useEditor, EditorContent } from "@tiptap/vue-3";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
-import LinkExtension from "@tiptap/extension-link";
 import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
 import Typography from "@tiptap/extension-typography";
 import Color from "@tiptap/extension-color";
 import TextStyle from "@tiptap/extension-text-style";
+import { WikiNoteLink, NoteLinkExtension, NOTE_LINK_PREFIX } from "@/extensions/wikiNoteLink";
+import NoteAiPanel from "@/components/notes/NoteAiPanel.vue";
+import { loadAiConfig, type AiConfig } from "@/services/aiSettings";
+import { htmlToPlainText } from "@/services/noteAi";
 
 import TurndownService from "turndown";
 import { toPng } from "html-to-image";
@@ -487,6 +598,7 @@ import type { NoteSpace, NoteFolder, NoteItem, NoteVersion } from "@/types";
 
 import { useI18n } from "@/composables/useI18n";
 const { t } = useI18n();
+const router = useRouter();
 
 import * as db from "@/services/database";
 const turndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
@@ -513,11 +625,17 @@ const renameInputRef = ref<HTMLInputElement>()
 const editorScrollRef = ref<HTMLDivElement>()
 const editorRef = ref<HTMLDivElement>()
 const imageInput = ref<HTMLInputElement>()
-const textColorInput = ref<HTMLInputElement>()
 const currentTextColor = ref<string>("#111827")
 const showLinkDialog = ref(false)
+const linkDialogTab = ref<'url' | 'note'>('url')
 const linkUrl = ref("")
 const linkText = ref("")
+const noteLinkSearch = ref("")
+const selectedLinkNoteId = ref<string | null>(null)
+const showBacklinks = ref(false)
+const outgoingLinkIds = ref<string[]>([])
+const incomingLinkIds = ref<string[]>([])
+const aiConfig = ref<AiConfig>({ provider: 'azure', apiKey: '', endpoint: '', model: '', maxContextTokens: 8000, authMode: 'api-key' })
 const showExportMenu = ref(false)
 const exportMenuRef = ref<HTMLDivElement>()
 const showSpaceDropdown = ref(false)
@@ -597,6 +715,32 @@ const highlightedNoteIds = computed(() => {
   ).map(n => n.id))
 })
 
+const filteredNotesForLink = computed(() => {
+  const q = noteLinkSearch.value.trim().toLowerCase()
+  const currentId = selectedNoteId.value
+  return notes.value
+    .filter(n => n.id !== currentId)
+    .filter(n => !q || n.title.toLowerCase().includes(q))
+    .slice(0, 20)
+})
+
+const outgoingLinkNotes = computed(() =>
+  outgoingLinkIds.value.map(id => notes.value.find(n => n.id === id)).filter(Boolean) as NoteItem[]
+)
+
+const incomingLinkNotes = computed(() =>
+  incomingLinkIds.value.map(id => notes.value.find(n => n.id === id)).filter(Boolean) as NoteItem[]
+)
+
+function resolveNoteIdByTitle(title: string): string | null {
+  const q = title.trim().toLowerCase()
+  if (!q) return null
+  const exact = notes.value.find(n => n.title.toLowerCase() === q)
+  if (exact) return exact.id
+  const partial = notes.value.find(n => n.title.toLowerCase().includes(q))
+  return partial?.id ?? null
+}
+
 interface TocNode { level: number; text: string; index: number; children: TocNode[] }
 
 function buildTocTree(items: { level: number; text: string }[]): TocNode[] {
@@ -626,6 +770,7 @@ async function loadData() {
     spaces.value = await db.loadNoteSpaces()
     folders.value = await db.loadNoteFolders()
     notes.value = await db.loadNotes()
+    aiConfig.value = await loadAiConfig()
     if (spaces.value.length > 0 && !selectedSpaceId.value) {
       selectedSpaceId.value = spaces.value[0].id
     }
@@ -890,6 +1035,70 @@ async function addNoteToFolder(folderId: string) {
   selectNoteById(note.id, "")
 }
 
+async function loadNoteLinks(noteId: string) {
+  try {
+    const links = await db.getNoteLinks(noteId)
+    outgoingLinkIds.value = links.linkedNoteIds
+    incomingLinkIds.value = links.backlinkNoteIds
+  } catch {
+    outgoingLinkIds.value = []
+    incomingLinkIds.value = []
+  }
+}
+
+async function syncNoteLinksFromContent(noteId: string, html: string) {
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  const anchors = doc.querySelectorAll('a[href^="note:"]')
+  const targetIds = new Set<string>()
+  anchors.forEach(a => {
+    const href = a.getAttribute('href') || ''
+    const id = href.slice(NOTE_LINK_PREFIX.length)
+    if (id && id !== noteId) targetIds.add(id)
+  })
+  try {
+    const { linkedNoteIds } = await db.getNoteLinks(noteId)
+    const oldSet = new Set(linkedNoteIds)
+    for (const tid of targetIds) {
+      if (!oldSet.has(tid)) await db.addNoteLink(noteId, tid)
+    }
+    for (const old of linkedNoteIds) {
+      if (!targetIds.has(old)) await db.removeNoteLink(noteId, old)
+    }
+    outgoingLinkIds.value = [...targetIds]
+  } catch (e) {
+    console.error('Failed to sync note links:', e)
+  }
+}
+
+function openNoteById(noteId: string) {
+  const note = notes.value.find(n => n.id === noteId)
+  if (note) selectNote(note)
+}
+
+function openInternalNoteLink(href: string) {
+  const noteId = href.slice(NOTE_LINK_PREFIX.length)
+  if (noteId) openNoteById(noteId)
+}
+
+function handleEditorLinkClick(event: MouseEvent) {
+  const target = event.target as HTMLElement | null
+  const anchor = target?.closest('a')
+  const href = anchor?.getAttribute('href') || ''
+  if (!href.startsWith(NOTE_LINK_PREFIX)) return
+  event.preventDefault()
+  event.stopPropagation()
+  openInternalNoteLink(href)
+}
+
+function openLinkDialog(tab: 'url' | 'note') {
+  linkDialogTab.value = tab
+  linkUrl.value = ''
+  linkText.value = ''
+  noteLinkSearch.value = ''
+  selectedLinkNoteId.value = null
+  showLinkDialog.value = true
+}
+
 function selectNoteById(id: string, content: string) {
   selectedFolderId.value = null
   selectedNoteId.value = id
@@ -921,6 +1130,8 @@ async function selectNote(note: NoteItem) {
   try {
     noteVersions.value = await db.loadNoteVersions(note.id)
   } catch { noteVersions.value = [] }
+
+  await loadNoteLinks(note.id)
 }
 
 async function saveCurrentNote() {
@@ -931,6 +1142,7 @@ async function saveCurrentNote() {
     note.content = editor.value.getHTML()
   }
   await db.saveNote(note)
+  await syncNoteLinksFromContent(selectedNoteId.value, note.content)
   saved.value = true
 }
 
@@ -947,13 +1159,19 @@ function onSearch() {
       // Restore folder expanded states (don't auto-collapse, just leave as-is)
       return
     }
+    const lowerQ = q.toLowerCase()
+    const localMatches = notes.value.filter(n =>
+      (n.title || '').toLowerCase().includes(lowerQ) ||
+      htmlToPlainText(n.content || '').toLowerCase().includes(lowerQ)
+    )
     try {
-      searchResults.value = await db.searchNotes(q)
+      const dbMatches = await db.searchNotes(q)
+      const merged = new Map<string, NoteItem>()
+      for (const note of dbMatches) merged.set(note.id, note)
+      for (const note of localMatches) merged.set(note.id, note)
+      searchResults.value = [...merged.values()]
     } catch {
-      searchResults.value = notes.value.filter(n =>
-        n.title.toLowerCase().includes(q.toLowerCase()) ||
-        n.content.toLowerCase().includes(q.toLowerCase())
-      )
+      searchResults.value = localMatches
     }
     // Auto-expand folders containing search results
     for (const f of folders.value) {
@@ -1034,12 +1252,30 @@ function confirmLink() {
   }
   const text = linkText.value.trim()
   const displayText = text || url
-  editor.value.chain().focus().insertContent(
-    `<a href="${url}" target="_blank" rel="noopener noreferrer">${displayText}</a>`
-  ).run()
+  editor.value.chain().focus().insertContent({
+    type: 'text',
+    text: displayText,
+    marks: [{ type: 'link', attrs: { href: url, target: '_blank', rel: 'noopener noreferrer' } }],
+  }).run()
   showLinkDialog.value = false
   linkUrl.value = ""
   linkText.value = ""
+}
+
+function confirmNoteLink() {
+  if (!selectedLinkNoteId.value || !editor.value) return
+  const target = notes.value.find(n => n.id === selectedLinkNoteId.value)
+  if (!target) return
+  const displayText = linkText.value.trim() || target.title || t('notes.untitled')
+  editor.value.chain().focus().insertContent({
+    type: 'text',
+    text: displayText,
+    marks: [{ type: 'link', attrs: { href: `${NOTE_LINK_PREFIX}${target.id}`, target: null, rel: null, class: 'note-link' } }],
+  }).run()
+  showLinkDialog.value = false
+  linkText.value = ""
+  selectedLinkNoteId.value = null
+  noteLinkSearch.value = ""
 }
 
 // ── Table of Contents ─────────────────────────────────────────
@@ -1309,36 +1545,23 @@ function addImage(e: Event) {
   input.value = ""
 }
 
-function triggerTextColorPicker() {
-  textColorInput.value?.click()
+function applyCurrentTextColor() {
+  if (!editor.value) return
+  editor.value.chain().focus().setColor(currentTextColor.value).run()
 }
 
-function applyTextColor(e: Event) {
-  const input = e.target as HTMLInputElement
-  const color = (input.value || "").trim()
-  if (!color || !editor.value) return
-  currentTextColor.value = color
-  editor.value.chain().focus().setColor(color).run()
-}
-
-function openColorMenu(e: MouseEvent) {
-  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-  // Place below button; use fixed coords because panel is teleported to body.
+function toggleColorMenu() {
+  const el = colorMenuRef.value
+  if (!el) return
+  const rect = el.getBoundingClientRect()
   colorMenuPos.value = { x: rect.left, y: rect.bottom + 6 }
   showColorMenu.value = !showColorMenu.value
 }
 
-function applyPresetTextColor(color: string) {
+function selectTextColor(color: string) {
   if (!editor.value) return
   currentTextColor.value = color
   editor.value.chain().focus().setColor(color).run()
-  showColorMenu.value = false
-}
-
-function clearTextColor() {
-  if (!editor.value) return
-  editor.value.chain().focus().unsetColor().run()
-  currentTextColor.value = "#111827"
   showColorMenu.value = false
 }
 
@@ -1364,7 +1587,10 @@ const editor = useEditor({
       heading: { levels: [1, 2, 3] },
     }),
     Underline,
-    LinkExtension.configure({ openOnClick: false }),
+    NoteLinkExtension,
+    WikiNoteLink.configure({
+      resolveNoteId: resolveNoteIdByTitle,
+    }),
     Image.configure({ inline: true, allowBase64: true }),
     Placeholder.configure({ placeholder: "Start writing..." }),
     Typography,
@@ -1376,15 +1602,22 @@ const editor = useEditor({
     saved.value = false
     triggerSave()
   },
-  onSelectionUpdate: () => {
-    const ed = editor.value
-    if (!ed) return
-    const color = (ed.getAttributes("textStyle") as any)?.color
-    if (typeof color === "string" && color.trim()) currentTextColor.value = color.trim()
-  },
   editorProps: {
     attributes: {
       class: "outline-none min-h-[300px]",
+    },
+    handleClick: (_view, _pos, event) => {
+      const target = event.target as HTMLElement
+      const anchor = target.closest('a')
+      if (anchor) {
+        const href = anchor.getAttribute('href') || ''
+        if (href.startsWith(NOTE_LINK_PREFIX)) {
+          event.preventDefault()
+          openInternalNoteLink(href)
+          return true
+        }
+      }
+      return false
     },
     clipboardTextSerializer: (slice) => {
       // Avoid extra blank lines when copying multi-line content out of the editor.
@@ -1530,6 +1763,10 @@ onBeforeUnmount(() => {
 :deep(.prose-editor li) { margin-bottom: 0.25rem; font-size: 1rem; line-height: 1.55; }
 :deep(.prose-editor blockquote) { border-left: 3px solid #c2c1ff; padding-left: 1rem; margin-left: 0; color: #6b6f82; font-style: italic; }
 :deep(.prose-editor a) { color: #0050cb; text-decoration: underline; cursor: pointer; }
+:deep(.prose-editor a.note-link),
+:deep(.prose-editor a[href^="note:"]) { color: #7c3aed; text-decoration: underline; cursor: pointer; }
+:deep(.prose-editor a.note-link-unresolved),
+:deep(.prose-editor a[href^="#unresolved:"]) { color: #9ca3af; text-decoration: underline dashed; cursor: pointer; }
 
 .toolbar-btn {
   background: transparent;
@@ -1553,6 +1790,35 @@ onBeforeUnmount(() => {
 }
 .toolbar-btn.toolbar-active span {
   color: #7c3aed;
+}
+
+.color-split-btn {
+  display: inline-flex;
+  align-items: stretch;
+}
+.color-split-main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  padding-right: 4px;
+}
+.color-split-letter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 16px;
+}
+.color-split-bar {
+  width: 14px;
+  height: 3px;
+  border-radius: 1px;
+}
+.color-split-dropdown {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  padding-left: 0;
+  padding-right: 2px;
+  border-left: 1px solid rgba(107, 111, 130, 0.15);
 }
 
 .animate-toc-in {

@@ -1,0 +1,229 @@
+<template>
+  <Teleport to="body">
+    <!-- Floating trigger — always visible on notes page -->
+    <button
+      v-if="!open"
+      ref="triggerRef"
+      class="fixed right-0 bottom-24 z-50 bg-white/40 backdrop-blur-md border border-white/60 rounded-l-md px-1.5 py-4 shadow-lg hover:bg-white/60 hover:pr-2 transition-all opacity-[85%] select-none"
+      :title="t('notes.aiAssistant')"
+      @click="open = true"
+    >
+      <span class="material-symbols-outlined text-[20px] text-on-surface-variant">smart_toy</span>
+    </button>
+
+    <!-- Slide panel -->
+    <div v-if="open" class="fixed right-4 bottom-4 z-[60] pointer-events-none">
+      <div
+        ref="panelRef"
+        class="relative w-[400px] max-w-[calc(100vw-2rem)] h-[480px] max-h-[calc(100vh-6rem)] flex flex-col glass-panel rounded-[2rem] bg-white/60 border border-white/50 shadow-2xl overflow-hidden animate-ai-in pointer-events-auto"
+      >
+        <div class="p-3 border-b border-glass-border-light/30 flex items-center justify-between shrink-0 bg-white/40">
+          <span class="font-label-md text-[13px] text-on-surface font-semibold flex items-center gap-2 min-w-0">
+            <span class="material-symbols-outlined text-[18px] shrink-0">smart_toy</span>
+            <span class="truncate">{{ t('notes.aiAssistant') }}</span>
+          </span>
+          <button class="glass-button p-1 rounded select-none shrink-0" @click="open = false">
+            <span class="material-symbols-outlined text-[16px]">close</span>
+          </button>
+        </div>
+
+        <div v-if="!configured" class="flex-1 flex flex-col items-center justify-center p-6 text-center">
+          <span class="material-symbols-outlined text-[40px] text-on-surface-variant/40 mb-3">settings</span>
+          <p class="text-[13px] text-on-surface-variant mb-4">{{ t('notes.aiNotConfigured') }}</p>
+          <button class="glass-button px-4 py-2 rounded-full text-[13px] glass-active select-none" @click="$emit('goSettings')">
+            {{ t('notes.aiGoSettings') }}
+          </button>
+        </div>
+
+        <template v-else>
+          <div class="px-3 py-2 border-b border-glass-border-light/20 flex items-center justify-between gap-2 shrink-0 text-[11px] text-on-surface-variant bg-white/30">
+            <span>{{ t('notes.aiAllNotesHint', { total: String(notes.length), included: String(contextNoteCount) }) }}</span>
+            <span class="whitespace-nowrap shrink-0">~{{ estimatedTokens }} tok</span>
+          </div>
+
+          <div ref="messagesRef" class="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-3 min-h-0">
+            <div v-if="messages.length === 0" class="text-[12px] text-on-surface-variant/60 text-center py-8">
+              {{ t('notes.aiPlaceholder') }}
+            </div>
+            <div
+              v-for="(msg, i) in messages"
+              :key="i"
+              class="text-[12px] leading-relaxed"
+              :class="msg.role === 'user' ? 'flex justify-end' : ''"
+            >
+              <div
+                class="max-w-[90%] px-3 py-2 rounded-md whitespace-pre-wrap break-words select-text"
+                :class="msg.role === 'user'
+                  ? 'bg-purple-100/80 text-on-surface'
+                  : 'bg-white/90 text-on-surface border border-glass-border-light/40'"
+              >
+                <template v-if="msg.role === 'user'">{{ msg.content }}</template>
+                <template v-else>
+                  <template v-for="(seg, si) in parseAnswerNoteLinks(msg.content)" :key="si">
+                    <span v-if="seg.type === 'text'">{{ seg.content }}</span>
+                    <button
+                      v-else
+                      type="button"
+                      class="inline text-secondary underline underline-offset-2 hover:opacity-80 cursor-pointer font-medium select-none align-baseline"
+                      @click="onOpenNote(seg.noteId!)"
+                    >{{ seg.content }}</button>
+                  </template>
+                </template>
+              </div>
+            </div>
+            <div v-if="loading" class="flex items-center gap-2 text-[12px] text-on-surface-variant px-2">
+              <span class="material-symbols-outlined text-[16px] animate-spin">sync</span>
+              {{ t('notes.aiThinking') }}
+            </div>
+          </div>
+
+          <div v-if="error" class="px-3 py-1.5 text-[11px] text-red-500 shrink-0 break-words bg-white/40">{{ error }}</div>
+
+          <div class="p-3 border-t border-glass-border-light/30 flex gap-2 shrink-0 bg-white/40">
+            <input
+              v-model="input"
+              type="text"
+              :placeholder="t('notes.aiInputPlaceholder')"
+              class="glass-input flex-1 min-w-0 px-3 py-2 rounded-lg text-[13px] outline-none select-text"
+              :disabled="loading"
+              @keydown.enter="send"
+            />
+            <button
+              class="glass-button px-3 py-2 rounded-lg glass-active select-none shrink-0"
+              :disabled="loading || !input.trim()"
+              @click="send"
+            >
+              <span class="material-symbols-outlined text-[18px]">send</span>
+            </button>
+          </div>
+        </template>
+      </div>
+    </div>
+  </Teleport>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import type { NoteItem } from '@/types'
+import type { AiConfig } from '@/services/aiSettings'
+import { isAiConfigured } from '@/services/aiSettings'
+import {
+  chatWithNotes,
+  selectContextChunks,
+  buildChunkContext,
+  estimateTokens,
+} from '@/services/noteAi'
+import { parseAnswerNoteLinks } from '@/utils/parseNoteLinks'
+import { useI18n } from '@/composables/useI18n'
+
+const props = defineProps<{
+  aiConfig: AiConfig
+  notes: NoteItem[]
+}>()
+
+const emit = defineEmits<{
+  goSettings: []
+  openNote: [noteId: string]
+}>()
+
+const { t } = useI18n()
+
+const open = ref(false)
+const input = ref('')
+const loading = ref(false)
+const error = ref('')
+const messagesRef = ref<HTMLDivElement>()
+const panelRef = ref<HTMLDivElement>()
+const triggerRef = ref<HTMLButtonElement>()
+
+interface ChatMsg {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+const messages = ref<ChatMsg[]>([])
+
+const configured = computed(() => isAiConfigured(props.aiConfig))
+
+const contextNoteCount = computed(() => {
+  const q = input.value.trim() || (messages.value.filter(m => m.role === 'user').pop()?.content ?? '')
+  return selectContextChunks(props.notes, q, props.aiConfig.maxContextTokens).noteIds.length
+})
+
+const estimatedTokens = computed(() => {
+  const q = input.value.trim() || 'sample question'
+  const { chunks } = selectContextChunks(props.notes, q, props.aiConfig.maxContextTokens)
+  return estimateTokens(buildChunkContext(chunks) + q)
+})
+
+function onOpenNote(noteId: string) {
+  emit('openNote', noteId)
+}
+
+function onDocumentPointerDown(event: PointerEvent) {
+  if (!open.value) return
+  const target = event.target as Node | null
+  if (!target) return
+  if (panelRef.value?.contains(target) || triggerRef.value?.contains(target)) return
+  open.value = false
+}
+
+onMounted(() => {
+  document.addEventListener('pointerdown', onDocumentPointerDown, true)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onDocumentPointerDown, true)
+})
+
+watch(open, (v) => {
+  if (v) {
+    error.value = ''
+    nextTick(() => messagesRef.value?.scrollTo({ top: messagesRef.value.scrollHeight }))
+  }
+})
+
+async function send() {
+  const question = input.value.trim()
+  if (!question || loading.value || !configured.value) return
+
+  input.value = ''
+  error.value = ''
+  messages.value.push({ role: 'user', content: question })
+  loading.value = true
+
+  await nextTick()
+  messagesRef.value?.scrollTo({ top: messagesRef.value.scrollHeight, behavior: 'smooth' })
+
+  try {
+    const history = messages.value
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .slice(0, -1)
+      .map(m => ({ role: m.role, content: m.content }))
+
+    const result = await chatWithNotes(props.aiConfig, question, props.notes, history)
+    messages.value.push({
+      role: 'assistant',
+      content: result.answer,
+    })
+  } catch (e: any) {
+    error.value = e.message || String(e)
+  } finally {
+    loading.value = false
+    await nextTick()
+    messagesRef.value?.scrollTo({ top: messagesRef.value.scrollHeight, behavior: 'smooth' })
+  }
+}
+
+defineExpose({ open })
+</script>
+
+<style scoped>
+.animate-ai-in {
+  animation: aiSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes aiSlideIn {
+  from { transform: translateY(20px) scale(0.96); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+</style>

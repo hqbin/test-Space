@@ -32,7 +32,13 @@
     "core:webview:allow-create-webview-window",
     {
       "identifier": "http:default",
-      "allow": [{ "url": "https://tms.zeasn.com/api/TestSpace/*" }]
+      "allow": [
+        { "url": "https://tms.zeasn.com/api/TestSpace/*" },
+        { "url": "https://*.openai.azure.com/**" },
+        { "url": "https://api.deepseek.com/**" },
+        { "url": "https://api.xiaomimimo.com/**" },
+        { "url": "https://api.openai.com/**" }
+      ]
     }
   ]
 }

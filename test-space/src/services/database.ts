@@ -6,7 +6,7 @@ let db: Database | null = null
 let dbPromise: Promise<Database> | null = null
 
 function escapeLike(s: string): string {
-  return s.replace(/%/g, '%').replace(/_/g, '_')
+  return s.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
 }
 
 function safeJsonParse<T = any>(raw: string | null | undefined, fallback: T): T {
