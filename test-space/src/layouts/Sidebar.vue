@@ -15,22 +15,44 @@
             <span class="font-label-md text-label-md whitespace-nowrap">{{ t(item.labelKey) }}</span>
           </router-link>
         </div>
-        <router-link to="/settings"
-          class="glass-hover rounded-xl px-4 py-2 flex items-center gap-2 transition-colors text-on-surface-variant"
-          :class="isActive('/settings') ? 'glass-active font-semibold' : ''">
-          <span class="material-symbols-outlined text-[18px]"
-            :style="{ fontVariationSettings: `'FILL' ${isActive('/settings') ? 1 : 0}` }">settings</span>
-          <span class="font-label-md text-label-md whitespace-nowrap">{{ t("nav.settings") }}</span>
-        </router-link>
+        <div class="flex items-center gap-1">
+          <router-link to="/settings"
+            class="glass-hover rounded-xl px-4 py-2 flex items-center gap-2 transition-colors text-on-surface-variant"
+            :class="isActive('/settings') ? 'glass-active font-semibold' : ''">
+            <span class="material-symbols-outlined text-[18px]"
+              :style="{ fontVariationSettings: `'FILL' ${isActive('/settings') ? 1 : 0}` }">settings</span>
+            <span class="font-label-md text-label-md whitespace-nowrap">{{ t("nav.settings") }}</span>
+          </router-link>
+
+          <button
+            class="glass-hover rounded-xl px-3 py-2 flex items-center gap-2 transition-colors text-on-surface-variant select-none"
+            :class="syncBusy ? 'opacity-60 cursor-not-allowed' : ''"
+            @click="runSync"
+          >
+            <span class="material-symbols-outlined text-[18px]" :class="syncBusy ? 'animate-spin' : ''">sync</span>
+          </button>
+        </div>
       </div>
     </div>
   </Transition>
+
+  <Teleport to="body">
+    <div v-if="syncToast.show" class="fixed left-1/2 -translate-x-1/2 top-4 z-[99999] pointer-events-none">
+      <div class="glass-panel rounded-full px-5 py-2.5 flex items-center gap-2 shadow-lg bg-white/90 backdrop-blur-sm border">
+        <span v-if="syncToast.type === 'loading'" class="material-symbols-outlined text-[18px] animate-spin text-on-surface-variant">sync</span>
+        <span v-else-if="syncToast.type === 'success'" class="material-symbols-outlined text-[18px] text-success-indicator">check_circle</span>
+        <span v-else class="material-symbols-outlined text-[18px] text-error">error</span>
+        <span class="text-[13px] font-semibold" :class="syncToast.type === 'error' ? 'text-error' : 'text-on-surface'">{{ syncToast.message }}</span>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "@/composables/useI18n";
+import { syncBackupToCloud } from "@/services/cloudSync";
 
 const { t } = useI18n();
 const route = useRoute();
@@ -51,6 +73,41 @@ const navItems: NavItem[] = [
   { path: "/script-space", labelKey: "nav.scripts", icon: "code" },
   { path: "/case-space", labelKey: "nav.case", icon: "folder_shared" },
 ];
+
+const syncBusy = ref(false);
+const syncToast = ref<{ show: boolean; message: string; type: "loading" | "success" | "error" }>({ show: false, message: "", type: "loading" });
+let syncToastTimer: ReturnType<typeof setTimeout> | null = null;
+
+function showSyncToast(message: string, type: "loading" | "success" | "error") {
+  syncToast.value = { show: true, message, type };
+  if (syncToastTimer) clearTimeout(syncToastTimer);
+  if (type !== "loading") {
+    syncToastTimer = setTimeout(() => {
+      syncToast.value.show = false;
+    }, 3000);
+  }
+}
+
+async function runSync() {
+  if (syncBusy.value) return;
+  syncBusy.value = true;
+  showSyncToast(t("cloudSync.syncing"), "loading");
+  try {
+    await syncBackupToCloud();
+    showSyncToast(t("cloudSync.success"), "success");
+  } catch (e: any) {
+    showSyncToast(`${t("cloudSync.fail")}: ${e?.message || String(e)}`, "error");
+  } finally {
+    syncBusy.value = false;
+    if (syncToast.value.type === "loading") syncToast.value.show = false;
+  }
+}
+
+function clearTimer() {
+  if (syncToastTimer) clearTimeout(syncToastTimer);
+}
+
+onUnmounted(() => clearTimer());
 
 function isActive(path: string) {
   if (path === "/case-space" || path === "/api-space") return route.path.startsWith(path);

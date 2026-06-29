@@ -229,6 +229,13 @@
           <button class="toolbar-btn select-none" :class="{ 'toolbar-active': editor?.isActive('strike') }" @click="editor?.chain().focus().toggleStrike().run()" title="Strikethrough">
             <span class="material-symbols-outlined text-[20px]">strikethrough_s</span>
           </button>
+          <div class="relative" ref="colorMenuRef">
+            <button class="toolbar-btn select-none relative" @click="openColorMenu" title="Text Color">
+              <span class="material-symbols-outlined text-[20px]">format_color_text</span>
+              <span class="absolute left-1.5 right-1.5 bottom-1 h-[3px] rounded" :style="{ backgroundColor: currentTextColor }"></span>
+            </button>
+            <input type="color" class="hidden select-text" ref="textColorInput" :value="currentTextColor" @input="applyTextColor" />
+          </div>
           <div class="w-px h-4 bg-outline-variant/30 mx-1"></div>
           <button class="toolbar-btn select-none" :class="{ 'toolbar-active': editor?.isActive('heading', { level: 1 }) }" @click="editor?.chain().focus().toggleHeading({ level: 1 }).run()" title="Heading 1">
             <span class="text-[13px] font-bold px-1">H1</span>
@@ -387,6 +394,35 @@
       </div>
     </Teleport>
 
+    <!-- Text Color Menu (Teleported) -->
+    <Teleport to="body">
+      <div
+        v-if="showColorMenu"
+        ref="colorMenuPanelRef"
+        class="fixed z-[9999]"
+        :style="{ left: colorMenuPos.x + 'px', top: colorMenuPos.y + 'px' }"
+      >
+        <div class="bg-white rounded-xl shadow-2xl border border-gray-200/80 overflow-hidden min-w-[220px]">
+          <div class="px-3 py-2 text-[11px] text-on-surface-variant/70 border-b border-gray-100 select-none">Text color</div>
+          <div class="p-3 grid grid-cols-8 gap-2">
+            <button
+              v-for="c in presetTextColors"
+              :key="c"
+              class="w-5 h-5 rounded-full border border-black/10 hover:scale-110 transition-transform"
+              :style="{ backgroundColor: c }"
+              @mousedown.prevent="applyPresetTextColor(c)"
+              :title="c"
+            />
+          </div>
+          <div class="border-t border-gray-100"></div>
+          <div class="flex items-center justify-between gap-2 px-3 py-2">
+            <button class="text-[12px] text-on-surface-variant hover:text-on-surface transition-colors select-none" @mousedown.prevent="clearTextColor">Clear</button>
+            <button class="text-[12px] text-secondary hover:opacity-80 transition-opacity select-none" @mousedown.prevent="triggerTextColorPicker">Custom…</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- Delete Space Confirmation -->
     <Teleport to="body">
       <div v-if="deleteSpaceTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="deleteSpaceTarget = null">
@@ -440,6 +476,8 @@ import LinkExtension from "@tiptap/extension-link";
 import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
 import Typography from "@tiptap/extension-typography";
+import Color from "@tiptap/extension-color";
+import TextStyle from "@tiptap/extension-text-style";
 
 import TurndownService from "turndown";
 import { toPng } from "html-to-image";
@@ -475,6 +513,8 @@ const renameInputRef = ref<HTMLInputElement>()
 const editorScrollRef = ref<HTMLDivElement>()
 const editorRef = ref<HTMLDivElement>()
 const imageInput = ref<HTMLInputElement>()
+const textColorInput = ref<HTMLInputElement>()
+const currentTextColor = ref<string>("#111827")
 const showLinkDialog = ref(false)
 const linkUrl = ref("")
 const linkText = ref("")
@@ -491,6 +531,10 @@ const deleteNoteTarget = ref<NoteItem | null>(null)
 const activeHeadingIndex = ref(-1)
 const showToc = ref(false)
 const tocCollapsed = ref<Set<number>>(new Set())
+const showColorMenu = ref(false)
+const colorMenuRef = ref<HTMLDivElement>()
+const colorMenuPanelRef = ref<HTMLDivElement>()
+const colorMenuPos = ref<{ x: number; y: number }>({ x: 0, y: 0 })
 
 let dragNoteId: string | null = null
 let dragFolderId: string | null = null
@@ -1265,6 +1309,50 @@ function addImage(e: Event) {
   input.value = ""
 }
 
+function triggerTextColorPicker() {
+  textColorInput.value?.click()
+}
+
+function applyTextColor(e: Event) {
+  const input = e.target as HTMLInputElement
+  const color = (input.value || "").trim()
+  if (!color || !editor.value) return
+  currentTextColor.value = color
+  editor.value.chain().focus().setColor(color).run()
+}
+
+function openColorMenu(e: MouseEvent) {
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  // Place below button; use fixed coords because panel is teleported to body.
+  colorMenuPos.value = { x: rect.left, y: rect.bottom + 6 }
+  showColorMenu.value = !showColorMenu.value
+}
+
+function applyPresetTextColor(color: string) {
+  if (!editor.value) return
+  currentTextColor.value = color
+  editor.value.chain().focus().setColor(color).run()
+  showColorMenu.value = false
+}
+
+function clearTextColor() {
+  if (!editor.value) return
+  editor.value.chain().focus().unsetColor().run()
+  currentTextColor.value = "#111827"
+  showColorMenu.value = false
+}
+
+const presetTextColors = [
+  "#111827", // near-black
+  "#ef4444", // red
+  "#f97316", // orange
+  "#eab308", // yellow
+  "#22c55e", // green
+  "#06b6d4", // cyan
+  "#3b82f6", // blue
+  "#8b5cf6", // purple
+]
+
 
 
 // ── Editor ────────────────────────────────────────────────────
@@ -1280,15 +1368,33 @@ const editor = useEditor({
     Image.configure({ inline: true, allowBase64: true }),
     Placeholder.configure({ placeholder: "Start writing..." }),
     Typography,
+    TextStyle,
+    Color,
   ],
   onUpdate: () => {
     lastEditorContent.value = editor.value?.getHTML() ?? ""
     saved.value = false
     triggerSave()
   },
+  onSelectionUpdate: () => {
+    const ed = editor.value
+    if (!ed) return
+    const color = (ed.getAttributes("textStyle") as any)?.color
+    if (typeof color === "string" && color.trim()) currentTextColor.value = color.trim()
+  },
   editorProps: {
     attributes: {
       class: "outline-none min-h-[300px]",
+    },
+    clipboardTextSerializer: (slice) => {
+      // Avoid extra blank lines when copying multi-line content out of the editor.
+      let text = slice.content.textBetween(0, slice.content.size, "\n", "\n")
+      // Normalize problematic invisible whitespace that breaks SQL/scripts when pasted elsewhere.
+      text = text
+        .replace(/\r\n/g, "\n")
+        .replace(/[\u00A0\u202F\u2007]/g, " ")
+        .replace(/[\u200B-\u200D\uFEFF]/g, "")
+      return text
     },
     handlePaste: (_view, event) => {
       const items = event.clipboardData?.items
@@ -1367,6 +1473,11 @@ function onDocumentClick(e: MouseEvent) {
   }
   if (folderAddDropdownId.value && folderAddDropdownRef.value && !folderAddDropdownRef.value.contains(target)) {
     folderAddDropdownId.value = null
+  }
+  if (showColorMenu.value) {
+    const inBtn = !!(colorMenuRef.value && colorMenuRef.value.contains(target))
+    const inPanel = !!(colorMenuPanelRef.value && colorMenuPanelRef.value.contains(target))
+    if (!inBtn && !inPanel) showColorMenu.value = false
   }
 }
 

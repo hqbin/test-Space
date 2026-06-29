@@ -20,6 +20,12 @@ const messages: Record<Lang, Record<string, string>> = {
     "nav.restore": "还原",
     "nav.close": "关闭",
 
+    // Cloud sync (quick backup)
+    "cloudSync.ready": "同步到云端备份",
+    "cloudSync.syncing": "正在同步云端备份…",
+    "cloudSync.success": "同步成功",
+    "cloudSync.fail": "同步失败",
+
     // Scripts page
     "scripts.search": "搜索...",
     "scripts.noScripts": "暂无脚本",
@@ -595,6 +601,12 @@ const messages: Record<Lang, Record<string, string>> = {
     "nav.maximize": "Maximize",
     "nav.restore": "Restore",
     "nav.close": "Close",
+
+    // Cloud sync (quick backup)
+    "cloudSync.ready": "Sync backup to cloud",
+    "cloudSync.syncing": "Syncing backup…",
+    "cloudSync.success": "Sync succeeded",
+    "cloudSync.fail": "Sync failed",
 
     // Scripts page
     "scripts.search": "Search...",
