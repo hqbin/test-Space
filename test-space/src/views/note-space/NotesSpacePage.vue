@@ -19,6 +19,13 @@
       <div class="px-3 py-1.5 border-b border-glass-border-light/50 flex justify-between items-center">
         <span class="font-label-md text-label-md text-on-surface font-semibold text-[12px]">{{ t('notes.directory') }}</span>
         <div class="flex gap-1">
+          <button class="glass-button !border-0 px-1.5 py-0.5 select-none" :title="t('notes.export')" @click="showExportDialog = true">
+            <span class="material-symbols-outlined text-[14px]">file_upload</span>
+          </button>
+          <button class="glass-button !border-0 px-1.5 py-0.5 select-none" :title="t('notes.import')" @click="openImportDialog">
+            <span class="material-symbols-outlined text-[14px]">file_download</span>
+          </button>
+          <div class="w-px h-4 bg-outline-variant/30 mx-0.5"></div>
           <button class="glass-button !border-0 px-1.5 py-0.5 select-none" :title="t('notes.newFolder')" @click="createFolder">
             <span class="material-symbols-outlined text-[14px]">create_new_folder</span>
           </button>
@@ -547,12 +554,20 @@
     <!-- Delete Folder Confirmation -->
     <Teleport to="body">
       <div v-if="deleteFolderTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="deleteFolderTarget = null">
-        <div class="glass-panel rounded-2xl p-6 w-80 bg-white/80">
+        <div class="glass-panel rounded-2xl p-6 w-96 bg-white/80">
           <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-2 select-none">{{ t('notes.deleteFolder') }}</h3>
-          <p class="text-[13px] text-on-surface-variant mb-6" v-html="t('notes.deleteFolderDesc', { name: `<strong>${escapeHtml(deleteFolderTarget.name)}</strong>` })"></p>
-          <div class="flex justify-end gap-2">
-            <button class="glass-button px-4 py-2 rounded-full text-[13px] select-none" @click="deleteFolderTarget = null">{{ t('notes.cancel') }}</button>
-            <button class="px-4 py-2 rounded-full text-[13px] bg-red-500 text-white hover:bg-red-600 transition-colors select-none" @click="doDeleteFolder">{{ t('notes.delete') }}</button>
+          <p class="text-[13px] text-on-surface-variant mb-2" v-html="t('notes.deleteFolderDesc', { name: `<strong>${escapeHtml(deleteFolderTarget.name)}</strong>` })"></p>
+          <p class="text-[11px] text-on-surface-variant/60 mb-4">{{ t('notes.deleteFolderOnly') }} / {{ t('notes.deleteFolderAndNotes') }}</p>
+          <div class="flex flex-col gap-2">
+            <button class="w-full glass-button px-4 py-2.5 rounded-full text-[13px] select-none text-left flex items-center gap-2" @click="doDeleteFolder(false)">
+              <span class="material-symbols-outlined text-[16px] text-on-surface-variant">folder_off</span>
+              <span>{{ t('notes.deleteFolderOnly') }}</span>
+            </button>
+            <button class="w-full px-4 py-2.5 rounded-full text-[13px] bg-red-500 text-white hover:bg-red-600 transition-colors select-none text-left flex items-center gap-2" @click="doDeleteFolder(true)">
+              <span class="material-symbols-outlined text-[16px]">delete_forever</span>
+              <span>{{ t('notes.deleteFolderAndNotes') }}</span>
+            </button>
+            <button class="w-full glass-button px-4 py-2 rounded-full text-[13px] select-none text-center mt-1" @click="deleteFolderTarget = null">{{ t('notes.cancel') }}</button>
           </div>
         </div>
       </div>
@@ -567,6 +582,53 @@
           <div class="flex justify-end gap-2">
             <button class="glass-button px-4 py-2 rounded-full text-[13px] select-none" @click="deleteNoteTarget = null">{{ t('notes.cancel') }}</button>
             <button class="px-4 py-2 rounded-full text-[13px] bg-red-500 text-white hover:bg-red-600 transition-colors select-none" @click="doDeleteNote">{{ t('notes.delete') }}</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Import Dialog -->
+    <Teleport to="body">
+      <div v-if="showImportDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/10 backdrop-blur-sm" @click.self="showImportDialog = false">
+        <div class="glass-panel rounded-[2rem] p-6 w-96 bg-white/60" @click.stop>
+          <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-4 select-none">{{ t('notes.importDialogTitle') }}</h3>
+          <div class="mb-4">
+            <label class="text-[12px] text-on-surface-variant block mb-1">{{ t('notes.importTargetFolder') }}</label>
+            <select v-model="importTargetFolderId" class="glass-input w-full px-3 py-2 rounded-lg text-[12px] outline-none">
+              <option :value="null">{{ t('notes.importRoot') }}</option>
+              <option v-for="f in folders" :key="f.id" :value="f.id">{{ f.name }}</option>
+            </select>
+          </div>
+          <div class="flex justify-end gap-2 mt-6">
+            <button class="glass-button px-4 py-2 rounded-full text-[13px] select-none" @click="showImportDialog = false">{{ t('notes.cancel') }}</button>
+            <button class="glass-button px-4 py-2 rounded-full text-[13px] glass-active select-none" @click="doImport" :disabled="importing">{{ importing ? t('notes.importing') : t('notes.importSelectFiles') }}</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Export Dialog -->
+    <Teleport to="body">
+      <div v-if="showExportDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/10 backdrop-blur-sm" @click.self="showExportDialog = false">
+        <div class="glass-panel rounded-[2rem] p-6 w-96 bg-white/60 max-h-[80vh] flex flex-col" @click.stop>
+          <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-4 select-none flex items-center justify-between">
+            <span>{{ t('notes.exportDialogTitle') }}</span>
+            <button class="glass-button px-2 py-1 rounded-full text-[10px] select-none" @click="toggleAllNotes">{{ exportAllSelected ? t('notes.exportDeselectAll') : t('notes.exportSelectAll') }}</button>
+          </h3>
+          <div class="mb-3 flex gap-2">
+            <button class="glass-button px-3 py-1.5 rounded-full text-[12px] select-none" :class="exportFormat === 'md' ? 'glass-active' : ''" @click="exportFormat = 'md'">{{ t('notes.exportFormatMd') }}</button>
+            <button class="glass-button px-3 py-1.5 rounded-full text-[12px] select-none" :class="exportFormat === 'docx' ? 'glass-active' : ''" @click="exportFormat = 'docx'">{{ t('notes.exportFormatDocx') }}</button>
+          </div>
+          <div class="flex-1 overflow-y-auto custom-scrollbar space-y-1 mb-3">
+            <div v-if="notes.length === 0" class="text-[11px] text-on-surface-variant/50 px-2 py-2">{{ t('notes.exportNoNotes') }}</div>
+            <label v-for="n in notes" :key="n.id" class="flex items-center gap-2 px-2 py-1.5 rounded-lg text-[12px] cursor-pointer glass-hover select-none">
+              <input type="checkbox" :value="n.id" v-model="exportSelectedNoteIds" class="accent-purple-600" />
+              <span class="truncate">{{ n.title || t('notes.untitled') }}</span>
+            </label>
+          </div>
+          <div class="flex justify-end gap-2">
+            <button class="glass-button px-4 py-2 rounded-full text-[13px] select-none" @click="showExportDialog = false">{{ t('notes.cancel') }}</button>
+            <button class="glass-button px-4 py-2 rounded-full text-[13px] glass-active select-none" @click="doExport" :disabled="exporting || exportSelectedNoteIds.length === 0">{{ exporting ? t('notes.exporting') : t('notes.export') }}</button>
           </div>
         </div>
       </div>
@@ -588,7 +650,7 @@ import TextStyle from "@tiptap/extension-text-style";
 import { WikiNoteLink, NoteLinkExtension, NOTE_LINK_PREFIX } from "@/extensions/wikiNoteLink";
 import NoteAiPanel from "@/components/notes/NoteAiPanel.vue";
 import { loadAiConfig, type AiConfig } from "@/services/aiSettings";
-import { htmlToPlainText } from "@/services/noteAi";
+import { getNotePlainText, htmlToPlainText } from "@/services/noteAi";
 
 import TurndownService from "turndown";
 import { toPng } from "html-to-image";
@@ -601,6 +663,7 @@ const { t } = useI18n();
 const router = useRouter();
 
 import * as db from "@/services/database";
+import { mdToHtml, docxToHtml } from "@/utils/noteImport";
 const turndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
 
 // ── State ────────────────────────────────────────────────────
@@ -653,6 +716,22 @@ const showColorMenu = ref(false)
 const colorMenuRef = ref<HTMLDivElement>()
 const colorMenuPanelRef = ref<HTMLDivElement>()
 const colorMenuPos = ref<{ x: number; y: number }>({ x: 0, y: 0 })
+const showImportDialog = ref(false)
+const showExportDialog = ref(false)
+const importTargetFolderId = ref<string | null>(null)
+const exportSelectedNoteIds = ref<string[]>([])
+const exportFormat = ref<'md' | 'docx'>('md')
+const importing = ref(false)
+const exporting = ref(false)
+
+let titleMap = new Map<string, string>()
+function rebuildTitleMap() {
+  titleMap = new Map<string, string>()
+  for (const n of notes.value) {
+    const key = n.title.toLowerCase().trim()
+    if (key && !titleMap.has(key)) titleMap.set(key, n.id)
+  }
+}
 
 let dragNoteId: string | null = null
 let dragFolderId: string | null = null
@@ -711,9 +790,11 @@ const highlightedNoteIds = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   if (!q) return new Set<string>()
   return new Set(notes.value.filter(n =>
-    n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q)
+    n.title.toLowerCase().includes(q) || (n.plainText || n.content).toLowerCase().includes(q)
   ).map(n => n.id))
 })
+
+const exportAllSelected = computed(() => notes.value.length > 0 && exportSelectedNoteIds.value.length === notes.value.length)
 
 const filteredNotesForLink = computed(() => {
   const q = noteLinkSearch.value.trim().toLowerCase()
@@ -735,10 +816,12 @@ const incomingLinkNotes = computed(() =>
 function resolveNoteIdByTitle(title: string): string | null {
   const q = title.trim().toLowerCase()
   if (!q) return null
-  const exact = notes.value.find(n => n.title.toLowerCase() === q)
-  if (exact) return exact.id
-  const partial = notes.value.find(n => n.title.toLowerCase().includes(q))
-  return partial?.id ?? null
+  const id = titleMap.get(q)
+  if (id) return id
+  for (const [key, nid] of titleMap) {
+    if (key.includes(q)) return nid
+  }
+  return null
 }
 
 interface TocNode { level: number; text: string; index: number; children: TocNode[] }
@@ -770,6 +853,7 @@ async function loadData() {
     spaces.value = await db.loadNoteSpaces()
     folders.value = await db.loadNoteFolders()
     notes.value = await db.loadNotes()
+    rebuildTitleMap()
     aiConfig.value = await loadAiConfig()
     if (spaces.value.length > 0 && !selectedSpaceId.value) {
       selectedSpaceId.value = spaces.value[0].id
@@ -817,6 +901,7 @@ async function doDeleteSpace() {
     spaces.value = spaces.value.filter(s => s.id !== id)
     folders.value = await db.loadNoteFolders()
     notes.value = await db.loadNotes()
+    rebuildTitleMap()
     if (selectedSpaceId.value === id) {
       selectedSpaceId.value = spaces.value.length > 0 ? spaces.value[0].id : null
     }
@@ -897,13 +982,18 @@ async function deleteFolder(id: string) {
   }
 }
 
-async function doDeleteFolder() {
+async function doDeleteFolder(withNotes: boolean) {
   if (!deleteFolderTarget.value) return
   const id = deleteFolderTarget.value.id
   try {
-    await db.deleteNoteFolder(id)
+    if (withNotes) {
+      await db.deleteNoteFolderWithNotes(id)
+    } else {
+      await db.deleteNoteFolder(id)
+    }
     folders.value = folders.value.filter(f => f.id !== id)
     notes.value = await db.loadNotes()
+    rebuildTitleMap()
     if (selectedFolderId.value === id) selectedFolderId.value = null
   } catch (e) {
     console.error('Failed to delete folder:', e)
@@ -1020,6 +1110,7 @@ async function createNote() {
   const note: NoteItem = { id, folderId: null, title: t('notes.untitled'), content: "", tags: [], isFavorite: false, createdAt: now, updatedAt: now }
   await db.saveNote(note)
   notes.value.unshift(note)
+  rebuildTitleMap()
   selectedFolderId.value = null
   selectNoteById(note.id, "")
 }
@@ -1030,6 +1121,7 @@ async function addNoteToFolder(folderId: string) {
   const note: NoteItem = { id, folderId, title: t('notes.untitled'), content: "", tags: [], isFavorite: false, createdAt: now, updatedAt: now }
   await db.saveNote(note)
   notes.value.unshift(note)
+  rebuildTitleMap()
   expandedFolders.value[folderId] = true
   folderAddDropdownId.value = null
   selectNoteById(note.id, "")
@@ -1118,6 +1210,16 @@ async function selectNote(note: NoteItem) {
     try { await saveCurrentNote() } catch { /* best effort */ }
   }
 
+  // Load full content if not already loaded
+  if (!note.content) {
+    const full = await db.loadNote(note.id)
+    if (full) {
+      note.content = full.content
+      note.plainText = full.plainText
+      note.tags = full.tags
+    }
+  }
+
   selectedFolderId.value = null
   selectedNoteId.value = note.id
   noteTitle.value = note.title
@@ -1162,7 +1264,7 @@ function onSearch() {
     const lowerQ = q.toLowerCase()
     const localMatches = notes.value.filter(n =>
       (n.title || '').toLowerCase().includes(lowerQ) ||
-      htmlToPlainText(n.content || '').toLowerCase().includes(lowerQ)
+      getNotePlainText(n).toLowerCase().includes(lowerQ)
     )
     try {
       const dbMatches = await db.searchNotes(q)
@@ -1201,6 +1303,7 @@ async function doDeleteNote() {
     console.error('Failed to delete note:', e)
   }
   notes.value = notes.value.filter(n => n.id !== id)
+  rebuildTitleMap()
   if (selectedNoteId.value === id) {
     selectedNoteId.value = null
     noteTitle.value = ""
@@ -1225,6 +1328,7 @@ function triggerSave() {
   if (saveTimer) clearTimeout(saveTimer)
   saveTimer = setTimeout(async () => {
     await saveCurrentNote()
+    rebuildTitleMap()
     if (versionTimer) clearTimeout(versionTimer)
     const noteIdForVersion = selectedNoteId.value
     const contentForVersion = lastEditorContent.value
@@ -1505,6 +1609,137 @@ async function exportAs(format: 'docx' | 'md' | 'pdf') {
   }
 }
 
+// ── Import ────────────────────────────────────────────────────
+
+function openImportDialog() {
+  importTargetFolderId.value = selectedFolderId.value
+  showImportDialog.value = true
+}
+
+async function doImport() {
+  importing.value = true
+  try {
+    const { open } = await import('@tauri-apps/plugin-dialog')
+    const { readTextFile, readFile } = await import('@tauri-apps/plugin-fs')
+
+    const files = await open({
+      multiple: true,
+      filters: [{ name: 'Notes', extensions: ['md', 'docx'] }],
+    }) as string[] | string | null
+
+    if (!files || (Array.isArray(files) && files.length === 0)) {
+      importing.value = false
+      return
+    }
+
+    const fileList = Array.isArray(files) ? files : [files]
+    let importedCount = 0
+
+    for (const filePath of fileList) {
+      try {
+        const fileName = filePath.split(/[\\/]/).pop() || 'Untitled'
+        const ext = fileName.split('.').pop()?.toLowerCase()
+        const title = fileName.replace(/\.(md|docx)$/i, '')
+
+        let html = ''
+        if (ext === 'md') {
+          const text = await readTextFile(filePath)
+          html = mdToHtml(text)
+        } else if (ext === 'docx') {
+          const uint8 = await readFile(filePath)
+          html = await docxToHtml(uint8.buffer)
+        } else {
+          continue
+        }
+
+        const id = crypto.randomUUID()
+        const now = new Date().toISOString()
+        const note: NoteItem = {
+          id, folderId: importTargetFolderId.value, title,
+          content: html, tags: [], isFavorite: false, createdAt: now, updatedAt: now,
+        }
+        await db.saveNote(note)
+        importedCount++
+      } catch (e) {
+        console.error('Failed to import file:', filePath, e)
+      }
+    }
+
+    notes.value = await db.loadNotes()
+    rebuildTitleMap()
+    showImportDialog.value = false
+    if (importedCount > 0) console.log(`Imported ${importedCount} notes`)
+  } catch (e) {
+    console.error('Import failed:', e)
+  }
+  importing.value = false
+}
+
+// ── Export (Batch) ─────────────────────────────────────────────
+
+function toggleAllNotes() {
+  if (exportAllSelected.value) {
+    exportSelectedNoteIds.value = []
+  } else {
+    exportSelectedNoteIds.value = notes.value.map(n => n.id)
+  }
+}
+
+async function doExport() {
+  if (exportSelectedNoteIds.value.length === 0) return
+  exporting.value = true
+  try {
+    const { open } = await import('@tauri-apps/plugin-dialog')
+    const { writeFile } = await import('@tauri-apps/plugin-fs')
+    const { invoke } = await import('@tauri-apps/api/core')
+
+    const dirPath = await open({ directory: true, title: 'Select export directory' })
+    if (!dirPath) {
+      exporting.value = false
+      return
+    }
+
+    // Load full content for all selected notes
+    const exportFullNotes = await Promise.all(
+      exportSelectedNoteIds.value.map(id => db.loadNote(id))
+    )
+    let exportedCount = 0
+    for (const note of exportFullNotes) {
+      if (!note) continue
+
+      const safeName = (note.title || 'untitled').replace(/[<>:"/\\|?*]/g, '_')
+      const html = note.content || ''
+
+      try {
+        if (exportFormat.value === 'md') {
+          const md = turndown.turndown(html)
+          await invoke('write_text_file', { path: `${dirPath}\\${safeName}.md`, content: md })
+        } else {
+          const docChildren = htmlToDocxChildren(html)
+          const doc = new Document({
+            sections: [{
+              properties: { page: { margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 } } },
+              children: docChildren,
+            }],
+          })
+          const blob = await Packer.toBlob(doc)
+          const buffer = await blob.arrayBuffer()
+          await writeFile(`${dirPath}\\${safeName}.docx`, new Uint8Array(buffer))
+        }
+        exportedCount++
+      } catch (e) {
+        console.error('Failed to export note:', note.id, e)
+      }
+    }
+
+    showExportDialog.value = false
+    if (exportedCount > 0) console.log(`Exported ${exportedCount} notes`)
+  } catch (e) {
+    console.error('Export failed:', e)
+  }
+  exporting.value = false
+}
+
 // ── Editor Actions ───────────────────────────────────────────
 
 function toggleOrderedList() {
@@ -1598,7 +1833,11 @@ const editor = useEditor({
     Color,
   ],
   onUpdate: () => {
-    lastEditorContent.value = editor.value?.getHTML() ?? ""
+    const html = editor.value?.getHTML() ?? ""
+    lastEditorContent.value = html
+    if (currentNoteData.value) {
+      currentNoteData.value.content = html
+    }
     saved.value = false
     triggerSave()
   },

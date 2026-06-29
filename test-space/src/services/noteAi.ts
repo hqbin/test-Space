@@ -39,6 +39,11 @@ async function getFetch(): Promise<typeof fetch> {
   return tauriFetch
 }
 
+/** Get plain text from a note, preferring cached plainText field. */
+export function getNotePlainText(note: NoteItem): string {
+  return note.plainText || htmlToPlainText(note.content || '')
+}
+
 /** Strip HTML to plain text, replace images with placeholder to save tokens. */
 export function htmlToPlainText(html: string, maxLen?: number): string {
   const doc = new DOMParser().parseFromString(html, 'text/html')
@@ -86,7 +91,10 @@ function splitLongText(text: string, size = TARGET_CHUNK_CHARS): string[] {
 /** Split note HTML into semantic chunks (headings / paragraphs). */
 export function chunkNoteContent(note: NoteItem): string[] {
   const html = note.content || ''
-  if (!html.trim()) return []
+  if (!html.trim()) {
+    if (note.plainText) return splitLongText(note.plainText)
+    return []
+  }
 
   const doc = new DOMParser().parseFromString(html, 'text/html')
   const rawChunks: string[] = []

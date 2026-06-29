@@ -123,6 +123,7 @@ async function migrateInternal(d: Database) {
     target_note_id TEXT NOT NULL,
     created_at TEXT NOT NULL
   )`)
+  try { await d.execute('ALTER TABLE notes ADD COLUMN plain_text TEXT NOT NULL DEFAULT \'\'') } catch {}
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_notes_folder ON notes(folder_id)`)
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_notes_fav ON notes(is_favorite)`)
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_note_versions_note ON note_versions(note_id)`)
@@ -489,6 +490,28 @@ export async function deleteNoteFolder(id: string) {
   await d.execute(`DELETE FROM note_folders WHERE id IN (${placeholders})`, allIds)
 }
 
+export async function deleteNoteFolderWithNotes(id: string) {
+  const d = await getDb()
+  // Collect all descendant folder IDs (BFS)
+  const allIds: string[] = [id]
+  let currentIds = [id]
+  while (currentIds.length > 0) {
+    const placeholders = currentIds.map(() => '?').join(',')
+    const children = await d.select<{ id: string }[]>(
+      `SELECT id FROM note_folders WHERE parent_id IN (${placeholders})`, currentIds
+    )
+    const childIds = children.map(c => c.id)
+    if (childIds.length === 0) break
+    allIds.push(...childIds)
+    currentIds = childIds
+  }
+  // Delete notes in all these folders
+  const placeholders = allIds.map(() => '?').join(',')
+  await d.execute(`DELETE FROM notes WHERE folder_id IN (${placeholders})`, allIds)
+  // Delete all descendant folders
+  await d.execute(`DELETE FROM note_folders WHERE id IN (${placeholders})`, allIds)
+}
+
 export async function renameNoteFolder(id: string, name: string) {
   const d = await getDb()
   await d.execute('UPDATE note_folders SET name = ?, updated_at = ? WHERE id = ?', [name, new Date().toISOString(), id])
@@ -499,35 +522,61 @@ export async function renameNoteFolder(id: string, name: string) {
 export async function loadNotes(): Promise<NoteItem[]> {
   const d = await getDb()
   const rows = await d.select<any[]>(
-    `SELECT id, folder_id as folderId, title, content, tags, is_favorite as isFavorite,
+    `SELECT id, folder_id as folderId, title, content, plain_text as plainText, tags, is_favorite as isFavorite,
             created_at as createdAt, updated_at as updatedAt
      FROM notes ORDER BY updated_at DESC`
   )
-  return rows.map(r => ({ ...r, tags: safeJsonParse(r.tags, []), isFavorite: !!r.isFavorite }))
+  return rows.map(r => ({ ...r, tags: safeJsonParse(r.tags, []), isFavorite: !!r.isFavorite, plainText: r.plainText || '' }))
+}
+
+export async function loadNoteList(): Promise<NoteItem[]> {
+  const d = await getDb()
+  const rows = await d.select<any[]>(
+    `SELECT id, folder_id as folderId, title, '' as content, plain_text as plainText, tags, is_favorite as isFavorite,
+            created_at as createdAt, updated_at as updatedAt
+     FROM notes ORDER BY updated_at DESC`
+  )
+  return rows.map(r => ({ ...r, tags: safeJsonParse(r.tags, []), isFavorite: !!r.isFavorite, plainText: r.plainText || '' }))
 }
 
 export async function loadNote(id: string): Promise<NoteItem | null> {
   const d = await getDb()
   const rows = await d.select<any[]>(
-    `SELECT id, folder_id as folderId, title, content, tags, is_favorite as isFavorite,
+    `SELECT id, folder_id as folderId, title, content, plain_text as plainText, tags, is_favorite as isFavorite,
             created_at as createdAt, updated_at as updatedAt
      FROM notes WHERE id = ?`, [id]
   )
   if (rows.length === 0) return null
   const r = rows[0]
-  return { ...r, tags: safeJsonParse(r.tags, []), isFavorite: !!r.isFavorite }
+  return { ...r, tags: safeJsonParse(r.tags, []), isFavorite: !!r.isFavorite, plainText: r.plainText || '' }
+}
+
+function htmlToPlainText(html: string): string {
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  doc.querySelectorAll('img').forEach(img => {
+    const alt = img.getAttribute('alt') || ''
+    const placeholder = document.createTextNode(alt ? `[图片: ${alt}]` : '[图片]')
+    img.replaceWith(placeholder)
+  })
+  return (doc.body.textContent || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/[\u00A0\u202F\u2007]/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 export async function saveNote(note: { id: string; folderId?: string | null; title: string; content: string; tags?: string[]; isFavorite?: boolean }) {
   const d = await getDb()
   const now = new Date().toISOString()
+  const plainText = htmlToPlainText(note.content)
   await d.execute(
-    `INSERT INTO notes (id, folder_id, title, content, tags, is_favorite, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO notes (id, folder_id, title, content, plain_text, tags, is_favorite, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        folder_id = excluded.folder_id, title = excluded.title, content = excluded.content,
-       tags = excluded.tags, is_favorite = excluded.is_favorite, updated_at = excluded.updated_at`,
-    [note.id, note.folderId || null, note.title, note.content,
+       plain_text = excluded.plain_text, tags = excluded.tags,
+       is_favorite = excluded.is_favorite, updated_at = excluded.updated_at`,
+    [note.id, note.folderId || null, note.title, note.content, plainText,
      JSON.stringify(note.tags || []), note.isFavorite ? 1 : 0, now, now]
   )
 }
@@ -552,23 +601,23 @@ export async function searchNotes(query: string): Promise<NoteItem[]> {
   const d = await getDb()
   const like = `%${escapeLike(query)}%`
   const rows = await d.select<any[]>(
-    `SELECT id, folder_id as folderId, title, content, tags, is_favorite as isFavorite,
+    `SELECT id, folder_id as folderId, title, content, plain_text as plainText, tags, is_favorite as isFavorite,
             created_at as createdAt, updated_at as updatedAt
      FROM notes WHERE title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\'
      ORDER BY updated_at DESC`,
     [like, like]
   )
-  return rows.map(r => ({ ...r, tags: safeJsonParse(r.tags, []), isFavorite: !!r.isFavorite }))
+  return rows.map(r => ({ ...r, tags: safeJsonParse(r.tags, []), isFavorite: !!r.isFavorite, plainText: r.plainText || '' }))
 }
 
 export async function getFavoriteNotes(): Promise<NoteItem[]> {
   const d = await getDb()
   const rows = await d.select<any[]>(
-    `SELECT id, folder_id as folderId, title, content, tags, is_favorite as isFavorite,
+    `SELECT id, folder_id as folderId, title, content, plain_text as plainText, tags, is_favorite as isFavorite,
             created_at as createdAt, updated_at as updatedAt
      FROM notes WHERE is_favorite = 1 ORDER BY updated_at DESC`
   )
-  return rows.map(r => ({ ...r, tags: safeJsonParse(r.tags, []), isFavorite: !!r.isFavorite }))
+  return rows.map(r => ({ ...r, tags: safeJsonParse(r.tags, []), isFavorite: !!r.isFavorite, plainText: r.plainText || '' }))
 }
 
 // ── Note Versions ─────────────────────────────────────────────

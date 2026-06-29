@@ -123,6 +123,7 @@ export interface NoteItem {
   isFavorite: boolean
   createdAt: string
   updatedAt: string
+  plainText?: string
 }
 
 export interface NoteVersion {

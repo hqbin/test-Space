@@ -15,7 +15,7 @@
     <div v-if="open" class="fixed right-4 bottom-4 z-[60] pointer-events-none">
       <div
         ref="panelRef"
-        class="relative w-[400px] max-w-[calc(100vw-2rem)] h-[480px] max-h-[calc(100vh-6rem)] flex flex-col glass-panel rounded-[2rem] bg-white/60 border border-white/50 shadow-2xl overflow-hidden animate-ai-in pointer-events-auto"
+        class="relative w-[400px] max-w-[calc(100vw-2rem)] h-[calc(100vh-8rem)] flex flex-col glass-panel rounded-[2rem] bg-white/60 border border-white/50 shadow-2xl overflow-hidden animate-ai-in pointer-events-auto"
       >
         <div class="p-3 border-b border-glass-border-light/30 flex items-center justify-between shrink-0 bg-white/40">
           <span class="font-label-md text-[13px] text-on-surface font-semibold flex items-center gap-2 min-w-0">
@@ -148,16 +148,27 @@ const memories = ref<AiMemory[]>([])
 
 const configured = computed(() => isAiConfigured(props.aiConfig))
 
-const contextNoteCount = computed(() => {
-  const q = input.value.trim() || (messages.value.filter(m => m.role === 'user').pop()?.content ?? '')
-  return selectContextChunks(props.notes, q, props.aiConfig.maxContextTokens).noteIds.length
-})
+const contextNoteCount = ref(0)
+const estimatedTokens = ref(0)
 
-const estimatedTokens = computed(() => {
-  const q = input.value.trim() || 'sample question'
-  const { chunks } = selectContextChunks(props.notes, q, props.aiConfig.maxContextTokens)
-  return estimateTokens(buildChunkContext(chunks) + q)
-})
+let contextDebounce: ReturnType<typeof setTimeout> | null = null
+function scheduleContextUpdate() {
+  if (contextDebounce) clearTimeout(contextDebounce)
+  contextDebounce = setTimeout(() => {
+    const q = input.value.trim() || (messages.value.filter(m => m.role === 'user').pop()?.content ?? '')
+    if (!q) {
+      contextNoteCount.value = 0
+      estimatedTokens.value = 0
+      return
+    }
+    const { chunks, noteIds } = selectContextChunks(props.notes, q, props.aiConfig.maxContextTokens)
+    contextNoteCount.value = noteIds.length
+    estimatedTokens.value = estimateTokens(buildChunkContext(chunks) + q)
+  }, 500)
+}
+
+watch(input, scheduleContextUpdate)
+watch(() => props.notes, scheduleContextUpdate, { deep: false })
 
 function onOpenNote(noteId: string) {
   emit('openNote', noteId)
