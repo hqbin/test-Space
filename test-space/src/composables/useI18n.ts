@@ -131,6 +131,9 @@ const messages: Record<Lang, Record<string, string>> = {
     "settings.aiMemoryDelete": "删除",
     "settings.aiMemoryDeleted": "记忆已删除",
     "settings.aiMemoryCleared": "全部记忆已清空",
+    "settings.aiMemoryManage": "管理记忆",
+    "settings.aiMemoryCount": "共 {count} 条记忆",
+    "settings.aiMemoryDeleteSelected": "删除选中 ({count})",
 
     // Device page
     "device.connect": "连接",
@@ -588,6 +591,8 @@ const messages: Record<Lang, Record<string, string>> = {
     "notes.aiThinking": "思考中...",
     "notes.aiReferences": "参考笔记",
     "notes.aiAllNotesHint": "全部 {total} 篇，检索 {included} 篇",
+    "notes.aiClearHistory": "清空记录",
+    "notes.aiHistoryCleared": "对话记录已清空",
 
     // Snippet descriptions - BAT
     "snippets.bat_echo_desc": "关闭命令回显，使输出更简洁",
@@ -780,6 +785,9 @@ const messages: Record<Lang, Record<string, string>> = {
     "settings.aiMemoryDelete": "Delete",
     "settings.aiMemoryDeleted": "Memory deleted",
     "settings.aiMemoryCleared": "All memories cleared",
+    "settings.aiMemoryManage": "Manage Memories",
+    "settings.aiMemoryCount": "{count} memories",
+    "settings.aiMemoryDeleteSelected": "Delete Selected ({count})",
 
     // Device page
     "device.connect": "Connect",
@@ -1237,6 +1245,8 @@ const messages: Record<Lang, Record<string, string>> = {
     "notes.aiThinking": "Thinking...",
     "notes.aiReferences": "References",
     "notes.aiAllNotesHint": "{total} notes, {included} retrieved",
+    "notes.aiClearHistory": "Clear history",
+    "notes.aiHistoryCleared": "Conversation history cleared",
 
     // Snippet descriptions - BAT
     "snippets.bat_echo_desc": "Turn off command echo for cleaner output",

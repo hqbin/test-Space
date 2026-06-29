@@ -155,29 +155,34 @@
       <div class="min-w-0">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <span class="font-body-md text-body-md text-on-surface font-medium shrink-0">{{ t("settings.aiConfig") }}</span>
-          <button
-            class="glass-button px-4 py-2 rounded-full text-[13px] select-none self-start sm:self-auto shrink-0"
-            :disabled="aiTesting"
-            @click="testAi"
-          >
-            <span v-if="aiTesting" class="material-symbols-outlined text-[16px] animate-spin align-middle mr-1">sync</span>
-            {{ t("settings.aiTest") }}
-          </button>
+          <div class="flex items-center gap-2 self-start sm:self-auto">
+            <button
+              class="glass-button px-4 py-2 rounded-full text-[13px] select-none shrink-0"
+              :disabled="aiTesting"
+              @click="testAi"
+            >
+              <span v-if="aiTesting" class="material-symbols-outlined text-[16px] animate-spin align-middle mr-1">sync</span>
+              {{ t("settings.aiTest") }}
+            </button>
+            <button class="glass-button px-4 py-2 rounded-full text-[13px] glass-active select-none shrink-0" @click="saveAi">{{ t("settings.aiSave") }}</button>
+          </div>
         </div>
         <div class="grid grid-cols-1 gap-4 min-w-0">
-          <div class="min-w-0">
-            <label class="text-[12px] text-on-surface-variant block mb-1">{{ t("settings.aiProvider") }}</label>
-            <select v-model="aiConfig.provider" class="glass-input w-full min-w-0 px-3 py-2 rounded-lg text-[14px] outline-none select-text" @change="onProviderChange">
-              <option value="azure">{{ t("settings.aiProviderAzure") }}</option>
-              <option value="deepseek">{{ t("settings.aiProviderDeepseek") }}</option>
-              <option value="mimo">{{ t("settings.aiProviderMimo") }}</option>
-              <option value="openai">{{ t("settings.aiProviderOpenai") }}</option>
-              <option value="custom">{{ t("settings.aiProviderCustom") }}</option>
-            </select>
-          </div>
-          <div class="min-w-0">
-            <label class="text-[12px] text-on-surface-variant block mb-1">{{ t("settings.aiEndpoint") }}</label>
-            <input v-model="aiConfig.endpoint" type="url" class="glass-input w-full min-w-0 px-3 py-2 rounded-lg text-[12px] outline-none select-text font-mono break-all" />
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 min-w-0">
+            <div class="min-w-0">
+              <label class="text-[12px] text-on-surface-variant block mb-1">{{ t("settings.aiProvider") }}</label>
+              <select v-model="aiConfig.provider" class="glass-input w-full min-w-0 px-3 py-2 rounded-lg text-[14px] outline-none select-text" @change="onProviderChange">
+                <option value="azure">{{ t("settings.aiProviderAzure") }}</option>
+                <option value="deepseek">{{ t("settings.aiProviderDeepseek") }}</option>
+                <option value="mimo">{{ t("settings.aiProviderMimo") }}</option>
+                <option value="openai">{{ t("settings.aiProviderOpenai") }}</option>
+                <option value="custom">{{ t("settings.aiProviderCustom") }}</option>
+              </select>
+            </div>
+            <div class="min-w-0">
+              <label class="text-[12px] text-on-surface-variant block mb-1">{{ t("settings.aiMaxTokens") }}</label>
+              <input v-model.number="aiConfig.maxContextTokens" type="number" min="1000" max="32000" step="500" class="glass-input w-full min-w-0 px-3 py-2 rounded-lg text-[14px] outline-none select-text" />
+            </div>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 min-w-0">
             <div class="min-w-0">
@@ -193,15 +198,12 @@
             </div>
           </div>
           <div class="min-w-0">
-            <label class="text-[12px] text-on-surface-variant block mb-1">{{ t("settings.aiApiKey") }}</label>
-            <input v-model="aiConfig.apiKey" type="password" autocomplete="off" class="glass-input w-full min-w-0 px-3 py-2 rounded-lg text-[12px] outline-none select-text font-mono" />
+            <label class="text-[12px] text-on-surface-variant block mb-1">{{ t("settings.aiEndpoint") }}</label>
+            <input v-model="aiConfig.endpoint" type="url" class="glass-input w-full min-w-0 px-3 py-2 rounded-lg text-[12px] outline-none select-text font-mono break-all" />
           </div>
           <div class="min-w-0">
-            <label class="text-[12px] text-on-surface-variant block mb-1">{{ t("settings.aiMaxTokens") }}</label>
-            <input v-model.number="aiConfig.maxContextTokens" type="number" min="1000" max="32000" step="500" class="glass-input w-full min-w-0 px-3 py-2 rounded-lg text-[14px] outline-none select-text" />
-          </div>
-          <div class="flex justify-end">
-            <button class="glass-button px-6 py-2 rounded-full text-[13px] glass-active select-none" @click="saveAi">{{ t("settings.aiSave") }}</button>
+            <label class="text-[12px] text-on-surface-variant block mb-1">{{ t("settings.aiApiKey") }}</label>
+            <input v-model="aiConfig.apiKey" type="password" autocomplete="off" class="glass-input w-full min-w-0 px-3 py-2 rounded-lg text-[12px] outline-none select-text font-mono" />
           </div>
         </div>
         <p v-if="aiStatusMessage" class="mt-3 font-body-md text-body-md text-[13px] break-words" :class="aiStatusIsError ? 'text-error' : 'text-success-indicator'">{{ aiStatusMessage }}</p>
@@ -210,44 +212,87 @@
       <!-- AI Memory Management -->
       <div class="border-t border-glass-border-light/30 my-5"></div>
       <div class="min-w-0">
-        <div class="flex items-center justify-between gap-3 mb-4">
+        <div class="flex items-center justify-between gap-3 mb-2">
           <span class="font-body-md text-body-md text-on-surface font-medium shrink-0">{{ t("settings.aiMemory") }}</span>
-          <div class="flex gap-2 shrink-0">
-            <button
-              class="glass-button px-3 py-1.5 rounded-full text-[12px] select-none"
-              :disabled="memories.length === 0"
-              @click="clearAllMemories"
-            >
-              <span v-if="clearingMemories" class="material-symbols-outlined text-[14px] animate-spin align-middle mr-1">sync</span>
-              {{ t("settings.aiMemoryClear") }}
-            </button>
-          </div>
-        </div>
-        <div v-if="memories.length === 0" class="text-[12px] text-on-surface-variant/60 py-2">
-          {{ t("settings.aiMemoryEmpty") }}
-        </div>
-        <div v-else class="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
-          <div
-            v-for="mem in memories"
-            :key="mem.id"
-            class="flex items-start gap-2 px-3 py-2 rounded-lg bg-white/40 border border-glass-border-light/20 group"
+          <button
+            class="glass-button px-4 py-1.5 rounded-full text-[12px] select-none"
+            @click="showMemoryModal = true"
           >
-            <span class="material-symbols-outlined text-[16px] text-on-surface-variant/50 shrink-0 mt-0.5">memory</span>
-            <div class="flex-1 min-w-0">
-              <p class="text-[12px] text-on-surface leading-relaxed break-words">{{ mem.content }}</p>
-              <p class="text-[10px] text-on-surface-variant/50 mt-0.5">{{ formatDate(mem.createdAt) }}</p>
+            <span class="material-symbols-outlined text-[14px] align-middle mr-1">manage_history</span>
+            {{ t("settings.aiMemoryManage") }}
+          </button>
+        </div>
+        <p class="text-[12px] text-on-surface-variant/60">
+          {{ memories.length > 0 ? t("settings.aiMemoryCount", { count: String(memories.length) }) : t("settings.aiMemoryEmpty") }}
+        </p>
+      </div>
+
+      <!-- AI Memory Modal -->
+      <Teleport to="body">
+        <div v-if="showMemoryModal" class="fixed inset-0 z-50 flex items-start justify-center pt-[8vh]" @click.self="showMemoryModal = false">
+          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
+          <div class="glass-panel rounded-[2rem] w-[560px] max-w-[calc(100vw-3rem)] max-h-[80vh] flex flex-col bg-white relative z-10 overflow-hidden" @click.stop>
+            <div class="flex items-center justify-between gap-3 px-6 pt-5 pb-3 shrink-0">
+              <h3 class="font-label-md text-label-md text-on-surface font-semibold select-none flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-[16px]">memory</span>
+                {{ t("settings.aiMemory") }}
+              </h3>
+              <button class="glass-button p-1 rounded select-none shrink-0" @click="showMemoryModal = false">
+                <span class="material-symbols-outlined text-[16px]">close</span>
+              </button>
             </div>
-            <button
-              class="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity px-1 py-0.5 rounded hover:bg-red-100 text-red-400 hover:text-red-600 select-none"
-              :title="t('settings.aiMemoryDelete')"
-              @click="deleteMemory(mem.id)"
-            >
-              <span class="material-symbols-outlined text-[14px]">close</span>
-            </button>
+            <div class="flex-1 overflow-y-auto custom-scrollbar px-6 py-2 min-h-0">
+              <div v-if="memories.length === 0" class="text-[12px] text-on-surface-variant/60 text-center py-12">
+                {{ t("settings.aiMemoryEmpty") }}
+              </div>
+              <div v-else class="space-y-1">
+                <div
+                  v-for="mem in memories"
+                  :key="mem.id"
+                  class="flex items-start gap-3 px-3 py-2.5 rounded-lg hover:bg-on-surface/[0.04] transition-colors group"
+                >
+                  <span
+                    class="material-symbols-outlined text-[16px] shrink-0 mt-0.5 cursor-pointer select-none transition-colors"
+                    :class="selectedMemoryIds.has(mem.id) ? 'text-secondary' : 'text-on-surface-variant/40'"
+                    @click="toggleMemorySelect(mem.id)"
+                  >{{ selectedMemoryIds.has(mem.id) ? 'check_circle' : 'radio_button_unchecked' }}</span>
+                  <div class="flex-1 min-w-0 cursor-pointer select-none" @click="toggleMemorySelect(mem.id)">
+                    <p class="text-[12px] text-on-surface leading-relaxed break-words">{{ mem.content }}</p>
+                    <p class="text-[10px] text-on-surface-variant/50 mt-0.5">{{ formatDate(mem.createdAt) }}</p>
+                  </div>
+                  <button
+                    class="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity px-1 py-0.5 rounded hover:bg-red-100 text-red-400 hover:text-red-600 select-none"
+                    :title="t('settings.aiMemoryDelete')"
+                    @click="deleteMemory(mem.id)"
+                  >
+                    <span class="material-symbols-outlined text-[14px]">close</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center justify-between gap-3 px-6 py-4 border-t border-glass-border-light/30 shrink-0">
+              <div class="flex items-center gap-2">
+                <button
+                  class="glass-button px-3 py-1.5 rounded-full text-[12px] select-none"
+                  :disabled="selectedMemoryIds.size === 0"
+                  @click="deleteSelectedMemories"
+                >
+                  {{ t("settings.aiMemoryDeleteSelected", { count: String(selectedMemoryIds.size) }) }}
+                </button>
+                <button
+                  class="glass-button px-3 py-1.5 rounded-full text-[12px] select-none"
+                  :disabled="memories.length === 0"
+                  @click="clearAllMemories"
+                >
+                  <span v-if="clearingMemories" class="material-symbols-outlined text-[14px] animate-spin align-middle mr-1">sync</span>
+                  {{ t("settings.aiMemoryClear") }}
+                </button>
+              </div>
+              <span v-if="memoryStatusMessage" class="text-[12px]" :class="memoryStatusIsError ? 'text-error' : 'text-success-indicator'">{{ memoryStatusMessage }}</span>
+            </div>
           </div>
         </div>
-        <p v-if="memoryStatusMessage" class="mt-2 font-body-md text-body-md text-[12px]" :class="memoryStatusIsError ? 'text-error' : 'text-success-indicator'">{{ memoryStatusMessage }}</p>
-      </div>
+      </Teleport>
 
       <!-- Version -->
       <div class="mt-auto border-t border-glass-border-light/30 pt-5 flex items-center justify-between">
@@ -308,7 +353,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import * as db from "@/services/database";
 import * as cloudApi from "@/services/cloudBackup";
 import * as crypto from "@/services/crypto";
@@ -369,6 +414,16 @@ const memories = ref<AiMemory[]>([]);
 const clearingMemories = ref(false);
 const memoryStatusMessage = ref("");
 const memoryStatusIsError = ref(false);
+const showMemoryModal = ref(false);
+const selectedMemoryIds = ref(new Set<string>());
+
+function toggleMemorySelect(id: string) {
+  const s = selectedMemoryIds.value;
+  if (s.has(id)) s.delete(id);
+  else s.add(id);
+  // trigger reactivity by replacing
+  selectedMemoryIds.value = new Set(s);
+}
 
 function setMemoryStatus(msg: string, isError = false) {
   memoryStatusMessage.value = msg;
@@ -413,6 +468,24 @@ async function clearAllMemories() {
     setMemoryStatus(e.message || "Clear failed", true);
   } finally {
     clearingMemories.value = false;
+  }
+}
+
+async function deleteSelectedMemories() {
+  const ids = [...selectedMemoryIds.value];
+  if (ids.length === 0) return;
+  let deleted = 0;
+  for (const id of ids) {
+    try {
+      await db.deleteAiMemory(id);
+      memories.value = memories.value.filter(m => m.id !== id);
+      deleted++;
+    } catch {}
+  }
+  selectedMemoryIds.value = new Set();
+  if (deleted > 0) {
+    setMemoryStatus(t("settings.aiMemoryDeleted"));
+    setTimeout(() => { if (memoryStatusMessage.value === t("settings.aiMemoryDeleted")) setMemoryStatus(""); }, 2000);
   }
 }
 
@@ -775,6 +848,13 @@ async function handleImport() {
     cloudBusy.value = false;
   }
 }
+
+watch(showMemoryModal, (v) => {
+  if (v) {
+    selectedMemoryIds.value = new Set();
+    loadMemories();
+  }
+});
 
 onMounted(async () => {
   await initLanguage();

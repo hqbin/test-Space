@@ -2376,10 +2376,11 @@ regex = "1"
 
 | 功能 | 说明 |
 |------|------|
-| 记忆列表 | AI 配置下方新增「AI 长期记忆」区域，显示所有记忆内容 + 创建时间 |
-| 展开/删除 | 条目 hover 显示关闭按钮，点击即删除 |
-| 清空全部 | 右上角「清空全部」按钮，二次确认无需 |
-| 空状态 | 显示「暂无长期记忆，使用 AI 助手时会自动提取」 |
+| 管理入口 | AI 配置下方仅显示记忆数量概览 +「管理记忆」按钮，不展开列表 |
+| 弹出模态 | 点击按钮弹出 Teleport 模态弹窗（`bg-white` 不透明背景，`fixed items-start pt-[8vh]` 防止溢出顶部），含标题 + 关闭按钮 + 筛选删除 |
+| 选择/删除 | 每条记忆左侧圆圈选中，点击整行也可选中；底部「删除选中 (N)」批量删除；hover 显示单个 `×` 删除 |
+| 清空全部 | 底部「清空全部」按钮 |
+| 实时刷新 | 模态打开时自动重新加载记忆列表 |
 
 ### 29.6 i18n 新增
 
@@ -2391,6 +2392,9 @@ regex = "1"
 | `settings.aiMemoryDelete` | 删除 | Delete |
 | `settings.aiMemoryDeleted` | 记忆已删除 | Memory deleted |
 | `settings.aiMemoryCleared` | 全部记忆已清空 | All memories cleared |
+| `settings.aiMemoryManage` | 管理记忆 | Manage Memories |
+| `settings.aiMemoryCount` | 共 {count} 条记忆 | {count} memories |
+| `settings.aiMemoryDeleteSelected` | 删除选中 ({count}) | Delete Selected ({count}) |
 
 ### 29.7 影响文件
 
@@ -2403,6 +2407,71 @@ regex = "1"
 | `src/composables/useI18n.ts` | 新增 `settings.aiMemory*` 文案 |
 
 ### 29.8 编译验证
+
+| 检查项 | 结果 |
+|--------|------|
+| `npm run build` (vue-tsc + vite) | ✅ 通过 |
+
+---
+
+## 三十、Phase 30 — AI 面板增强 & 记忆管理 UI 优化 & 设置页 AI 配置重排（已完成 ✅）
+
+> 优化 AI 助手面板交互（宽度加宽、历史记录持久化），修复长期记忆不生效的 bug，重构记忆管理 UI，调整设置页 AI 配置表单布局。
+
+### 30.1 AI 面板宽度 & 历史持久化
+
+| 改动 | 文件 | 说明 |
+|------|------|------|
+| 宽度调整 | `NoteAiPanel.vue` | 面板宽度从 `w-[400px]` 改为 `w-[500px]` |
+| 对话历史持久化 | `NoteAiPanel.vue` + `database.ts` | 每次对话后自动将 `messages[]` 序列化 JSON 存到 `app_settings(key: 'ai_chat_history')`；面板打开时自动恢复；清空记录按钮（`delete_sweep` 图标）手动清除 |
+| 历史加载时机 | `NoteAiPanel.vue` | `onMounted` 时加载 + `historyLoaded` 标志防止初始赋值触发重复存储 |
+| 防抖存储 | `NoteAiPanel.vue` | 300ms 防抖 `watch(messages, { deep: true })` |
+
+### 30.2 修复 `extractMemories` 长期记忆不生效
+
+| 改动 | 文件 | 说明 |
+|------|------|------|
+| 改用 `callChatApi` | `noteAi.ts` | `extractMemories()` 原自行拼接请求体（`temperature: 0.1, max_tokens: 300`），未使用 `buildRequestBody()`，与不同 provider 的请求格式不兼容（如 MiMo 要求 `max_completion_tokens`、Azure 部署名在 URL），导致 API 调用静默失败返回空数组。现改为调用 `callChatApi()`，与主对话使用同一套请求构建逻辑。 |
+
+### 30.3 记忆管理 UI 重构
+
+| 改动 | 文件 | 说明 |
+|------|------|------|
+| 按钮 + 模态 | `SettingsPage.vue` | 设置页不再内联展示所有记忆，改为「管理记忆」按钮 + 数量概览 |
+| 弹窗样式 | `SettingsPage.vue` | 跟随 4.4 弹窗规范：`<Teleport to="body">` 脱离 `glass-panel` 包含块；`bg-white` 不透明背景（替代 `bg-white/60`）；`items-start pt-[8vh]` 防止溢出顶部；独立 backdrop `bg-black/10 backdrop-blur-sm` |
+| 选择/批量删除 | `SettingsPage.vue` | 每条记忆左侧圆圈复选框（`check_circle` / `radio_button_unchecked`），点击整行切换选中；底部「删除选中 (N)」批量删除；hover 显示单个 `×` 删除 |
+| 清空全部 | `SettingsPage.vue` | 保留「清空全部」按钮在模态底部 |
+| 实时刷新 | `SettingsPage.vue` | `watch(showMemoryModal)` 打开时自动调用 `loadMemories()` 并清空选中态 |
+
+### 30.4 AI 配置表单重排
+
+| 字段 | 说明 |
+|------|------|
+| 服务商 + 最大上下文 Token | 同一行 `grid-cols-2` 各占一半 |
+| 模型 + 认证方式 | 同一行 `grid-cols-2` 各占一半 |
+| API 地址 | 移到模型下方、API Key 上方 |
+| 保存按钮 | 移到 header 行，在「测试连接」按钮右侧 |
+
+### 30.5 i18n 新增
+
+| Key | zh | en |
+|-----|----|----|
+| `notes.aiClearHistory` | 清空记录 | Clear history |
+| `notes.aiHistoryCleared` | 对话记录已清空 | Conversation history cleared |
+| `settings.aiMemoryManage` | 管理记忆 | Manage Memories |
+| `settings.aiMemoryCount` | 共 {count} 条记忆 | {count} memories |
+| `settings.aiMemoryDeleteSelected` | 删除选中 ({count}) | Delete Selected ({count}) |
+
+### 30.6 影响文件
+
+| 文件 | 修改类型 |
+|------|----------|
+| `src/components/notes/NoteAiPanel.vue` | AI 面板宽度、对话历史持久化、extractMemories 去重逻辑 |
+| `src/services/noteAi.ts` | `extractMemories()` 改用 `callChatApi()` |
+| `src/views/settings/SettingsPage.vue` | AI 配置布局重排、记忆管理模态弹窗 |
+| `src/composables/useI18n.ts` | 新增 5 条 i18n 文案 |
+
+### 30.7 编译验证
 
 | 检查项 | 结果 |
 |--------|------|

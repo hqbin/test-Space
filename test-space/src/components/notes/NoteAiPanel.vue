@@ -15,16 +15,26 @@
     <div v-if="open" class="fixed right-4 bottom-4 z-[60] pointer-events-none">
       <div
         ref="panelRef"
-        class="relative w-[400px] max-w-[calc(100vw-2rem)] h-[calc(100vh-8rem)] flex flex-col glass-panel rounded-[2rem] bg-white/60 border border-white/50 shadow-2xl overflow-hidden animate-ai-in pointer-events-auto"
+        class="relative w-[500px] max-w-[calc(100vw-2rem)] h-[calc(100vh-8rem)] flex flex-col glass-panel rounded-[2rem] bg-white/60 border border-white/50 shadow-2xl overflow-hidden animate-ai-in pointer-events-auto"
       >
         <div class="p-3 border-b border-glass-border-light/30 flex items-center justify-between shrink-0 bg-white/40">
           <span class="font-label-md text-[13px] text-on-surface font-semibold flex items-center gap-2 min-w-0">
             <span class="material-symbols-outlined text-[18px] shrink-0">smart_toy</span>
             <span class="truncate">{{ t('notes.aiAssistant') }}</span>
           </span>
-          <button class="glass-button p-1 rounded select-none shrink-0" @click="open = false">
-            <span class="material-symbols-outlined text-[16px]">close</span>
-          </button>
+          <div class="flex items-center gap-1">
+            <button
+              v-if="messages.length > 0"
+              class="glass-button p-1 rounded select-none shrink-0 text-on-surface-variant hover:text-red-500 transition-colors"
+              :title="t('notes.aiClearHistory')"
+              @click="clearHistory"
+            >
+              <span class="material-symbols-outlined text-[16px]">delete_sweep</span>
+            </button>
+            <button class="glass-button p-1 rounded select-none shrink-0" @click="open = false">
+              <span class="material-symbols-outlined text-[16px]">close</span>
+            </button>
+          </div>
         </div>
 
         <div v-if="!configured" class="flex-1 flex flex-col items-center justify-center p-6 text-center">
@@ -116,7 +126,7 @@ import {
 } from '@/services/noteAi'
 import { parseAnswerNoteLinks } from '@/utils/parseNoteLinks'
 import { useI18n } from '@/composables/useI18n'
-import { loadAiMemories, saveAiMemory, type AiMemory } from '@/services/database'
+import { getSetting, setSetting, loadAiMemories, saveAiMemory, type AiMemory } from '@/services/database'
 
 const props = defineProps<{
   aiConfig: AiConfig
@@ -145,6 +155,7 @@ interface ChatMsg {
 
 const messages = ref<ChatMsg[]>([])
 const memories = ref<AiMemory[]>([])
+const historyLoaded = ref(false)
 
 const configured = computed(() => isAiConfigured(props.aiConfig))
 
@@ -186,8 +197,23 @@ onMounted(async () => {
   document.addEventListener('pointerdown', onDocumentPointerDown, true)
   try {
     memories.value = await loadAiMemories()
+    const raw = await getSetting('ai_chat_history')
+    if (raw) {
+      const parsed = JSON.parse(raw) as ChatMsg[]
+      if (Array.isArray(parsed)) messages.value = parsed
+    }
   } catch {}
+  historyLoaded.value = true
 })
+
+let saveHistoryDebounce: ReturnType<typeof setTimeout> | null = null
+watch(messages, () => {
+  if (!historyLoaded.value) return
+  if (saveHistoryDebounce) clearTimeout(saveHistoryDebounce)
+  saveHistoryDebounce = setTimeout(() => {
+    setSetting('ai_chat_history', JSON.stringify(messages.value)).catch(() => {})
+  }, 300)
+}, { deep: true })
 
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', onDocumentPointerDown, true)
@@ -241,6 +267,15 @@ async function send() {
     await nextTick()
     messagesRef.value?.scrollTo({ top: messagesRef.value.scrollHeight, behavior: 'smooth' })
   }
+}
+
+async function clearHistory() {
+  messages.value = []
+  input.value = ''
+  error.value = ''
+  try {
+    await setSetting('ai_chat_history', '')
+  } catch {}
 }
 
 defineExpose({ open })

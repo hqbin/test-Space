@@ -521,27 +521,16 @@ export async function extractMemories(
     { role: 'user', content: userContent },
   ]
 
-  const body: Record<string, unknown> = {
-    model: config.model.trim(),
-    messages,
-    temperature: 0.1,
-    max_tokens: 300,
+  try {
+    const json = await callChatApi(config, messages)
+    const content: string = json.choices?.[0]?.message?.content || json.choices?.[0]?.text || ''
+    const lines: string[] = content.split('\n')
+      .map(l => l.trim().replace(/^[-*\d.、\s]+/, ''))
+      .filter(l => l.length >= 4)
+    return [...new Set(lines)]
+  } catch {
+    return []
   }
-
-  const f = await getFetch()
-  const res = await f(config.endpoint.trim(), {
-    method: 'POST',
-    headers: buildAuthHeaders(config),
-    body: JSON.stringify(body),
-  })
-
-  const text = await res.text()
-  let json: any
-  try { json = JSON.parse(text) } catch { return [] }
-
-  const content: string = json.choices?.[0]?.message?.content || json.choices?.[0]?.text || ''
-  const lines: string[] = content.split('\n').map((l: string) => l.trim().replace(/^[-*\d.、\s]+/, '')).filter((l: string) => l.length >= 4)
-  return [...new Set(lines)]
 }
 
 export async function testAiConnection(config: AiConfig): Promise<string> {
