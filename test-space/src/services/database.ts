@@ -128,6 +128,12 @@ async function migrateInternal(d: Database) {
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_note_versions_note ON note_versions(note_id)`)
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_note_links_source ON note_links(source_note_id)`)
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_note_links_target ON note_links(target_note_id)`)
+  await d.execute(`CREATE TABLE IF NOT EXISTS note_ai_memories (
+    id TEXT PRIMARY KEY,
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`)
   await d.execute(`CREATE TABLE IF NOT EXISTS scripts (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -679,6 +685,43 @@ export async function deleteScript(id: string) {
   await d.execute('DELETE FROM scripts WHERE id = ?', [id])
 }
 
+// ── AI Memories ────────────────────────────────────────────
+
+export interface AiMemory {
+  id: string
+  content: string
+  createdAt: string
+  updatedAt: string
+}
+
+export async function saveAiMemory(content: string): Promise<AiMemory> {
+  const d = await getDb()
+  const id = crypto.randomUUID()
+  const now = new Date().toISOString()
+  await d.execute(
+    'INSERT INTO note_ai_memories (id, content, created_at, updated_at) VALUES (?, ?, ?, ?)',
+    [id, content.trim(), now, now]
+  )
+  return { id, content: content.trim(), createdAt: now, updatedAt: now }
+}
+
+export async function loadAiMemories(): Promise<AiMemory[]> {
+  const d = await getDb()
+  return await d.select<AiMemory[]>(
+    'SELECT id, content, created_at as createdAt, updated_at as updatedAt FROM note_ai_memories ORDER BY created_at DESC'
+  )
+}
+
+export async function deleteAiMemory(id: string) {
+  const d = await getDb()
+  await d.execute('DELETE FROM note_ai_memories WHERE id = ?', [id])
+}
+
+export async function clearAiMemories() {
+  const d = await getDb()
+  await d.execute('DELETE FROM note_ai_memories')
+}
+
 export async function saveProxyRules(rules: ApiRewriteRule[]) {
   const d = await getDb()
   await d.execute(
@@ -711,6 +754,7 @@ export interface AppBackup {
   noteVersions: NoteVersion[]
   noteLinks: NoteLink[]
   scripts: ScriptItem[]
+  aiMemories: AiMemory[]
   proxyRules?: ApiRewriteRule[]
 }
 
@@ -737,9 +781,12 @@ export async function exportAllData(): Promise<AppBackup> {
     'SELECT id, source_note_id as sourceNoteId, target_note_id as targetNoteId, created_at as createdAt FROM note_links'
   )
   const scripts = await listScripts()
+  const aiMemories = await d.select<AiMemory[]>(
+    'SELECT id, content, created_at as createdAt, updated_at as updatedAt FROM note_ai_memories'
+  )
   const proxyRules = await loadProxyRules()
   return {
-    version: '1.5',
+    version: '1.6',
     exportedAt: new Date().toISOString(),
     fieldRuleSets,
     caseFiles,
@@ -754,6 +801,7 @@ export async function exportAllData(): Promise<AppBackup> {
     noteVersions,
     noteLinks,
     scripts,
+    aiMemories,
     proxyRules: proxyRules.length > 0 ? proxyRules : undefined,
   }
 }
@@ -761,7 +809,7 @@ export async function exportAllData(): Promise<AppBackup> {
 function validateBackup(backup: any): string | null {
   if (!backup || typeof backup !== 'object') return '备份数据格式无效'
   if (!backup.version) return '备份文件缺少版本号，可能是旧格式或损坏文件'
-  const tables = ['fieldRuleSets', 'caseFiles', 'recentFiles', 'favorites', 'settings', 'inputHistory', 'logSessions', 'noteSpaces', 'noteFolders', 'notes', 'noteVersions', 'noteLinks', 'scripts']
+  const tables = ['fieldRuleSets', 'caseFiles', 'recentFiles', 'favorites', 'settings', 'inputHistory', 'logSessions', 'noteSpaces', 'noteFolders', 'notes', 'noteVersions', 'noteLinks', 'scripts', 'aiMemories']
   for (const t of tables) {
     if (backup[t] !== undefined && !Array.isArray(backup[t]) && typeof backup[t] !== 'object') {
       return `字段 "${t}" 类型无效`
@@ -788,7 +836,7 @@ export async function importAllData(backup: AppBackup) {
   const deletes = [
     'field_rule_sets', 'case_files', 'recent_files', 'favorites',
     'app_settings', 'input_history', 'log_sessions',
-    'note_folders', 'notes', 'note_versions', 'note_links', 'scripts'
+    'note_folders', 'notes', 'note_versions', 'note_links', 'scripts', 'note_ai_memories'
   ]
   for (const table of deletes) {
     try { await d.execute(`DELETE FROM ${table}`) } catch (e: any) { failures.push(`DELETE ${table}: ${e}`) }
@@ -807,6 +855,7 @@ export async function importAllData(backup: AppBackup) {
     ['note_versions', 'id, note_id, content, saved_at', backup.noteVersions || [], (v: any) => [v.id, v.noteId ?? v.note_id, v.content, v.savedAt ?? v.saved_at]],
     ['note_links', 'id, source_note_id, target_note_id, created_at', backup.noteLinks || [], (l: any) => [l.id, l.sourceNoteId ?? l.source_note_id, l.targetNoteId ?? l.target_note_id, l.createdAt ?? l.created_at]],
     ['scripts', 'id, name, type, content, created_at, updated_at', backup.scripts || [], (s: any) => [s.id, s.name, s.type ?? 'bat', s.content ?? '', s.createdAt ?? s.created_at, s.updatedAt ?? s.updated_at ?? s.createdAt]],
+    ['note_ai_memories', 'id, content, created_at, updated_at', backup.aiMemories || [], (m: any) => [m.id, m.content, m.createdAt ?? m.created_at, m.updatedAt ?? m.updated_at ?? m.createdAt]],
   ]
   for (const [table, cols, items, toParams] of inserts) {
     if (!Array.isArray(items) || items.length === 0) continue

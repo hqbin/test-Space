@@ -969,7 +969,7 @@ const { savedFilePath, isDirty, saveToFile, loadFromFile, saveAs, clearPath } = 
 **备份数据格式**（`AppBackup`）：
 ```typescript
 interface AppBackup {
-  version: string            // 数据版本号（当前 1.3）
+  version: string            // 数据版本号（当前 1.6）
   exportedAt: string         // 导出时间 ISO 字符串
   fieldRuleSets: any[]       // 字段规则集
   caseFiles: any[]           // 用例文件
@@ -1009,6 +1009,7 @@ interface AppBackup {
 | `note_versions` | 笔记版本历史 | id, note_id, content, saved_at |
 | `note_links` | 笔记双向链接 | id, source_note_id, target_note_id |
 | `scripts` | 脚本文件 | id, name, type, content, created_at, updated_at |
+| `note_ai_memories` | AI 长期记忆 | id, content, created_at, updated_at |
 
 ### 9.3 权限配置
 
@@ -1371,6 +1372,8 @@ npm run build
 - **开发模式**（浏览器 fallback）：页面数据从 `@tauri-apps/plugin-sql` 读取，若不可用则回退到 dev 文件读写
 
 #### 数据表结构
+
+| `note_ai_memories` | AI 长期记忆 | id, content, created_at, updated_at |
 
 | 表名 | 用途 | 关键字段 |
 |------|------|---------|
@@ -2315,3 +2318,92 @@ regex = "1"
 |------|------|
 | `note:` 链接在 TipTap Link 安全校验中未作为协议注册，切换笔记后可能丢失 href/样式，点击无反应 | `NoteLinkExtension` 注册 `protocols: ['note']` 并自定义 `isAllowedUri`，确保 `note:` 与 `#unresolved:` 能被解析和渲染 |
 | 历史笔记链接可能没有 `note-link` class | CSS 兜底匹配 `a[href^="note:"]` 与 `a[href^="#unresolved:"]` |
+
+---
+
+## 二十九、Phase 29 — AI 长期记忆系统（已完成 ✅）
+
+> 为 AI 助手添加长期记忆能力：自动从问答对话中提取关键知识点，持久化到 SQLite，下次提问时注入 context 供 AI 参考。
+
+### 29.1 架构概览
+
+```
+用户提问 → 载入记忆 → BM25 搜笔记 → 注入记忆 + 笔记 → AI 回答 → 提炼新记忆 → 存入 SQLite
+                              ↑                                   ↑
+                        scoreMemories()                    extractMemories()
+                         本地关键词排序                       轻量 AI 调用
+```
+
+### 29.2 数据层（`src/services/database.ts`）
+
+| 变更 | 说明 |
+|------|------|
+| `note_ai_memories` 表 | `id TEXT PK`, `content TEXT NOT NULL`, `created_at TEXT`, `updated_at TEXT` |
+| `saveAiMemory(content)` | 插入一条记忆，返回 `AiMemory` 对象 |
+| `loadAiMemories()` | 查询全部记忆（按 `created_at DESC`） |
+| `deleteAiMemory(id)` | 删除单条记忆 |
+| `clearAiMemories()` | 清空全部记忆 |
+| `AiMemory` 接口 | `{ id, content, createdAt, updatedAt }` 导出类型 |
+| `AppBackup.aiMemories` | 纳入备份/恢复（版本升至 `1.6`） |
+
+### 29.3 检索与提取（`src/services/noteAi.ts`）
+
+| 函数 | 说明 |
+|------|------|
+| `scoreMemories(query, memories)` | 本地关键词重叠排序：对每条记忆统计查询词命中数 + 精确短语命中加分 → 返回 Top ≤10 条 |
+| `chatWithNotes(..., memories)` | 新增可选 `memories` 参数。注入到 system prompt 的「已知长期记忆」区块 |
+| `extractMemories(config, question, answer)` | 轻量 AI 调用（`temperature=0.1, max_tokens=300`），从问答对提取事实陈述，去重后返回字符串数组 |
+
+**系统 prompt 修改**：
+```
+你是 Test Space 笔记助手。根据下方「参考笔记片段」和已知长期记忆回答用户问题。
+...
+已知长期记忆：
+- MAC烧写命令: echo mac > name
+- 用户偏好使用 AMIBA 方案烧写
+```
+
+### 29.4 UI 接入（`src/components/notes/NoteAiPanel.vue`）
+
+| 变更 | 说明 |
+|------|------|
+| `memories` ref | `onMounted` 时从 DB 加载全部记忆 |
+| `send()` | 传递 `memories` 给 `chatWithNotes()`；回答后调用 `extractMemories()`（fire & forget），去重后 `saveAiMemory()` |
+
+提取不阻塞 UI：`extractMemories()` 的 Promise 在 `.then()` 中处理结果，用户可立即进行下一次提问。
+
+### 29.5 记忆管理（`src/views/settings/SettingsPage.vue`）
+
+| 功能 | 说明 |
+|------|------|
+| 记忆列表 | AI 配置下方新增「AI 长期记忆」区域，显示所有记忆内容 + 创建时间 |
+| 展开/删除 | 条目 hover 显示关闭按钮，点击即删除 |
+| 清空全部 | 右上角「清空全部」按钮，二次确认无需 |
+| 空状态 | 显示「暂无长期记忆，使用 AI 助手时会自动提取」 |
+
+### 29.6 i18n 新增
+
+| Key | zh | en |
+|-----|----|----|
+| `settings.aiMemory` | AI 长期记忆 | AI Long-term Memory |
+| `settings.aiMemoryEmpty` | 暂无长期记忆，使用 AI 助手时会自动提取 | No memories yet. They'll be auto-extracted when using the AI assistant. |
+| `settings.aiMemoryClear` | 清空全部 | Clear All |
+| `settings.aiMemoryDelete` | 删除 | Delete |
+| `settings.aiMemoryDeleted` | 记忆已删除 | Memory deleted |
+| `settings.aiMemoryCleared` | 全部记忆已清空 | All memories cleared |
+
+### 29.7 影响文件
+
+| 文件 | 修改类型 |
+|------|----------|
+| `src/services/database.ts` | 新增表 + CRUD + 备份恢复 |
+| `src/services/noteAi.ts` | 新增 `scoreMemories()` / `extractMemories()`；修改 `chatWithNotes()` |
+| `src/components/notes/NoteAiPanel.vue` | 记忆加载与提取 |
+| `src/views/settings/SettingsPage.vue` | 记忆管理面板 |
+| `src/composables/useI18n.ts` | 新增 `settings.aiMemory*` 文案 |
+
+### 29.8 编译验证
+
+| 检查项 | 结果 |
+|--------|------|
+| `npm run build` (vue-tsc + vite) | ✅ 通过 |

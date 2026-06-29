@@ -125,6 +125,12 @@ const messages: Record<Lang, Record<string, string>> = {
     "settings.aiTesting": "正在测试...",
     "settings.aiTestSuccess": "连接成功",
     "settings.aiTestFail": "连接失败",
+    "settings.aiMemory": "AI 长期记忆",
+    "settings.aiMemoryEmpty": "暂无长期记忆，使用 AI 助手时会自动提取",
+    "settings.aiMemoryClear": "清空全部",
+    "settings.aiMemoryDelete": "删除",
+    "settings.aiMemoryDeleted": "记忆已删除",
+    "settings.aiMemoryCleared": "全部记忆已清空",
 
     // Device page
     "device.connect": "连接",
@@ -747,6 +753,12 @@ const messages: Record<Lang, Record<string, string>> = {
     "settings.aiTesting": "Testing...",
     "settings.aiTestSuccess": "Connection OK",
     "settings.aiTestFail": "Connection failed",
+    "settings.aiMemory": "AI Long-term Memory",
+    "settings.aiMemoryEmpty": "No memories yet. They'll be auto-extracted when using the AI assistant.",
+    "settings.aiMemoryClear": "Clear All",
+    "settings.aiMemoryDelete": "Delete",
+    "settings.aiMemoryDeleted": "Memory deleted",
+    "settings.aiMemoryCleared": "All memories cleared",
 
     // Device page
     "device.connect": "Connect",

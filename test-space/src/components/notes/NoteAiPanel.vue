@@ -112,9 +112,11 @@ import {
   selectContextChunks,
   buildChunkContext,
   estimateTokens,
+  extractMemories,
 } from '@/services/noteAi'
 import { parseAnswerNoteLinks } from '@/utils/parseNoteLinks'
 import { useI18n } from '@/composables/useI18n'
+import { loadAiMemories, saveAiMemory, type AiMemory } from '@/services/database'
 
 const props = defineProps<{
   aiConfig: AiConfig
@@ -142,6 +144,7 @@ interface ChatMsg {
 }
 
 const messages = ref<ChatMsg[]>([])
+const memories = ref<AiMemory[]>([])
 
 const configured = computed(() => isAiConfigured(props.aiConfig))
 
@@ -168,8 +171,11 @@ function onDocumentPointerDown(event: PointerEvent) {
   open.value = false
 }
 
-onMounted(() => {
+onMounted(async () => {
   document.addEventListener('pointerdown', onDocumentPointerDown, true)
+  try {
+    memories.value = await loadAiMemories()
+  } catch {}
 })
 
 onBeforeUnmount(() => {
@@ -201,11 +207,22 @@ async function send() {
       .slice(0, -1)
       .map(m => ({ role: m.role, content: m.content }))
 
-    const result = await chatWithNotes(props.aiConfig, question, props.notes, history)
+    const result = await chatWithNotes(props.aiConfig, question, props.notes, history, memories.value)
     messages.value.push({
       role: 'assistant',
       content: result.answer,
     })
+
+    // Extract memories after answer (fire & forget — don't block UI)
+    extractMemories(props.aiConfig, question, result.answer).then(facts => {
+      for (const fact of facts) {
+        if (!memories.value.some(m => m.content === fact)) {
+          saveAiMemory(fact).then(saved => {
+            if (saved) memories.value.unshift(saved)
+          }).catch(() => {})
+        }
+      }
+    }).catch(() => {})
   } catch (e: any) {
     error.value = e.message || String(e)
   } finally {

@@ -207,6 +207,48 @@
         <p v-if="aiStatusMessage" class="mt-3 font-body-md text-body-md text-[13px] break-words" :class="aiStatusIsError ? 'text-error' : 'text-success-indicator'">{{ aiStatusMessage }}</p>
       </div>
 
+      <!-- AI Memory Management -->
+      <div class="border-t border-glass-border-light/30 my-5"></div>
+      <div class="min-w-0">
+        <div class="flex items-center justify-between gap-3 mb-4">
+          <span class="font-body-md text-body-md text-on-surface font-medium shrink-0">{{ t("settings.aiMemory") }}</span>
+          <div class="flex gap-2 shrink-0">
+            <button
+              class="glass-button px-3 py-1.5 rounded-full text-[12px] select-none"
+              :disabled="memories.length === 0"
+              @click="clearAllMemories"
+            >
+              <span v-if="clearingMemories" class="material-symbols-outlined text-[14px] animate-spin align-middle mr-1">sync</span>
+              {{ t("settings.aiMemoryClear") }}
+            </button>
+          </div>
+        </div>
+        <div v-if="memories.length === 0" class="text-[12px] text-on-surface-variant/60 py-2">
+          {{ t("settings.aiMemoryEmpty") }}
+        </div>
+        <div v-else class="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
+          <div
+            v-for="mem in memories"
+            :key="mem.id"
+            class="flex items-start gap-2 px-3 py-2 rounded-lg bg-white/40 border border-glass-border-light/20 group"
+          >
+            <span class="material-symbols-outlined text-[16px] text-on-surface-variant/50 shrink-0 mt-0.5">memory</span>
+            <div class="flex-1 min-w-0">
+              <p class="text-[12px] text-on-surface leading-relaxed break-words">{{ mem.content }}</p>
+              <p class="text-[10px] text-on-surface-variant/50 mt-0.5">{{ formatDate(mem.createdAt) }}</p>
+            </div>
+            <button
+              class="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity px-1 py-0.5 rounded hover:bg-red-100 text-red-400 hover:text-red-600 select-none"
+              :title="t('settings.aiMemoryDelete')"
+              @click="deleteMemory(mem.id)"
+            >
+              <span class="material-symbols-outlined text-[14px]">close</span>
+            </button>
+          </div>
+        </div>
+        <p v-if="memoryStatusMessage" class="mt-2 font-body-md text-body-md text-[12px]" :class="memoryStatusIsError ? 'text-error' : 'text-success-indicator'">{{ memoryStatusMessage }}</p>
+      </div>
+
       <!-- Version -->
       <div class="mt-auto border-t border-glass-border-light/30 pt-5 flex items-center justify-between">
         <span class="font-body-md text-body-md text-on-surface font-medium">{{ t("settings.version") }}</span>
@@ -272,6 +314,7 @@ import * as cloudApi from "@/services/cloudBackup";
 import * as crypto from "@/services/crypto";
 import { useI18n } from "@/composables/useI18n";
 import { getVersion } from "@tauri-apps/api/app";
+import type { AiMemory } from "@/services/database";
 import {
   loadAiConfig,
   loadAiConfigForProvider,
@@ -320,6 +363,58 @@ const aiStatusMessage = ref("");
 const aiStatusIsError = ref(false);
 const aiTesting = ref(false);
 const activeAiProvider = ref<AiProvider>("azure");
+
+// AI Memory state
+const memories = ref<AiMemory[]>([]);
+const clearingMemories = ref(false);
+const memoryStatusMessage = ref("");
+const memoryStatusIsError = ref(false);
+
+function setMemoryStatus(msg: string, isError = false) {
+  memoryStatusMessage.value = msg;
+  memoryStatusIsError.value = isError;
+}
+
+function formatDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return iso;
+  }
+}
+
+async function loadMemories() {
+  try {
+    memories.value = await db.loadAiMemories();
+  } catch { memories.value = []; }
+}
+
+async function deleteMemory(id: string) {
+  try {
+    await db.deleteAiMemory(id);
+    memories.value = memories.value.filter(m => m.id !== id);
+    setMemoryStatus(t("settings.aiMemoryDeleted"));
+    setTimeout(() => { if (memoryStatusMessage.value === t("settings.aiMemoryDeleted")) setMemoryStatus(""); }, 2000);
+  } catch (e: any) {
+    setMemoryStatus(e.message || "Delete failed", true);
+  }
+}
+
+async function clearAllMemories() {
+  if (memories.value.length === 0) return;
+  clearingMemories.value = true;
+  try {
+    await db.clearAiMemories();
+    memories.value = [];
+    setMemoryStatus(t("settings.aiMemoryCleared"));
+    setTimeout(() => { if (memoryStatusMessage.value === t("settings.aiMemoryCleared")) setMemoryStatus(""); }, 2000);
+  } catch (e: any) {
+    setMemoryStatus(e.message || "Clear failed", true);
+  } finally {
+    clearingMemories.value = false;
+  }
+}
 
 function setAiStatus(msg: string, isError = false) {
   aiStatusMessage.value = msg;
@@ -692,5 +787,6 @@ onMounted(async () => {
     appVersion.value = "1.0.0";
   }
   await ensureDeviceId();
+  await loadMemories();
 });
 </script>

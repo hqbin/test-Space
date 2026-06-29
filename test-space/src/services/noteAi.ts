@@ -1,5 +1,6 @@
 import type { NoteItem } from '@/types'
 import type { AiConfig } from '@/services/aiSettings'
+import type { AiMemory } from '@/services/database'
 
 export interface AiChatMessage {
   role: 'user' | 'assistant' | 'system'
@@ -10,6 +11,7 @@ export interface AiChatResult {
   answer: string
   contextNoteCount: number
   contextChunkCount: number
+  memoryCount: number
   usage?: { promptTokens: number; completionTokens: number; totalTokens: number }
 }
 
@@ -221,6 +223,26 @@ function bm25Score(text: string, query: string, stats: { idf: Map<string, number
   return score
 }
 
+/** Score memories by query term overlap — simple lightweight ranking. */
+export function scoreMemories(query: string, memories: AiMemory[]): AiMemory[] {
+  if (!query.trim() || memories.length === 0) return []
+  const queryTokens = new Set(tokenizeFinalQuery(query))
+  if (queryTokens.size === 0) return memories.slice(0, 10)
+
+  const scored = memories.map(m => {
+    const docTokens = tokenizeDoc(m.content)
+    let score = 0
+    for (const t of docTokens) {
+      if (queryTokens.has(t)) score++
+    }
+    if (m.content.toLowerCase().includes(query.toLowerCase())) score += 3
+    return { memory: m, score }
+  })
+
+  scored.sort((a, b) => b.score - a.score)
+  return scored.filter(s => s.score > 0).slice(0, 10).map(s => s.memory)
+}
+
 /** Rank & pack note chunks within token budget (RAG-style slicing). */
 export function selectContextChunks(
   notes: NoteItem[],
@@ -428,17 +450,23 @@ export async function chatWithNotes(
   config: AiConfig,
   question: string,
   allNotes: NoteItem[],
-  history: AiChatMessage[] = []
+  history: AiChatMessage[] = [],
+  memories: AiMemory[] = []
 ): Promise<AiChatResult> {
   const { chunks, noteIds } = selectContextChunks(allNotes, question, config.maxContextTokens)
   const context = buildChunkContext(chunks)
 
-  const systemPrompt = `你是 Test Space 笔记助手。根据下方「参考笔记片段」回答用户问题。
+  const relevantMemories = scoreMemories(question, memories)
+  const memoriesBlock = relevantMemories.length > 0
+    ? `\n\n已知长期记忆：\n${relevantMemories.map(m => `- ${m.content}`).join('\n')}`
+    : ''
+
+  const systemPrompt = `你是 Test Space 笔记助手。根据下方「参考笔记片段」和已知长期记忆回答用户问题。
 规则：
-1. 仅基于参考片段作答；若无相关信息，明确说明。
+1. 仅基于参考片段和长期记忆作答；若无相关信息，明确说明。
 2. 引用笔记时在正文中使用格式：[笔记标题](note:笔记ID)，可多处引用。
 3. 不要在回答末尾单独列出「参考笔记」清单。
-4. 回答简洁准确，使用与用户相同的语言。`
+4. 回答简洁准确，使用与用户相同的语言。${memoriesBlock}`
 
   const userContent = `参考笔记（共 ${allNotes.length} 篇，检索 ${noteIds.length} 篇 / ${chunks.length} 个片段）：\n${context || '(无参考内容)'}\n\n用户问题：${question}`
 
@@ -463,8 +491,49 @@ export async function chatWithNotes(
     answer: answer.trim(),
     contextNoteCount: noteIds.length,
     contextChunkCount: chunks.length,
+    memoryCount: relevantMemories.length,
     usage,
   }
+}
+
+/**
+ * Lightweight AI call to extract memorable facts from a Q&A pair.
+ * Returns extracted fact strings (empty array if nothing to remember).
+ */
+export async function extractMemories(
+  config: AiConfig,
+  question: string,
+  answer: string
+): Promise<string[]> {
+  const systemPrompt = '从以下问答中提取可作为长期记忆的知识点。每条记忆应是一个独立的事实陈述，简洁准确。如果没有值得记忆的内容，返回空。\n格式：每行一条，不要加序号。'
+  const userContent = `问：${question}\n答：${answer}`
+
+  const messages: AiChatMessage[] = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userContent },
+  ]
+
+  const body: Record<string, unknown> = {
+    model: config.model.trim(),
+    messages,
+    temperature: 0.1,
+    max_tokens: 300,
+  }
+
+  const f = await getFetch()
+  const res = await f(config.endpoint.trim(), {
+    method: 'POST',
+    headers: buildAuthHeaders(config),
+    body: JSON.stringify(body),
+  })
+
+  const text = await res.text()
+  let json: any
+  try { json = JSON.parse(text) } catch { return [] }
+
+  const content: string = json.choices?.[0]?.message?.content || json.choices?.[0]?.text || ''
+  const lines: string[] = content.split('\n').map((l: string) => l.trim().replace(/^[-*\d.、\s]+/, '')).filter((l: string) => l.length >= 4)
+  return [...new Set(lines)]
 }
 
 export async function testAiConnection(config: AiConfig): Promise<string> {
