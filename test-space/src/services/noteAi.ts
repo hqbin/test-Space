@@ -143,23 +143,81 @@ function tokenizeSearchQuery(query: string): string[] {
 function tokenizeFinalQuery(query: string): string[] {
   const q = query.toLowerCase().trim()
   if (!q) return []
-  const cjk = q.match(/[\u4e00-\u9fff]{2,}/g) || []
-  const words = q
+  // Split CJK-Latin boundaries so "设备MAC地址烧写" → "设备 MAC 地址烧写"
+  const spaced = q.replace(/([\u4e00-\u9fff])([a-z\d])/g, '$1 $2')
+                  .replace(/([a-z\d])([\u4e00-\u9fff])/g, '$1 $2')
+  const cjk = spaced.match(/[\u4e00-\u9fff]{2,}/g) || []
+  const words = spaced
     .split(/[^\p{L}\p{N}\u4e00-\u9fff]+/u)
     .filter(w => w.length >= 2)
   return [...new Set([...cjk, ...words, q])]
 }
 
-function scoreText(text: string, query: string, titleBoost = 0): number {
-  const tokens = tokenizeFinalQuery(query)
-  if (tokens.length === 0) return titleBoost
-  const lower = text.toLowerCase()
-  let score = 0
-  for (const tok of tokens) {
-    if (lower.includes(tok)) score += tok.length >= 4 ? 4 : 2
+/** Tokenize document text (with duplicates, for BM25 term frequency). */
+function tokenizeDoc(text: string): string[] {
+  const lower = text.toLowerCase().trim()
+  if (!lower) return []
+  const spaced = lower.replace(/([\u4e00-\u9fff])([a-z\d])/g, '$1 $2')
+                      .replace(/([a-z\d])([\u4e00-\u9fff])/g, '$1 $2')
+  const cjk = spaced.match(/[\u4e00-\u9fff]{2,}/g) || []
+  const words = spaced
+    .split(/[^\p{L}\p{N}\u4e00-\u9fff]+/u)
+    .filter(w => w.length >= 2)
+  return [...cjk, ...words]
+}
+
+/** Compute BM25 corpus statistics (IDF + avg doc length). */
+function computeBm25Stats(texts: string[]): { idf: Map<string, number>; avgdl: number } {
+  const docLengths: number[] = []
+  const df = new Map<string, number>()
+
+  for (const text of texts) {
+    const tokens = tokenizeDoc(text)
+    if (tokens.length === 0) continue
+    docLengths.push(tokens.length)
+    const unique = new Set(tokens)
+    for (const t of unique) {
+      df.set(t, (df.get(t) || 0) + 1)
+    }
   }
-  if (score > 0) score += titleBoost
-  if (lower.includes(query.toLowerCase().trim())) score += 6
+
+  const N = docLengths.length
+  const avgdl = N > 0 ? docLengths.reduce((a, b) => a + b, 0) / N : 1
+
+  const idf = new Map<string, number>()
+  for (const [term, docFreq] of df) {
+    idf.set(term, Math.log(1 + (N - docFreq + 0.5) / (docFreq + 0.5)))
+  }
+
+  return { idf, avgdl }
+}
+
+/** BM25 score for a document against a query. */
+function bm25Score(text: string, query: string, stats: { idf: Map<string, number>; avgdl: number }): number {
+  const queryTokens = tokenizeFinalQuery(query)
+  if (queryTokens.length === 0 || !stats.avgdl) return 0
+
+  const docTokens = tokenizeDoc(text)
+  if (docTokens.length === 0) return 0
+
+  const docLen = docTokens.length
+  const tfMap = new Map<string, number>()
+  for (const t of docTokens) {
+    tfMap.set(t, (tfMap.get(t) || 0) + 1)
+  }
+
+  const k1 = 1.5; const b = 0.75
+  let score = 0
+
+  for (const qToken of queryTokens) {
+    if (qToken.length < 2) continue
+    const tf = tfMap.get(qToken) || 0
+    if (tf === 0) continue
+    const idf = stats.idf.get(qToken)
+    if (!idf || idf <= 0) continue
+    score += idf * (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * docLen / stats.avgdl))
+  }
+
   return score
 }
 
@@ -176,17 +234,17 @@ export function selectContextChunks(
   const configuredBudget = Number.isFinite(maxContextTokens) ? maxContextTokens : 0
   const budget = Math.max(DEFAULT_MIN_CONTEXT_TOKENS, configuredBudget - systemReserve - queryReserve)
 
+  // Step 1: chunk all notes
   const allChunks: NoteChunk[] = []
   for (const note of notes) {
     const pieces = chunkNoteContent(note)
-    const titleScore = scoreText(note.title, query, 8)
     if (pieces.length === 0) {
       allChunks.push({
         noteId: note.id,
         title: note.title || '无标题',
         index: 0,
         text: '(空)',
-        score: titleScore * 0.5,
+        score: 0,
       })
       continue
     }
@@ -196,34 +254,83 @@ export function selectContextChunks(
         title: note.title || '无标题',
         index,
         text,
-        score: scoreText(text, query) + titleScore,
+        score: 0,
       })
     })
   }
 
-  allChunks.sort((a, b) => b.score - a.score || b.text.length - a.text.length || a.noteId.localeCompare(b.noteId))
+  // Step 2: BM25 scoring (corpus-aware)
+  if (query.trim()) {
+    const contentChunks = allChunks.filter(c => c.text !== '(空)')
+    const stats = contentChunks.length > 0
+      ? computeBm25Stats(contentChunks.map(c => c.text))
+      : { idf: new Map(), avgdl: 1 }
+
+    // Precompute title BM25 per note
+    const titleScores = new Map<string, number>()
+    for (const note of notes) {
+      titleScores.set(note.id, bm25Score(note.title || '', query, stats))
+    }
+
+    for (const chunk of allChunks) {
+      if (chunk.text === '(空)') continue
+      const ts = bm25Score(chunk.text, query, stats)
+      const titleBm25 = titleScores.get(chunk.noteId) || 0
+      chunk.score = ts + titleBm25 * 3 + (titleBm25 > 0 ? 2 : 0)
+    }
+  } else {
+    for (const chunk of allChunks) {
+      chunk.score = chunk.text === '(空)' ? 0.5 : 1
+    }
+  }
+
+  // Group by note for diverse packing: every note gets at least one chunk
+  const byNote = new Map<string, NoteChunk[]>()
+  for (const chunk of allChunks) {
+    const list = byNote.get(chunk.noteId) || []
+    list.push(chunk)
+    byNote.set(chunk.noteId, list)
+  }
+  for (const list of byNote.values()) {
+    list.sort((a, b) => b.score - a.score || a.text.length - b.text.length)
+  }
 
   const selected: NoteChunk[] = []
   let used = 0
-  const seenNotes = new Set<string>()
 
-  for (const chunk of allChunks) {
-    const block = formatChunkBlock(chunk)
-    const cost = estimateTokens(block)
-    if (used + cost > budget && selected.length > 0) continue
+  // Round 1: pick the best chunk from each note (budget permitting)
+  for (const note of notes) {
+    const chunks = byNote.get(note.id)
+    if (!chunks || chunks.length === 0) continue
+    const cost = estimateTokens(formatChunkBlock(chunks[0]))
+    if (used + cost <= budget) {
+      selected.push(chunks[0])
+      used += cost
+    }
+  }
 
-    selected.push(chunk)
-    used += cost
-    seenNotes.add(chunk.noteId)
+  // Round 2: fill remaining budget with next-best chunks in score order
+  const selectedIds = new Set(selected.map(c => `${c.noteId}-${c.index}`))
+  const remaining = allChunks.filter(c => !selectedIds.has(`${c.noteId}-${c.index}`))
+  remaining.sort((a, b) => b.score - a.score || a.text.length - b.text.length || a.noteId.localeCompare(b.noteId))
+  for (const chunk of remaining) {
+    const cost = estimateTokens(formatChunkBlock(chunk))
+    if (used + cost <= budget) {
+      selected.push(chunk)
+      used += cost
+    }
   }
 
   if (selected.length === 0) {
     const fallback = allChunks.slice(0, Math.min(3, allChunks.length))
-    for (const c of fallback) seenNotes.add(c.noteId)
-    return { chunks: fallback, noteIds: [...seenNotes] }
+    const fbNoteIds = [...new Set(fallback.map(c => c.noteId))]
+    return { chunks: fallback, noteIds: fbNoteIds }
   }
 
-  return { chunks: selected, noteIds: [...seenNotes] }
+  return {
+    chunks: selected,
+    noteIds: [...new Set(selected.map(c => c.noteId))],
+  }
 }
 
 function formatChunkBlock(chunk: NoteChunk): string {
