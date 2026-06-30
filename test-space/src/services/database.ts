@@ -1,4 +1,4 @@
-import type Database from '@tauri-apps/plugin-sql'
+﻿import type Database from '@tauri-apps/plugin-sql'
 import type { InputHistoryEntry, LogSession, NoteSpace, NoteFolder, NoteItem, NoteVersion, NoteLink } from '@/types'
 import type { ApiRewriteRule } from '@/types'
 
@@ -23,6 +23,7 @@ async function initDb(): Promise<Database> {
   await instance.execute('PRAGMA busy_timeout = 30000')
   console.log('[DB] path:', `sqlite:${dir}/test-space.db`)
   await migrateInternal(instance)
+  try { await rebuildFtsIndex() } catch {}
   return instance
 }
 
@@ -124,8 +125,12 @@ async function migrateInternal(d: Database) {
     created_at TEXT NOT NULL
   )`)
   try { await d.execute('ALTER TABLE notes ADD COLUMN plain_text TEXT NOT NULL DEFAULT \'\'') } catch {}
+  try { await d.execute('ALTER TABLE notes ADD COLUMN content_json TEXT') } catch {}
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_notes_folder ON notes(folder_id)`)
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_notes_fav ON notes(is_favorite)`)
+  await d.execute(`CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes(updated_at)`)
+  await d.execute(`CREATE INDEX IF NOT EXISTS idx_note_folders_space ON note_folders(space_id)`)
+  await d.execute(`CREATE INDEX IF NOT EXISTS idx_note_folders_parent ON note_folders(parent_id)`)
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_note_versions_note ON note_versions(note_id)`)
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_note_links_source ON note_links(source_note_id)`)
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_note_links_target ON note_links(target_note_id)`)
@@ -143,6 +148,15 @@ async function migrateInternal(d: Database) {
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )`)
+  // FTS5 full-text search for notes
+  try {
+    await d.execute(`CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
+      note_id, title, plain_text, tags,
+      tokenize='unicode61'
+    )`)
+  } catch (e) {
+    console.warn('[DB] FTS5 not available, falling back to LIKE search')
+  }
 }
 
 export async function closeDb() {
@@ -522,8 +536,8 @@ export async function renameNoteFolder(id: string, name: string) {
 export async function loadNotes(): Promise<NoteItem[]> {
   const d = await getDb()
   const rows = await d.select<any[]>(
-    `SELECT id, folder_id as folderId, title, content, plain_text as plainText, tags, is_favorite as isFavorite,
-            created_at as createdAt, updated_at as updatedAt
+    `SELECT id, folder_id as folderId, title, content, content_json as contentJson, plain_text as plainText,
+            tags, is_favorite as isFavorite, created_at as createdAt, updated_at as updatedAt
      FROM notes ORDER BY updated_at DESC`
   )
   return rows.map(r => ({ ...r, tags: safeJsonParse(r.tags, []), isFavorite: !!r.isFavorite, plainText: r.plainText || '' }))
@@ -532,8 +546,8 @@ export async function loadNotes(): Promise<NoteItem[]> {
 export async function loadNoteList(): Promise<NoteItem[]> {
   const d = await getDb()
   const rows = await d.select<any[]>(
-    `SELECT id, folder_id as folderId, title, '' as content, plain_text as plainText, tags, is_favorite as isFavorite,
-            created_at as createdAt, updated_at as updatedAt
+    `SELECT id, folder_id as folderId, title, '' as content, '' as contentJson, plain_text as plainText, tags,
+            is_favorite as isFavorite, created_at as createdAt, updated_at as updatedAt
      FROM notes ORDER BY updated_at DESC`
   )
   return rows.map(r => ({ ...r, tags: safeJsonParse(r.tags, []), isFavorite: !!r.isFavorite, plainText: r.plainText || '' }))
@@ -542,8 +556,8 @@ export async function loadNoteList(): Promise<NoteItem[]> {
 export async function loadNote(id: string): Promise<NoteItem | null> {
   const d = await getDb()
   const rows = await d.select<any[]>(
-    `SELECT id, folder_id as folderId, title, content, plain_text as plainText, tags, is_favorite as isFavorite,
-            created_at as createdAt, updated_at as updatedAt
+    `SELECT id, folder_id as folderId, title, content, content_json as contentJson, plain_text as plainText,
+            tags, is_favorite as isFavorite, created_at as createdAt, updated_at as updatedAt
      FROM notes WHERE id = ?`, [id]
   )
   if (rows.length === 0) return null
@@ -565,18 +579,19 @@ function htmlToPlainText(html: string): string {
     .trim()
 }
 
-export async function saveNote(note: { id: string; folderId?: string | null; title: string; content: string; tags?: string[]; isFavorite?: boolean }) {
+export async function saveNote(note: { id: string; folderId?: string | null; title: string; content: string; contentJson?: string | null; tags?: string[]; isFavorite?: boolean }) {
   const d = await getDb()
   const now = new Date().toISOString()
   const plainText = htmlToPlainText(note.content)
+  const cj = note.contentJson || null
   await d.execute(
-    `INSERT INTO notes (id, folder_id, title, content, plain_text, tags, is_favorite, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO notes (id, folder_id, title, content, content_json, plain_text, tags, is_favorite, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        folder_id = excluded.folder_id, title = excluded.title, content = excluded.content,
-       plain_text = excluded.plain_text, tags = excluded.tags,
+       content_json = excluded.content_json, plain_text = excluded.plain_text, tags = excluded.tags,
        is_favorite = excluded.is_favorite, updated_at = excluded.updated_at`,
-    [note.id, note.folderId || null, note.title, note.content, plainText,
+    [note.id, note.folderId || null, note.title, note.content, cj, plainText,
      JSON.stringify(note.tags || []), note.isFavorite ? 1 : 0, now, now]
   )
 }
@@ -586,6 +601,7 @@ export async function deleteNote(id: string) {
   await d.execute('DELETE FROM note_versions WHERE note_id = ?', [id])
   await d.execute('DELETE FROM note_links WHERE source_note_id = ? OR target_note_id = ?', [id, id])
   await d.execute('DELETE FROM notes WHERE id = ?', [id])
+  try { await d.execute('DELETE FROM notes_fts WHERE note_id = ?', [id]) } catch {}
 }
 
 export async function toggleNoteFavorite(id: string): Promise<boolean> {
@@ -597,24 +613,80 @@ export async function toggleNoteFavorite(id: string): Promise<boolean> {
   return !!newVal
 }
 
+function buildFtsQuery(query: string): string {
+  const words = query.trim().split(/\s+/).filter(Boolean)
+  if (words.length === 0) return ""
+  const escaped = words.map(w => {
+    const safe = w.replace(/"/g, '""')
+    return '"' + safe + '"*'
+  })
+  return escaped.join(" AND ")
+}
+
+export async function rebuildFtsIndex() {
+  try {
+    const d = await getDb()
+    await d.execute("DELETE FROM notes_fts")
+    const notes = await d.select<any[]>("SELECT id, title, plain_text, tags FROM notes")
+    for (const note of notes) {
+      try {
+        await d.execute(
+          "INSERT INTO notes_fts (note_id, title, plain_text, tags) VALUES (?, ?, ?, ?)",
+          [note.id, note.title, note.plain_text || "", note.tags || "[]"]
+        )
+      } catch {}
+    }
+    console.log("[DB] FTS5 index rebuilt:", notes.length, "notes indexed")
+  } catch (e) {
+    console.warn("[DB] FTS5 rebuild failed:", e)
+  }
+}
+
 export async function searchNotes(query: string): Promise<NoteItem[]> {
   const d = await getDb()
-  const like = `%${escapeLike(query)}%`
+  
+  // Try FTS5 full-text search first
+  try {
+    const ftsQuery = buildFtsQuery(query)
+    if (ftsQuery) {
+      const ftRows = await d.select<{ note_id: string }[]>(
+        "SELECT note_id FROM notes_fts WHERE notes_fts MATCH ? ORDER BY rank",
+        [ftsQuery]
+      )
+      if (ftRows.length > 0) {
+        const ids = ftRows.map(r => r.note_id)
+        const placeholders = ids.map(() => "?").join(",")
+        const rows = await d.select<any[]>(
+          `SELECT id, folder_id as folderId, title, content, content_json as contentJson, plain_text as plainText,
+                  tags, is_favorite as isFavorite, created_at as createdAt, updated_at as updatedAt
+           FROM notes WHERE id IN (${placeholders})`,
+          ids
+        )
+        return rows.map(r => ({ ...r, tags: safeJsonParse(r.tags, []), isFavorite: !!r.isFavorite, plainText: r.plainText || "" }))
+      }
+      return []
+    }
+  } catch (e) {
+    console.warn("[DB] FTS5 search failed, fallback to LIKE:", e)
+  }
+
+  // Fallback: LIKE search
+  const like = "%" + escapeLike(query) + "%"
   const rows = await d.select<any[]>(
-    `SELECT id, folder_id as folderId, title, content, plain_text as plainText, tags, is_favorite as isFavorite,
-            created_at as createdAt, updated_at as updatedAt
+    `SELECT id, folder_id as folderId, title, content, content_json as contentJson, plain_text as plainText,
+            tags, is_favorite as isFavorite, created_at as createdAt, updated_at as updatedAt
      FROM notes WHERE title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\'
      ORDER BY updated_at DESC`,
     [like, like]
   )
-  return rows.map(r => ({ ...r, tags: safeJsonParse(r.tags, []), isFavorite: !!r.isFavorite, plainText: r.plainText || '' }))
+  return rows.map(r => ({ ...r, tags: safeJsonParse(r.tags, []), isFavorite: !!r.isFavorite, plainText: r.plainText || "" }))
 }
 
 export async function getFavoriteNotes(): Promise<NoteItem[]> {
   const d = await getDb()
   const rows = await d.select<any[]>(
-    `SELECT id, folder_id as folderId, title, content, plain_text as plainText, tags, is_favorite as isFavorite,
-            created_at as createdAt, updated_at as updatedAt
+    `SELECT id, folder_id as folderId, title, content, content_json as contentJson, plain_text as plainText,
+            tags, is_favorite as isFavorite, created_at as createdAt, updated_at as updatedAt
      FROM notes WHERE is_favorite = 1 ORDER BY updated_at DESC`
   )
   return rows.map(r => ({ ...r, tags: safeJsonParse(r.tags, []), isFavorite: !!r.isFavorite, plainText: r.plainText || '' }))
@@ -835,7 +907,7 @@ export async function exportAllData(): Promise<AppBackup> {
   )
   const proxyRules = await loadProxyRules()
   return {
-    version: '1.6',
+    version: '1.7',
     exportedAt: new Date().toISOString(),
     fieldRuleSets,
     caseFiles,
@@ -885,7 +957,7 @@ export async function importAllData(backup: AppBackup) {
   const deletes = [
     'field_rule_sets', 'case_files', 'recent_files', 'favorites',
     'app_settings', 'input_history', 'log_sessions',
-    'note_folders', 'notes', 'note_versions', 'note_links', 'scripts', 'note_ai_memories'
+    'note_folders', 'notes', 'notes_fts', 'note_versions', 'note_links', 'scripts', 'note_ai_memories'
   ]
   for (const table of deletes) {
     try { await d.execute(`DELETE FROM ${table}`) } catch (e: any) { failures.push(`DELETE ${table}: ${e}`) }
@@ -900,7 +972,7 @@ export async function importAllData(backup: AppBackup) {
     ['log_sessions', 'id, type, device_serial, status, started_at, metadata', backup.logSessions || [], s => [s.id, s.type, s.deviceSerial, s.status, s.startedAt, s.metadata]],
     ['note_spaces', 'id, name, sort_order, created_at, updated_at', backup.noteSpaces || [], (s: any) => [s.id, s.name, s.sortOrder ?? s.sort_order ?? 0, s.createdAt ?? s.created_at, s.updatedAt ?? s.updated_at]],
     ['note_folders', 'id, space_id, name, parent_id, sort_order, created_at, updated_at', backup.noteFolders || [], (f: any) => [f.id, f.spaceId ?? f.space_id ?? null, f.name, f.parentId ?? f.parent_id ?? null, f.sortOrder ?? f.sort_order ?? 0, f.createdAt ?? f.created_at, f.updatedAt ?? f.updated_at]],
-    ['notes', 'id, folder_id, title, content, tags, is_favorite, created_at, updated_at', backup.notes || [], (n: any) => [n.id, n.folderId ?? n.folder_id ?? null, n.title ?? '', n.content ?? '', JSON.stringify(n.tags ?? []), n.isFavorite ? 1 : 0, n.createdAt ?? n.created_at, n.updatedAt ?? n.updated_at]],
+    ['notes', 'id, folder_id, title, content, content_json, tags, is_favorite, created_at, updated_at', backup.notes || [], (n: any) => [n.id, n.folderId ?? n.folder_id ?? null, n.title ?? '', n.content ?? '', n.contentJson ?? n.content_json ?? null, JSON.stringify(n.tags ?? []), n.isFavorite ? 1 : 0, n.createdAt ?? n.created_at, n.updatedAt ?? n.updated_at]],
     ['note_versions', 'id, note_id, content, saved_at', backup.noteVersions || [], (v: any) => [v.id, v.noteId ?? v.note_id, v.content, v.savedAt ?? v.saved_at]],
     ['note_links', 'id, source_note_id, target_note_id, created_at', backup.noteLinks || [], (l: any) => [l.id, l.sourceNoteId ?? l.source_note_id, l.targetNoteId ?? l.target_note_id, l.createdAt ?? l.created_at]],
     ['scripts', 'id, name, type, content, created_at, updated_at', backup.scripts || [], (s: any) => [s.id, s.name, s.type ?? 'bat', s.content ?? '', s.createdAt ?? s.created_at, s.updatedAt ?? s.updated_at ?? s.createdAt]],

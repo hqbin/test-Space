@@ -5,7 +5,11 @@
   >
     <TitleBar />
     <main class="px-margin-page pt-3 box-border flex-1 overflow-y-auto overflow-x-hidden min-h-0 flex flex-col">
-      <router-view />
+      <router-view v-slot="{ Component }">
+        <keep-alive :include="['NotesSpacePage']">
+          <component :is="Component" />
+        </keep-alive>
+      </router-view>
     </main>
   </div>
 </template>

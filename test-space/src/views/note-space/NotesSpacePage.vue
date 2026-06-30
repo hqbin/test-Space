@@ -1,4 +1,3 @@
-<template>
   <div class="flex flex-1 min-h-0 -mx-margin-page overflow-hidden pb-4 box-border select-none">
     <!-- Left: Search + File Tree -->
     <div class="flex-shrink-0 flex flex-col w-64 ml-3 overflow-hidden rounded-xl bg-white/10 backdrop-blur-[60px] border border-white/50 shadow-lg">
@@ -643,7 +642,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
+defineOptions({ name: 'NotesSpacePage' })
+import { ref, computed, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from "vue";
 import { useRouter } from "vue-router";
 import { useEditor, EditorContent } from "@tiptap/vue-3";
 import StarterKit from "@tiptap/starter-kit";
@@ -671,6 +671,20 @@ const router = useRouter();
 import * as db from "@/services/database";
 import { mdToHtml, docxToHtml } from "@/utils/noteImport";
 const turndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
+
+
+// Module-level cache to survive remounts
+let _cachedNotes: NoteItem[] | null = null
+let _cachedFolders: NoteFolder[] | null = null
+let _cachedSpaces: NoteSpace[] | null = null
+const _contentCache = new Map<string, string>()  // noteId -> content HTML
+const _contentJsonCache = new Map<string, string>()  // noteId -> content JSON
+let _isUnmounted = false
+let _pendingNoteId: string | null = null
+
+function tryParseJson(s: string): any {
+  try { return JSON.parse(s) } catch { return null }
+}
 
 // ── State ────────────────────────────────────────────────────
 
@@ -731,6 +745,7 @@ const importing = ref(false)
 const importingProgress = ref('')
 const exporting = ref(false)
 const contentLoading = ref(false)
+const dataLoading = ref(false)
 
 let titleMap = new Map<string, string>()
 function rebuildTitleMap() {
@@ -1240,11 +1255,13 @@ async function selectNote(note: NoteItem) {
       editor.value.commands.setContent("")
     }
     await nextTick()
+    await new Promise(r => setTimeout(r, 0))
     if (editor.value) {
       editor.value.commands.setContent(content)
     }
     contentLoading.value = false
   } else {
+    await new Promise(r => setTimeout(r, 0))
     if (editor.value) {
       editor.value.commands.setContent(content)
     }
@@ -1266,8 +1283,11 @@ async function saveCurrentNote() {
   note.title = noteTitle.value || t('notes.untitled')
   if (editor.value) {
     note.content = editor.value.getHTML()
+    note.contentJson = JSON.stringify(editor.value.getJSON())
   }
   await db.saveNote(note)
+  _contentCache.set(note.id, note.content)
+  _contentJsonCache.set(note.id, note.contentJson || "")
   await syncNoteLinksFromContent(selectedNoteId.value, note.content)
   saved.value = true
 }
@@ -1522,7 +1542,18 @@ async function exportAs(format: 'docx' | 'md' | 'pdf') {
         code{font-family:Consolas,monospace;font-size:0.9em;background:#f1f2f5;border-radius:4px;padding:2px 6px}pre code{background:none;color:#e4e5e7;padding:0}
         table{width:100%;border-collapse:collapse;margin-bottom:1.25rem}th,td{padding:8px 12px;border:1px solid #e0e1e5;text-align:left}th{background:#f1f2f5;font-weight:600}
         a{color:#0050cb;text-decoration:underline}img{max-width:100%}
-      </style></head><body>${html}</body></html>`)
+      .skeleton-shimmer { position: relative; overflow: hidden; }
+.skeleton-line {
+  background: linear-gradient(90deg, rgba(107,111,130,0.08) 0%, rgba(107,111,130,0.15) 50%, rgba(107,111,130,0.08) 100%);
+  background-size: 200% 100%;
+  animation: skeletonPulse 1.8s ease-in-out infinite;
+  border-radius: 4px;
+}
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+</style></head><body>${html}</body></html>`)
       doc.close()
 
       await new Promise(r => setTimeout(r, 500))
@@ -1989,7 +2020,32 @@ onMounted(async () => {
   })
 })
 
+onActivated(() => {
+  editor.value?.commands.focus()
+})
+
+onDeactivated(() => {
+  if (!saved.value && selectedNoteId.value && lastEditorContent.value !== null) {
+    const note = currentNoteData.value
+    if (note) {
+      note.title = noteTitle.value || t('notes.untitled')
+      note.content = lastEditorContent.value
+      if (editor.value) {
+        note.contentJson = JSON.stringify(editor.value.getJSON())
+      }
+      db.saveNote(note).catch(() => {})
+      _contentCache.set(note.id, note.content)
+      _contentJsonCache.set(note.id, note.contentJson || "")
+    }
+  }
+  if (saveTimer) clearTimeout(saveTimer)
+  if (versionTimer) clearTimeout(versionTimer)
+  if (searchDebounce) clearTimeout(searchDebounce)
+})
+
 onBeforeUnmount(() => {
+  _isUnmounted = true
+  _pendingNoteId = null
   document.removeEventListener('click', onDocumentClick, true)
   if (!saved.value && selectedNoteId.value && lastEditorContent.value !== null) {
     const note = currentNoteData.value

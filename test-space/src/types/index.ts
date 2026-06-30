@@ -119,6 +119,7 @@ export interface NoteItem {
   folderId: string | null
   title: string
   content: string
+  contentJson?: string
   tags: string[]
   isFavorite: boolean
   createdAt: string
