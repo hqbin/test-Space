@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="flex flex-1 min-h-0 -mx-margin-page overflow-hidden pb-4 box-border select-none">
     <!-- Left: Search + File Tree -->
     <div class="flex-shrink-0 flex flex-col w-64 ml-3 overflow-hidden rounded-xl bg-white/10 backdrop-blur-[60px] border border-white/50 shadow-lg">
@@ -1273,13 +1273,16 @@ async function selectNote(note: NoteItem) {
   selectedFolderId.value = null
   selectedNoteId.value = note.id
   noteTitle.value = note.title
+  if (editor.value) {
+    editor.value.commands.setContent("")
+  }
 
   // Show loading overlay for large notes
   const needsLoading = !note.content || note.content.length > 50000
   if (needsLoading) {
     contentLoading.value = true
     await nextTick()
-    await new Promise(r => requestAnimationFrame(r))
+    await new Promise(r => setTimeout(r, 0))
     if (_isUnmounted || _pendingNoteId !== targetId) return
   }
 
@@ -1309,14 +1312,11 @@ async function selectNote(note: NoteItem) {
     } catch {}
   }
 
-  // Yield to browser so it can paint loading skeleton first
   const contentSize = typeof bestContent === "string" ? bestContent.length : JSON.stringify(bestContent).length
-  const yieldDelay = contentSize > 200000 ? 20 : 0
-  await new Promise(r => setTimeout(r, yieldDelay))
-  if (_isUnmounted || _pendingNoteId !== targetId) return
 
   if (editor.value) {
-    editor.value.commands.setContent(bestContent)
+    await setNoteContentProgressive(editor.value, bestContent, contentSize, targetId)
+    if (_isUnmounted || _pendingNoteId !== targetId) return
   }
 
   contentLoading.value = false
@@ -1332,6 +1332,26 @@ async function selectNote(note: NoteItem) {
     } catch { noteVersions.value = [] }
     await loadNoteLinks(note.id)
   })
+}
+
+/**
+ * Set note content without blocking the main thread.
+ * Small (<100 KB): yield then setContent directly.
+ * Large (>=100 KB): yield 20ms then setContent directly.
+ * Never parse HTML into DOM manually -- that causes multi-GB memory spikes.
+ * ProseMirror's internal HTML parser is more efficient.
+ */
+async function setNoteContentProgressive(
+  ed: any,
+  content: any,
+  contentSize: number,
+  targetId: string
+): Promise<void> {
+  const delay = contentSize > 100000 ? 20 : 0
+  await new Promise(r => setTimeout(r, delay))
+  if (_isUnmounted || _pendingNoteId !== targetId) return
+
+  ed.commands.setContent(content || "")
 }
 
 async function saveCurrentNote() {
@@ -2207,4 +2227,16 @@ onBeforeUnmount(() => {
   from { transform: translateX(100%); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }
 }
+.skeleton-shimmer { position: relative; overflow: hidden; }
+.skeleton-line {
+  background: linear-gradient(90deg, rgba(107,111,130,0.08) 0%, rgba(107,111,130,0.15) 50%, rgba(107,111,130,0.08) 100%);
+  background-size: 200% 100%;
+  animation: skeletonPulse 1.8s ease-in-out infinite;
+  border-radius: 4px;
+}
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
 </style>
