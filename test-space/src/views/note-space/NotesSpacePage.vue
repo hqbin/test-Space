@@ -730,6 +730,17 @@ function cappedCacheSet<T>(cache: Map<string, T>, key: string, value: T) {
   }
   cache.set(key, value)
 }  // noteId -> content JSON
+/** Like cappedCacheSet but parses JSON strings into objects before caching. */
+function cappedCacheSetParsed(cache: Map<string, any>, key: string, value: string) {
+  try {
+    var parsed = JSON.parse(value)
+    if (parsed && typeof parsed === "object") {
+      cappedCacheSet(cache, key, parsed)
+      return
+    }
+  } catch {}
+  cappedCacheSet(cache, key, value)
+}
 let _isUnmounted = false
 let _pendingNoteId: string | null = null
 
@@ -1335,7 +1346,7 @@ async function selectNote(note: NoteItem) {
       note.tags = full.tags
       note.contentJson = full.contentJson
       cappedCacheSet(_contentCache, note.id, full.content)
-      cappedCacheSet(_contentJsonCache, note.id, full.contentJson || "")
+      cappedCacheSetParsed(_contentJsonCache, note.id, full.contentJson || "")
     }
   }
 
@@ -1351,7 +1362,7 @@ async function selectNote(note: NoteItem) {
     } catch {}
   }
 
-  const contentSize = typeof bestContent === "string" ? bestContent.length : JSON.stringify(bestContent).length
+  const contentSize = note.contentJson?.length || note.content?.length || 0
 
   if (editor.value) {
     await setNoteContentProgressive(editor.value, bestContent, contentSize, targetId)
@@ -1406,7 +1417,7 @@ async function saveCurrentNote() {
   }
   await db.saveNote(note)
   cappedCacheSet(_contentCache, note.id, note.content)
-  cappedCacheSet(_contentJsonCache, note.id, note.contentJson || "")
+  cappedCacheSetParsed(_contentJsonCache, note.id, note.contentJson || "")
   await syncNoteLinksFromContent(selectedNoteId.value, note.content)
   saved.value = true
 }
@@ -2169,7 +2180,7 @@ onDeactivated(() => {
       }
       db.saveNote(note).catch(() => {})
       cappedCacheSet(_contentCache, note.id, note.content)
-      cappedCacheSet(_contentJsonCache, note.id, note.contentJson || "")
+      cappedCacheSetParsed(_contentJsonCache, note.id, note.contentJson || "")
     }
   }
   if (saveTimer) clearTimeout(saveTimer)
