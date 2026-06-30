@@ -78,7 +78,7 @@
         <span>{{ t('notes.favorites') }}</span>
         <span class="ml-auto text-[10px] text-on-surface-variant/60">{{ favoriteNotes.length }}</span>
       </div>
-      <div class="flex-1 overflow-y-auto p-2 custom-scrollbar" @dragenter.prevent @dragover.prevent>
+      <div class="flex-1 overflow-y-auto p-2 custom-scrollbar" style="position:relative" @dragenter.prevent @dragover.prevent>
         <div v-if="dataLoading" class="skeleton-shimmer px-2 py-1 space-y-2" style="position:absolute;inset:0;z-index:1;background:white/10;backdrop-filter:blur(60px)">
           <div class="flex items-center gap-2 px-2 py-1"><div class="skeleton-line h-3 w-4 rounded-md"></div><div class="skeleton-line h-3 w-24 rounded-md"></div></div>
           <div class="flex items-center gap-2 px-2 py-1" style="padding-left:24px"><div class="skeleton-line h-3 w-4 rounded-md"></div><div class="skeleton-line h-3 w-32 rounded-md"></div></div>
@@ -202,10 +202,40 @@
           <p class="font-body-md text-body-md text-on-surface-variant/50 mt-3">{{ t('notes.selectNote') }}</p>
         </div>
       </div>
-      <div v-else-if="contentLoading" class="flex-1 glass-panel rounded-xl flex items-center justify-center shadow-md">
-        <div class="text-center">
-          <span class="material-symbols-outlined text-[36px] text-on-surface-variant/30 animate-spin">hourglass_top</span>
-          <p class="font-body-md text-body-md text-on-surface-variant/50 mt-3">{{ t('notes.loading') }}</p>
+      <div v-else-if="contentLoading" class="flex-1 glass-panel rounded-xl shadow-md overflow-hidden">
+        <div class="skeleton-shimmer w-full h-full p-4 flex flex-col gap-3 overflow-hidden">
+          <div class="flex items-center gap-2"><div class="skeleton-line h-5 w-48 rounded-md"></div><div class="skeleton-line h-5 w-16 rounded-md ml-auto"></div></div>
+          <div class="border-b border-glass-border-light/30 my-1"></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-full rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-11/12 rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-5/6 rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-3/4 rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-2/3 rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-4/5 rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-3/5 rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-7/8 rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-1/2 rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-full rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-5/6 rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-3/4 rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-4/5 rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-11/12 rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-2/3 rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-3/5 rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-7/8 rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-1/2 rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-full rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-5/6 rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-3/4 rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-11/12 rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-4/5 rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-2/3 rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-7/8 rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-3/5 rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-1/2 rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-full rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-5/6 rounded-md"></div></div>
+          <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-3/4 rounded-md"></div></div>
         </div>
       </div>
       <div v-else class="flex-1 min-w-0 min-h-0 glass-panel rounded-xl flex flex-col shadow-md">
@@ -1351,9 +1381,10 @@ async function setNoteContentProgressive(
   await new Promise(r => setTimeout(r, delay))
   if (_isUnmounted || _pendingNoteId !== targetId) return
 
+  // Single setContent is faster than chunked insertContent -- ProseMirror JSON is efficient
+
   ed.commands.setContent(content || "")
 }
-
 async function saveCurrentNote() {
   if (!selectedNoteId.value || !currentNoteData.value) return
   const note = currentNoteData.value
@@ -1632,6 +1663,19 @@ async function exportAs(format: 'docx' | 'md' | 'pdf') {
   0%, 100% { opacity: 0.5; }
   50% { opacity: 1; }
 }
+
+.skeleton-shimmer { position: relative; overflow: hidden; }
+.skeleton-line {
+  background: linear-gradient(90deg, rgba(107,111,130,0.08) 0%, rgba(107,111,130,0.15) 50%, rgba(107,111,130,0.08) 100%);
+  background-size: 200% 100%;
+  animation: skeletonPulse 1.8s ease-in-out infinite;
+  border-radius: 4px;
+}
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
 </style></head><body>${html}</body></html>`)
       doc.close()
 
