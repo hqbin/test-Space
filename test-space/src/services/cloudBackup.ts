@@ -28,13 +28,16 @@ async function request<T>(
 ): Promise<T> {
   const url = `${BASE_URL}${path}`;
   const f = await getFetch();
+  const bodyStr = body !== undefined ? JSON.stringify(body) : undefined;
+  const bodyBytes = bodyStr ? bodyStr.length : 0;
+  const timeoutMs = 300000 + Math.ceil(bodyBytes / 1048576) * 60000;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 300000);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await f(url, {
       method,
       headers: headers(deviceId),
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: bodyStr,
       signal: controller.signal,
     });
     const text = await res.text();
@@ -68,6 +71,7 @@ export interface BackupDetail extends BackupListItem {
   iv: string;
   salt: string;
   auth_tag: string;
+  compression?: string;
 }
 
 export interface BackupUploadPayload {
@@ -78,6 +82,7 @@ export interface BackupUploadPayload {
   size_bytes: number;
   checksum: string;
   metadata: { version: string; exportedAt: string };
+  compression?: string;
 }
 
 export function uploadBackup(

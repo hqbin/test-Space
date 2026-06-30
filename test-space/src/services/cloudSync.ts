@@ -2,6 +2,10 @@
 import * as cloudApi from "@/services/cloudBackup";
 import * as crypto from "@/services/crypto";
 
+function yieldToMain(): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
+
 async function ensureDeviceId(): Promise<string> {
   let id = (await db.getLastDeviceId())?.trim() || "";
   if (!id) {
@@ -22,14 +26,20 @@ async function ensureDeviceId(): Promise<string> {
 
 export async function syncBackupToCloud(): Promise<void> {
   await db.checkDatabaseReady();
+  await yieldToMain();
   const deviceId = await ensureDeviceId();
+  await yieldToMain();
   const data = await db.exportAllData();
+  await yieldToMain();
   const json = JSON.stringify(data);
+  await yieldToMain();
   const key = await crypto.getOrCreateKey();
+  await yieldToMain();
   const payload = await crypto.encryptBackup(json, key, {
     version: data.version,
     exportedAt: data.exportedAt,
   });
+  await yieldToMain();
   await cloudApi.uploadBackup(deviceId.trim(), payload);
 }
 

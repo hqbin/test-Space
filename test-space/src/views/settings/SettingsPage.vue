@@ -652,6 +652,10 @@ async function confirmRenameDeviceId() {
   if (item) item.name = name;
 }
 
+function yieldToMain(): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
+
 async function handleCloudUpload() {
   if (cloudBusy.value) return;
   cloudBusy.value = true;
@@ -661,14 +665,19 @@ async function handleCloudUpload() {
     await saveCurrentDeviceId();
   }
   await saveCurrentDeviceId();
+  await yieldToMain();
   try {
     const data = await db.exportAllData();
+    await yieldToMain();
     const json = JSON.stringify(data);
+    await yieldToMain();
     const key = await crypto.getOrCreateKey();
+    await yieldToMain();
     const payload = await crypto.encryptBackup(json, key, {
       version: data.version,
       exportedAt: data.exportedAt,
     });
+    await yieldToMain();
     await cloudApi.uploadBackup(deviceId.value.trim(), payload);
     setStatus(t("settings.cloudUploadSuccess"));
   } catch (e: any) {
