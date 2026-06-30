@@ -1,4 +1,4 @@
-const BASE_URL = "https://tms.zeasn.com/api/TestSpace";
+﻿const BASE_URL = "https://tms.zeasn.com/api/TestSpace";
 
 let tauriFetch: typeof fetch | null = null;
 
@@ -28,23 +28,30 @@ async function request<T>(
 ): Promise<T> {
   const url = `${BASE_URL}${path}`;
   const f = await getFetch();
-  const res = await f(url, {
-    method,
-    headers: headers(deviceId),
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  const text = await res.text();
-  if (res.status === 204) return undefined as T;
-  let json: any;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 300000);
   try {
-    json = JSON.parse(text);
-  } catch {
-    throw new Error(`Server returned non-JSON (HTTP ${res.status}): ${text.slice(0, 200)}`);
+    const res = await f(url, {
+      method,
+      headers: headers(deviceId),
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+    const text = await res.text();
+    if (res.status === 204) return undefined as T;
+    let json: any;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      throw new Error(`Server returned non-JSON (HTTP ${res.status}): ${text.slice(0, 200)}`);
+    }
+    if (!res.ok) {
+      throw new Error(json.error || `HTTP ${res.status}`);
+    }
+    return json as T;
+  } finally {
+    clearTimeout(timer);
   }
-  if (!res.ok) {
-    throw new Error(json.error || `HTTP ${res.status}`);
-  }
-  return json as T;
 }
 
 export interface BackupListItem {
