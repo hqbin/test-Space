@@ -120,10 +120,10 @@
                 <div v-for="n in lineCount" :key="n">{{ n }}</div>
               </div>
               <div class="flex-1 relative min-h-0">
-                <pre ref="highlightRef" class="absolute inset-0 p-3 text-[13px] leading-relaxed font-mono whitespace-pre-wrap pointer-events-none text-[#e4e5e7] select-text" style="background: #0d0d1a; overflow: hidden; tab-size: 2;" aria-hidden="true"><code v-html="highlightedCode"></code></pre>
+                <pre ref="highlightRef" class="editor-highlight absolute inset-0 p-3 text-[13px] leading-relaxed font-mono whitespace-pre-wrap pointer-events-none text-[#e4e5e7] select-none" style="background: #0d0d1a; overflow-y: auto; tab-size: 2; scrollbar-width: none; -ms-overflow-style: none;" aria-hidden="true"><code v-html="highlightedCode"></code></pre>
                 <textarea ref="editorRef" v-model="editingContent"
-                  class="editor-textarea absolute inset-0 w-full h-full resize-none outline-none border-none p-3 text-[13px] leading-relaxed font-mono text-transparent caret-white custom-scrollbar select-text"
-                  style="background: transparent; tab-size: 2; -webkit-text-fill-color: transparent;"
+                  class="editor-textarea absolute inset-0 w-full h-full resize-none outline-none border-none p-3 text-[13px] leading-relaxed font-mono text-transparent caret-white select-text"
+                  style="background: transparent; tab-size: 2; -webkit-text-fill-color: transparent; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none;"
                   spellcheck="false"
                   @keydown.tab.prevent="insertTab"
                   @scroll="syncScroll">
@@ -433,13 +433,16 @@ function highlightBat(code: string): string {
 }
 
 function highlightPy(code: string): string {
-  let html = escHtml(code);
-  html = html.replace(/(#.*)/g, '<span style="color:#6b7280">$1</span>');
-  html = html.replace(/("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/g, '<span style="color:#34d399">$1</span>');
-  html = html.replace(/(@\w[\w.]*)/g, '<span style="color:#c084fc">$1</span>');
-  html = html.replace(/\b(def|class|if|elif|else|for|while|try|except|finally|import|from|return|yield|raise|with|as|pass|break|continue|and|or|not|in|is|lambda|global|nonlocal|assert|del|True|False|None|print|self|async|await)\b/g, '<span style="color:#60a5fa">$1</span>');
-  html = html.replace(/\b(\d+\.?\d*)\b/g, '<span style="color:#fb923c">$1</span>');
-  return html;
+  const html = escHtml(code);
+  const combined = /(#.*)|("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(@\w[\w.]*)|\b(def|class|if|elif|else|for|while|try|except|finally|import|from|return|yield|raise|with|as|pass|break|continue|and|or|not|in|is|lambda|global|nonlocal|assert|del|True|False|None|print|self|async|await)\b|\b(\d+\.?\d*)\b/g;
+  return html.replace(combined, (match, comment, string, decorator, keyword, number) => {
+    if (comment) return `<span style="color:#6b7280">${comment}</span>`;
+    if (string) return `<span style="color:#34d399">${string}</span>`;
+    if (decorator) return `<span style="color:#c084fc">${decorator}</span>`;
+    if (keyword) return `<span style="color:#60a5fa">${keyword}</span>`;
+    if (number) return `<span style="color:#fb923c">${number}</span>`;
+    return match;
+  });
 }
 
 function escHtml(s: string): string {
@@ -678,9 +681,24 @@ onUnmounted(() => {
 }
 
 .editor-textarea::selection {
-  background: rgba(100, 140, 255, 0.35);
+  background: rgba(100, 140, 255, 0.25);
+  color: transparent;
+  -webkit-text-fill-color: transparent;
 }
 .editor-textarea::-moz-selection {
-  background: rgba(100, 140, 255, 0.35);
+  background: rgba(100, 140, 255, 0.25);
+  color: transparent;
+}
+.editor-textarea {
+  color: transparent !important;
+}
+.editor-textarea::-webkit-scrollbar {
+  display: none;
+}
+.editor-highlight::-webkit-scrollbar {
+  display: none;
+}
+.editor-highlight code {
+  font: inherit;
 }
 </style>

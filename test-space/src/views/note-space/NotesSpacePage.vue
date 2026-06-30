@@ -190,6 +190,12 @@
           <p class="font-body-md text-body-md text-on-surface-variant/50 mt-3">{{ t('notes.selectNote') }}</p>
         </div>
       </div>
+      <div v-else-if="contentLoading" class="flex-1 glass-panel rounded-xl flex items-center justify-center shadow-md">
+        <div class="text-center">
+          <span class="material-symbols-outlined text-[36px] text-on-surface-variant/30 animate-spin">hourglass_top</span>
+          <p class="font-body-md text-body-md text-on-surface-variant/50 mt-3">{{ t('notes.loading') }}</p>
+        </div>
+      </div>
       <div v-else class="flex-1 min-w-0 min-h-0 glass-panel rounded-xl flex flex-col shadow-md">
         <div class="sticky top-0 z-10 bg-white/60 backdrop-blur-md border-b border-glass-border-light/30 px-4 py-2 flex items-center gap-2">
           <input             v-model="noteTitle"
@@ -722,7 +728,9 @@ const importTargetFolderId = ref<string | null>(null)
 const exportSelectedNoteIds = ref<string[]>([])
 const exportFormat = ref<'md' | 'docx'>('md')
 const importing = ref(false)
+const importingProgress = ref('')
 const exporting = ref(false)
+const contentLoading = ref(false)
 
 let titleMap = new Map<string, string>()
 function rebuildTitleMap() {
@@ -1223,10 +1231,26 @@ async function selectNote(note: NoteItem) {
   selectedFolderId.value = null
   selectedNoteId.value = note.id
   noteTitle.value = note.title
-  if (editor.value) {
-    editor.value.commands.setContent(note.content || "")
+
+  const content = note.content || ""
+
+  if (content.length > 100000) {
+    contentLoading.value = true
+    if (editor.value) {
+      editor.value.commands.setContent("")
+    }
+    await nextTick()
+    if (editor.value) {
+      editor.value.commands.setContent(content)
+    }
+    contentLoading.value = false
+  } else {
+    if (editor.value) {
+      editor.value.commands.setContent(content)
+    }
   }
-  lastEditorContent.value = note.content || ""
+
+  lastEditorContent.value = content
   saved.value = true
 
   try {
@@ -1639,7 +1663,8 @@ async function doImport() {
       try {
         const fileName = filePath.split(/[\\/]/).pop() || 'Untitled'
         const ext = fileName.split('.').pop()?.toLowerCase()
-        const title = fileName.replace(/\.(md|docx)$/i, '')
+        const dotIdx = fileName.lastIndexOf('.')
+        const title = dotIdx > 0 ? fileName.substring(0, dotIdx) : fileName
 
         let html = ''
         if (ext === 'md') {
