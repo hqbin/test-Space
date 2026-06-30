@@ -23,7 +23,7 @@ async function initDb(): Promise<Database> {
   await instance.execute('PRAGMA busy_timeout = 30000')
   console.log('[DB] path:', `sqlite:${dir}/test-space.db`)
   await migrateInternal(instance)
-  try { await rebuildFtsIndex() } catch {}
+  try { await rebuildFtsIndex(instance) } catch {}
   return instance
 }
 
@@ -594,6 +594,16 @@ export async function saveNote(note: { id: string; folderId?: string | null; tit
     [note.id, note.folderId || null, note.title, note.content, cj, plainText,
      JSON.stringify(note.tags || []), note.isFavorite ? 1 : 0, now, now]
   )
+  // Sync FTS5 index
+  try {
+    await d.execute(
+"DELETE FROM notes_fts WHERE note_id = ?"
+, [note.id])
+    await d.execute(
+"INSERT INTO notes_fts (note_id, title, plain_text, tags) VALUES (?, ?, ?, ?)"
+,
+      [note.id, note.title, plainText, JSON.stringify(note.tags || [])])
+  } catch {}
 }
 
 export async function deleteNote(id: string) {
@@ -623,9 +633,9 @@ function buildFtsQuery(query: string): string {
   return escaped.join(" AND ")
 }
 
-export async function rebuildFtsIndex() {
+export async function rebuildFtsIndex(externalDb?: Database) {
   try {
-    const d = await getDb()
+    const d = externalDb ?? await getDb()
     await d.execute("DELETE FROM notes_fts")
     const notes = await d.select<any[]>("SELECT id, title, plain_text, tags FROM notes")
     for (const note of notes) {

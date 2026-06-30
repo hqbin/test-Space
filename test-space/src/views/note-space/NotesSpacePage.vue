@@ -1,3 +1,4 @@
+<template>
   <div class="flex flex-1 min-h-0 -mx-margin-page overflow-hidden pb-4 box-border select-none">
     <!-- Left: Search + File Tree -->
     <div class="flex-shrink-0 flex flex-col w-64 ml-3 overflow-hidden rounded-xl bg-white/10 backdrop-blur-[60px] border border-white/50 shadow-lg">
@@ -78,6 +79,18 @@
         <span class="ml-auto text-[10px] text-on-surface-variant/60">{{ favoriteNotes.length }}</span>
       </div>
       <div class="flex-1 overflow-y-auto p-2 custom-scrollbar" @dragenter.prevent @dragover.prevent>
+        <div v-if="dataLoading" class="skeleton-shimmer px-2 py-1 space-y-2" style="position:absolute;inset:0;z-index:1;background:white/10;backdrop-filter:blur(60px)">
+          <div class="flex items-center gap-2 px-2 py-1"><div class="skeleton-line h-3 w-4 rounded-md"></div><div class="skeleton-line h-3 w-24 rounded-md"></div></div>
+          <div class="flex items-center gap-2 px-2 py-1" style="padding-left:24px"><div class="skeleton-line h-3 w-4 rounded-md"></div><div class="skeleton-line h-3 w-32 rounded-md"></div></div>
+          <div class="flex items-center gap-2 px-2 py-1" style="padding-left:40px"><div class="skeleton-line h-2.5 w-3 rounded-md"></div><div class="skeleton-line h-2.5 w-20 rounded-md"></div></div>
+          <div class="flex items-center gap-2 px-2 py-1" style="padding-left:40px"><div class="skeleton-line h-2.5 w-3 rounded-md"></div><div class="skeleton-line h-2.5 w-28 rounded-md"></div></div>
+          <div class="flex items-center gap-2 px-2 py-1" style="padding-left:24px"><div class="skeleton-line h-3 w-4 rounded-md"></div><div class="skeleton-line h-3 w-36 rounded-md"></div></div>
+          <div class="flex items-center gap-2 px-2 py-1" style="padding-left:40px"><div class="skeleton-line h-2.5 w-3 rounded-md"></div><div class="skeleton-line h-2.5 w-16 rounded-md"></div></div>
+          <div class="flex items-center gap-2 px-2 py-1" style="padding-left:40px"><div class="skeleton-line h-2.5 w-3 rounded-md"></div><div class="skeleton-line h-2.5 w-24 rounded-md"></div></div>
+          <div class="flex items-center gap-2 px-2 py-1" style="padding-left:40px"><div class="skeleton-line h-2.5 w-3 rounded-md"></div><div class="skeleton-line h-2.5 w-20 rounded-md"></div></div>
+          <div class="flex items-center gap-2 px-2 py-1" style="padding-left:24px"><div class="skeleton-line h-3 w-4 rounded-md"></div><div class="skeleton-line h-3 w-28 rounded-md"></div></div>
+          <div class="flex items-center gap-2 px-2 py-1" style="padding-left:40px"><div class="skeleton-line h-2.5 w-3 rounded-md"></div><div class="skeleton-line h-2.5 w-32 rounded-md"></div></div>
+        </div>
         <!-- Favorites flat list -->
         <div v-if="showFavorites" class="space-y-0.5">
           <div class="px-2 py-0.5 text-[10px] text-on-surface-variant/50 uppercase tracking-wider font-medium mb-1">{{ t('notes.favorites') }}</div>
@@ -872,16 +885,37 @@ function escapeHtml(str: string): string {
 // ── Data Loading ─────────────────────────────────────────────
 
 async function loadData() {
+  // Use module-level cache to survive remounts
+  if (_cachedNotes && _cachedFolders && _cachedSpaces) {
+    spaces.value = _cachedSpaces
+    folders.value = _cachedFolders
+    notes.value = _cachedNotes
+    for (const n of notes.value) {
+      const cached = _contentCache.get(n.id)
+      if (cached) n.content = cached
+    }
+    rebuildTitleMap()
+    if (!selectedSpaceId.value && spaces.value.length > 0) {
+      selectedSpaceId.value = spaces.value[0].id
+    }
+    return
+  }
   try {
+    dataLoading.value = true
     spaces.value = await db.loadNoteSpaces()
     folders.value = await db.loadNoteFolders()
-    notes.value = await db.loadNotes()
+    notes.value = await db.loadNoteList()
+    dataLoading.value = false
     rebuildTitleMap()
     aiConfig.value = await loadAiConfig()
     if (spaces.value.length > 0 && !selectedSpaceId.value) {
       selectedSpaceId.value = spaces.value[0].id
     }
+    _cachedSpaces = spaces.value
+    _cachedFolders = folders.value
+    _cachedNotes = notes.value
   } catch (e) {
+    dataLoading.value = false
     console.error('Failed to load notes:', e)
   }
 }
@@ -1226,6 +1260,7 @@ function selectNoteById(id: string, content: string) {
 }
 
 async function selectNote(note: NoteItem) {
+  if (_isUnmounted) return
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
   if (versionTimer) { clearTimeout(versionTimer); versionTimer = null }
 
@@ -1233,48 +1268,70 @@ async function selectNote(note: NoteItem) {
     try { await saveCurrentNote() } catch { /* best effort */ }
   }
 
-  // Load full content if not already loaded
-  if (!note.content) {
-    const full = await db.loadNote(note.id)
-    if (full) {
-      note.content = full.content
-      note.plainText = full.plainText
-      note.tags = full.tags
-    }
-  }
-
+  const targetId = note.id
+  _pendingNoteId = targetId
   selectedFolderId.value = null
   selectedNoteId.value = note.id
   noteTitle.value = note.title
 
-  const content = note.content || ""
-
-  if (content.length > 100000) {
+  // Show loading overlay for large notes
+  const needsLoading = !note.content || note.content.length > 50000
+  if (needsLoading) {
     contentLoading.value = true
-    if (editor.value) {
-      editor.value.commands.setContent("")
-    }
     await nextTick()
-    await new Promise(r => setTimeout(r, 0))
-    if (editor.value) {
-      editor.value.commands.setContent(content)
-    }
-    contentLoading.value = false
-  } else {
-    await new Promise(r => setTimeout(r, 0))
-    if (editor.value) {
-      editor.value.commands.setContent(content)
+    await new Promise(r => requestAnimationFrame(r))
+    if (_isUnmounted || _pendingNoteId !== targetId) return
+  }
+
+  // Load full content if not already loaded
+  if (!note.content) {
+    const full = await db.loadNote(note.id)
+    if (_isUnmounted || _pendingNoteId !== targetId) return
+    if (full) {
+      note.content = full.content
+      note.plainText = full.plainText
+      note.tags = full.tags
+      note.contentJson = full.contentJson
+      _contentCache.set(note.id, full.content)
+      _contentJsonCache.set(note.id, full.contentJson || "")
     }
   }
 
-  lastEditorContent.value = content
+  // Determine best content source: JSON (faster) or HTML (fallback)
+  let bestContent: any = note.content || ""
+  const cachedJson = _contentJsonCache.get(note.id)
+  if (cachedJson && cachedJson.length > 2) {
+    try {
+      const parsed = JSON.parse(cachedJson)
+      if (parsed && typeof parsed === "object") {
+        bestContent = parsed
+      }
+    } catch {}
+  }
+
+  // Yield to browser so it can paint loading skeleton first
+  const contentSize = typeof bestContent === "string" ? bestContent.length : JSON.stringify(bestContent).length
+  const yieldDelay = contentSize > 200000 ? 20 : 0
+  await new Promise(r => setTimeout(r, yieldDelay))
+  if (_isUnmounted || _pendingNoteId !== targetId) return
+
+  if (editor.value) {
+    editor.value.commands.setContent(bestContent)
+  }
+
+  contentLoading.value = false
+  await nextTick()
+  lastEditorContent.value = editor.value?.getHTML() ?? note.content ?? ""
   saved.value = true
 
-  try {
-    noteVersions.value = await db.loadNoteVersions(note.id)
-  } catch { noteVersions.value = [] }
-
-  await loadNoteLinks(note.id)
+  // Defer non-critical work
+  requestAnimationFrame(async () => {
+    if (_isUnmounted || _pendingNoteId !== targetId) return
+    try {
+      noteVersions.value = await db.loadNoteVersions(note.id)
+    } catch { noteVersions.value = [] }
+    await loadNoteLinks(note.id)
+  })
 }
 
 async function saveCurrentNote() {
@@ -1347,6 +1404,8 @@ async function doDeleteNote() {
     console.error('Failed to delete note:', e)
   }
   notes.value = notes.value.filter(n => n.id !== id)
+  _contentCache.delete(id)
+  _contentJsonCache.delete(id)
   rebuildTitleMap()
   if (selectedNoteId.value === id) {
     selectedNoteId.value = null
