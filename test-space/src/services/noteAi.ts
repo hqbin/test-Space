@@ -505,15 +505,28 @@ export async function chatWithNotes(
 }
 
 /**
- * Lightweight AI call to extract memorable facts from a Q&A pair.
+ * Lightweight AI call to extract consolidated, meaningful facts from a Q&A pair.
  * Returns extracted fact strings (empty array if nothing to remember).
  */
 export async function extractMemories(
   config: AiConfig,
   question: string,
-  answer: string
+  answer: string,
+  existingMemories: string[] = []
 ): Promise<string[]> {
-  const systemPrompt = '从以下问答中提取可作为长期记忆的知识点。每条记忆应是一个独立的事实陈述，简洁准确。如果没有值得记忆的内容，返回空。\n格式：每行一条，不要加序号。'
+  const existingBlock = existingMemories.length > 0
+    ? `\n已有记忆：\n${existingMemories.map(m => `- ${m}`).join('\n')}\n注意：不要重复提取与已有记忆表达相同或高度相似的内容。`
+    : ''
+  const systemPrompt =
+    '你是一个记忆提取助手。从以下问答中提取值得长期记住的关键知识点，要求：\n' +
+    '1. 只提取有长期价值的事实性知识（如用户偏好、项目信息、技术决策、约定等）\n' +
+    '2. 忽略一次性的、临时的、无长期价值的对话内容\n' +
+    '3. 将密切相关的多条信息合并为一条综合记忆，避免碎片化\n' +
+    '4. 每条记忆应简洁准确，用一句话概括\n' +
+    '5. 如果没有值得长期记忆的内容，直接返回空\n' +
+    '6. 严禁提取与已有记忆内容相同或高度相似的记忆' +
+    existingBlock +
+    '\n格式：每行一条，不要加序号。'
   const userContent = `问：${question}\n答：${answer}`
 
   const messages: AiChatMessage[] = [
@@ -521,16 +534,12 @@ export async function extractMemories(
     { role: 'user', content: userContent },
   ]
 
-  try {
-    const json = await callChatApi(config, messages)
-    const content: string = json.choices?.[0]?.message?.content || json.choices?.[0]?.text || ''
-    const lines: string[] = content.split('\n')
-      .map(l => l.trim().replace(/^[-*\d.、\s]+/, ''))
-      .filter(l => l.length >= 4)
-    return [...new Set(lines)]
-  } catch {
-    return []
-  }
+  const json = await callChatApi(config, messages)
+  const content: string = json.choices?.[0]?.message?.content || json.choices?.[0]?.text || ''
+  const lines: string[] = content.split('\n')
+    .map(l => l.trim().replace(/^[-*\d.、\s]+/, ''))
+    .filter(l => l.length >= 4)
+  return [...new Set(lines)]
 }
 
 export async function testAiConnection(config: AiConfig): Promise<string> {

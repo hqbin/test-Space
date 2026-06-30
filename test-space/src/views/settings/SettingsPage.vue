@@ -214,16 +214,26 @@
       <div class="min-w-0">
         <div class="flex items-center justify-between gap-3 mb-2">
           <span class="font-body-md text-body-md text-on-surface font-medium shrink-0">{{ t("settings.aiMemory") }}</span>
-          <button
-            class="glass-button px-4 py-1.5 rounded-full text-[12px] select-none"
-            @click="showMemoryModal = true"
-          >
-            <span class="material-symbols-outlined text-[14px] align-middle mr-1">manage_history</span>
-            {{ t("settings.aiMemoryManage") }}
-          </button>
+          <div class="flex items-center gap-1">
+            <button
+              class="glass-button px-2 py-1.5 rounded-full text-[12px] select-none"
+              title="Refresh memories"
+              @click="loadMemories"
+            >
+              <span class="material-symbols-outlined text-[14px]" :class="refreshingMemories ? 'animate-spin' : ''">refresh</span>
+            </button>
+            <button
+              class="glass-button px-4 py-1.5 rounded-full text-[12px] select-none"
+              @click="showMemoryModal = true"
+            >
+              <span class="material-symbols-outlined text-[14px] align-middle mr-1">manage_history</span>
+              {{ t("settings.aiMemoryManage") }}
+            </button>
+          </div>
         </div>
         <p class="text-[12px] text-on-surface-variant/60">
           {{ memories.length > 0 ? t("settings.aiMemoryCount", { count: String(memories.length) }) : t("settings.aiMemoryEmpty") }}
+          <span v-if="memoryStatusMessage && !showMemoryModal" class="ml-2 text-success-indicator">{{ memoryStatusMessage }}</span>
         </p>
       </div>
 
@@ -353,7 +363,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import { ref, computed, watch, onMounted, onActivated, onUnmounted } from "vue";
 import * as db from "@/services/database";
 import * as cloudApi from "@/services/cloudBackup";
 import * as crypto from "@/services/crypto";
@@ -413,6 +423,7 @@ const activeAiProvider = ref<AiProvider>("azure");
 // AI Memory state
 const memories = ref<AiMemory[]>([]);
 const clearingMemories = ref(false);
+const refreshingMemories = ref(false);
 const memoryStatusMessage = ref("");
 const memoryStatusIsError = ref(false);
 const showMemoryModal = ref(false);
@@ -441,9 +452,15 @@ function formatDate(iso: string): string {
 }
 
 async function loadMemories() {
+  refreshingMemories.value = true;
   try {
     memories.value = await db.loadAiMemories();
+    if (memoryStatusMessage.value !== t("settings.aiMemoryDeleted") && memoryStatusMessage.value !== t("settings.aiMemoryCleared")) {
+      setMemoryStatus(`${t("settings.aiMemoryCount", { count: String(memories.value.length) })}`);
+      setTimeout(() => { if (memoryStatusMessage.value === t("settings.aiMemoryCount", { count: String(memories.value.length) })) setMemoryStatus(""); }, 2000);
+    }
   } catch { memories.value = []; }
+  refreshingMemories.value = false;
 }
 
 async function deleteMemory(id: string) {
@@ -881,5 +898,9 @@ onMounted(async () => {
   }
   await ensureDeviceId();
   await loadMemories();
+});
+
+onActivated(() => {
+  loadMemories();
 });
 </script>

@@ -85,6 +85,10 @@
               <span class="material-symbols-outlined text-[16px] animate-spin">sync</span>
               {{ t('notes.aiThinking') }}
             </div>
+            <div v-else-if="memorizing" class="flex items-center gap-2 text-[11px] text-on-surface-variant/60 px-2">
+              <span class="material-symbols-outlined text-[14px] animate-spin">memory</span>
+              {{ t('notes.aiMemorizing') }}
+            </div>
           </div>
 
           <div v-if="error" class="px-3 py-1.5 text-[11px] text-red-500 shrink-0 break-words bg-white/40">{{ error }}</div>
@@ -143,6 +147,7 @@ const { t } = useI18n()
 const open = ref(false)
 const input = ref('')
 const loading = ref(false)
+const memorizing = ref(false)
 const error = ref('')
 const messagesRef = ref<HTMLDivElement>()
 const panelRef = ref<HTMLDivElement>()
@@ -249,23 +254,40 @@ async function send() {
       role: 'assistant',
       content: result.answer,
     })
+    await nextTick()
+    messagesRef.value?.scrollTo({ top: messagesRef.value.scrollHeight, behavior: 'smooth' })
 
-    // Extract memories after answer (fire & forget — don't block UI)
-    extractMemories(props.aiConfig, question, result.answer).then(facts => {
+    // Done loading answer, now extract memories
+    loading.value = false
+    await nextTick()
+    memorizing.value = true
+    try {
+      const existingTexts = memories.value.map(m => m.content)
+      const facts = await extractMemories(props.aiConfig, question, result.answer, existingTexts)
       for (const fact of facts) {
-        if (!memories.value.some(m => m.content === fact)) {
-          saveAiMemory(fact).then(saved => {
+        const norm = fact.trim().toLowerCase().replace(/[，。！？；、,.!?;:]/g, '')
+        const isDuplicate = memories.value.some(m => {
+          const existing = m.content.trim().toLowerCase().replace(/[，。！？；、,.!?;:]/g, '')
+          return existing === norm || existing.includes(norm) || norm.includes(existing)
+        })
+        if (!isDuplicate) {
+          try {
+            const saved = await saveAiMemory(fact)
             if (saved) memories.value.unshift(saved)
-          }).catch(() => {})
+          } catch {
+            console.warn('[NoteAiPanel] Failed to save memory:', fact)
+          }
         }
       }
-    }).catch(() => {})
+    } catch (e: any) {
+      console.warn('[NoteAiPanel] Memory extraction failed:', e?.message || e)
+    } finally {
+      memorizing.value = false
+    }
   } catch (e: any) {
     error.value = e.message || String(e)
   } finally {
     loading.value = false
-    await nextTick()
-    messagesRef.value?.scrollTo({ top: messagesRef.value.scrollHeight, behavior: 'smooth' })
   }
 }
 
