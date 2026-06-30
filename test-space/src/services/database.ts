@@ -23,7 +23,6 @@ async function initDb(): Promise<Database> {
   await instance.execute('PRAGMA busy_timeout = 30000')
   console.log('[DB] path:', `sqlite:${dir}/test-space.db`)
   await migrateInternal(instance)
-  try { await rebuildFtsIndex(instance) } catch {}
   return instance
 }
 

@@ -1078,6 +1078,7 @@ async function doDeleteFolder(withNotes: boolean) {
     } else {
       await db.deleteNoteFolder(id)
     }
+    deleteFolderTarget.value = null
     folders.value = folders.value.filter(f => f.id !== id)
     notes.value = await db.loadNotes()
     rebuildTitleMap()
