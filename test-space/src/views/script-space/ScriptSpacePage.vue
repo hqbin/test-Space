@@ -120,10 +120,10 @@
                 <div v-for="n in lineCount" :key="n">{{ n }}</div>
               </div>
               <div class="flex-1 relative min-h-0">
-                <pre ref="highlightRef" class="absolute inset-0 p-3 text-[13px] leading-relaxed font-mono whitespace-pre-wrap break-all overflow-y-auto pointer-events-none text-[#e4e5e7] select-text" style="background: #0d0d1a;" aria-hidden="true"><code v-html="highlightedCode"></code></pre>
+                <pre ref="highlightRef" class="absolute inset-0 p-3 text-[13px] leading-relaxed font-mono whitespace-pre-wrap pointer-events-none text-[#e4e5e7] select-text" style="background: #0d0d1a; overflow: hidden; tab-size: 2;" aria-hidden="true"><code v-html="highlightedCode"></code></pre>
                 <textarea ref="editorRef" v-model="editingContent"
-                  class="absolute inset-0 w-full h-full resize-none outline-none border-none p-3 text-[13px] leading-relaxed font-mono text-transparent caret-white custom-scrollbar select-text"
-                  style="background: transparent; tab-size: 2;"
+                  class="editor-textarea absolute inset-0 w-full h-full resize-none outline-none border-none p-3 text-[13px] leading-relaxed font-mono text-transparent caret-white custom-scrollbar select-text"
+                  style="background: transparent; tab-size: 2; -webkit-text-fill-color: transparent;"
                   spellcheck="false"
                   @keydown.tab.prevent="insertTab"
                   @scroll="syncScroll">
@@ -675,5 +675,12 @@ onUnmounted(() => {
 .dropdown-leave-to {
   opacity: 0;
   transform: translateY(-6px);
+}
+
+.editor-textarea::selection {
+  background: rgba(100, 140, 255, 0.35);
+}
+.editor-textarea::-moz-selection {
+  background: rgba(100, 140, 255, 0.35);
 }
 </style>
