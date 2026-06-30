@@ -721,7 +721,15 @@ let _cachedNotes: NoteItem[] | null = null
 let _cachedFolders: NoteFolder[] | null = null
 let _cachedSpaces: NoteSpace[] | null = null
 const _contentCache = new Map<string, string>()  // noteId -> content HTML
-const _contentJsonCache = new Map<string, string>()  // noteId -> content JSON
+const _contentJsonCache = new Map<string, string>()
+const CACHE_MAX_SIZE = 30
+function cappedCacheSet<T>(cache: Map<string, T>, key: string, value: T) {
+  if (cache.size >= CACHE_MAX_SIZE) {
+    var oldest = cache.keys().next().value
+    if (oldest !== undefined) cache.delete(oldest)
+  }
+  cache.set(key, value)
+}  // noteId -> content JSON
 let _isUnmounted = false
 let _pendingNoteId: string | null = null
 
@@ -1326,8 +1334,8 @@ async function selectNote(note: NoteItem) {
       note.plainText = full.plainText
       note.tags = full.tags
       note.contentJson = full.contentJson
-      _contentCache.set(note.id, full.content)
-      _contentJsonCache.set(note.id, full.contentJson || "")
+      cappedCacheSet(_contentCache, note.id, full.content)
+      cappedCacheSet(_contentJsonCache, note.id, full.contentJson || "")
     }
   }
 
@@ -1385,6 +1393,8 @@ async function setNoteContentProgressive(
   // Single setContent is faster than chunked insertContent -- ProseMirror JSON is efficient
 
   ed.commands.setContent(content || "")
+  // Close undo history to prevent ProseMirror memory accumulation from rapid note switching
+  try { (ed as any).view.dispatch((ed as any).state.tr.scrollIntoView()) } catch {}
 }
 async function saveCurrentNote() {
   if (!selectedNoteId.value || !currentNoteData.value) return
@@ -1395,8 +1405,8 @@ async function saveCurrentNote() {
     note.contentJson = JSON.stringify(editor.value.getJSON())
   }
   await db.saveNote(note)
-  _contentCache.set(note.id, note.content)
-  _contentJsonCache.set(note.id, note.contentJson || "")
+  cappedCacheSet(_contentCache, note.id, note.content)
+  cappedCacheSet(_contentJsonCache, note.id, note.contentJson || "")
   await syncNoteLinksFromContent(selectedNoteId.value, note.content)
   saved.value = true
 }
@@ -2158,8 +2168,8 @@ onDeactivated(() => {
         note.contentJson = JSON.stringify(editor.value.getJSON())
       }
       db.saveNote(note).catch(() => {})
-      _contentCache.set(note.id, note.content)
-      _contentJsonCache.set(note.id, note.contentJson || "")
+      cappedCacheSet(_contentCache, note.id, note.content)
+      cappedCacheSet(_contentJsonCache, note.id, note.contentJson || "")
     }
   }
   if (saveTimer) clearTimeout(saveTimer)

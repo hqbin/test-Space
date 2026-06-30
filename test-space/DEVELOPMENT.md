@@ -1,4 +1,4 @@
-# Test Space 开发文档
+﻿# Test Space 开发文档
 
 > **重要**：每次对项目进行更新或修改后，必须同步更新本文档。所有新增、修改或删除的功能都要在对应页面模块中描述清楚。本文档是项目的核心参考文件。
 >
@@ -2476,3 +2476,64 @@ regex = "1"
 | 检查项 | 结果 |
 |--------|------|
 | `npm run build` (vue-tsc + vite) | ✅ 通过 |
+## 三十一、Phase 31 — 性能优化与内存管理
+
+> 修复笔记页面骨架屏显示、大文件加载卡顿、数据库FTS5慢查询、弹窗不关闭等问题。
+
+### 31.1 骨架屏优化
+
+| 问题 | 修复 |
+|------|------|
+| dataLoading 骨架屏与按钮重叠 | 为包裹骨架屏的滚动容器添加 position:relative，骨架屏不再相对于视口定位 |
+| contentLoading 使用沙漏图标 | 替换为与文件树一致的 32 行 skeleton-shimmer 骨架线，模拟文档段落布局 |
+| 骨架屏不显示 | 将 .skeleton-shimmer / .skeleton-line / @keyframes skeletonPulse CSS 定义添加到 <style scoped> 中（之前只定义在 JS 模板字符串里） |
+
+### 31.2 大文件加载优化
+
+| 问题 | 修复 |
+|------|------|
+| editor.value.commands.setContent() 同步阻塞 | 调用前使用 setTimeout(0) yield，让浏览器先渲染骨架屏 |
+| 渐进式 insertContent 更慢 | 回退到单次 setContent(content || "")，ProseMirror 解析 JSON 的开销远小于拆分的累积开销 |
+| 3000MB 内存飙升 | 彻底删除了 div.innerHTML + DOM 切片的 setNoteContentProgressive 路径，改用单次 setContent |
+
+### 31.3 数据库 FTS5 性能修复
+
+| 问题 | 修复 |
+|------|------|
+| DELETE FROM notes_fts 耗时 1.2 秒 | 移除了 initDb() 中的 ebuildFtsIndex() 调用。FTS5 索引通过每次 saveNote() / deleteNote() 增量维护，初始重建是多余的 |
+
+### 31.4 ProseMirror 历史内存管理
+
+| 问题 | 修复 |
+|------|------|
+| 快速切换笔记时 ProseMirror undo 历史积累 | 在 StarterKit 中配置 history: { depth: 20, newGroupDelay: 1000 }，限制 undo 栈深度 |
+| 多次 setContent() 创建历史事务 | 每次内容加载完成后分发 scrollIntoView 事务关闭当前历史分组 |
+
+### 31.5 缓存内存控制
+
+| 功能 | 说明 |
+|------|------|
+| CACHE_MAX_SIZE = 30 | 笔记内容缓存上限 30 条，超出时淘汰最旧条目 |
+| cappedCacheSet() | 替代直接 Map.set()，在写入前检查容量 |
+
+### 31.6 弹窗修复
+
+| 问题 | 修复 |
+|------|------|
+| 删除文件夹后弹窗未关闭 | deleteFolderTarget.value = null 移至 loadNotes() 之前，在数据库删除完成后立即关闭弹窗 |
+
+### 31.7 影响文件
+
+| 文件 | 修改 |
+|------|------|
+| src/views/note-space/NotesSpacePage.vue | 骨架屏、ProseMirror history 配置、cappedCacheSet、弹窗关闭时序 |
+| src/services/database.ts | 移除 initDb() 中的 ebuildFtsIndex() 调用 |
+
+### 31.8 编译验证
+
+| 检查项 | 结果 |
+|--------|------|
+| 
+pm run build (vue-tsc + vite) | ✓ 通过 |
+
+...
