@@ -4,9 +4,9 @@
     <div class="flex items-center gap-3 mb-2 flex-shrink-0 ml-3">
       <!-- Type dropdown -->
       <div class="relative" ref="typeDropdownRef">
-        <button class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-1.5 min-w-[100px] select-none" @click="typeDropdownOpen = !typeDropdownOpen">
-          <span class="material-symbols-outlined text-[18px]">code</span>
-          <span class="text-[13px] font-mono uppercase">{{ currentTypeLabel }}</span>
+        <button class="glass-button px-3 py-1.5 rounded-full font-caption text-caption font-normal flex items-center gap-1.5 min-w-[80px] select-none" @click="typeDropdownOpen = !typeDropdownOpen">
+          <span class="material-symbols-outlined text-[16px]">code</span>
+          <span class="text-[12px] font-mono uppercase">{{ currentTypeLabel }}</span>
           <span class="material-symbols-outlined text-[16px] transition-transform" :class="typeDropdownOpen ? 'rotate-180' : ''">expand_more</span>
         </button>
         <Transition name="dropdown">
@@ -21,20 +21,20 @@
           </div>
         </Transition>
       </div>
-      <button class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-1.5 select-none" @click="newScript">
-        <span class="material-symbols-outlined text-[18px]">add</span>
+      <button class="glass-button px-3 py-1.5 rounded-full font-caption text-caption font-normal flex items-center gap-1.5 select-none" @click="newScript">
+        <span class="material-symbols-outlined text-[16px]">add</span>
         {{ t("scripts.new") }}
       </button>
-      <button class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-1.5 select-none" @click="openLocalFile">
-        <span class="material-symbols-outlined text-[18px]">folder_open</span>
+      <button class="glass-button px-3 py-1.5 rounded-full font-caption text-caption font-normal flex items-center gap-1.5 select-none" @click="openLocalFile">
+        <span class="material-symbols-outlined text-[16px]">folder_open</span>
         {{ t("scripts.open") }}
       </button>
-      <button v-if="currentScript" class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-1.5 select-none" @click="saveCurrentScript">
-        <span class="material-symbols-outlined text-[18px]">save</span>
+      <button v-if="currentScript" class="glass-button px-3 py-1.5 rounded-full font-caption text-caption font-normal flex items-center gap-1.5 select-none" @click="saveCurrentScript">
+        <span class="material-symbols-outlined text-[16px]">save</span>
         {{ t("scripts.save") }}
       </button>
-      <button v-if="currentScript" class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-1.5 select-none" @click="exportToFile">
-        <span class="material-symbols-outlined text-[18px]">file_upload</span>
+      <button v-if="currentScript" class="glass-button px-3 py-1.5 rounded-full font-caption text-caption font-normal flex items-center gap-1.5 select-none" @click="exportToFile">
+        <span class="material-symbols-outlined text-[16px]">file_upload</span>
         {{ t("scripts.export") }}
       </button>
     </div>

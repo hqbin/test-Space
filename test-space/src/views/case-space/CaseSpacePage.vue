@@ -1,20 +1,20 @@
 ﻿<template>
   <div class="flex flex-col h-full select-none">
-    <div class="flex items-center gap-3 mb-8 mt-8">
-      <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2 select-none" @click="showNewDialog = true">
-        <span class="material-symbols-outlined text-[20px]">add</span>
+    <div class="flex items-center gap-3 mb-3 mt-2 flex-shrink-0">
+      <button class="glass-button px-3 py-1.5 rounded-full font-caption text-caption font-normal flex items-center gap-1.5 select-none" @click="showNewDialog = true">
+        <span class="material-symbols-outlined text-[16px]">add</span>
         {{ t("case.newFile") }}
       </button>
-      <span class="w-px h-8 bg-white/30 mx-1"></span>
-      <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2 select-none" @click="goToFieldRules">
-        <span class="material-symbols-outlined text-[20px]">fact_check</span>
+      <span class="w-px h-5 bg-white/30 mx-1"></span>
+      <button class="glass-button px-3 py-1.5 rounded-full font-caption text-caption font-normal flex items-center gap-1.5 select-none" @click="goToFieldRules">
+        <span class="material-symbols-outlined text-[16px]">fact_check</span>
         {{ t("case.fieldTemplates") }}
       </button>
     </div>
 
     <div v-if="store.favoriteFiles.length > 0" class="mb-8">
-      <h2 class="font-headline-md text-headline-md text-on-surface font-semibold mb-4 flex items-center gap-2 select-none">
-        <span class="material-symbols-outlined text-[20px] text-secondary" style="font-variation-settings: 'FILL' 1">star</span>
+      <h2 class="font-label-md text-label-md text-on-surface mb-3 flex items-center gap-1.5 select-none">
+        <span class="material-symbols-outlined text-[18px] text-secondary" style="font-variation-settings: 'FILL' 1">star</span>
         {{ t("case.favorites") }}
       </h2>
       <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -45,9 +45,9 @@
       </div>
     </div>
 
-    <div v-if="store.recentFilesList.length > 0">
-      <h2 class="font-headline-md text-headline-md text-on-surface font-semibold mb-4 flex items-center gap-2 select-none">
-        <span class="material-symbols-outlined text-[20px] text-on-surface-variant/70">history</span>
+    <div v-if="store.recentFilesList.length > 0" class="mt-2">
+      <h2 class="font-label-md text-label-md text-on-surface mb-3 flex items-center gap-1.5 select-none">
+        <span class="material-symbols-outlined text-[18px] text-on-surface-variant/70">history</span>
         {{ t("case.recentFiles") }}
       </h2>
       <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -89,11 +89,11 @@
 
     <div v-if="store.recentFilesList.length === 0 && store.favoriteFiles.length === 0" class="flex-1 flex items-center justify-center">
       <div class="text-center">
-        <span class="material-symbols-outlined text-7xl text-on-surface-variant/20">description</span>
-        <p class="font-headline-md text-headline-md text-on-surface-variant mt-6">{{ t("case.noFiles") }}</p>
-        <p class="font-body-md text-body-md text-on-surface-variant/60 mt-2 mb-6">{{ t("case.noFilesDesc") }}</p>
+        <span class="material-symbols-outlined text-6xl text-on-surface-variant/20">description</span>
+        <p class="font-label-md text-label-md text-on-surface-variant mt-4">{{ t("case.noFiles") }}</p>
+        <p class="font-body-md text-body-md text-on-surface-variant/60 mt-2 mb-4">{{ t("case.noFilesDesc") }}</p>
         <div class="flex items-center justify-center gap-3">
-          <button class="glass-button px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2 select-none" @click="showNewDialog = true">
+          <button class="glass-button px-2.5 py-1 rounded-full font-caption text-caption font-normal flex items-center gap-1.5 select-none" @click="showNewDialog = true">
             <span class="material-symbols-outlined text-[20px]">add</span>
             {{ t("case.createNew") }}
           </button>
@@ -107,9 +107,9 @@
         <div class="absolute inset-0 bg-black/10 backdrop-blur-sm" @click="showNewDialog = false"></div>
         <div class="glass-panel rounded-2xl p-8 w-[440px] relative z-10">
           <div class="flex items-center justify-between mb-6">
-            <h3 class="font-headline-md text-headline-md text-on-surface font-semibold select-none">{{ t("case.newDialogTitle") }}</h3>
+            <h3 class="font-label-md text-label-md text-on-surface select-none">{{ t("case.newDialogTitle") }}</h3>
             <button class="glass-button p-1 rounded select-none" @click="showNewDialog = false">
-              <span class="material-symbols-outlined text-[20px]">close</span>
+              <span class="material-symbols-outlined text-[18px]">close</span>
             </button>
           </div>
           <div class="flex flex-col gap-5">
@@ -163,9 +163,9 @@
               </Transition>
             </div>
             <div class="flex justify-end gap-3 mt-2">
-              <button class="glass-button px-6 py-2.5 rounded-full font-label-md text-label-md select-none" @click="showNewDialog = false">{{ t("case.cancel") }}</button>
+              <button class="glass-button px-4 py-2 rounded-full font-caption text-caption select-none" @click="showNewDialog = false">{{ t("case.cancel") }}</button>
               <button
-                class="glass-button px-6 py-2.5 rounded-full font-label-md text-label-md flex items-center gap-2 transition-all shadow-sm select-none"
+                class="glass-button px-4 py-2 rounded-full font-caption text-caption flex items-center gap-1.5 transition-all shadow-sm select-none"
                 :disabled="!newCaseName.trim()"
                 :class="!newCaseName.trim() ? 'opacity-50 cursor-not-allowed' : ''"
                 @click="confirmNew"
@@ -185,15 +185,15 @@
         <div class="absolute inset-0 bg-black/10 backdrop-blur-sm" @click="showDeleteConfirm = false"></div>
         <div class="glass-panel rounded-2xl p-8 w-[400px] relative z-10">
           <div class="flex items-center justify-between mb-4">
-            <h3 class="font-headline-md text-headline-md text-on-surface font-semibold select-none">{{ t("case.deleteTitle") }}</h3>
+            <h3 class="font-label-md text-label-md text-on-surface select-none">{{ t("case.deleteTitle") }}</h3>
             <button class="glass-button p-1 rounded select-none" @click="showDeleteConfirm = false">
               <span class="material-symbols-outlined text-[20px]">close</span>
             </button>
           </div>
           <p class="font-body-md text-body-md text-on-surface-variant mb-6">{{ t("case.deleteDesc") }}</p>
           <div class="flex justify-end gap-3">
-            <button class="glass-button px-6 py-2.5 rounded-full font-label-md text-label-md select-none" @click="showDeleteConfirm = false">{{ t("case.deleteCancel") }}</button>
-            <button class="glass-button px-6 py-2.5 rounded-full font-label-md text-label-md bg-red-500/20 hover:bg-red-500/30 text-red-400 select-none" @click="confirmDeleteRecent">{{ t("case.deleteConfirm") }}</button>
+            <button class="glass-button px-4 py-2 rounded-full font-caption text-caption select-none" @click="showDeleteConfirm = false">{{ t("case.deleteCancel") }}</button>
+            <button class="glass-button px-4 py-2 rounded-full font-caption text-caption bg-red-500/20 hover:bg-red-500/30 text-red-400 select-none" @click="confirmDeleteRecent">{{ t("case.deleteConfirm") }}</button>
           </div>
         </div>
       </div>

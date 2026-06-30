@@ -2,37 +2,37 @@
   <div class="flex flex-col h-full -mx-margin-page select-none">
     <!-- Toolbar -->
     <div class="flex items-center gap-1 px-4 py-2 bg-white/20 backdrop-blur-sm border-b border-white/20 shrink-0 overflow-x-auto custom-scrollbar">
-      <button class="glass-button px-3 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1 shrink-0 select-none" title="Back to Home" @click="goHome">
-        <span class="material-symbols-outlined text-[16px]">arrow_back</span>
+      <button class="glass-button px-2 py-1 rounded-lg font-caption text-caption flex items-center gap-1 shrink-0 select-none" title="Back to Home" @click="goHome">
+        <span class="material-symbols-outlined text-[14px]">arrow_back</span>
         <span class="hidden sm:inline">Back</span>
       </button>
-      <span class="w-px h-5 bg-white/30 mx-1 shrink-0"></span>
-      <button class="glass-button px-3 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1 shrink-0 select-none" title="Save" @click="saveFile">
-        <span class="material-symbols-outlined text-[16px]">save</span>
+      <span class="w-px h-4 bg-white/30 mx-1 shrink-0"></span>
+      <button class="glass-button px-2 py-1 rounded-lg font-caption text-caption flex items-center gap-1 shrink-0 select-none" title="Save" @click="saveFile">
+        <span class="material-symbols-outlined text-[14px]">save</span>
         <span class="hidden sm:inline">Save</span>
       </button>
-      <button class="glass-button px-3 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1 shrink-0 select-none" title="Save As" @click="showSaveAsDialog = true">
-        <span class="material-symbols-outlined text-[16px]">save_as</span>
+      <button class="glass-button px-2 py-1 rounded-lg font-caption text-caption flex items-center gap-1 shrink-0 select-none" title="Save As" @click="showSaveAsDialog = true">
+        <span class="material-symbols-outlined text-[14px]">save_as</span>
         <span class="hidden sm:inline">Save As</span>
       </button>
-      <span class="w-px h-5 bg-white/30 mx-1 shrink-0"></span>
-      <button class="glass-button px-3 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1 shrink-0 opacity-50 cursor-not-allowed select-none" title="Cloud Sync (Coming Soon)">
-        <span class="material-symbols-outlined text-[16px]">cloud_sync</span>
+      <span class="w-px h-4 bg-white/30 mx-1 shrink-0"></span>
+      <button class="glass-button px-2 py-1 rounded-lg font-caption text-caption flex items-center gap-1 shrink-0 opacity-50 cursor-not-allowed select-none" title="Cloud Sync (Coming Soon)">
+        <span class="material-symbols-outlined text-[14px]">cloud_sync</span>
         <span class="hidden sm:inline">Cloud</span>
       </button>
-      <button class="glass-button px-3 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1 shrink-0 opacity-50 cursor-not-allowed select-none" title="Platform Sync (Coming Soon)">
-        <span class="material-symbols-outlined text-[16px]">sync</span>
+      <button class="glass-button px-2 py-1 rounded-lg font-caption text-caption flex items-center gap-1 shrink-0 opacity-50 cursor-not-allowed select-none" title="Platform Sync (Coming Soon)">
+        <span class="material-symbols-outlined text-[14px]">sync</span>
         <span class="hidden sm:inline">Platform</span>
       </button>
 
       <div class="ml-auto flex items-center gap-1">
         <div class="glass-panel rounded-full p-0.5 inline-flex shadow-sm shrink-0">
-          <button class="px-3 py-1.5 rounded-full font-caption text-caption flex items-center gap-1.5 transition-all select-none" :class="viewMode === 'excel' ? 'glass-active' : 'glass-button'" @click="viewMode = 'excel'">
-            <span class="material-symbols-outlined text-[16px]">table_view</span>
+          <button class="px-2.5 py-1 rounded-full font-caption text-caption flex items-center gap-1 transition-all select-none" :class="viewMode === 'excel' ? 'glass-active' : 'glass-button'" @click="viewMode = 'excel'">
+            <span class="material-symbols-outlined text-[14px]">table_view</span>
             <span class="hidden sm:inline">Excel</span>
           </button>
-          <button class="px-3 py-1.5 rounded-full font-caption text-caption flex items-center gap-1.5 transition-all select-none" :class="viewMode === 'mindmap' ? 'glass-active' : 'glass-button'" @click="viewMode = 'mindmap'">
-            <span class="material-symbols-outlined text-[16px]">account_tree</span>
+          <button class="px-2.5 py-1 rounded-full font-caption text-caption flex items-center gap-1 transition-all select-none" :class="viewMode === 'mindmap' ? 'glass-active' : 'glass-button'" @click="viewMode = 'mindmap'">
+            <span class="material-symbols-outlined text-[14px]">account_tree</span>
             <span class="hidden sm:inline">Mind Map</span>
           </button>
         </div>
@@ -49,8 +49,8 @@
             <span class="font-caption text-caption text-on-surface-variant/60">{{ contentRows.length }} cases</span>
           </div>
           <div class="flex items-center gap-1">
-            <button class="glass-button px-2 py-1 rounded-lg text-caption flex items-center gap-1 select-none" @click="addRow">
-              <span class="material-symbols-outlined text-[14px]">add</span>
+            <button class="glass-button px-1.5 py-0.5 rounded-lg text-caption flex items-center gap-0.5 select-none" @click="addRow">
+              <span class="material-symbols-outlined text-[12px]">add</span>
               Row
             </button>
           </div>
@@ -162,8 +162,8 @@
               <div class="text-center">
                 <span class="material-symbols-outlined text-4xl text-on-surface-variant/15">table_rows</span>
                 <p class="font-body-md text-body-md text-on-surface-variant/50 mt-3">No test cases yet</p>
-                <button class="mt-4 px-5 py-2 rounded-full glass-button inline-flex items-center gap-1.5 select-none" @click="addRow">
-                  <span class="material-symbols-outlined text-[16px]">add</span>
+                <button class="mt-4 px-4 py-1.5 rounded-full glass-button inline-flex items-center gap-1 select-none" @click="addRow">
+                  <span class="material-symbols-outlined text-[14px]">add</span>
                   Add First Case
                 </button>
               </div>
@@ -324,15 +324,15 @@
         <div class="glass-panel rounded-2xl p-6 w-full max-w-xs relative z-10 bg-white/80 shadow-xl">
           <h3 class="font-headline-md text-headline-md text-on-surface font-semibold mb-4 select-none">Export As</h3>
           <div class="flex flex-col gap-2">
-            <button class="glass-button w-full px-4 py-3 rounded-xl font-label-md text-label-md flex items-center gap-3 text-left select-none" @click="saveAsExcel">
-              <span class="material-symbols-outlined text-[20px]">table_chart</span>
+            <button class="glass-button w-full px-3 py-2 rounded-xl font-caption text-caption flex items-center gap-2 text-left select-none" @click="saveAsExcel">
+              <span class="material-symbols-outlined text-[18px]">table_chart</span>
               <div>
                 <div>Excel (.xlsx)</div>
                 <div class="font-caption text-caption text-on-surface-variant/60">Export to spreadsheet</div>
               </div>
             </button>
-            <button class="glass-button w-full px-4 py-3 rounded-xl font-label-md text-label-md flex items-center gap-3 text-left select-none" @click="saveAsPng">
-              <span class="material-symbols-outlined text-[20px]">account_tree</span>
+            <button class="glass-button w-full px-3 py-2 rounded-xl font-caption text-caption flex items-center gap-2 text-left select-none" @click="saveAsPng">
+              <span class="material-symbols-outlined text-[18px]">account_tree</span>
               <div>
                 <div>Mind Map (.png)</div>
                 <div class="font-caption text-caption text-on-surface-variant/60">Export mind map as image</div>

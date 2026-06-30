@@ -4,9 +4,9 @@
     <div v-if="showRules" class="glass-panel rounded-xl px-5 py-3">
       <div class="flex items-center justify-between mb-2">
         <span class="font-label-md font-semibold">{{ t('api.rules') }}</span>
-        <button class="bg-white/30 border border-outline-variant/30 rounded-lg px-2.5 py-1 flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all select-none" @click="showRuleEditor = true">
+        <button class="glass-button px-2.5 py-1 rounded-full font-caption text-caption font-normal flex items-center gap-1 select-none" @click="showRuleEditor = true">
           <span class="material-symbols-outlined text-[14px]">add</span>
-          <span class="font-label-md">{{ t('api.addRule') }}</span>
+          {{ t('api.addRule') }}
         </button>
       </div>
       <div class="space-y-1 max-h-[120px] overflow-y-auto custom-scrollbar">
@@ -27,14 +27,14 @@
     </div>
 
     <!-- Control Bar -->
-    <div class="glass-panel rounded-xl px-5 py-3 flex items-center gap-4 flex-wrap">
-      <button v-if="!api.running.value" class="bg-white/30 border border-outline-variant/30 px-5 py-2 rounded-xl flex items-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all select-none" :disabled="api.isStarting.value" @click="handleStart">
-        <span class="material-symbols-outlined text-[18px]">play_arrow</span>
-        <span class="font-label-md whitespace-nowrap">{{ api.isStarting.value ? 'Starting...' : t('api.start') }}</span>
+    <div class="glass-panel rounded-xl px-4 py-2 flex items-center gap-3 flex-wrap">
+      <button v-if="!api.running.value" class="glass-button px-3 py-1.5 rounded-full font-caption text-caption font-normal flex items-center gap-1.5 select-none" :disabled="api.isStarting.value" @click="handleStart">
+        <span class="material-symbols-outlined text-[16px]">play_arrow</span>
+        <span class="whitespace-nowrap">{{ api.isStarting.value ? 'Starting...' : t('api.start') }}</span>
       </button>
-      <button v-else class="bg-white/30 border border-outline-variant/30 px-5 py-2 rounded-xl flex items-center gap-2 hover:bg-red-500/10 hover:border-red-400/30 hover:scale-105 transition-all select-none" :disabled="api.isStopping.value" @click="handleStop">
-        <span class="material-symbols-outlined text-[18px]">stop</span>
-        <span class="font-label-md whitespace-nowrap">{{ api.isStopping.value ? 'Stopping...' : t('api.stop') }}</span>
+      <button v-else class="glass-button px-3 py-1.5 rounded-full font-caption text-caption font-normal flex items-center gap-1.5 select-none" :disabled="api.isStopping.value" @click="handleStop">
+        <span class="material-symbols-outlined text-[16px]">stop</span>
+        <span class="whitespace-nowrap">{{ api.isStopping.value ? 'Stopping...' : t('api.stop') }}</span>
       </button>
 
       <div v-if="api.running.value" class="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/20 rounded-full">
@@ -45,11 +45,11 @@
 
       <div class="w-px h-6 bg-white/20" />
 
-      <button class="bg-white/30 border border-outline-variant/30 rounded-xl px-3 py-2 flex items-center gap-2 transition-all relative select-none"
-        :class="api.breakpointEnabled.value ? 'glass-active' : 'hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105'"
+      <button class="glass-button px-3 py-1.5 rounded-full font-caption text-caption font-normal flex items-center gap-1.5 transition-all relative select-none"
+        :class="api.breakpointEnabled.value ? 'glass-active' : ''"
         @click="api.toggleBreakpoint(!api.breakpointEnabled.value, breakpointUrlPattern)">
-        <span class="material-symbols-outlined text-[18px]">error_outline</span>
-        <span class="font-label-md whitespace-nowrap">{{ t('api.breakpoint') }}</span>
+        <span class="material-symbols-outlined text-[16px]">error_outline</span>
+        <span class="whitespace-nowrap">{{ t('api.breakpoint') }}</span>
         <span v-if="api.pendingCount.value > 0"
           class="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1">
           {{ api.pendingCount.value }}
@@ -67,18 +67,18 @@
             <span class="material-symbols-outlined text-[14px] text-on-surface-variant">expand_more</span>
           </button>
         </div>
-        <button class="bg-white/30 border border-outline-variant/30 rounded-xl px-2 py-1.5 flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all select-none" @click="refreshDevices" title="Refresh">
-          <span class="material-symbols-outlined text-[16px]">refresh</span>
+        <button class="glass-button px-2 py-1 rounded-full font-caption text-caption font-normal flex items-center gap-1 select-none" @click="refreshDevices" title="Refresh">
+          <span class="material-symbols-outlined text-[14px]">refresh</span>
         </button>
       </div>
 
       <div class="w-px h-6 bg-white/20" />
 
-      <button class="bg-white/30 border border-outline-variant/30 rounded-xl px-3 py-2 flex items-center gap-2 transition-all select-none"
-        :class="showRules ? 'glass-active' : 'hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105'"
+      <button class="glass-button px-3 py-1.5 rounded-full font-caption text-caption font-normal flex items-center gap-1.5 transition-all select-none"
+        :class="showRules ? 'glass-active' : ''"
         @click="showRules = !showRules">
-        <span class="material-symbols-outlined text-[18px]">rule</span>
-        <span class="font-label-md whitespace-nowrap">Rules</span>
+        <span class="material-symbols-outlined text-[16px]">rule</span>
+        <span class="whitespace-nowrap">Rules</span>
         <span v-if="localRules.length > 0" class="text-caption text-on-surface-variant bg-white/10 rounded-full px-1.5 py-0.5">{{ localRules.filter(r => r.enabled).length }}/{{ localRules.length }}</span>
       </button>
     </div>
@@ -122,9 +122,9 @@
       </Teleport>
 
       <span class="text-caption text-on-surface-variant whitespace-nowrap">{{ t('api.capturedCount', { count: String(filteredList.length) }) }}</span>
-      <button v-if="api.capturedRequests.value.length > 0" class="bg-white/30 border border-outline-variant/30 rounded-xl px-3 py-1.5 flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all select-none" @click="handleClear">
+      <button v-if="api.capturedRequests.value.length > 0" class="glass-button px-3 py-1.5 rounded-full font-caption text-caption font-normal flex items-center gap-1.5 select-none" @click="handleClear">
         <span class="material-symbols-outlined text-[16px]">delete_sweep</span>
-        <span class="font-label-md">{{ t('api.clear') }}</span>
+        {{ t('api.clear') }}
       </button>
     </div>
 
@@ -182,18 +182,18 @@
           <div class="flex items-center gap-1 px-4 pt-3 pb-2 border-b border-white/10 flex-shrink-0">
             <button v-for="tab in detailTabs" :key="tab.key"
               class="rounded-lg px-3 py-1.5 text-body-md transition-all"
-              :class="activeDetailTab === tab.key ? 'glass-active font-semibold' : 'text-on-surface-variant bg-white/30 border border-outline-variant/30 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105'"
+              :class="activeDetailTab === tab.key ? 'glass-active' : 'glass-button'"
               @click="activeDetailTab = tab.key">
               {{ tab.label }}
             </button>
             <div class="flex-1" />
-            <button class="bg-white/30 border border-outline-variant/30 rounded-lg px-2.5 py-1.5 flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all select-none" @click="handleEditRequest">
-              <span class="material-symbols-outlined text-[16px]">edit</span>
-              <span class="font-label-md">{{ t('api.edit') }}</span>
+            <button class="glass-button px-2.5 py-1 rounded-full font-caption text-caption font-normal flex items-center gap-1 select-none" @click="handleEditRequest">
+              <span class="material-symbols-outlined text-[14px]">edit</span>
+              {{ t('api.edit') }}
             </button>
-            <button class="bg-white/30 border border-outline-variant/30 rounded-lg px-2.5 py-1.5 flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all select-none" :class="{ 'opacity-50 pointer-events-none': api.isReplaying.value }" @click="handleReplay">
-              <span class="material-symbols-outlined text-[16px]">replay</span>
-              <span class="font-label-md">{{ api.isReplaying.value ? t('api.replaying') : t('api.replay') }}</span>
+            <button class="glass-button px-2.5 py-1 rounded-full font-caption text-caption font-normal flex items-center gap-1 select-none" :class="{ 'opacity-50 pointer-events-none': api.isReplaying.value }" @click="handleReplay">
+              <span class="material-symbols-outlined text-[14px]">replay</span>
+              {{ api.isReplaying.value ? t('api.replaying') : t('api.replay') }}
             </button>
           </div>
 
@@ -207,7 +207,7 @@
               <div class="mb-4">
                 <div class="flex items-center justify-between text-label-md font-semibold text-on-surface mb-2">
                   <span>{{ t('api.headers') }}</span>
-                  <button class="bg-white/30 border border-outline-variant/30 rounded-lg px-2 py-0.5 flex items-center gap-1 text-caption hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all select-none" @click="copyText(formatHeaders(selectedRequest.request_headers))">
+                  <button class="glass-button px-2 py-0.5 rounded-full font-caption text-caption font-normal flex items-center gap-1 select-none" @click="copyText(formatHeaders(selectedRequest.request_headers))">
                     <span class="material-symbols-outlined text-[14px]">content_copy</span> Copy
                   </button>
                 </div>
@@ -222,7 +222,7 @@
                   <span>{{ t('api.body') }} <span class="text-caption text-on-surface-variant font-normal">({{ formatSize(selectedRequest.request_size) }})</span>
                     <span v-if="selectedRequest.request_body_is_base64" class="text-caption text-amber-500 font-normal"> [Binary]</span>
                   </span>
-                  <button v-if="!selectedRequest.request_body_is_base64" class="bg-white/30 border border-outline-variant/30 rounded-lg px-2 py-0.5 flex items-center gap-1 text-caption hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all select-none" @click="copyText(tryFormatJson(selectedRequest.request_body))">
+                  <button v-if="!selectedRequest.request_body_is_base64" class="glass-button px-2 py-0.5 rounded-full font-caption text-caption font-normal flex items-center gap-1 select-none" @click="copyText(tryFormatJson(selectedRequest.request_body))">
                     <span class="material-symbols-outlined text-[14px]">content_copy</span> Copy
                   </button>
                 </div>
@@ -250,15 +250,15 @@
                   <span class="text-caption text-on-surface-variant">{{ selectedRequest.duration?.toFixed(1) }}ms</span>
                   <span class="text-caption text-on-surface-variant">{{ formatSize(selectedRequest.response_size) }}</span>
                   <div class="flex-1" />
-                  <button class="bg-white/30 border border-outline-variant/30 rounded-lg px-2.5 py-1.5 flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all select-none" @click="openBreakpointEditor(selectedRequest, 'response')">
-                    <span class="material-symbols-outlined text-[16px]">edit</span>
-                    <span class="font-label-md">{{ t('api.edit') }}</span>
+                  <button class="glass-button px-2.5 py-1 rounded-full font-caption text-caption font-normal flex items-center gap-1 select-none" @click="openBreakpointEditor(selectedRequest, 'response')">
+                    <span class="material-symbols-outlined text-[14px]">edit</span>
+                    {{ t('api.edit') }}
                   </button>
                 </div>
                 <div class="mb-4">
                   <div class="flex items-center justify-between text-label-md font-semibold text-on-surface mb-2">
                     <span>{{ t('api.resHeaders') }}</span>
-                    <button class="bg-white/30 border border-outline-variant/30 rounded-lg px-2 py-0.5 flex items-center gap-1 text-caption hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all select-none" @click="copyText(formatHeaders(selectedRequest.response_headers ?? []))">
+                    <button class="glass-button px-2 py-0.5 rounded-full font-caption text-caption font-normal flex items-center gap-1 select-none" @click="copyText(formatHeaders(selectedRequest.response_headers ?? []))">
                       <span class="material-symbols-outlined text-[14px]">content_copy</span> Copy
                     </button>
                   </div>
@@ -273,7 +273,7 @@
                     <span>{{ t('api.resBody') }} <span class="text-caption text-on-surface-variant font-normal">({{ formatSize(selectedRequest.response_size) }})</span>
                       <span v-if="selectedRequest.response_body_is_base64" class="text-caption text-amber-500 font-normal"> [Binary]</span>
                     </span>
-                    <button v-if="!selectedRequest.response_body_is_base64" class="bg-white/30 border border-outline-variant/30 rounded-lg px-2 py-0.5 flex items-center gap-1 text-caption hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all select-none" @click="copyText(tryFormatJson(selectedRequest.response_body))">
+                    <button v-if="!selectedRequest.response_body_is_base64" class="glass-button px-2 py-0.5 rounded-full font-caption text-caption font-normal flex items-center gap-1 select-none" @click="copyText(tryFormatJson(selectedRequest.response_body))">
                       <span class="material-symbols-outlined text-[14px]">content_copy</span> Copy
                     </button>
                   </div>
@@ -307,7 +307,7 @@
             <!-- Raw Tab -->
             <div v-if="activeDetailTab === 'raw'">
               <div class="flex justify-end mb-2">
-                <button class="bg-white/30 border border-outline-variant/30 rounded-lg px-2 py-0.5 flex items-center gap-1 text-caption hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all select-none" @click="copyText(rawContent)">
+                <button class="glass-button px-2 py-0.5 rounded-full font-caption text-caption font-normal flex items-center gap-1 select-none" @click="copyText(rawContent)">
                   <span class="material-symbols-outlined text-[14px]">content_copy</span> Copy
                 </button>
               </div>
