@@ -716,6 +716,7 @@ async function handleCloudRestore() {
     }
     await db.importAllData(backup);
     setStatus(t("settings.cloudRestoreSuccess"));
+    setTimeout(() => window.location.reload(), 1500);
   } catch (e: any) {
     setStatus(t("settings.cloudRestoreFail") + ": " + (e.message || e), true);
   } finally {
@@ -853,6 +854,7 @@ async function handleImport() {
     }
     await db.importAllData(backup);
     setStatus(t("settings.importSuccess"));
+    setTimeout(() => window.location.reload(), 1500);
   } catch (e: any) {
     setStatus(t("settings.importFail") + ": " + (e.message || e), true);
   } finally {
