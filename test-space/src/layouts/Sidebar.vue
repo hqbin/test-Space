@@ -84,7 +84,7 @@ function showSyncToast(message: string, type: "loading" | "success" | "error") {
   if (type !== "loading") {
     syncToastTimer = setTimeout(() => {
       syncToast.value.show = false;
-    }, 3000);
+    }, 5000);
   }
 }
 

@@ -642,10 +642,24 @@
           <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-4 select-none">{{ t('notes.importDialogTitle') }}</h3>
           <div class="mb-4">
             <label class="text-[12px] text-on-surface-variant block mb-1">{{ t('notes.importTargetFolder') }}</label>
-            <select v-model="importTargetFolderId" class="glass-input w-full px-3 py-2 rounded-lg text-[12px] outline-none">
-              <option :value="null">{{ t('notes.importRoot') }}</option>
-              <option v-for="f in folders" :key="f.id" :value="f.id">{{ f.name }}</option>
-            </select>
+            <div class="relative" ref="importFolderDropdownRef">
+              <button ref="importFolderDropdownBtnRef" class="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-[12px] glass-hover transition-colors text-on-surface-variant select-none" @click.stop="showImportFolderDropdown = !showImportFolderDropdown">
+                <span class="truncate">{{ folders.find(f => f.id === importTargetFolderId)?.name || t('notes.importRoot') }}</span>
+                <span class="material-symbols-outlined text-[14px]" :class="showImportFolderDropdown ? 'rotate-180' : ''">expand_more</span>
+              </button>
+              <div v-if="showImportFolderDropdown" class="absolute left-0 right-0 top-full mt-1 bg-white rounded-lg shadow-xl border border-gray-200/80 z-50 overflow-hidden">
+                <div class="py-1 max-h-[200px] overflow-y-auto">
+                  <div class="flex items-center gap-2 px-3 py-1.5 text-[11px] cursor-pointer transition-colors select-none" :class="importTargetFolderId === null ? 'bg-purple-100/60 text-secondary font-medium' : 'hover:bg-gray-50 text-on-surface-variant'" @click.stop="selectImportFolder(null)">
+                    <span class="material-symbols-outlined text-[14px] text-secondary" :style="{ visibility: importTargetFolderId === null ? 'visible' : 'hidden' }">check</span>
+                    <span>{{ t('notes.importRoot') }}</span>
+                  </div>
+                  <div v-for="f in folders" :key="f.id" class="flex items-center gap-2 px-3 py-1.5 text-[11px] cursor-pointer transition-colors select-none" :class="importTargetFolderId === f.id ? 'bg-purple-100/60 text-secondary font-medium' : 'hover:bg-gray-50 text-on-surface-variant'" @click.stop="selectImportFolder(f.id)">
+                    <span class="material-symbols-outlined text-[14px] text-secondary" :style="{ visibility: importTargetFolderId === f.id ? 'visible' : 'hidden' }">check</span>
+                    <span>{{ f.name }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="flex justify-end gap-2 mt-6">
             <button class="glass-button px-4 py-2 rounded-full text-[13px] select-none" @click="showImportDialog = false">{{ t('notes.cancel') }}</button>
@@ -748,6 +762,10 @@ function tryParseJson(s: string): any {
   try { return JSON.parse(s) } catch { return null }
 }
 
+function yieldToMain(): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
+
 // ── State ────────────────────────────────────────────────────
 
 const spaces = ref<NoteSpace[]>([])
@@ -799,6 +817,9 @@ const colorMenuRef = ref<HTMLDivElement>()
 const colorMenuPanelRef = ref<HTMLDivElement>()
 const colorMenuPos = ref<{ x: number; y: number }>({ x: 0, y: 0 })
 const showImportDialog = ref(false)
+const showImportFolderDropdown = ref(false)
+const importFolderDropdownRef = ref<HTMLDivElement>()
+const importFolderDropdownBtnRef = ref<HTMLButtonElement>()
 const showExportDialog = ref(false)
 const importTargetFolderId = ref<string | null>(null)
 const exportSelectedNoteIds = ref<string[]>([])
@@ -1004,8 +1025,10 @@ async function doDeleteSpace() {
   const id = deleteSpaceTarget.value.id
   try {
     await db.deleteNoteSpace(id)
+    await yieldToMain()
     spaces.value = spaces.value.filter(s => s.id !== id)
     folders.value = await db.loadNoteFolders()
+    await yieldToMain()
     notes.value = await db.loadNotes()
     rebuildTitleMap()
     if (selectedSpaceId.value === id) {
@@ -1097,6 +1120,7 @@ async function doDeleteFolder(withNotes: boolean) {
     } else {
       await db.deleteNoteFolder(id)
     }
+    await yieldToMain()
     deleteFolderTarget.value = null
     folders.value = folders.value.filter(f => f.id !== id)
     notes.value = await db.loadNotes()
@@ -1816,6 +1840,11 @@ function openImportDialog() {
   showImportDialog.value = true
 }
 
+function selectImportFolder(id: string | null) {
+  importTargetFolderId.value = id
+  showImportFolderDropdown.value = false
+}
+
 async function doImport() {
   importing.value = true
   try {
@@ -2151,6 +2180,9 @@ function onDocumentClick(e: MouseEvent) {
     const inBtn = !!(colorMenuRef.value && colorMenuRef.value.contains(target))
     const inPanel = !!(colorMenuPanelRef.value && colorMenuPanelRef.value.contains(target))
     if (!inBtn && !inPanel) showColorMenu.value = false
+  }
+  if (showImportFolderDropdown.value && importFolderDropdownRef.value && !importFolderDropdownRef.value.contains(target)) {
+    showImportFolderDropdown.value = false
   }
 }
 

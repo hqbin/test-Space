@@ -1,6 +1,7 @@
 ﻿import * as db from "@/services/database";
 import * as cloudApi from "@/services/cloudBackup";
 import * as crypto from "@/services/crypto";
+import type { AppBackup } from "@/services/database";
 
 function yieldToMain(): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, 0));
@@ -24,12 +25,55 @@ async function ensureDeviceId(): Promise<string> {
   return id;
 }
 
+const CLOUD_MAX_ITEM_SIZE = 5 * 1024 * 1024;
+
+function filterOversizedItems(data: AppBackup): AppBackup {
+  const skipped: string[] = [];
+
+  const notes = data.notes.filter(n => {
+    const size = (n.content?.length || 0) + ((n as any).contentJson?.length || 0);
+    if (size >= CLOUD_MAX_ITEM_SIZE) {
+      skipped.push(`笔记 ${n.id} (${Math.round(size / 1024 / 1024 * 100) / 100}MB)`);
+      return false;
+    }
+    return true;
+  });
+
+  const noteVersions = data.noteVersions.filter(v => {
+    const size = v.content?.length || 0;
+    if (size >= CLOUD_MAX_ITEM_SIZE) {
+      skipped.push(`笔记版本 ${v.id} (${Math.round(size / 1024 / 1024 * 100) / 100}MB)`);
+      return false;
+    }
+    return true;
+  });
+
+  const caseFiles = data.caseFiles.filter(f => {
+    const dataSize = typeof f.data === 'string' ? f.data.length : JSON.stringify(f.data || '').length;
+    if (dataSize >= CLOUD_MAX_ITEM_SIZE) {
+      skipped.push(`用例文件 ${f.id} (${Math.round(dataSize / 1024 / 1024 * 100) / 100}MB)`);
+      return false;
+    }
+    return true;
+  });
+
+  if (skipped.length > 0) {
+    console.warn(`[cloudSync] 跳过 ${skipped.length} 个超大项目:\n${skipped.join('\n')}`);
+  }
+
+  return { ...data, notes, noteVersions, caseFiles };
+}
+
+export { filterOversizedItems };
+
 export async function syncBackupToCloud(): Promise<void> {
   await db.checkDatabaseReady();
   await yieldToMain();
   const deviceId = await ensureDeviceId();
   await yieldToMain();
-  const data = await db.exportAllData();
+  const raw = await db.exportAllData();
+  await yieldToMain();
+  const data = filterOversizedItems(raw);
   await yieldToMain();
   const json = JSON.stringify(data);
   await yieldToMain();

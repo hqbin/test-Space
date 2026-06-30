@@ -71,7 +71,6 @@ export interface BackupDetail extends BackupListItem {
   iv: string;
   salt: string;
   auth_tag: string;
-  compression?: string;
 }
 
 export interface BackupUploadPayload {
@@ -82,7 +81,6 @@ export interface BackupUploadPayload {
   size_bytes: number;
   checksum: string;
   metadata: { version: string; exportedAt: string };
-  compression?: string;
 }
 
 export function uploadBackup(

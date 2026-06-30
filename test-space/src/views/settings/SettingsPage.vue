@@ -357,6 +357,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import * as db from "@/services/database";
 import * as cloudApi from "@/services/cloudBackup";
 import * as crypto from "@/services/crypto";
+import { filterOversizedItems } from "@/services/cloudSync";
 import { useI18n } from "@/composables/useI18n";
 import { getVersion } from "@tauri-apps/api/app";
 import type { AiMemory } from "@/services/database";
@@ -667,8 +668,9 @@ async function handleCloudUpload() {
   await saveCurrentDeviceId();
   await yieldToMain();
   try {
-    const data = await db.exportAllData();
+    const raw = await db.exportAllData();
     await yieldToMain();
+    const data = filterOversizedItems(raw);
     const json = JSON.stringify(data);
     await yieldToMain();
     const key = await crypto.getOrCreateKey();

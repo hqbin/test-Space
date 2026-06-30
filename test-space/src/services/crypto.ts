@@ -68,55 +68,6 @@ export interface EncryptedPayload {
   size_bytes: number;
   checksum: string;
   metadata: { version: string; exportedAt: string };
-  compression?: string;
-}
-
-async function compressString(s: string): Promise<Uint8Array> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(s);
-  const cs = new CompressionStream('gzip');
-  const writer = cs.writable.getWriter();
-  await writer.write(data);
-  await writer.close();
-  const reader = cs.readable.getReader();
-  const chunks: Uint8Array[] = [];
-  let totalLength = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    totalLength += value.length;
-  }
-  const result = new Uint8Array(totalLength);
-  let offset = 0;
-  for (const chunk of chunks) {
-    result.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return result;
-}
-
-async function decompressBytes(bytes: Uint8Array): Promise<string> {
-  const ds = new DecompressionStream('gzip');
-  const writer = ds.writable.getWriter();
-  await writer.write(bytes);
-  await writer.close();
-  const reader = ds.readable.getReader();
-  const chunks: Uint8Array[] = [];
-  let totalLength = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    totalLength += value.length;
-  }
-  const result = new Uint8Array(totalLength);
-  let offset = 0;
-  for (const chunk of chunks) {
-    result.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return new TextDecoder().decode(result);
 }
 
 export async function encryptBackup(
@@ -133,12 +84,10 @@ export async function encryptBackup(
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 
-  const compressed = await compressString(jsonStr);
-
   const encrypted = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv },
     derivedKey,
-    compressed
+    strToBuf(jsonStr)
   );
 
   const encryptedBytes = new Uint8Array(encrypted);
@@ -153,12 +102,11 @@ export async function encryptBackup(
     size_bytes: jsonStr.length,
     checksum,
     metadata,
-    compression: 'gzip',
   };
 }
 
 export async function decryptBackup(
-  payload: { data: string; iv: string; salt: string; auth_tag: string; checksum: string; compression?: string },
+  payload: { data: string; iv: string; salt: string; auth_tag: string; checksum: string },
   masterKeyBase64: string
 ): Promise<string> {
   const salt = base64Decode(payload.salt);
@@ -182,10 +130,7 @@ export async function decryptBackup(
     throw new Error("密钥不匹配，解密失败");
   }
 
-  const decryptedBytes = new Uint8Array(decrypted);
-  const plaintext = payload.compression === 'gzip'
-    ? await decompressBytes(decryptedBytes)
-    : bufToStr(decrypted);
+  const plaintext = bufToStr(decrypted);
 
   const checksumBytes = await crypto.subtle.digest("SHA-256", strToBuf(plaintext));
   const checksum = Array.from(new Uint8Array(checksumBytes))

@@ -890,29 +890,40 @@ export interface AppBackup {
   proxyRules?: ApiRewriteRule[]
 }
 
+function _yieldToMain(): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
+
 export async function exportAllData(): Promise<AppBackup> {
   const fieldRuleSets = await loadFieldRuleSets()
   const caseFiles = await loadCaseFiles()
+  await _yieldToMain()
   const recentFiles = await getRecentFiles()
   const favPaths = await getFavorites()
   const settings = await loadSettings()
+  await _yieldToMain()
   const d = await getDb()
   const inputHistory = await d.select<InputHistoryEntry[]>(
     'SELECT id, key_name as keyName, value, created_at as createdAt FROM input_history ORDER BY sort_order DESC'
   )
+  await _yieldToMain()
   const logSessions = await d.select<LogSession[]>(
     'SELECT id, type, device_serial as deviceSerial, status, started_at as startedAt, metadata FROM log_sessions ORDER BY started_at DESC'
   )
+  await _yieldToMain()
   const noteSpaces = await d.select<any[]>('SELECT id, name, sort_order as sortOrder, created_at as createdAt, updated_at as updatedAt FROM note_spaces')
   const noteFolders = await loadNoteFolders()
+  await _yieldToMain()
   const notes = await loadNotes()
   const noteVersions = await d.select<NoteVersion[]>(
     'SELECT id, note_id as noteId, content, saved_at as savedAt FROM note_versions ORDER BY saved_at ASC'
   )
+  await _yieldToMain()
   const noteLinks = await d.select<NoteLink[]>(
     'SELECT id, source_note_id as sourceNoteId, target_note_id as targetNoteId, created_at as createdAt FROM note_links'
   )
   const scripts = await listScripts()
+  await _yieldToMain()
   const aiMemories = await d.select<AiMemory[]>(
     'SELECT id, content, created_at as createdAt, updated_at as updatedAt FROM note_ai_memories'
   )
