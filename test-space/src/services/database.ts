@@ -1,4 +1,5 @@
 ﻿import type Database from '@tauri-apps/plugin-sql'
+import DOMPurify from 'dompurify'
 import type { InputHistoryEntry, LogSession, NoteSpace, NoteFolder, NoteItem, NoteVersion, NoteLink } from '@/types'
 import type { ApiRewriteRule } from '@/types'
 
@@ -581,7 +582,8 @@ function htmlToPlainText(html: string): string {
 export async function saveNote(note: { id: string; folderId?: string | null; title: string; content: string; contentJson?: string | null; tags?: string[]; isFavorite?: boolean }) {
   const d = await getDb()
   const now = new Date().toISOString()
-  const plainText = htmlToPlainText(note.content)
+  const safeContent = DOMPurify.sanitize(note.content)
+  const plainText = htmlToPlainText(safeContent)
   const cj = note.contentJson || null
   await d.execute(
     `INSERT INTO notes (id, folder_id, title, content, content_json, plain_text, tags, is_favorite, created_at, updated_at)
@@ -590,7 +592,7 @@ export async function saveNote(note: { id: string; folderId?: string | null; tit
        folder_id = excluded.folder_id, title = excluded.title, content = excluded.content,
        content_json = excluded.content_json, plain_text = excluded.plain_text, tags = excluded.tags,
        is_favorite = excluded.is_favorite, updated_at = excluded.updated_at`,
-    [note.id, note.folderId || null, note.title, note.content, cj, plainText,
+    [note.id, note.folderId || null, note.title, safeContent, cj, plainText,
      JSON.stringify(note.tags || []), note.isFavorite ? 1 : 0, now, now]
   )
   // Sync FTS5 index
