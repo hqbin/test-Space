@@ -154,8 +154,8 @@ function tokenizeFinalQuery(query: string): string[] {
   const q = query.toLowerCase().trim()
   if (!q) return []
   // Split CJK-Latin boundaries so "设备MAC地址烧写" → "设备 MAC 地址烧写"
-  const spaced = q.replace(/([\u4e00-\u9fff])([a-z\d])/g, '$1 $2')
-                  .replace(/([a-z\d])([\u4e00-\u9fff])/g, '$1 $2')
+  const spaced = q.replace(/([\u4e00-\u9fff])([a-z\d]+)/g, '$1 $2')
+                  .replace(/([a-z\d]+)([\u4e00-\u9fff])/g, '$1 $2')
   const cjk = spaced.match(/[\u4e00-\u9fff]{2,}/g) || []
   const words = spaced
     .split(/[^\p{L}\p{N}\u4e00-\u9fff]+/u)
@@ -167,8 +167,8 @@ function tokenizeFinalQuery(query: string): string[] {
 function tokenizeDoc(text: string): string[] {
   const lower = text.toLowerCase().trim()
   if (!lower) return []
-  const spaced = lower.replace(/([\u4e00-\u9fff])([a-z\d])/g, '$1 $2')
-                      .replace(/([a-z\d])([\u4e00-\u9fff])/g, '$1 $2')
+  const spaced = lower.replace(/([\u4e00-\u9fff])([a-z\d]+)/g, '$1 $2')
+                      .replace(/([a-z\d]+)([\u4e00-\u9fff])/g, '$1 $2')
   const cjk = spaced.match(/[\u4e00-\u9fff]{2,}/g) || []
   const words = spaced
     .split(/[^\p{L}\p{N}\u4e00-\u9fff]+/u)

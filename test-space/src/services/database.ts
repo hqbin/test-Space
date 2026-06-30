@@ -533,8 +533,11 @@ export async function renameNoteFolder(id: string, name: string) {
 
 // ── Notes ─────────────────────────────────────────────────────
 
+let _plainTextRepaired = false
+
 export async function loadNotes(): Promise<NoteItem[]> {
   const d = await getDb()
+  if (!_plainTextRepaired) await repairEmptyPlainText(d)
   const rows = await d.select<any[]>(
     `SELECT id, folder_id as folderId, title, content, content_json as contentJson, plain_text as plainText,
             tags, is_favorite as isFavorite, created_at as createdAt, updated_at as updatedAt
@@ -545,6 +548,7 @@ export async function loadNotes(): Promise<NoteItem[]> {
 
 export async function loadNoteList(): Promise<NoteItem[]> {
   const d = await getDb()
+  if (!_plainTextRepaired) await repairEmptyPlainText(d)
   const rows = await d.select<any[]>(
     `SELECT id, folder_id as folderId, title, '' as content, '' as contentJson, plain_text as plainText, tags,
             is_favorite as isFavorite, created_at as createdAt, updated_at as updatedAt
@@ -579,6 +583,29 @@ function htmlToPlainText(html: string): string {
     .trim()
 }
 
+async function repairEmptyPlainText(d: Database) {
+  try {
+    const rows = await d.select<{ id: string; content: string }[]>(
+      `SELECT id, content FROM notes WHERE content IS NOT NULL AND content != '' AND (plain_text IS NULL OR plain_text = '')`
+    )
+    for (const row of rows) {
+      const plainText = htmlToPlainText(DOMPurify.sanitize(row.content))
+      if (plainText) {
+        await d.execute('UPDATE notes SET plain_text = ? WHERE id = ?', [plainText, row.id])
+        try {
+          await d.execute('DELETE FROM notes_fts WHERE note_id = ?', [row.id])
+          await d.execute(
+            'INSERT INTO notes_fts (note_id, title, plain_text, tags) SELECT id, title, ?, tags FROM notes WHERE id = ?',
+            [plainText, row.id]
+          )
+        } catch {}
+      }
+    }
+    if (rows.length > 0) console.log(`[DB] Repaired plain_text for ${rows.length} notes`)
+    _plainTextRepaired = true
+  } catch {}
+}
+
 export async function saveNote(note: { id: string; folderId?: string | null; title: string; content: string; contentJson?: string | null; tags?: string[]; isFavorite?: boolean }) {
   const d = await getDb()
   const now = new Date().toISOString()
@@ -589,8 +616,11 @@ export async function saveNote(note: { id: string; folderId?: string | null; tit
     `INSERT INTO notes (id, folder_id, title, content, content_json, plain_text, tags, is_favorite, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
-       folder_id = excluded.folder_id, title = excluded.title, content = excluded.content,
-       content_json = excluded.content_json, plain_text = excluded.plain_text, tags = excluded.tags,
+       folder_id = excluded.folder_id, title = excluded.title,
+       content = CASE WHEN length(trim(excluded.content)) = 0 THEN content ELSE excluded.content END,
+       content_json = CASE WHEN length(trim(excluded.content)) = 0 THEN content_json ELSE excluded.content_json END,
+       plain_text = CASE WHEN length(trim(excluded.content)) = 0 THEN plain_text ELSE excluded.plain_text END,
+       tags = excluded.tags,
        is_favorite = excluded.is_favorite, updated_at = excluded.updated_at`,
     [note.id, note.folderId || null, note.title, safeContent, cj, plainText,
      JSON.stringify(note.tags || []), note.isFavorite ? 1 : 0, now, now]

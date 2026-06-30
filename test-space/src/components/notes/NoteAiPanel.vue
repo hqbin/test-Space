@@ -24,6 +24,15 @@
           </span>
           <div class="flex items-center gap-1">
             <button
+              v-if="messages.length >= 2"
+              class="glass-button p-1 rounded select-none shrink-0 text-on-surface-variant hover:text-amber-600 transition-colors"
+              :title="t('notes.aiExtractMemory')"
+              :disabled="memorizing"
+              @click="extractFromLastQA"
+            >
+              <span class="material-symbols-outlined text-[16px]" :class="memorizing ? 'animate-spin' : ''">memory</span>
+            </button>
+            <button
               v-if="messages.length > 0"
               class="glass-button p-1 rounded select-none shrink-0 text-on-surface-variant hover:text-red-500 transition-colors"
               :title="t('notes.aiClearHistory')"
@@ -48,7 +57,13 @@
         <template v-else>
           <div class="px-3 py-2 border-b border-glass-border-light/20 flex items-center justify-between gap-2 shrink-0 text-[11px] text-on-surface-variant bg-white/30">
             <span>{{ t('notes.aiAllNotesHint', { total: String(notes.length), included: String(contextNoteCount) }) }}</span>
-            <span class="whitespace-nowrap shrink-0">~{{ estimatedTokens }} tok</span>
+            <div class="flex items-center gap-2 shrink-0">
+              <span v-if="memorizing" class="flex items-center gap-1 text-amber-600">
+                <span class="material-symbols-outlined text-[13px] animate-spin">memory</span>
+                {{ t('notes.aiMemorizing') }}
+              </span>
+              <span>~{{ estimatedTokens }} tok</span>
+            </div>
           </div>
 
           <div ref="messagesRef" class="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-3 min-h-0">
@@ -257,37 +272,43 @@ async function send() {
     await nextTick()
     messagesRef.value?.scrollTo({ top: messagesRef.value.scrollHeight, behavior: 'smooth' })
 
-    // Done loading answer, now extract memories
     loading.value = false
-    await nextTick()
-    memorizing.value = true
-    try {
-      const existingTexts = memories.value.map(m => m.content)
-      const facts = await extractMemories(props.aiConfig, question, result.answer, existingTexts)
-      for (const fact of facts) {
-        const norm = fact.trim().toLowerCase().replace(/[，。！？；、,.!?;:]/g, '')
-        const isDuplicate = memories.value.some(m => {
-          const existing = m.content.trim().toLowerCase().replace(/[，。！？；、,.!?;:]/g, '')
-          return existing === norm || existing.includes(norm) || norm.includes(existing)
-        })
-        if (!isDuplicate) {
-          try {
-            const saved = await saveAiMemory(fact)
-            if (saved) memories.value.unshift(saved)
-          } catch {
-            console.warn('[NoteAiPanel] Failed to save memory:', fact)
-          }
-        }
-      }
-    } catch (e: any) {
-      console.warn('[NoteAiPanel] Memory extraction failed:', e?.message || e)
-    } finally {
-      memorizing.value = false
-    }
   } catch (e: any) {
     error.value = e.message || String(e)
   } finally {
     loading.value = false
+  }
+}
+
+async function extractFromLastQA() {
+  if (memorizing.value || messages.value.length < 2) return
+  const lastAssistant = [...messages.value].reverse().find(m => m.role === 'assistant')
+  const lastUser = [...messages.value].reverse().find(m => m.role === 'user')
+  if (!lastAssistant || !lastUser) return
+
+  memorizing.value = true
+  try {
+    const existingTexts = memories.value.map(m => m.content)
+    const facts = await extractMemories(props.aiConfig, lastUser.content, lastAssistant.content, existingTexts)
+    for (const fact of facts) {
+      const norm = fact.trim().toLowerCase().replace(/[，。！？；、,.!?;:]/g, '')
+      const isDuplicate = memories.value.some(m => {
+        const existing = m.content.trim().toLowerCase().replace(/[，。！？；、,.!?;:]/g, '')
+        return existing === norm || existing.includes(norm) || norm.includes(existing)
+      })
+      if (!isDuplicate) {
+        try {
+          const saved = await saveAiMemory(fact)
+          if (saved) memories.value.unshift(saved)
+        } catch {
+          console.warn('[NoteAiPanel] Failed to save memory:', fact)
+        }
+      }
+    }
+  } catch (e: any) {
+    console.warn('[NoteAiPanel] Memory extraction failed:', e?.message || e)
+  } finally {
+    memorizing.value = false
   }
 }
 

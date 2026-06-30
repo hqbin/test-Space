@@ -2552,4 +2552,47 @@ regex = "1"
 | 
 pm run build (vue-tsc + vite) | ✓ 通过 |
 
-...
+---
+
+## 三十二、Phase 32 — AI 检索修复 & `saveNote` 空内容保护（已完成 ✅）
+
+> 修复 AI 搜索找不到已导入笔记内容的根本原因（`saveNote` 被空内容覆盖）、BM25 分词不保留多字母 Latin 序列、新增 `plain_text` 自动修复机制。
+
+### 32.1 BM25 分词修复
+
+| 问题 | 修复 |
+|------|------|
+| CJK-Latin 边界正则 `[a-z\d]` 将 `MAC` 拆为 `M,A,C`，`WiFi` 拆为 `W,i,F,i` | 改为 `[a-z\d]+`，保留多字母 Latin 序列为单一 token，不影响原有 CJK-Latin 插入空格逻辑 |
+
+### 32.2 `saveNote` 空内容保护
+
+| 问题 | 修复 |
+|------|------|
+| `onDeactivated`/`onBeforeUnmount` 保存路径以 `note.content = lastEditorContent.value` 写入，对于导入后未打开的笔记，`lastEditorContent` 为 `""`，`saveNote` 无条件覆盖已有 `content`/`plain_text` | `ON CONFLICT(id) DO UPDATE SET` 中使用 `CASE WHEN length(trim(excluded.content)) = 0 THEN content ELSE excluded.content END`，空内容时不覆盖已有 `content`、`content_json`、`plain_text`，仅更新元数据（title、folder、tags 等） |
+
+### 32.3 自动修复已损坏笔记
+
+| 问题 | 修复 |
+|------|------|
+| 已有笔记 `plain_text` 被清空（`content` 存在但 `plain_text` 为 `''`），BM25 搜索不到 | 新增 `repairEmptyPlainText()` 函数：`SELECT` 检出 `content IS NOT NULL AND content != '' AND (plain_text IS NULL OR plain_text = '')` 的笔记，重新 `htmlToPlainText(DOMPurify.sanitize(content))` 写回 `plain_text` 并更新 FTS5 索引。通过 `_plainTextRepaired` 标记保证整个会话周期只执行一次。在 `loadNotes()` 和 `loadNoteList()` 入口处调用 |
+
+### 32.4 记忆提取改为手动触发
+
+| 问题 | 修复 |
+|------|------|
+| 每次 AI 回答后自动调用 `extractMemories()`，API 开销大且可能重复提取 | AI 面板头部新增手动「从当前对话提取长期记忆」按钮（`memory` 图标），仅在消息 >=2 条时可点击；`send()` 中移除自动提取调用；新增 `extractFromLastQA()` 传入已有记忆做模糊去重 |
+
+### 32.5 影响文件
+
+| 文件 | 修改 |
+|------|------|
+| `src/services/database.ts` | `saveNote()` 空内容保护（CASE）、新增 `repairEmptyPlainText()`、`loadNoteList()`/`loadNotes()` 调用修复、`_plainTextRepaired` 标记 |
+| `src/services/noteAi.ts` | CJK-Latin 正则修复、移除 debug 日志、`extractMemeries()` 新增 `existingMemeries` 参数 |
+| `src/components/notes/NoteAiPanel.vue` | 移除自动提取、新增手动提取按钮、记忆状态移至头部信息栏 |
+| `src/composables/useI18n.ts` | 新增 `notes.aiExtractMemory` 双语文案 |
+
+### 32.6 编译验证
+
+| 检查项 | 结果 |
+|--------|------|
+| `npm run build` (vue-tsc + vite) | ✅ 通过 |
