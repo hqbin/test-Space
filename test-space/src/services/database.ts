@@ -538,7 +538,7 @@ export async function loadNotes(): Promise<NoteItem[]> {
   const rows = await d.select<any[]>(
     `SELECT id, folder_id as folderId, title, content, content_json as contentJson, plain_text as plainText,
             tags, is_favorite as isFavorite, created_at as createdAt, updated_at as updatedAt
-     FROM notes ORDER BY updated_at DESC`
+     FROM notes ORDER BY title COLLATE NOCASE ASC`
   )
   return rows.map(r => ({ ...r, tags: safeJsonParse(r.tags, []), isFavorite: !!r.isFavorite, plainText: r.plainText || '' }))
 }
@@ -548,7 +548,7 @@ export async function loadNoteList(): Promise<NoteItem[]> {
   const rows = await d.select<any[]>(
     `SELECT id, folder_id as folderId, title, '' as content, '' as contentJson, plain_text as plainText, tags,
             is_favorite as isFavorite, created_at as createdAt, updated_at as updatedAt
-     FROM notes ORDER BY updated_at DESC`
+     FROM notes ORDER BY title COLLATE NOCASE ASC`
   )
   return rows.map(r => ({ ...r, tags: safeJsonParse(r.tags, []), isFavorite: !!r.isFavorite, plainText: r.plainText || '' }))
 }
