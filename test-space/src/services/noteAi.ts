@@ -453,15 +453,18 @@ export async function chatWithNotes(
 
   const relevantMemories = scoreMemories(question, memories)
   const memoriesBlock = relevantMemories.length > 0
-    ? `\n\n已知长期记忆：\n${relevantMemories.map(m => `- ${m.content}`).join('\n')}`
+    ? `\n\n已知长期记忆（仅供参考，不可替代笔记引用）：\n${relevantMemories.map(m => `- ${m.content}`).join('\n')}`
     : ''
 
-  const systemPrompt = `你是 Test Space 笔记助手。根据下方「参考笔记片段」和已知长期记忆回答用户问题。
+  const systemPrompt = `你是 Test Space 笔记助手。根据下方「参考笔记片段」和已知长期记忆回答用户问题。${memoriesBlock}
+
 规则：
-1. 仅基于参考片段和长期记忆作答；若无相关信息，明确说明。
-2. 引用笔记时在正文中使用格式：[笔记标题](note:笔记ID)，可多处引用。
-3. 不要在回答末尾单独列出「参考笔记」清单。
-4. 回答简洁准确，使用与用户相同的语言。${memoriesBlock}`
+1. 优先基于参考笔记片段作答；长期记忆可作为补充，但不能替代笔记内容。若笔记和记忆均无相关信息，明确说明。
+2. 只要回答中使用了笔记片段的内容，必须在正文对应位置引用来源笔记。引用格式：[显示文字](note:笔记ID)。若能定位到具体段落，使用 [显示文字](note:笔记ID#标题文字) 格式。
+3. 「标题文字」的选取规则：参考笔记片段是按笔记的 H1/H2/H3 标题切分的，每个片段的第一行就是该段的标题。引用时「标题文字」必须直接复制该片段第一行的原文（保留大小写、空格、中英文），不要改写、不要总结、不要加 # 号。
+4. 不要在回答末尾单独列出「参考笔记」清单，引用直接内嵌在正文中。
+5. 回答简洁准确，使用与用户相同的语言。
+6. 即使有长期记忆可以直接回答，也要检查笔记片段是否有更详细的内容，如有则引用。`
 
   const userContent = `参考笔记（共 ${allNotes.length} 篇，检索 ${noteIds.length} 篇 / ${chunks.length} 个片段）：\n${context || '(无参考内容)'}\n\n用户问题：${question}`
 

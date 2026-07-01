@@ -771,6 +771,8 @@ function cappedCacheSetParsed(cache: Map<string, any>, key: string, value: strin
 }
 let _isUnmounted = false
 let _pendingNoteId: string | null = null
+/** Heading anchor text to scroll to after the next note finishes loading */
+let _pendingHeadingAnchor: string | null = null
 
 function tryParseJson(s: string): any {
   try { return JSON.parse(s) } catch { return null }
@@ -1321,9 +1323,159 @@ async function syncNoteLinksFromContent(noteId: string, html: string) {
   }
 }
 
-function openNoteById(noteId: string) {
+function openNoteById(noteId: string, headingAnchor?: string) {
   const note = notes.value.find(n => n.id === noteId)
-  if (note) selectNote(note)
+  if (!note) return
+  _pendingHeadingAnchor = headingAnchor?.trim() || null
+  // If this note is already open, scroll immediately; otherwise selectNote will scroll after load
+  if (selectedNoteId.value === noteId && headingAnchor) {
+    _pendingHeadingAnchor = null
+    scrollToHeadingByText(headingAnchor.trim())
+  } else {
+    selectNote(note)
+  }
+}
+
+/** Normalize text for anchor matching: trim, lowercase, collapse whitespace, strip punctuation. */
+function normalizeAnchorText(s: string): string {
+  return s
+    .replace(/[\u00A0\u202F\u2007]/g, ' ')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/[，。；：、,.;:!?？！()（）]/g, '')
+    .trim()
+}
+
+/**
+ * Find the first H1/H2/H3 in the editor whose text matches `anchor` and scroll it into view.
+ * Uses ProseMirror state to locate the heading node (same approach as TipTap's TOC extension),
+ * then queries the DOM via `editor.view.nodeDOM(pos)` which is the reliable public API.
+ * Flashes the heading with a brief highlight animation.
+ */
+function scrollToHeadingByText(anchor: string) {
+  const ed: any = editor.value
+  if (!anchor || !ed) return
+  const target = normalizeAnchorText(anchor)
+  if (!target) return
+
+  // Iterate ProseMirror doc to find matching heading node.
+  // Use array containers so TS control flow doesn't lose type info in the callback.
+  const exact: HTMLElement[] = []
+  const fuzzy: Array<{ el: HTMLElement; score: number }> = []
+  ed.state.doc.descendants((node: any, pos: number) => {
+    if (exact.length) return false
+    if (node.type?.name !== 'heading') return true
+    const text = normalizeAnchorText(node.textContent || '')
+    if (!text) return true
+    let score = 0
+    if (text === target) score = 100
+    else if (text.startsWith(target) || target.startsWith(text)) score = 60
+    else if (text.includes(target) || target.includes(text)) score = 30
+    if (score === 0) return true
+    const dom = ed.view.nodeDOM(pos)
+    if (!(dom instanceof HTMLElement)) return true
+    if (score === 100) {
+      exact.push(dom)
+      return false
+    }
+    fuzzy.push({ el: dom, score })
+    return true
+  })
+  fuzzy.sort((a, b) => b.score - a.score)
+  const el: HTMLElement | undefined = exact[0] || fuzzy[0]?.el
+  if (!el) return
+
+  // rAF ensures browser layout is complete before scrolling (prevents jitter when
+  // this is called right after nextTick + contentLoading = false on large notes).
+  requestAnimationFrame(() => {
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    // Wait for the smooth scroll to actually finish before capturing element position.
+    // Fixed timeouts are unreliable because scroll duration depends on distance and browser.
+    // Detect scroll idle by watching the scroll container's scrollTop go quiet for 100ms.
+    waitForScrollSettle(() => flashHeadingInline(el))
+  })
+}
+
+/**
+ * Wait until the editor scroll container's scrollTop stops changing for 100ms,
+ * then invoke the callback. Falls back to a max-wait timeout of 1200ms.
+ */
+function waitForScrollSettle(done: () => void) {
+  const container = editorScrollRef.value
+  if (!container) { done(); return }
+  let lastTop = container.scrollTop
+  let idleTimer: number | null = null
+  let maxWaitTimer: number | null = null
+  const tick = () => {
+    const cur = container.scrollTop
+    if (cur !== lastTop) {
+      lastTop = cur
+      idleTimer = window.setTimeout(tick, 60)
+    } else {
+      if (idleTimer) { clearTimeout(idleTimer); idleTimer = null }
+      if (maxWaitTimer) { clearTimeout(maxWaitTimer); maxWaitTimer = null }
+      done()
+    }
+  }
+  // Prime with an initial check after 60ms (long enough for scroll to start)
+  idleTimer = window.setTimeout(tick, 60)
+  // Safety fallback in case something is very slow
+  maxWaitTimer = window.setTimeout(() => {
+    if (idleTimer) { clearTimeout(idleTimer); idleTimer = null }
+    done()
+  }, 1200)
+}
+
+/**
+ * Flash a heading with a highly visible three-pulse highlight overlay.
+ *
+ * Strategy: instead of mutating the heading element's own style (which lives inside
+ * ProseMirror's managed DOM tree and can be affected by scoped CSS, backdrop-filter
+ * layers, or the PM mutation observer), we render a separate fixed-position overlay
+ * div attached to document.body. This overlay is completely outside PM's control
+ * and outside every ancestor's styling context, so nothing can mask or revert it.
+ */
+function flashHeadingInline(el: HTMLElement) {
+  const rect = el.getBoundingClientRect()
+  if (rect.width === 0 || rect.height === 0) return
+
+  const overlay = document.createElement('div')
+  overlay.setAttribute('data-heading-flash', 'true')
+  overlay.style.cssText = [
+    'position: fixed',
+    `left: ${rect.left - 6}px`,
+    `top: ${rect.top - 4}px`,
+    `width: ${rect.width + 12}px`,
+    `height: ${rect.height + 8}px`,
+    'pointer-events: none',
+    'z-index: 1000',
+    'border-radius: 8px',
+    'background-color: transparent',
+    'box-shadow: 0 0 0 0 rgba(139, 89, 255, 0)',
+    'transition: background-color 180ms ease, box-shadow 180ms ease',
+  ].join(';')
+  document.body.appendChild(overlay)
+
+  // Soft lavender pulse — light and airy, matching the app's glass aesthetic
+  const on = () => {
+    overlay.style.backgroundColor = 'rgba(196, 181, 253, 0.28)'
+    overlay.style.boxShadow = '0 0 16px 4px rgba(196, 181, 253, 0.35)'
+  }
+  const off = () => {
+    overlay.style.backgroundColor = 'transparent'
+    overlay.style.boxShadow = '0 0 0 0 rgba(196, 181, 253, 0)'
+  }
+
+  const handles: number[] = []
+  handles.push(window.setTimeout(on, 0))
+  handles.push(window.setTimeout(off, 320))
+  handles.push(window.setTimeout(on, 520))
+  handles.push(window.setTimeout(off, 840))
+  handles.push(window.setTimeout(on, 1040))
+  handles.push(window.setTimeout(off, 1360))
+  handles.push(window.setTimeout(() => {
+    if (overlay.parentNode) overlay.parentNode.removeChild(overlay)
+  }, 1620))
 }
 
 function openInternalNoteLink(href: string) {
@@ -1426,6 +1578,13 @@ async function selectNote(note: NoteItem) {
   lastEditorContent.value = editor.value?.getHTML() ?? note.content ?? ""
   saved.value = true
 
+  // Scroll to heading anchor if requested (e.g. from AI assistant note link)
+  if (_pendingHeadingAnchor) {
+    const anchor = _pendingHeadingAnchor
+    _pendingHeadingAnchor = null
+    scrollToHeadingByText(anchor)
+  }
+
   // Defer non-critical work
   requestAnimationFrame(async () => {
     if (_isUnmounted || _pendingNoteId !== targetId) return
@@ -1456,8 +1615,13 @@ async function setNoteContentProgressive(
   // Single setContent is faster than chunked insertContent -- ProseMirror JSON is efficient
 
   ed.commands.setContent(content || "")
-  // Close undo history to prevent ProseMirror memory accumulation from rapid note switching
-  try { (ed as any).view.dispatch((ed as any).state.tr.scrollIntoView()) } catch {}
+  // Clear undo history to prevent ProseMirror memory accumulation from rapid note switching.
+  // Use clearHistory transaction flag instead of scrollIntoView to avoid resetting scroll position.
+  try {
+    const { state } = (ed as any).view
+    const tr = state.tr.setMeta('addToHistory', false)
+    ;(ed as any).view.dispatch(tr)
+  } catch {}
 }
 async function saveCurrentNote() {
   if (!selectedNoteId.value || !currentNoteData.value) return

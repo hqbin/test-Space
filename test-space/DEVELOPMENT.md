@@ -2717,3 +2717,122 @@ pm run build (vue-tsc + vite) | ✓ 通过 |
 | `src/views/script-space/ScriptSpacePage.vue` | 编辑器光标对齐修复、快捷键重写（`onEditorKeydown`）、类型持久化、模块导入修复（同类脚本写入 temp）、`sys.path` 注入 |
 | `src/composables/useScriptRunner.ts` | 重复执行修复（`setupInProgress` 锁）、输出行数上限（MAX 5000） |
 | `src-tauri/src/script_exec.rs` | `script_spawn` 新增 `work_dir: Option<String>` 参数，`cmd.current_dir()` 支持 |
+
+---
+
+## Phase 35 — AI 助手笔记段落级跳转（已完成 ✅）
+
+> 让 AI 助手回答里的笔记引用能精准跳转到具体段落标题，并在目标标题上以柔和的三次脉冲高亮提示。
+
+### 35.1 引用格式扩展
+
+**目标**：原本 AI 回答只能引用整篇笔记 `[标题](note:uuid)`，点击跳到笔记顶部；扩展后可精确定位到具体段落。
+
+**新增格式**：`[显示文字](note:uuid#标题文字)`
+
+- `#标题文字` 可选，填了就跳到笔记内对应 H1/H2/H3 标题
+- 标题文字直接取自 chunk 的第一行（`chunkNoteContent()` 按 H1/H2/H3 切分，每个 chunk 第一行就是段标题）
+- 兼容旧格式：不带 `#` 的引用行为不变
+
+**文件**：`src/utils/parseNoteLinks.ts`
+
+- 正则从 `\[(...)\]\(note:([a-f0-9-]{36})\)` 扩展为 `\[(...)\]\(note:([a-f0-9-]{36})(?:#([^)]*))?\)`
+- `AnswerSegment` 接口新增可选 `headingAnchor?: string`
+- 解析时 group 3 若存在则 trim 后赋给 `headingAnchor`
+
+### 35.2 System Prompt 强化
+
+**文件**：`src/services/noteAi.ts` 内 `chatWithNotes()`
+
+- **长期记忆前移**：`memoriesBlock` 从 prompt 末尾移到开头，作为背景信息；规则列表放在末尾（LLM 对末尾指令遵循度更高，避免"有记忆就短路、忘记引用笔记"的问题）
+- **规则调整**：
+  1. 优先基于笔记片段，记忆仅作补充，不能替代
+  2. 引用格式支持 `#标题` 定位段落
+  3. 标题文字必须原样复制 chunk 第一行（保留大小写、空格、中英文），不改写不总结不加 `#`
+  4. 不列末尾参考清单，引用内嵌在正文
+  5. 即使记忆能直答也要检查笔记是否更详细，有则引用
+- **记忆标注**："仅供参考，不可替代笔记引用"
+
+**未改动**：`selectContextChunks()` 的 BM25 检索、`chunkNoteContent()` 切片、上下文预算——AI 检索准确性和覆盖度完全一致。
+
+### 35.3 AI 面板点击笔记链接后自动关闭
+
+**问题**：AI 面板 `fixed right-4 bottom-4 z-[60]`、`bg-white/60` + `backdrop-filter: blur(60px)`，几乎不透明毛玻璃，占屏幕右侧 500px 全高。用户点击笔记引用后，目标笔记内容和高亮闪烁都在面板正后方，肉眼看不见。
+
+**修复**：`NoteAiPanel.vue` 的 `onOpenNote()` 在 `emit('openNote', ...)` 之后设 `open.value = false`。
+
+- 面板关闭后目标笔记完全可见
+- 聊天历史、长期记忆全部保留（存在 SQLite `app_settings` / `ai_memories` 表）
+- 用户想继续对话时，点右下角浮球重新打开即可
+
+### 35.4 标题查找与滚动
+
+**文件**：`src/views/note-space/NotesSpacePage.vue`
+
+**核心函数 `scrollToHeadingByText(anchor: string)`**：
+
+采用 TipTap 官方 TOC 扩展的成熟模式——通过 ProseMirror state API 定位节点，不用不稳定的 DOM 查询：
+
+```
+editor.state.doc.descendants((node, pos) => {
+  if (node.type.name !== 'heading') return true
+  // 评分匹配：完全相等=100 / 前缀=60 / 包含=30
+  const dom = editor.view.nodeDOM(pos)  // TipTap 官方公有 API
+  ...
+})
+```
+
+- **文本规范化 `normalizeAnchorText()`**：`\u00A0` 等特殊空白→普通空格、collapse whitespace、去中英文标点、大小写归一，让"如何烧写MAC"和"如何烧写 mac"能对上
+- **评分匹配**：完全相等直接取；否则收集所有 fuzzy 匹配，按 score 降序取最优；避免 AI 输出的锚点文字略有偏差时匹配到错误标题
+
+**同笔记内跳转 vs 跨笔记跳转**：
+
+- `openNoteById(noteId, anchor?)` 判断 `selectedNoteId.value === noteId`
+  - 相同笔记：直接调 `scrollToHeadingByText()`
+  - 不同笔记：设 `_pendingHeadingAnchor` 模块级变量，调 `selectNote()` 加载笔记
+- `selectNote()` 末尾（`contentLoading = false` + `nextTick` 之后）消费 `_pendingHeadingAnchor`——保证大文件加载完成后才滚动
+
+### 35.5 高亮闪烁 —— Overlay 方案
+
+**踩坑记录**：先后尝试过三种方案都失败——
+
+1. `@keyframes heading-flash` + `.heading-flash` CSS 类：CSS 已进构建产物，但 `<style scoped>` 里 `:deep(.prose-editor h1)`（specificity `0,2,1`）加上 `glass-panel` 的 `backdrop-filter` 图层压制了 h1 的背景色渲染
+2. JS 直接在 h1 上设 inline style：inline style specificity 最高，但视觉上仍被吞（PM MutationObserver、scoped 样式、backdrop-filter 多层叠加）
+3. 加 outline 也不显示：同上，还是被压
+
+**最终方案 `flashHeadingInline(el)`**：**不动 h1 本身**，在 `document.body` 里 `createElement('div')` 一个 fixed overlay：
+
+- `position: fixed` + 精确视口坐标（`getBoundingClientRect()` + 4~6px padding 让光环包裹标题）
+- `z-index: 1000` 压过一切；`pointer-events: none` 不影响交互
+- **完全脱离 ProseMirror 树、脱离所有 scoped 样式作用域、脱离所有 backdrop-filter 图层**
+- 三次脉冲用 setTimeout 编排：`on(0) → off(320) → on(520) → off(840) → on(1040) → off(1360) → remove(1620)`
+- 颜色柔和：淡紫 `rgba(196, 181, 253, 0.28)` 背景 + `0 0 16px 4px rgba(196, 181, 253, 0.35)` 光晕；无实心边框，符合应用玻璃态设计
+
+### 35.6 滚动同步 `waitForScrollSettle()`
+
+**位置歪的根因**：固定 450ms 延迟等 smooth scroll 完成不可靠——短距离滚动 300ms 就到位，长距离 800ms+，450ms 一刀切时，`getBoundingClientRect()` 抓到的是中途位置，overlay 就固定在了错误的坐标。
+
+**修复**：新增 `waitForScrollSettle(done)`：
+
+- 每 60ms 采样一次 `editorScrollRef.scrollTop`
+- 若与上次相同（不再变化），认为滚动稳定，触发回调
+- 1200ms 兜底超时防意外卡死
+
+`scrollToHeadingByText` 里改成：`el.scrollIntoView(...)` 后 `waitForScrollSettle(() => flashHeadingInline(el))`。滚动一停就立刻捕获准确坐标画 overlay，位置 100% 对齐。
+
+### 35.7 影响文件
+
+| 文件 | 修改 |
+|------|------|
+| `src/utils/parseNoteLinks.ts` | 正则支持 `#anchor`、`AnswerSegment.headingAnchor` |
+| `src/services/noteAi.ts` | System prompt 重排（记忆前移、引用格式扩展、标题选取规则） |
+| `src/components/notes/NoteAiPanel.vue` | emit 签名加 `headingAnchor?`、`onOpenNote` 透传 anchor 并关闭面板 |
+| `src/views/note-space/NotesSpacePage.vue` | `_pendingHeadingAnchor`、`openNoteById(id, anchor?)`、`normalizeAnchorText`、`scrollToHeadingByText`、`waitForScrollSettle`、`flashHeadingInline` overlay 方案 |
+
+### 35.8 关键教训
+
+- **绕开容器**：需要在管理型 DOM 树（ProseMirror / contenteditable）内做视觉高亮时，不要直接改被管理元素的样式；用 body 级 fixed overlay 一劳永逸
+- **滚动时机**：`scrollIntoView({ behavior: 'smooth' })` 的实际完成时间不可预测，需要用 `scrollend` 事件或轮询 `scrollTop` 检测稳定状态；固定 setTimeout 延迟必然翻车
+- **LLM prompt 位置权重**：模型对 prompt 末尾指令遵循度最高——重要规则放末尾，背景信息放开头
+- **CSS specificity 陷阱**：`<style scoped>` 里 `:deep()` 选择器有相当高的 specificity，动态添加的普通类可能显示不出效果；这时 inline style 也未必救得回来（多层图层混合），overlay 才是终极方案
+

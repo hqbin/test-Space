@@ -90,7 +90,7 @@
                       v-else
                       type="button"
                       class="inline text-secondary underline underline-offset-2 hover:opacity-80 cursor-pointer font-medium select-none align-baseline"
-                      @click="onOpenNote(seg.noteId!)"
+                      @click="onOpenNote(seg.noteId!, seg.headingAnchor)"
                     >{{ seg.content }}</button>
                   </template>
                 </template>
@@ -154,7 +154,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   goSettings: []
-  openNote: [noteId: string]
+  openNote: [noteId: string, headingAnchor?: string]
 }>()
 
 const { t } = useI18n()
@@ -201,8 +201,11 @@ function scheduleContextUpdate() {
 watch(input, scheduleContextUpdate)
 watch(() => props.notes, scheduleContextUpdate, { deep: false })
 
-function onOpenNote(noteId: string) {
-  emit('openNote', noteId)
+function onOpenNote(noteId: string, headingAnchor?: string) {
+  emit('openNote', noteId, headingAnchor)
+  // Close the panel so the note (and its heading flash) is actually visible to the user.
+  // The AI panel uses backdrop-filter blur which fully obscures anything behind it.
+  open.value = false
 }
 
 function onDocumentPointerDown(event: PointerEvent) {
