@@ -134,22 +134,6 @@ export function chunkNoteContent(note: NoteItem): string[] {
   return rawChunks.flatMap(c => (c.length > TARGET_CHUNK_CHARS * 2 ? splitLongText(c) : [c]))
 }
 
-function tokenizeQuery(query: string): string[] {
-  const q = query.toLowerCase().trim()
-  if (!q) return []
-  const cjk = q.match(/[\u4e00-\u9fff]{2,}/g) || []
-  const words = q.split(/[\s,，。！？；;、]+/).filter(w => w.length >= 2)
-  return [...new Set([...cjk, ...words, q])]
-}
-
-function tokenizeSearchQuery(query: string): string[] {
-  const q = query.toLowerCase().trim()
-  if (!q) return []
-  const cjk = q.match(/[\u4e00-\u9fff]{2,}/g) || []
-  const words = q.split(/[\s,，。！？；;、,.!?()[\]{}"'`<>:：|/@#$%^&*_+=~\\-]+/).filter(w => w.length >= 2)
-  return [...new Set([...cjk, ...words, q])]
-}
-
 function tokenizeFinalQuery(query: string): string[] {
   const q = query.toLowerCase().trim()
   if (!q) return []
@@ -328,13 +312,16 @@ export function selectContextChunks(
   const selected: NoteChunk[] = []
   let used = 0
 
-  // Round 1: pick the best chunk from each note (budget permitting)
+  // Round 1: pick the best chunk from each note (budget permitting), skip empty placeholders
   for (const note of notes) {
     const chunks = byNote.get(note.id)
     if (!chunks || chunks.length === 0) continue
-    const cost = estimateTokens(formatChunkBlock(chunks[0]))
+    // Skip notes that only have empty placeholder chunks
+    const bestChunk = chunks.find(c => c.text !== '(空)') || chunks[0]
+    if (bestChunk.text === '(空)') continue
+    const cost = estimateTokens(formatChunkBlock(bestChunk))
     if (used + cost <= budget) {
-      selected.push(chunks[0])
+      selected.push(bestChunk)
       used += cost
     }
   }

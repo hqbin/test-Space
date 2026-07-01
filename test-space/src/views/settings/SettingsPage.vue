@@ -181,7 +181,7 @@
             </div>
             <div class="min-w-0">
               <label class="text-[12px] text-on-surface-variant block mb-1">{{ t("settings.aiMaxTokens") }}</label>
-              <input v-model.number="aiConfig.maxContextTokens" type="number" min="1000" max="32000" step="500" class="glass-input w-full min-w-0 px-3 py-2 rounded-lg text-[14px] outline-none select-text" />
+              <input v-model.number="aiConfig.maxContextTokens" type="number" min="1000" max="200000" step="500" class="glass-input w-full min-w-0 px-3 py-2 rounded-lg text-[14px] outline-none select-text" />
             </div>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 min-w-0">
@@ -240,7 +240,7 @@
       <!-- AI Memory Modal -->
       <Teleport to="body">
         <div v-if="showMemoryModal" class="fixed inset-0 z-50 flex items-start justify-center pt-[8vh]" @click.self="showMemoryModal = false">
-          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
+          <div class="absolute inset-0 bg-black/30 backdrop-blur-sm"></div>
           <div class="glass-panel rounded-[2rem] w-[560px] max-w-[calc(100vw-3rem)] max-h-[80vh] flex flex-col bg-white relative z-10 overflow-hidden" @click.stop>
             <div class="flex items-center justify-between gap-3 px-6 pt-5 pb-3 shrink-0">
               <h3 class="font-label-md text-label-md text-on-surface font-semibold select-none flex items-center gap-1.5">
@@ -313,7 +313,7 @@
   </div>
 
   <!-- Key Import Modal -->
-  <div v-if="showKeyImportModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm" @click.self="showKeyImportModal = false">
+  <div v-if="showKeyImportModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="showKeyImportModal = false">
     <div class="glass-panel rounded-2xl p-6 w-96 bg-white/60" @click.stop>
       <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-4 select-none">{{ t("settings.importKey") }}</h3>
       <input
@@ -343,7 +343,7 @@
   </div>
 
   <!-- Rename Device ID -->
-  <div v-if="renameDeviceIdTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm" @click.self="renameDeviceIdTarget = null">
+  <div v-if="renameDeviceIdTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="renameDeviceIdTarget = null">
     <div class="glass-panel rounded-2xl p-6 w-96 bg-white/60" @click.stop>
       <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-1 select-none">{{ t("settings.deviceIdRenameTitle") }}</h3>
       <p class="text-[12px] text-on-surface-variant mb-4 font-mono break-all">{{ renameDeviceIdTarget.id }}</p>

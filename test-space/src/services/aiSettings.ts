@@ -74,7 +74,7 @@ function normalizeAiConfig(provider: AiProvider, config?: Partial<AiConfig>): Ai
     provider,
     apiKey: config?.apiKey ?? '',
     authMode: config?.authMode === 'bearer' ? 'bearer' : preset.authMode,
-    maxContextTokens: Math.min(32000, Math.max(1000, config?.maxContextTokens ?? preset.maxContextTokens)),
+    maxContextTokens: Math.min(200000, Math.max(1000, config?.maxContextTokens ?? preset.maxContextTokens)),
   }
 }
 

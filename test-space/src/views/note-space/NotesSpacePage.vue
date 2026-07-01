@@ -419,7 +419,7 @@
 
     <!-- Link Dialog -->
     <Teleport to="body">
-      <div v-if="showLinkDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/10 backdrop-blur-sm" @click.self="showLinkDialog = false">
+      <div v-if="showLinkDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="showLinkDialog = false">
         <div class="glass-panel rounded-[2rem] p-6 w-96 bg-white/60" @click.stop>
           <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-4 select-none">{{ t('notes.insertLink') }}</h3>
           <div class="flex gap-2 mb-4">
@@ -530,7 +530,7 @@
 
     <!-- Rename Dialog -->
     <Teleport to="body">
-      <div v-if="renameTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm" @click.self="renameTarget = null">
+      <div v-if="renameTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="renameTarget = null">
         <div class="glass-panel rounded-2xl p-6 w-80 bg-white/60">
           <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-4 select-none">{{ t('notes.rename') }}</h3>
           <input             v-model="renameValue"
@@ -637,7 +637,7 @@
 
     <!-- Import Dialog -->
     <Teleport to="body">
-      <div v-if="showImportDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/10 backdrop-blur-sm" @click.self="showImportDialog = false">
+      <div v-if="showImportDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="showImportDialog = false">
         <div class="glass-panel rounded-[2rem] p-6 w-96 bg-white/60" @click.stop>
           <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-4 select-none">{{ t('notes.importDialogTitle') }}</h3>
           <div class="mb-4">
@@ -671,7 +671,7 @@
 
     <!-- Export Dialog -->
     <Teleport to="body">
-      <div v-if="showExportDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/10 backdrop-blur-sm" @click.self="showExportDialog = false">
+      <div v-if="showExportDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="showExportDialog = false">
         <div class="glass-panel rounded-[2rem] p-6 w-96 bg-white/60 max-h-[80vh] flex flex-col" @click.stop>
           <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-4 select-none flex items-center justify-between">
             <span>{{ t('notes.exportDialogTitle') }}</span>
@@ -889,6 +889,8 @@ function getNotesByFolder(folderId: string): NoteItem[] {
 const uncategorizedNotes = computed(() => {
   if (searchQuery.value) return []
   if (!selectedSpaceId.value) return []
+  // 根笔记（folderId=null）本身无 spaceId 字段，无法按 Space 精确过滤；
+  // 展示所有无文件夹的笔记，由用户通过 Space 的文件夹树感知归属
   return notes.value.filter(n => !n.folderId)
 })
 
@@ -1123,6 +1125,8 @@ async function doDeleteFolder(withNotes: boolean) {
     await yieldToMain()
     deleteFolderTarget.value = null
     folders.value = folders.value.filter(f => f.id !== id)
+    // 仅在连同笔记删除时才重新加载笔记列表；仅删除文件夹时笔记被移到根级别，
+    // 需要重新加载以反映 folderId 变化
     notes.value = await db.loadNotes()
     rebuildTitleMap()
     if (selectedFolderId.value === id) selectedFolderId.value = null
@@ -1698,31 +1702,7 @@ async function exportAs(format: 'docx' | 'md' | 'pdf') {
         code{font-family:Consolas,monospace;font-size:0.9em;background:#f1f2f5;border-radius:4px;padding:2px 6px}pre code{background:none;color:#e4e5e7;padding:0}
         table{width:100%;border-collapse:collapse;margin-bottom:1.25rem}th,td{padding:8px 12px;border:1px solid #e0e1e5;text-align:left}th{background:#f1f2f5;font-weight:600}
         a{color:#0050cb;text-decoration:underline}img{max-width:100%}
-      .skeleton-shimmer { position: relative; overflow: hidden; }
-.skeleton-line {
-  background: linear-gradient(90deg, rgba(107,111,130,0.08) 0%, rgba(107,111,130,0.15) 50%, rgba(107,111,130,0.08) 100%);
-  background-size: 200% 100%;
-  animation: skeletonPulse 1.8s ease-in-out infinite;
-  border-radius: 4px;
-}
-@keyframes skeletonPulse {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
-}
-
-.skeleton-shimmer { position: relative; overflow: hidden; }
-.skeleton-line {
-  background: linear-gradient(90deg, rgba(107,111,130,0.08) 0%, rgba(107,111,130,0.15) 50%, rgba(107,111,130,0.08) 100%);
-  background-size: 200% 100%;
-  animation: skeletonPulse 1.8s ease-in-out infinite;
-  border-radius: 4px;
-}
-@keyframes skeletonPulse {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
-}
-
-</style></head><body>${html}</body></html>`)
+      </style></head><body>${html}</body></html>`)
       doc.close()
 
       await new Promise(r => setTimeout(r, 500))
@@ -2189,6 +2169,7 @@ function onDocumentClick(e: MouseEvent) {
 // ── Lifecycle ─────────────────────────────────────────────────
 
 onMounted(async () => {
+  _isUnmounted = false
   await loadData()
   document.addEventListener('click', onDocumentClick, true)
 
@@ -2199,6 +2180,8 @@ onMounted(async () => {
 
 onActivated(() => {
   editor.value?.commands.focus()
+  // 从设置页返回时刷新 AI 配置，避免修改后缓存命中路径跳过 loadAiConfig
+  loadAiConfig().then(c => { aiConfig.value = c }).catch(() => {})
 })
 
 onDeactivated(() => {

@@ -226,12 +226,16 @@ onMounted(async () => {
   historyLoaded.value = true
 })
 
+const MAX_HISTORY_MESSAGES = 50
+
 let saveHistoryDebounce: ReturnType<typeof setTimeout> | null = null
 watch(messages, () => {
   if (!historyLoaded.value) return
   if (saveHistoryDebounce) clearTimeout(saveHistoryDebounce)
   saveHistoryDebounce = setTimeout(() => {
-    setSetting('ai_chat_history', JSON.stringify(messages.value)).catch(() => {})
+    // 只保留最近 MAX_HISTORY_MESSAGES 条，避免备份文件膨胀
+    const toSave = messages.value.slice(-MAX_HISTORY_MESSAGES)
+    setSetting('ai_chat_history', JSON.stringify(toSave)).catch(() => {})
   }, 300)
 }, { deep: true })
 
@@ -271,8 +275,6 @@ async function send() {
     })
     await nextTick()
     messagesRef.value?.scrollTo({ top: messagesRef.value.scrollHeight, behavior: 'smooth' })
-
-    loading.value = false
   } catch (e: any) {
     error.value = e.message || String(e)
   } finally {
@@ -306,6 +308,7 @@ async function extractFromLastQA() {
       }
     }
   } catch (e: any) {
+    error.value = e?.message || String(e)
     console.warn('[NoteAiPanel] Memory extraction failed:', e?.message || e)
   } finally {
     memorizing.value = false
