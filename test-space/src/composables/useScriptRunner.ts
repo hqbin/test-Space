@@ -20,10 +20,15 @@ export interface ScriptTab {
 const tabs = ref<ScriptTab[]>([]);
 const activeTabId = ref<string>("");
 
+// 每个 tab 最多保留的输出行数，超出后丢弃最早的行（循环缓冲区）
+// 压测场景下大量输出不会导致内存溢出
+const MAX_OUTPUT_LINES = 5000;
+
 let elapsedTimer: ReturnType<typeof setInterval> | null = null;
 let unlistenLine: (() => void) | null = null;
 let unlistenExit: (() => void) | null = null;
 let setupCalled = false;
+let setupInProgress = false;
 
 function genId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -82,28 +87,43 @@ function destroy() {
   tabs.value = [];
   activeTabId.value = "";
   setupCalled = false;
+  setupInProgress = false;
 }
 
 async function setup() {
-  if (setupCalled) return;
+  if (setupInProgress) return;
+  setupInProgress = true;
+  // 先清理旧的监听器，保证全局只有一组监听器（防止 HMR 或重复调用叠加）
+  unlistenLine?.();
+  unlistenExit?.();
+  unlistenLine = null;
+  unlistenExit = null;
   setupCalled = true;
 
-  unlistenLine = await listen<{ id: string; line: string; stream: string }>("script-line", (event) => {
-    const tab = tabs.value.find(t => t.id === event.payload.id);
-    if (tab) {
-      tab.output.push({ text: event.payload.line, stream: event.payload.stream as "stdout" | "stderr" });
-      scrollToBottom();
-    }
-  });
-  unlistenExit = await listen<{ id: string; exit_code: number }>("script-exit", (event) => {
-    const tab = tabs.value.find(t => t.id === event.payload.id);
-    if (tab) {
-      tab.status = event.payload.exit_code === 0 ? "success" : "error";
-      tab.exitCode = event.payload.exit_code;
-      tab.output.push({ text: `\n[Exit ${event.payload.exit_code}]`, stream: "stdout" });
-      scrollToBottom();
-    }
-  });
+  try {
+    unlistenLine = await listen<{ id: string; line: string; stream: string }>("script-line", (event) => {
+      const tab = tabs.value.find(t => t.id === event.payload.id);
+      if (tab) {
+        tab.output.push({ text: event.payload.line, stream: event.payload.stream as "stdout" | "stderr" });
+        // 超出上限时从头部丢弃，避免长时间压测撑爆内存
+        if (tab.output.length > MAX_OUTPUT_LINES) {
+          tab.output.splice(0, tab.output.length - MAX_OUTPUT_LINES);
+        }
+        scrollToBottom();
+      }
+    });
+    unlistenExit = await listen<{ id: string; exit_code: number }>("script-exit", (event) => {
+      const tab = tabs.value.find(t => t.id === event.payload.id);
+      if (tab) {
+        tab.status = event.payload.exit_code === 0 ? "success" : "error";
+        tab.exitCode = event.payload.exit_code;
+        tab.output.push({ text: `\n[Exit ${event.payload.exit_code}]`, stream: "stdout" });
+        scrollToBottom();
+      }
+    });
+  } finally {
+    setupInProgress = false;
+  }
 }
 
 let scrollContainer: HTMLElement | null = null;

@@ -37,21 +37,6 @@
         <span class="material-symbols-outlined text-[16px]">file_upload</span>
         {{ t("scripts.export") }}
       </button>
-      <!-- Working directory -->
-      <div v-if="currentScript" class="flex items-center gap-1 flex-1 min-w-0 max-w-[340px]">
-        <span class="material-symbols-outlined text-[14px] text-on-surface-variant/50 shrink-0" :title="t('scripts.workDirHint')">folder</span>
-        <input
-          v-model="workingDir"
-          type="text"
-          :placeholder="t('scripts.workDirPlaceholder')"
-          class="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-[11px] font-mono text-on-surface-variant placeholder-on-surface-variant/30 focus:outline-none focus:border-white/20 select-text"
-          :title="t('scripts.workDirHint')"
-          @keydown.stop
-        />
-        <button class="glass-button p-1 rounded-lg shrink-0 select-none" :title="t('scripts.workDirBrowse')" @click="browseWorkDir">
-          <span class="material-symbols-outlined text-[14px]">drive_folder_upload</span>
-        </button>
-      </div>
     </div>
 
     <div class="flex-1 flex gap-4 min-h-0">
@@ -131,18 +116,16 @@
               </button>
             </div>
             <div class="flex-1 flex min-h-0" style="background: #0d0d1a;">
-              <div ref="lineNumbersRef" class="flex-shrink-0 text-right px-3 py-3 text-[13px] font-mono text-[#4a5568] select-none overflow-hidden" style="background: #0d0d1a; min-width: 36px; line-height: 1.625rem;">
-                <div v-for="n in lineCount" :key="n" style="line-height: 1.625rem;">{{ n }}</div>
+              <div ref="lineNumbersRef" class="flex-shrink-0 text-right px-3 font-mono text-[#4a5568] select-none overflow-hidden" style="background: #0d0d1a; min-width: 36px; font-size: 13px; line-height: 21px; padding-top: 12px; padding-bottom: 48px;">
+                <div v-for="n in lineCount" :key="n" style="height: 21px; line-height: 21px;">{{ n }}</div>
               </div>
               <div class="flex-1 relative min-h-0">
-                <pre ref="highlightRef" class="editor-highlight absolute inset-0 p-3 text-[13px] font-mono pointer-events-none text-[#e4e5e7] select-none" style="background: #0d0d1a; overflow: auto; tab-size: 2; white-space: pre; scrollbar-width: none; -ms-overflow-style: none; line-height: 1.625rem;" aria-hidden="true"><code v-html="highlightedCode"></code></pre>
+                <pre ref="highlightRef" class="editor-highlight absolute inset-0 pointer-events-none select-none" style="background: #0d0d1a; overflow: auto; tab-size: 2; white-space: pre; scrollbar-width: none; -ms-overflow-style: none; font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 13px; line-height: 21px; padding: 12px 12px 48px 12px; margin: 0; color: #e4e5e7;" aria-hidden="true" v-html="highlightedCode"></pre>
                 <textarea ref="editorRef" v-model="editingContent"
-                  class="editor-textarea absolute inset-0 w-full h-full resize-none outline-none border-none p-3 text-[13px] font-mono text-transparent caret-white select-text"
-                  style="background: transparent; tab-size: 2; -webkit-text-fill-color: transparent; overflow: auto; scrollbar-width: none; -ms-overflow-style: none; white-space: pre; line-height: 1.625rem;"
+                  class="editor-textarea absolute inset-0 w-full h-full resize-none outline-none border-none select-text"
+                  style="background: transparent; tab-size: 2; -webkit-text-fill-color: transparent; color: transparent; caret-color: white; overflow: auto; scrollbar-width: none; -ms-overflow-style: none; white-space: pre; font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 13px; line-height: 21px; padding: 12px 12px 48px 12px;"
                   spellcheck="false"
-                  @keydown.tab.prevent="insertTab"
-                  @keydown.shift.tab.prevent="unindentTab"
-                  @keydown.ctrl.slash.prevent="toggleComment"
+                  @keydown="onEditorKeydown"
                   @scroll="syncScroll">
                 </textarea>
               </div>
@@ -520,23 +503,42 @@ function genId(): string {
 }
 
 /**
- * 向 textarea 插入文本，替换 [replaceStart, replaceEnd) 区间的内容。
- * 采用 indent-textarea (fregante) 的成熟方案：
- *   优先用 execCommand('insertText') — 能保留浏览器原生 undo 历史（Ctrl+Z/Cmd+Z）
- *   降级用 setRangeText — Firefox 和某些 WebView 的兜底，无 undo 但内容正确
- * 关键：只替换需要变化的区间，不操作整个文件，undo 只撤销这一步编辑。
+ * 统一的编辑器 keydown 处理，避免 Vue 事件修饰符在组合键时的冲突。
  */
-function insertTextAt(ta: HTMLTextAreaElement, text: string, replaceStart: number, replaceEnd: number) {
-  ta.focus();
-  ta.setSelectionRange(replaceStart, replaceEnd);
-  const ok = document.execCommand('insertText', false, text);
-  if (!ok) {
-    // 降级（Firefox / 部分 WebView），没有 undo，但内容正确
-    ta.setRangeText(text, replaceStart, replaceEnd, 'end');
-    // 手动触发 input 事件让 v-model 同步
-    ta.dispatchEvent(new Event('input', { bubbles: true }));
+function onEditorKeydown(e: KeyboardEvent) {
+  // Tab / Shift+Tab
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    if (e.shiftKey) {
+      unindentTab();
+    } else {
+      insertTab();
+    }
+    return;
   }
-  // 确保 Vue 响应式状态与 DOM 同步
+  // Ctrl+/ 注释
+  if (e.key === '/' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
+    e.preventDefault();
+    toggleComment();
+    return;
+  }
+}
+
+/**
+ * 编辑器核心：直接操作 textarea，用 setRangeText 替换指定区间。
+ * 执行后游标位于 replaceStart + text.length（'end' 模式）。
+ * 调用方负责在此函数返回后用 setSelectionRange 设置最终光标/选区。
+ *
+ * 关于 undo：
+ *   execCommand('insertText') 能保留原生 undo，但在 Tauri WebView (WebKit2GTK/WKWebView)
+ *   上行为不一致——有时光标被错误放置，有时返回 false。
+ *   因此改用 setRangeText，并通过 dispatchEvent('input') 让 Vue v-model 同步。
+ *   这样失去了浏览器原生 undo，但光标行为稳定可预测。
+ *   未来可考虑自实现 undo 栈（保存快照），此处先以正确性优先。
+ */
+function applyRangeText(ta: HTMLTextAreaElement, text: string, replaceStart: number, replaceEnd: number): void {
+  ta.setRangeText(text, replaceStart, replaceEnd, 'end');
+  // 同步 Vue v-model（setRangeText 不触发 input 事件）
   editingContent.value = ta.value;
 }
 
@@ -547,17 +549,17 @@ function insertTab() {
 
   if (start === end) {
     // 无选区：光标处插入两个空格
-    insertTextAt(ta, '  ', start, end);
+    applyRangeText(ta, '  ', start, end);
+    ta.setSelectionRange(start + 2, start + 2);
   } else {
-    // 有选区（单行或多行）：对覆盖的每一行行首加两个空格
-    // 扩展选区到行首（保证整行都被处理）
+    // 有选区（含多行）：扩展到行首，每行行首加两个空格
     const lineStart = value.lastIndexOf('\n', start - 1) + 1;
     const lineEnd = value[end - 1] === '\n' ? end - 1 : end;
     const block = value.substring(lineStart, lineEnd);
     const lines = block.split('\n');
     const indented = lines.map(l => '  ' + l).join('\n');
-    insertTextAt(ta, indented, lineStart, lineEnd);
-    // 恢复选区：start 往后偏移2（首行多了2格），end 往后偏移总增量
+    applyRangeText(ta, indented, lineStart, lineEnd);
+    // start 偏移2（首行多了两格），end 偏移总增量
     ta.setSelectionRange(start + 2, end + lines.length * 2);
   }
 }
@@ -580,8 +582,8 @@ function unindentTab() {
   });
   const dedentedStr = dedented.join('\n');
   const totalDelta = block.length - dedentedStr.length;
-  if (totalDelta === 0) return; // 没有缩进可去掉，不触发 undo
-  insertTextAt(ta, dedentedStr, lineStart, lineEnd);
+  if (totalDelta === 0) return;
+  applyRangeText(ta, dedentedStr, lineStart, lineEnd);
   ta.setSelectionRange(
     Math.max(lineStart, start - firstLineDelta),
     end - totalDelta
@@ -600,7 +602,6 @@ function toggleComment() {
   const block = value.substring(lineStart, lineEnd);
   const lines = block.split('\n');
 
-  // 若所有非空行都以注释符开头则取消注释，否则添加注释
   const nonEmpty = lines.filter(l => l.trim().length > 0);
   const allCommented = nonEmpty.length > 0 &&
     nonEmpty.every(l => l.trimStart().startsWith(commentChar.trimEnd()));
@@ -610,7 +611,6 @@ function toggleComment() {
     toggled = lines.map(l => {
       const idx = l.indexOf(commentChar.trimEnd());
       if (idx < 0) return l;
-      // 去掉 `# ` 或 `:: `（含后续空格）
       const afterComment = l.charAt(idx + commentChar.trimEnd().length) === ' '
         ? idx + commentChar.length
         : idx + commentChar.trimEnd().length;
@@ -621,8 +621,7 @@ function toggleComment() {
   }
 
   const delta = toggled.length - block.length;
-  insertTextAt(ta, toggled, lineStart, lineEnd);
-  // 恢复选区
+  applyRangeText(ta, toggled, lineStart, lineEnd);
   const newStart = Math.max(lineStart, start + (allCommented ? -commentChar.length : commentChar.length));
   ta.setSelectionRange(newStart, end + delta);
 }
@@ -631,7 +630,7 @@ function insertSnippet(code: string) {
   const ta = editorRef.value;
   if (!ta) return;
   const { selectionStart: start, selectionEnd: end } = ta;
-  insertTextAt(ta, code, start, end);
+  applyRangeText(ta, code, start, end);
   ta.setSelectionRange(start + code.length, start + code.length);
   ta.focus();
 }
@@ -710,6 +709,8 @@ async function loadScript(id: string) {
     editingType.value = s.type;
     editingContent.value = s.content;
     localFilePath.value = null; // 数据库脚本无本地文件路径
+    // 恢复该脚本的工作目录（按脚本 id 存入 localStorage）
+    workingDir.value = localStorage.getItem(`script-work-dir:${id}`) || "";
   }
 }
 
@@ -748,30 +749,58 @@ async function runCurrentScript() {
     // 优先级：用户手动指定的工作目录 > localFilePath 派生的目录
     let workDir: string | null = workingDir.value.trim() || null;
 
+    // 对 Python 脚本（localFilePath 路径），如果有工作目录则注入 sys.path
+    // temp 路径分支会在后面单独处理注入逻辑
+    let finalContent = editingContent.value;
+    if (interpreter === 'python' && workDir && localFilePath.value) {
+      const sysPathInject = `import sys as _sys; _sys.path.insert(0, r"${workDir}"); del _sys\n`;
+      finalContent = sysPathInject + finalContent;
+    }
+
     if (localFilePath.value) {
       // 有原始文件路径：直接写回原始文件后在原始目录执行
-      // 这样 import exporter、相对路径等都能正常解析
       const { writeTextFile } = await import("@tauri-apps/plugin-fs");
-      await writeTextFile(localFilePath.value, editingContent.value);
+      await writeTextFile(localFilePath.value, finalContent);
       scriptPath = localFilePath.value;
       if (!workDir) {
-        // localFilePath 派生的工作目录作为兜底
         const normalized = localFilePath.value.replace(/\\/g, '/');
         const lastSlash = normalized.lastIndexOf('/');
         workDir = lastSlash >= 0 ? localFilePath.value.substring(0, lastSlash) : null;
       }
     } else {
-      // 没有原始路径（内存中新建的脚本）：写入 temp_scripts 目录
+      // 没有原始路径：写入 temp_scripts 目录
       const { appDataDir } = await import("@tauri-apps/api/path");
-      const { mkdir } = await import("@tauri-apps/plugin-fs");
+      const { mkdir, writeTextFile } = await import("@tauri-apps/plugin-fs");
       const dir = await appDataDir();
-      const sep = dir.includes('\\') ? '\\' : '/';
-      const tmpDir = (dir.endsWith(sep) ? `${dir}temp_scripts` : `${dir}${sep}temp_scripts`).trimEnd();
+      const s = dir.includes('\\') ? '\\' : '/';
+      const tmpDir = (dir.endsWith(s) ? `${dir}temp_scripts` : `${dir}${s}temp_scripts`).trimEnd();
       try { await mkdir(tmpDir, { recursive: true }); } catch (e) { console.warn('[ScriptSpace] mkdir failed:', e); }
-      const tempPath = `${tmpDir}${sep}${tab.id}.${ext}`;
-      await invoke("write_script_file", { path: tempPath, content: editingContent.value, interpreter });
+
+      // 把同类型的其他脚本也写到 temp 目录，文件名用脚本名，
+      // 这样 import exporter 能找到同目录的 exporter.py
+      const sameTypeScripts = scripts.value.filter(
+        s => s.type === editingType.value && s.id !== currentScript.value?.id
+      );
+      for (const sibling of sameTypeScripts) {
+        try {
+          const full = await db.loadScript(sibling.id);
+          if (!full) continue;
+          const safeName = sibling.name.replace(/[<>:"/\\|?*\s]/g, '_');
+          const siblingPath = `${tmpDir}${dir.includes('\\') ? '\\' : '/'}${safeName}.${ext}`;
+          await writeTextFile(siblingPath, full.content);
+        } catch { /* 单个失败不阻断运行 */ }
+      }
+
+      // 在注入代码里把 tmpDir 加入 sys.path（覆盖前面的 workDir 注入逻辑）
+      if (interpreter === 'python') {
+        const sysPathInject = `import sys as _sys; _sys.path.insert(0, r"${tmpDir}"); del _sys\n`;
+        finalContent = sysPathInject + editingContent.value; // 重新构建，以 tmpDir 为准
+      }
+
+      const tempPath = `${tmpDir}${dir.includes('\\') ? '\\' : '/'}__ts_run_${tab.id}.${ext}`;
+      await invoke("write_script_file", { path: tempPath, content: finalContent, interpreter });
       scriptPath = tempPath;
-      // workDir 仍使用用户手动指定的值（或 null）
+      workDir = workDir || tmpDir; // 工作目录也设为 tmpDir
     }
 
     await invoke("script_spawn", {
@@ -794,7 +823,13 @@ async function browseWorkDir() {
   try {
     const { open } = await import("@tauri-apps/plugin-dialog");
     const dir = await open({ directory: true, title: t("scripts.workDirBrowse") });
-    if (dir) workingDir.value = dir as string;
+    if (dir) {
+      workingDir.value = dir as string;
+      // 立即持久化
+      if (currentScript.value?.id) {
+        localStorage.setItem(`script-work-dir:${currentScript.value.id}`, dir as string);
+      }
+    }
   } catch {}
 }
 
@@ -824,6 +859,23 @@ onMounted(async () => {
 });
 
 watch([globalType, searchQuery, sortMode, sortAsc], () => { currentPage.value = 1; });
+
+// 工作目录变更时持久化（按脚本 id 存储）
+watch(workingDir, (val) => {
+  if (currentScript.value?.id) {
+    if (val.trim()) {
+      localStorage.setItem(`script-work-dir:${currentScript.value.id}`, val.trim());
+    } else {
+      localStorage.removeItem(`script-work-dir:${currentScript.value.id}`);
+    }
+  }
+});
+
+// 内容变化时（包括删除导致的自动滚动）同步 pre 和行号的滚动位置
+// 用 rAF 确保在浏览器完成自动滚动并绘制后再同步，避免 pre 停留在旧位置
+watch(editingContent, () => {
+  nextTick(() => requestAnimationFrame(syncScroll));
+});
 
 onUnmounted(() => {
   destroy();
@@ -856,6 +908,7 @@ onUnmounted(() => {
 }
 .editor-textarea {
   color: transparent !important;
+  caret-color: white !important;
   user-select: text !important;
   -webkit-user-select: text !important;
 }
@@ -864,8 +917,5 @@ onUnmounted(() => {
 }
 .editor-highlight::-webkit-scrollbar {
   display: none;
-}
-.editor-highlight code {
-  font: inherit;
 }
 </style>

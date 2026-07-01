@@ -2629,3 +2629,91 @@ pm run build (vue-tsc + vite) | ✓ 通过 |
 | `src/services/aiSettings.ts` | maxContextTokens 上限从 32000 → 200000 |
 | `src/views/settings/SettingsPage.vue` | maxContextTokens input max 同步、弹窗背景色统一 |
 | `DEVELOPMENT.md` | 弹窗规范 `bg-black/10` 更新为 `bg-black/30`，Phase 33 记录 |
+
+---
+
+## Phase 34 — 笔记导出反馈 + 脚本空间全面优化
+
+### 34.1 笔记页面导出无反馈修复
+
+**问题**：点击「导出为 PDF / Word / Markdown」及目录区「导入/导出」后没有任何提示，用户不知道是否成功。
+
+**修复**：
+- `NotesSpacePage.vue` 新增轻量 Toast 机制（`toast` ref + `showToast()` + 底部弹出模板，与 DeviceSpacePage 风格一致）
+- `exportAs(format)` 重写：开始时显示 loading Toast「正在导出，请稍候…」；用户取消文件对话框时静默关闭；成功显示「已保存到 xxx.pdf/docx/md」；失败显示「导出失败：[错误]」
+- `doImport()` 重写：成功显示「已导入 N 篇笔记」；部分失败显示「已导入 N 篇，M 篇失败」；整体异常显示具体错误
+- `doExport()` 重写：选目录后显示 loading；成功显示「已导出 N 篇笔记」；部分失败显示统计
+- `useI18n.ts` 新增 `notes.exportFileSaving`、`notes.exportFileSaved`、`notes.exportFileFail`、`notes.exportPartialFail`、`notes.importPartialFail` 中英双语 key
+- `onBeforeUnmount` 中清理 `toastTimer`
+
+### 34.2 脚本空间全面优化
+
+#### 34.2.1 代码编辑器重构（光标对齐修复）
+
+**问题根因**：编辑器采用透明 `<textarea>` 叠加 `<pre>` 高亮层方案，`<pre>` 中的 `<code>` 是 inline 元素，行高计算与 `<textarea>`（块级）不同，累积偏差导致光标错位；`whitespace-pre-wrap` 在长行折行时造成两层行高不一致。
+
+**修复**：
+- 去掉 `<code>` 包裹，`v-html` 直接绑定到 `<pre>` 上
+- 全部改用固定像素值：`font-size: 13px; line-height: 21px; padding: 12px`（三层统一：行号栏 / `<pre>` / `<textarea>`）
+- `white-space: pre`（不折行）替代 `whitespace-pre-wrap`
+- `syncScroll` 补充 `scrollLeft` 同步
+- `watch(editingContent)` 用 `nextTick + requestAnimationFrame` 补一次同步，修复删除内容时浏览器自动滚动后 `<pre>` 与光标位置偏移
+- `padding-bottom: 48px` 确保最后一行始终完整显示
+
+#### 34.2.2 快捷键修复（Tab / Shift+Tab / Ctrl+/）
+
+**问题根因**：
+1. `applyEdit` 用 `ta.select()` 全选后 `execCommand('insertText', false, 全文)` 替换，Ctrl+Z 撤销直接清空文件
+2. `@keydown.tab.prevent` 和 `@keydown.shift.tab.prevent` 同时监听 Tab 键，Shift+Tab 触发两个处理器互相抵消
+
+**修复**：
+- 废弃 `execCommand` 方案，改用 `setRangeText(text, start, end, 'end')`（同步、光标行为可预测）
+- 所有快捷键合并到 `onEditorKeydown(e: KeyboardEvent)` 统一处理，用 `e.key` 原生判断，彻底避免 Vue 修饰符组合键冲突
+- `insertTab`：无选区插入2空格；有选区扩展到行首逐行加缩进
+- `unindentTab`：逐行去掉最多2个前导空格，记录首行 delta 精确调整 selectionStart；无可去缩进时直接 return 不产生无效 undo
+- `toggleComment`：只检测非空行，Python 用 `# `，BAT 用 `:: `；全部已注释则取消，否则添加
+
+#### 34.2.3 脚本类型持久化
+
+**问题**：切换 Python / BAT 类型后切换页面回来重置为默认值。
+
+**修复**：`switchType` 和 `confirmTypeSwitch` 写 `localStorage('script-space:type')`，`onMounted` 读取恢复。
+
+#### 34.2.4 模块导入修复（No module named 'exporter'）
+
+**问题根因**：脚本存在数据库中，运行时写入 `AppData/temp_scripts/` 目录，Python 的 `sys.path[0]` 是脚本文件目录，不是工作目录，找不到同数据库中的 `exporter.py`。
+
+**修复**：
+- 运行前把**同类型的所有其他脚本**也写入 temp_scripts 目录，文件名用脚本名（如 `exporter.py`）
+- 在脚本内容开头自动注入 `import sys as _sys; _sys.path.insert(0, r"<tmpDir>"); del _sys`，确保 `import exporter` 能找到同目录的模块
+- 完全透明，用户无需任何额外操作，打包成 exe 后同样工作
+
+| 场景 | 执行路径 | 工作目录 |
+|------|----------|----------|
+| 数据库脚本 | `temp_scripts/__ts_run_<id>.py` | `temp_scripts/`（含所有同类脚本） |
+| 本地打开文件 | 直接写回原始文件路径 | 原始文件所在目录（自动派生） |
+
+#### 34.2.5 脚本重复执行修复
+
+**问题根因**：`useScriptRunner` 的 `setup()` 用 `setupCalled` 防重，但 HMR 热重载时模块重新执行 `setupCalled` 重置为 `false`，多次注册 `script-line` / `script-exit` 监听器，一次运行触发多次输出和多个 `[Exit N]`。
+
+**修复**：
+- `setup()` 开头无条件先调用旧的 unlisten，清理残留监听器
+- 新增 `setupInProgress` 异步锁防止 `await listen()` 挂起期间的并发调用
+- `destroy()` 重置 `setupInProgress`
+
+#### 34.2.6 长时间运行输出限制
+
+**问题**：压测两天等长时运行脚本持续输出大量日志，全部 push 进 `tab.output` 数组会导致内存溢出。
+
+**修复**：`useScriptRunner` 新增 `MAX_OUTPUT_LINES = 5000` 常量，每次 push 后超出则从头部丢弃旧行（circular buffer），内存用量恒定。
+
+### 34.3 影响文件
+
+| 文件 | 修改 |
+|------|------|
+| `src/views/note-space/NotesSpacePage.vue` | Toast 机制、`exportAs` / `doImport` / `doExport` 全部加反馈 |
+| `src/composables/useI18n.ts` | 新增导出/导入反馈相关 i18n key（中英双语） |
+| `src/views/script-space/ScriptSpacePage.vue` | 编辑器光标对齐修复、快捷键重写（`onEditorKeydown`）、类型持久化、模块导入修复（同类脚本写入 temp）、`sys.path` 注入 |
+| `src/composables/useScriptRunner.ts` | 重复执行修复（`setupInProgress` 锁）、输出行数上限（MAX 5000） |
+| `src-tauri/src/script_exec.rs` | `script_spawn` 新增 `work_dir: Option<String>` 参数，`cmd.current_dir()` 支持 |
