@@ -160,8 +160,13 @@ pub fn script_spawn(
     interpreter: String,
     script_path: String,
     args: Vec<String>,
+    work_dir: Option<String>,
 ) -> Result<(), String> {
-    let mut child = spawn_command(&interpreter, &script_path, &args)?
+    let mut cmd = spawn_command(&interpreter, &script_path, &args)?;
+    if let Some(dir) = &work_dir {
+        cmd.current_dir(dir);
+    }
+    let mut child = cmd
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()

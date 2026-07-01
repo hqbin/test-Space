@@ -696,6 +696,20 @@
       </div>
     </Teleport>
   </div>
+
+  <!-- Toast notification -->
+  <Teleport to="body">
+    <Transition name="fade">
+      <div v-if="toast.show" class="fixed bottom-8 left-1/2 -translate-x-1/2 z-[200] glass-panel rounded-full px-5 py-2.5 flex items-center gap-2 shadow-lg max-w-[80vw]">
+        <span v-if="toast.type === 'loading'" class="material-symbols-outlined text-[18px] text-secondary animate-spin">progress_activity</span>
+        <span v-else class="material-symbols-outlined text-[18px]"
+          :class="toast.type === 'error' ? 'text-error' : 'text-success-indicator'">
+          {{ toast.type === 'error' ? 'error' : 'check_circle' }}
+        </span>
+        <span class="font-body-md text-body-md text-on-surface truncate">{{ toast.message }}</span>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -801,6 +815,16 @@ const incomingLinkIds = ref<string[]>([])
 const aiConfig = ref<AiConfig>({ provider: 'azure', apiKey: '', endpoint: '', model: '', maxContextTokens: 8000, authMode: 'api-key' })
 const showExportMenu = ref(false)
 const exportMenuRef = ref<HTMLDivElement>()
+// ── Toast (export feedback) ────────────────────────────────────
+const toast = ref({ show: false, message: '', type: 'success' as 'success' | 'error' | 'loading' })
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+function showToast(message: string, type: 'success' | 'error' | 'loading' = 'success') {
+  if (toastTimer) clearTimeout(toastTimer)
+  toast.value = { show: true, message, type }
+  if (type !== 'loading') {
+    toastTimer = setTimeout(() => { toast.value.show = false }, 3500)
+  }
+}
 const showSpaceDropdown = ref(false)
 const spaceDropdownRef = ref<HTMLDivElement>()
 const folderAddDropdownId = ref<string | null>(null)
@@ -1687,6 +1711,7 @@ async function exportAs(format: 'docx' | 'md' | 'pdf') {
   const html = editor.value.getHTML()
 
   if (format === 'pdf') {
+    showToast(t('notes.exportFileSaving'), 'loading')
     try {
       const iframe = document.createElement('iframe')
       iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;height:600px;border:none;'
@@ -1737,38 +1762,35 @@ async function exportAs(format: 'docx' | 'md' | 'pdf') {
         filters: [{ name: 'PDF Document', extensions: ['pdf'] }],
         defaultPath: `${title}.pdf`,
       })
-      if (!path) return
+      if (!path) {
+        toast.value.show = false
+        return
+      }
 
       const pdfBuffer = pdf.output('arraybuffer')
       const uint8 = new Uint8Array(pdfBuffer)
       const { writeFile } = await import('@tauri-apps/plugin-fs')
       await writeFile(path, uint8)
-    } catch (e) {
+      showToast(t('notes.exportFileSaved', { path: path.split(/[\\/]/).pop() ?? path }), 'success')
+    } catch (e: any) {
       console.error('PDF export error:', e)
-      const pdf = new jsPDF('p', 'mm', 'a4')
-      pdf.setFontSize(16)
-      pdf.text('Error generating PDF', 20, 40)
-      const blob = pdf.output('blob')
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${title}.pdf`
-      a.click()
-      URL.revokeObjectURL(url)
+      showToast(t('notes.exportFileFail', { error: e?.message || String(e) }), 'error')
     }
     return
   }
 
-  const ext = format
-
   if (format === 'docx') {
+    showToast(t('notes.exportFileSaving'), 'loading')
     try {
       const { save } = await import('@tauri-apps/plugin-dialog')
       const path = await save({
         filters: [{ name: 'Word Document', extensions: ['docx'] }],
         defaultPath: `${title}.docx`,
       })
-      if (!path) return
+      if (!path) {
+        toast.value.show = false
+        return
+      }
 
       const docChildren = htmlToDocxChildren(html)
       const doc = new Document({
@@ -1782,34 +1804,32 @@ async function exportAs(format: 'docx' | 'md' | 'pdf') {
       const uint8 = new Uint8Array(buffer)
       const { writeFile } = await import('@tauri-apps/plugin-fs')
       await writeFile(path, uint8)
-    } catch (e) {
+      showToast(t('notes.exportFileSaved', { path: path.split(/[\\/]/).pop() ?? path }), 'success')
+    } catch (e: any) {
       console.error('Docx export error:', e)
+      showToast(t('notes.exportFileFail', { error: e?.message || String(e) }), 'error')
     }
     return
   }
 
+  // Markdown
+  showToast(t('notes.exportFileSaving'), 'loading')
   try {
     const { save } = await import('@tauri-apps/plugin-dialog')
-    const { invoke } = await import('@tauri-apps/api/core')
-    const filterName = 'Markdown'
     const path = await save({
-      filters: [{ name: filterName, extensions: [ext] }],
-      defaultPath: `${title}.${ext}`,
+      filters: [{ name: 'Markdown', extensions: ['md'] }],
+      defaultPath: `${title}.md`,
     })
-    if (!path) return
-
-    if (format === 'md') {
-      await invoke('write_text_file', { path, content: turndown.turndown(html) })
+    if (!path) {
+      toast.value.show = false
+      return
     }
-  } catch {
-    const content = turndown.turndown(html)
-    const blob = new Blob([content], { type: 'text/markdown' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${title}.${ext}`
-    a.click()
-    URL.revokeObjectURL(url)
+    const { invoke } = await import('@tauri-apps/api/core')
+    await invoke('write_text_file', { path, content: turndown.turndown(html) })
+    showToast(t('notes.exportFileSaved', { path: path.split(/[\\/]/).pop() ?? path }), 'success')
+  } catch (e: any) {
+    console.error('Md export error:', e)
+    showToast(t('notes.exportFileFail', { error: e?.message || String(e) }), 'error')
   }
 }
 
@@ -1843,6 +1863,7 @@ async function doImport() {
 
     const fileList = Array.isArray(files) ? files : [files]
     let importedCount = 0
+    const failedFiles: string[] = []
 
     for (const filePath of fileList) {
       try {
@@ -1872,15 +1893,22 @@ async function doImport() {
         importedCount++
       } catch (e) {
         console.error('Failed to import file:', filePath, e)
+        failedFiles.push(filePath.split(/[\\/]/).pop() || filePath)
       }
     }
 
     notes.value = await db.loadNotes()
     rebuildTitleMap()
     showImportDialog.value = false
-    if (importedCount > 0) console.log(`Imported ${importedCount} notes`)
-  } catch (e) {
+
+    if (failedFiles.length > 0) {
+      showToast(t('notes.importPartialFail', { count: String(importedCount), fail: String(failedFiles.length) }), 'error')
+    } else if (importedCount > 0) {
+      showToast(t('notes.importSuccess', { count: String(importedCount) }), 'success')
+    }
+  } catch (e: any) {
     console.error('Import failed:', e)
+    showToast(t('notes.importFail') + (e?.message ? `：${e.message}` : ''), 'error')
   }
   importing.value = false
 }
@@ -1909,11 +1937,14 @@ async function doExport() {
       return
     }
 
+    showToast(t('notes.exporting'), 'loading')
+
     // Load full content for all selected notes
     const exportFullNotes = await Promise.all(
       exportSelectedNoteIds.value.map(id => db.loadNote(id))
     )
     let exportedCount = 0
+    const failedTitles: string[] = []
     for (const note of exportFullNotes) {
       if (!note) continue
 
@@ -1939,13 +1970,19 @@ async function doExport() {
         exportedCount++
       } catch (e) {
         console.error('Failed to export note:', note.id, e)
+        failedTitles.push(note.title || t('notes.untitled'))
       }
     }
 
     showExportDialog.value = false
-    if (exportedCount > 0) console.log(`Exported ${exportedCount} notes`)
-  } catch (e) {
+    if (failedTitles.length > 0) {
+      showToast(t('notes.exportPartialFail', { count: String(exportedCount), fail: String(failedTitles.length) }), 'error')
+    } else {
+      showToast(t('notes.exportSuccess', { count: String(exportedCount) }), 'success')
+    }
+  } catch (e: any) {
     console.error('Export failed:', e)
+    showToast(t('notes.exportFail') + (e?.message ? `：${e.message}` : ''), 'error')
   }
   exporting.value = false
 }
@@ -2218,6 +2255,7 @@ onBeforeUnmount(() => {
   if (saveTimer) clearTimeout(saveTimer)
   if (versionTimer) clearTimeout(versionTimer)
   if (searchDebounce) clearTimeout(searchDebounce)
+  if (toastTimer) clearTimeout(toastTimer)
   editor.value?.destroy()
 })
 </script>
