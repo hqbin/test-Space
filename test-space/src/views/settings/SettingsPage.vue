@@ -731,9 +731,14 @@ async function handleCloudRestore() {
       setStatus(t("settings.cloudRestoreFail") + ": invalid backup data", true);
       return;
     }
-    await db.importAllData(backup);
-    setStatus(t("settings.cloudRestoreSuccess"));
-    setTimeout(() => window.location.reload(), 1500);
+    // Cloud restore uses incremental merge: skip items whose name already exists locally,
+    // insert new ones. Local data is never deleted.
+    const result = await db.importAllDataIncremental(backup);
+    setStatus(
+      t("settings.cloudRestoreSuccess") +
+        ` (${t("settings.cloudRestoreImported")}: ${result.imported}, ${t("settings.cloudRestoreSkipped")}: ${result.skipped})`
+    );
+    setTimeout(() => window.location.reload(), 1800);
   } catch (e: any) {
     setStatus(t("settings.cloudRestoreFail") + ": " + (e.message || e), true);
   } finally {

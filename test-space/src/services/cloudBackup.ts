@@ -57,12 +57,19 @@ async function request<T>(
   }
 }
 
+export interface BackupMeta {
+  version: string;
+  exportedAt: string;
+  /** Present on backups created from Phase 36 onward — decrypted bytes are gzip-compressed. */
+  compressed?: boolean;
+}
+
 export interface BackupListItem {
   id: string;
   device_id: string;
   size_bytes: number;
   checksum: string;
-  metadata: { version: string; exportedAt: string };
+  metadata: BackupMeta;
   created_at: string;
 }
 
@@ -80,7 +87,7 @@ export interface BackupUploadPayload {
   auth_tag: string;
   size_bytes: number;
   checksum: string;
-  metadata: { version: string; exportedAt: string };
+  metadata: BackupMeta;
 }
 
 export function uploadBackup(

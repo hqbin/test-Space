@@ -991,6 +991,237 @@ function validateBackup(backup: any): string | null {
   return null
 }
 
+/**
+ * Incremental restore — used exclusively by cloud restore.
+ *
+ * Contract: DO NOT delete any existing local data. For every user-facing named entity in the
+ * backup, look up whether an item with the same name already exists locally.
+ * - If it exists locally → skip the backup item entirely (keep local as-is).
+ * - If it doesn't exist locally → insert the backup item (using backup's original ID).
+ *
+ * Reference-heavy tables (note_versions, note_links) are only imported for notes that were
+ * newly inserted; skipped notes keep their existing local version history and links intact.
+ *
+ * Preference/session tables (app_settings, input_history, log_sessions, recent_files,
+ * favorites, proxy_rules) are NEVER touched here — cloud restore should not overwrite the
+ * user's local settings or session state.
+ *
+ * Returns per-category counts so the caller can present a summary to the user.
+ */
+export async function importAllDataIncremental(backup: AppBackup): Promise<{
+  imported: number
+  skipped: number
+  failures: string[]
+}> {
+  const err = validateBackup(backup)
+  if (err) throw new Error(err)
+  const d = await getDb()
+  const maxRetries = 3
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try { await d.select('SELECT 1'); break }
+    catch {
+      if (attempt === maxRetries) throw new Error('数据库繁忙，请稍后重试')
+      await new Promise(r => setTimeout(r, 1000 * attempt))
+    }
+  }
+
+  let imported = 0
+  let skipped = 0
+  const failures: string[] = []
+
+  // ── 1. NOTE SPACES ─ match by name; build backupSpaceId → localSpaceId map ──
+  const spaceIdMap: Record<string, string> = {}
+  const localSpaces = (await d.select<{ id: string; name: string }[]>(
+    'SELECT id, name FROM note_spaces'
+  )) || []
+  const localSpaceByName = new Map(localSpaces.map(s => [s.name, s.id]))
+  for (const s of backup.noteSpaces || []) {
+    const existing = localSpaceByName.get(s.name)
+    if (existing) { spaceIdMap[s.id] = existing; skipped++; continue }
+    try {
+      await d.execute(
+        'INSERT INTO note_spaces (id, name, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+        [s.id, s.name, s.sortOrder ?? 0, s.createdAt, s.updatedAt]
+      )
+      spaceIdMap[s.id] = s.id
+      imported++
+    } catch (e: any) { failures.push(`space "${s.name}": ${e.message || e}`) }
+  }
+
+  // ── 2. NOTE FOLDERS ─ match by (remapped space_id, remapped parent_id, name); recursive ──
+  const folderIdMap: Record<string, string> = {}
+  const processedFolderIds = new Set<string>()
+  const backupFoldersById = new Map<string, any>()
+  for (const f of backup.noteFolders || []) backupFoldersById.set(f.id, f)
+
+  async function processFolder(f: any): Promise<void> {
+    if (processedFolderIds.has(f.id)) return
+    processedFolderIds.add(f.id)
+
+    const bkSpaceId = f.spaceId ?? f.space_id ?? null
+    const localSpaceId: string | null = bkSpaceId ? (spaceIdMap[bkSpaceId] ?? null) : null
+    const bkParentId = f.parentId ?? f.parent_id ?? null
+    let localParentId: string | null = null
+    if (bkParentId) {
+      const parent = backupFoldersById.get(bkParentId)
+      if (parent) await processFolder(parent)
+      localParentId = folderIdMap[bkParentId] ?? null
+    }
+
+    const existing = (await d.select<{ id: string }[]>(
+      `SELECT id FROM note_folders
+        WHERE IFNULL(space_id, '') = IFNULL(?, '')
+          AND IFNULL(parent_id, '') = IFNULL(?, '')
+          AND name = ?`,
+      [localSpaceId, localParentId, f.name]
+    )) || []
+    if (existing.length > 0) { folderIdMap[f.id] = existing[0].id; skipped++; return }
+
+    try {
+      await d.execute(
+        'INSERT INTO note_folders (id, space_id, name, parent_id, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [f.id, localSpaceId, f.name, localParentId, f.sortOrder ?? 0, f.createdAt, f.updatedAt]
+      )
+      folderIdMap[f.id] = f.id
+      imported++
+    } catch (e: any) { failures.push(`folder "${f.name}": ${e.message || e}`) }
+  }
+  for (const f of backup.noteFolders || []) await processFolder(f)
+
+  // ── 3. NOTES ─ match by (remapped folder_id, title). Track newly-inserted note IDs
+  //             so version/link imports can be scoped to fresh notes only. ──
+  const noteIdMap: Record<string, string> = {}
+  const freshlyInsertedNoteIds = new Set<string>()
+  for (const rawNote of backup.notes || []) {
+    const n: any = rawNote
+    const bkFolderId = n.folderId ?? n.folder_id ?? null
+    const localFolderId: string | null = bkFolderId ? (folderIdMap[bkFolderId] ?? null) : null
+
+    const existing = (await d.select<{ id: string }[]>(
+      `SELECT id FROM notes
+        WHERE IFNULL(folder_id, '') = IFNULL(?, '')
+          AND title = ?`,
+      [localFolderId, n.title ?? '']
+    )) || []
+    if (existing.length > 0) { noteIdMap[n.id] = existing[0].id; skipped++; continue }
+
+    try {
+      await d.execute(
+        'INSERT INTO notes (id, folder_id, title, content, content_json, tags, is_favorite, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [n.id, localFolderId, n.title ?? '', n.content ?? '', n.contentJson ?? null, JSON.stringify(n.tags ?? []), n.isFavorite ? 1 : 0, n.createdAt, n.updatedAt]
+      )
+      noteIdMap[n.id] = n.id
+      freshlyInsertedNoteIds.add(n.id)
+      imported++
+    } catch (e: any) { failures.push(`note "${n.title}": ${e.message || e}`) }
+  }
+
+  // ── 4. NOTE VERSIONS ─ only import for freshly-inserted notes (skipped notes keep local history) ──
+  for (const rawV of backup.noteVersions || []) {
+    const v: any = rawV
+    const bkNoteId = v.noteId ?? v.note_id
+    if (!freshlyInsertedNoteIds.has(bkNoteId)) continue
+    try {
+      await d.execute(
+        'INSERT INTO note_versions (id, note_id, content, saved_at) VALUES (?, ?, ?, ?)',
+        [v.id, bkNoteId, v.content, v.savedAt ?? v.saved_at]
+      )
+      imported++
+    } catch { /* silently ignore individual version failures */ }
+  }
+
+  // ── 5. NOTE LINKS ─ only import if the source note was freshly inserted AND target
+  //                   resolves to some local note (either fresh or existing by name) ──
+  for (const rawL of backup.noteLinks || []) {
+    const l: any = rawL
+    const src = l.sourceNoteId ?? l.source_note_id
+    const tgt = l.targetNoteId ?? l.target_note_id
+    if (!freshlyInsertedNoteIds.has(src)) continue
+    const localTgt = noteIdMap[tgt]
+    if (!localTgt) continue
+    try {
+      await d.execute(
+        'INSERT INTO note_links (id, source_note_id, target_note_id, created_at) VALUES (?, ?, ?, ?)',
+        [l.id, src, localTgt, l.createdAt ?? l.created_at]
+      )
+      imported++
+    } catch { /* ignore */ }
+  }
+
+  // ── 6. FIELD RULE SETS ─ match by name ──
+  const localRuleSets = (await d.select<{ name: string }[]>(
+    'SELECT name FROM field_rule_sets'
+  )) || []
+  const localRuleNames = new Set(localRuleSets.map(r => r.name))
+  for (const r of backup.fieldRuleSets || []) {
+    if (localRuleNames.has(r.name)) { skipped++; continue }
+    try {
+      await d.execute(
+        'INSERT INTO field_rule_sets (id, name, rules, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+        [r.id, r.name, JSON.stringify(r.rules), r.createdAt || r.created_at, r.updatedAt || r.updated_at || r.createdAt]
+      )
+      imported++
+    } catch (e: any) { failures.push(`ruleset "${r.name}": ${e.message || e}`) }
+  }
+
+  // ── 7. CASE FILES ─ match by name ──
+  const localCaseFiles = (await d.select<{ name: string }[]>(
+    'SELECT name FROM case_files'
+  )) || []
+  const localCaseNames = new Set(localCaseFiles.map(f => f.name))
+  for (const f of backup.caseFiles || []) {
+    if (localCaseNames.has(f.name)) { skipped++; continue }
+    try {
+      await d.execute(
+        'INSERT INTO case_files (id, name, data, tags, custom_fields, rule_set_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [f.id, f.name, f.data || JSON.stringify(f), JSON.stringify(f.tags || []), JSON.stringify(f.custom_fields || f.customFields || []), f.rule_set_id || f.ruleSetId || '', f.created_at || f.createdAt, f.updated_at || f.updatedAt]
+      )
+      imported++
+    } catch (e: any) { failures.push(`case file "${f.name}": ${e.message || e}`) }
+  }
+
+  // ── 8. SCRIPTS ─ match by (type, name); scripts of same name in different types coexist ──
+  const localScripts = (await d.select<{ type: string; name: string }[]>(
+    'SELECT type, name FROM scripts'
+  )) || []
+  const localScriptKeys = new Set(localScripts.map(s => `${s.type}::${s.name}`))
+  for (const rawS of backup.scripts || []) {
+    const s: any = rawS
+    const key = `${s.type ?? 'bat'}::${s.name}`
+    if (localScriptKeys.has(key)) { skipped++; continue }
+    try {
+      await d.execute(
+        'INSERT INTO scripts (id, name, type, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+        [s.id, s.name, s.type ?? 'bat', s.content ?? '', s.createdAt ?? s.created_at, s.updatedAt ?? s.updated_at ?? s.createdAt]
+      )
+      imported++
+    } catch (e: any) { failures.push(`script "${s.name}": ${e.message || e}`) }
+  }
+
+  // ── 9. AI MEMORIES ─ dedup by content (already the identity for user-visible memories) ──
+  const localMems = (await d.select<{ content: string }[]>(
+    'SELECT content FROM note_ai_memories'
+  )) || []
+  const localMemContents = new Set(localMems.map(m => m.content))
+  for (const rawM of backup.aiMemories || []) {
+    const m: any = rawM
+    if (localMemContents.has(m.content)) { skipped++; continue }
+    try {
+      await d.execute(
+        'INSERT INTO note_ai_memories (id, content, created_at, updated_at) VALUES (?, ?, ?, ?)',
+        [m.id, m.content, m.createdAt ?? m.created_at, m.updatedAt ?? m.updated_at ?? m.createdAt]
+      )
+      imported++
+    } catch (e: any) { failures.push(`memory: ${e.message || e}`) }
+  }
+
+  // NOTE: app_settings, input_history, log_sessions, recent_files, favorites, proxy_rules
+  // are intentionally NOT touched. Cloud restore preserves local preferences/state.
+
+  if (failures.length > 0) console.warn('[importAllDataIncremental] failures:', failures)
+  return { imported, skipped, failures }
+}
+
 export async function importAllData(backup: AppBackup) {
   const err = validateBackup(backup)
   if (err) throw new Error(err)

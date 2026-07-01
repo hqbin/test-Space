@@ -25,7 +25,13 @@ async function ensureDeviceId(): Promise<string> {
   return id;
 }
 
-const CLOUD_MAX_ITEM_SIZE = 5 * 1024 * 1024;
+/**
+ * Maximum size (in bytes, uncompressed) for any single item to be included in a cloud backup.
+ * Items larger than this are silently dropped from the sync payload (with a console warning
+ * that lists the skipped items). 1 MB per item keeps the overall encrypted+gzipped payload
+ * well under the server's `client_max_body_size` limit even for large workspaces.
+ */
+const CLOUD_MAX_ITEM_SIZE = 1 * 1024 * 1024;
 
 function filterOversizedItems(data: AppBackup): AppBackup {
   const skipped: string[] = [];

@@ -33,6 +33,52 @@ function bufToStr(buf: ArrayBuffer): string {
   return new TextDecoder().decode(buf);
 }
 
+/** Gzip-compress a string. Uses native CompressionStream (available in all modern webviews). */
+async function gzipCompress(str: string): Promise<Uint8Array> {
+  const cs = new (globalThis as any).CompressionStream("gzip");
+  const writer = cs.writable.getWriter();
+  writer.write(strToBuf(str));
+  writer.close();
+  const chunks: Uint8Array[] = [];
+  const reader = cs.readable.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value as Uint8Array);
+  }
+  const total = chunks.reduce((n, c) => n + c.byteLength, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) {
+    out.set(c, offset);
+    offset += c.byteLength;
+  }
+  return out;
+}
+
+/** Gzip-decompress bytes back into a string. */
+async function gzipDecompress(bytes: Uint8Array): Promise<string> {
+  const ds = new (globalThis as any).DecompressionStream("gzip");
+  const writer = ds.writable.getWriter();
+  writer.write(bytes);
+  writer.close();
+  const chunks: Uint8Array[] = [];
+  const reader = ds.readable.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value as Uint8Array);
+  }
+  const total = chunks.reduce((n, c) => n + c.byteLength, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) {
+    out.set(c, offset);
+    offset += c.byteLength;
+  }
+  return new TextDecoder().decode(out);
+}
+
 export async function getOrCreateKey(): Promise<string> {
   let key = await db.getSetting(STORAGE_KEY);
   if (!key) {
@@ -60,6 +106,13 @@ async function deriveKey(masterKeyBase64: string, salt: Uint8Array): Promise<Cry
   );
 }
 
+export interface BackupMetadata {
+  version: string;
+  exportedAt: string;
+  /** If true, decrypted bytes are gzip-compressed and must be decompressed to get JSON. */
+  compressed?: boolean;
+}
+
 export interface EncryptedPayload {
   data: string;
   iv: string;
@@ -67,9 +120,15 @@ export interface EncryptedPayload {
   auth_tag: string;
   size_bytes: number;
   checksum: string;
-  metadata: { version: string; exportedAt: string };
+  metadata: BackupMetadata;
 }
 
+/**
+ * Encrypt a JSON string for cloud upload.
+ * Flow: JSON string → gzip-compress → AES-GCM encrypt → base64.
+ * `size_bytes` and `checksum` are computed on the ORIGINAL plaintext JSON
+ * (so restore-side checksum verification remains meaningful).
+ */
 export async function encryptBackup(
   jsonStr: string,
   masterKeyBase64: string,
@@ -79,15 +138,19 @@ export async function encryptBackup(
   const iv = crypto.getRandomValues(new Uint8Array(IV_SIZE));
   const derivedKey = await deriveKey(masterKeyBase64, salt);
 
+  // Checksum on plaintext JSON (before compression) for end-to-end verification.
   const checksumBytes = await crypto.subtle.digest("SHA-256", strToBuf(jsonStr));
   const checksum = Array.from(new Uint8Array(checksumBytes))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 
+  // Gzip-compress before encrypting to shrink the upload payload (text/JSON compresses 3-10x).
+  const compressedBytes = await gzipCompress(jsonStr);
+
   const encrypted = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv },
     derivedKey,
-    strToBuf(jsonStr)
+    compressedBytes
   );
 
   const encryptedBytes = new Uint8Array(encrypted);
@@ -101,12 +164,24 @@ export async function encryptBackup(
     auth_tag: base64Encode(authTag.buffer),
     size_bytes: jsonStr.length,
     checksum,
-    metadata,
+    metadata: { ...metadata, compressed: true },
   };
 }
 
+/**
+ * Decrypt a cloud backup payload back into the original JSON string.
+ * If `payload.metadata.compressed === true` the decrypted bytes are treated as gzip;
+ * otherwise (legacy uncompressed backups) they are decoded directly as UTF-8.
+ */
 export async function decryptBackup(
-  payload: { data: string; iv: string; salt: string; auth_tag: string; checksum: string },
+  payload: {
+    data: string;
+    iv: string;
+    salt: string;
+    auth_tag: string;
+    checksum: string;
+    metadata?: BackupMetadata;
+  },
   masterKeyBase64: string
 ): Promise<string> {
   const salt = base64Decode(payload.salt);
@@ -130,7 +205,11 @@ export async function decryptBackup(
     throw new Error("密钥不匹配，解密失败");
   }
 
-  const plaintext = bufToStr(decrypted);
+  // Legacy backups (before Phase 36) stored plain UTF-8; new ones are gzip-compressed.
+  const isCompressed = payload.metadata?.compressed === true;
+  const plaintext = isCompressed
+    ? await gzipDecompress(new Uint8Array(decrypted))
+    : bufToStr(decrypted);
 
   const checksumBytes = await crypto.subtle.digest("SHA-256", strToBuf(plaintext));
   const checksum = Array.from(new Uint8Array(checksumBytes))
