@@ -90,6 +90,20 @@ function destroy() {
   setupInProgress = false;
 }
 
+/**
+ * Lightweight teardown for page unmount: stop timers and event listeners,
+ * but keep tabs/state intact so running scripts can be resumed on re-mount.
+ */
+function teardown() {
+  if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null; }
+  unlistenLine?.();
+  unlistenExit?.();
+  unlistenLine = null;
+  unlistenExit = null;
+  setupCalled = false;
+  setupInProgress = false;
+}
+
 async function setup() {
   if (setupInProgress) return;
   setupInProgress = true;
@@ -121,6 +135,28 @@ async function setup() {
         scrollToBottom();
       }
     });
+
+    // Restore activeTabId to the most recent running tab if it was lost on remount
+    if (!activeTabId.value || !tabs.value.find(t => t.id === activeTabId.value)) {
+      const running = tabs.value.filter(t => t.status === 'running')
+      if (running.length > 0) {
+        activeTabId.value = running[running.length - 1].id
+      } else if (tabs.value.length > 0) {
+        activeTabId.value = tabs.value[tabs.value.length - 1].id
+      }
+    }
+
+    // Restart elapsed timer if there are still running tabs
+    if (tabs.value.some(t => t.status === 'running') && !elapsedTimer) {
+      elapsedTimer = setInterval(() => {
+        for (const t of tabs.value) {
+          if (t.status === "running") {
+            const secs = Math.floor((Date.now() - t.startTime) / 1000);
+            t.elapsed = `${String(Math.floor(secs / 60)).padStart(2, "0")}:${String(secs % 60).padStart(2, "0")}`;
+          }
+        }
+      }, 1000);
+    }
   } finally {
     setupInProgress = false;
   }
@@ -148,6 +184,7 @@ export function useScriptRunner() {
     clearTabOutput,
     killScript,
     setup,
+    teardown,
     destroy,
     setScrollContainer,
   };

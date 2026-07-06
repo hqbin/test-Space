@@ -3,8 +3,22 @@ import type { AiConfig } from '@/services/aiSettings'
 import type { AiMemory } from '@/services/database'
 
 export interface AiChatMessage {
-  role: 'user' | 'assistant' | 'system'
+  role: 'user' | 'assistant' | 'system' | 'developer'
   content: string
+}
+
+/**
+ * Detect whether a model requires the 'developer' role instead of 'system'.
+ * Based on model name so it works regardless of provider field.
+ * Only known o-series model name patterns are matched — erring on the side of
+ * using 'system' (the universal default) rather than risking false positives.
+ */
+export function resolveSystemRole(config: AiConfig): AiChatMessage['role'] {
+  const model = config.model.trim().toLowerCase()
+  // Explicitly named o-series models that require 'developer' role.
+  // Note: gpt-5 is intentionally excluded — Azure deployment names are user-defined
+  // and gpt-5 may not be o-series architecture. Only match unambiguous o1/o3/o4 names.
+  return /^o[1-9](-mini|-preview|-pro)?$|^o4-mini/.test(model) ? 'developer' : 'system'
 }
 
 export interface AiChatResult {
@@ -392,25 +406,25 @@ function buildAuthHeaders(config: AiConfig): Record<string, string> {
   return headers
 }
 
+/**
+ * Detect whether a model requires the 'developer' role and omitting temperature.
+ * Based on model name rather than provider so custom endpoints work correctly.
+ */
 function buildRequestBody(config: AiConfig, messages: AiChatMessage[]): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: config.model.trim(),
     messages,
   }
 
-  switch (config.provider) {
-    case 'azure':
-      body.temperature = 1
-      break
-    case 'mimo':
-      body.temperature = 0.3
-      body.max_completion_tokens = 1024
-      body.stream = false
-      break
-    default:
-      body.temperature = 0.3
-      body.max_tokens = 1024
-      break
+  // Do NOT set temperature or max_completion_tokens.
+  // - temperature: Azure deployments often reject non-default values; omitting uses the safe default.
+  // - max_completion_tokens: omitting lets the model use its deployment default (typically 4096+),
+  //   which avoids the finish_reason:length truncation that a hardcoded value causes.
+  // The RAG chunk budget (config.maxContextTokens) already limits how much prompt we send,
+  // so the model always has enough room to produce a full answer.
+
+  if (config.provider === 'mimo') {
+    body.stream = false
   }
 
   return body
@@ -468,8 +482,10 @@ export async function chatWithNotes(
 
   const userContent = `参考笔记（共 ${allNotes.length} 篇，检索 ${noteIds.length} 篇 / ${chunks.length} 个片段）：\n${context || '(无参考内容)'}\n\n用户问题：${question}`
 
+  const systemRole = resolveSystemRole(config)
+
   const messages: AiChatMessage[] = [
-    { role: 'system', content: systemPrompt },
+    { role: systemRole, content: systemPrompt },
     ...history.slice(-4),
     { role: 'user', content: userContent },
   ]
@@ -477,6 +493,13 @@ export async function chatWithNotes(
   const json = await callChatApi(config, messages)
 
   const answer = json.choices?.[0]?.message?.content || json.choices?.[0]?.text || ''
+  if (!answer.trim()) {
+    // Surface the raw response in the error so the user can see what happened
+    const detail = json.choices?.[0]?.finish_reason
+      ? `finish_reason: ${json.choices[0].finish_reason}`
+      : JSON.stringify(json).slice(0, 200)
+    throw new Error(`AI 返回了空回复（${detail}）`)
+  }
   const usage = json.usage
     ? {
         promptTokens: json.usage.prompt_tokens ?? 0,
@@ -520,7 +543,7 @@ export async function extractMemories(
   const userContent = `问：${question}\n答：${answer}`
 
   const messages: AiChatMessage[] = [
-    { role: 'system', content: systemPrompt },
+    { role: resolveSystemRole(config), content: systemPrompt },
     { role: 'user', content: userContent },
   ]
 
@@ -534,7 +557,7 @@ export async function extractMemories(
 
 export async function testAiConnection(config: AiConfig): Promise<string> {
   const messages: AiChatMessage[] = [
-    { role: 'system', content: '你是一个助手' },
+    { role: resolveSystemRole(config), content: '你是一个助手' },
     { role: 'user', content: '你好，请回复 OK' },
   ]
   const json = await callChatApi(config, messages)

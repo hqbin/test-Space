@@ -370,13 +370,7 @@
       <span class="material-symbols-outlined text-[18px] text-on-surface-variant">link</span>
     </button>
 
-    <!-- AI Assistant Panel -->
-    <NoteAiPanel
-      :ai-config="aiConfig"
-      :notes="notes"
-      @go-settings="router.push('/settings')"
-      @open-note="openNoteById"
-    />
+    <!-- AI Assistant Panel is now global in AppLayout.vue -->
 
     <!-- Right: Table of Contents (slide panel) -->
     <Teleport to="body">
@@ -725,7 +719,7 @@ import Typography from "@tiptap/extension-typography";
 import Color from "@tiptap/extension-color";
 import TextStyle from "@tiptap/extension-text-style";
 import { WikiNoteLink, NoteLinkExtension, NOTE_LINK_PREFIX } from "@/extensions/wikiNoteLink";
-import NoteAiPanel from "@/components/notes/NoteAiPanel.vue";
+// NoteAiPanel is now global in AppLayout.vue — no local import needed
 import { loadAiConfig, type AiConfig } from "@/services/aiSettings";
 import { getNotePlainText, htmlToPlainText } from "@/services/noteAi";
 
@@ -2403,6 +2397,9 @@ onDeactivated(() => {
   if (versionTimer) clearTimeout(versionTimer)
   if (searchDebounce) clearTimeout(searchDebounce)
 })
+
+// Expose state for AppLayout's global AI panel
+defineExpose({ notes, openNoteById })
 
 onBeforeUnmount(() => {
   _isUnmounted = true

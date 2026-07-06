@@ -60,6 +60,12 @@ const messages: Record<Lang, Record<string, string>> = {
     "scripts.typeCancel": "取消",
     "scripts.typeConfirm": "确认切换",
     "scripts.outputHint": "运行脚本后在此查看输出...",
+    "scripts.aiAssistant": "脚本 AI 助手",
+    "scripts.aiPlaceholder": "描述你想要的脚本，AI 会自动选择 BAT 或 Python 类型并生成完整代码",
+    "scripts.aiInputPlaceholder": "描述脚本功能...",
+    "scripts.aiModeHint": "当前类型：{type}，AI 会自动选择最合适的类型",
+    "scripts.aiApplyScript": "新建并保存此脚本",
+    "scripts.aiAutoSaved": "已自动新建并保存：{name}",
 
     // Settings page
     "settings.title": "设置",
@@ -727,6 +733,12 @@ const messages: Record<Lang, Record<string, string>> = {
     "scripts.typeCancel": "Cancel",
     "scripts.typeConfirm": "Confirm",
     "scripts.outputHint": "Run a script to see output here...",
+    "scripts.aiAssistant": "Script AI Assistant",
+    "scripts.aiPlaceholder": "Describe the script you need. AI will pick BAT or Python and generate complete code.",
+    "scripts.aiInputPlaceholder": "Describe the script...",
+    "scripts.aiModeHint": "Current type: {type} — AI will choose the best type automatically",
+    "scripts.aiApplyScript": "Create & save this script",
+    "scripts.aiAutoSaved": "Auto-saved: {name}",
 
     // Settings page
     "settings.title": "Settings",

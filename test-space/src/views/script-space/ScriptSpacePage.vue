@@ -235,7 +235,7 @@ const { t } = useI18n();
 
 const {
   tabs, activeTabId, activeTab, activeTabOutput,
-  addTab, clearTabOutput, killScript, setup: setupRunner, setScrollContainer, destroy,
+  addTab, clearTabOutput, killScript, setup: setupRunner, teardown, setScrollContainer, destroy,
 } = useScriptRunner();
 
 const scripts = ref<db.ScriptItem[]>([]);
@@ -648,6 +648,7 @@ async function newScript() {
   };
   editingContent.value = templates[globalType.value] || "";
   currentScript.value = { id, name: "untitled", type: globalType.value, content: editingContent.value, createdAt: "", updatedAt: "" };
+  activeTabId.value = "";
   nextTick(() => editorRef.value?.focus());
 }
 
@@ -681,6 +682,7 @@ async function openLocalFile() {
     const lastSlash = normalized.lastIndexOf('/');
     workingDir.value = lastSlash >= 0 ? path.substring(0, lastSlash) : "";
     currentScript.value = { id: genId(), name: editingName.value, type: editingType.value, content, createdAt: "", updatedAt: "" };
+    activeTabId.value = "";
     nextTick(() => editorRef.value?.focus());
   } catch (e: any) {
     console.error("Open failed:", e);
@@ -711,6 +713,8 @@ async function loadScript(id: string) {
     localFilePath.value = null; // 数据库脚本无本地文件路径
     // 恢复该脚本的工作目录（按脚本 id 存入 localStorage）
     workingDir.value = localStorage.getItem(`script-work-dir:${id}`) || "";
+    // 清空控制台：切换脚本时不应显示上一个脚本的输出
+    activeTabId.value = "";
   }
 }
 
@@ -878,12 +882,93 @@ watch(editingContent, () => {
 });
 
 onUnmounted(() => {
-  destroy();
+  // Use teardown (not destroy) so running script tabs are preserved
+  // and can be resumed when the user navigates back to this page.
+  teardown();
   document.removeEventListener("click", handleDocClick);
   if (tipTimer) clearTimeout(tipTimer);
   if (toastTimer) clearTimeout(toastTimer);
   if (resizeObs) resizeObs.disconnect();
 });
+
+// ── AI script integration ─────────────────────────────────────────────────
+
+import type { ScriptAiResult } from "@/services/scriptAi";
+
+/**
+ * Names of other scripts of the same current type — for AI import awareness.
+ * Exposed so AppLayout can pass them to NoteAiPanel.
+ */
+const siblingScriptNames = computed(() =>
+  scripts.value
+    .filter(s => s.type === globalType.value && s.id !== currentScript.value?.id)
+    .map(s => s.name)
+);
+
+/**
+ * Called by AppLayout when the AI panel produces a script result.
+ * If a script is already open in the editor, updates it in place.
+ * If the editor is empty, creates a new script.
+ */
+async function applyAiScript(payload: ScriptAiResult) {
+  try {
+    // 1. Switch editor type if AI chose a different one
+    if (payload.scriptType !== globalType.value) {
+      globalType.value = payload.scriptType
+      localStorage.setItem('script-space:type', payload.scriptType)
+    }
+    editingType.value = payload.scriptType
+
+    const isUpdate = !!currentScript.value
+
+    let id: string
+    let finalName: string
+
+    if (isUpdate) {
+      // Update the existing script in place — keep its ID and name
+      id = currentScript.value!.id
+      finalName = currentScript.value!.name
+    } else {
+      // New script — generate a unique name
+      let baseName = payload.name || 'ai_script'
+      const existingNames = new Set(scripts.value.filter(s => s.type === payload.scriptType).map(s => s.name))
+      finalName = baseName
+      let counter = 1
+      while (existingNames.has(finalName)) {
+        finalName = `${baseName}_${counter++}`
+      }
+      id = genId()
+    }
+
+    // 2. Load into editor
+    editingName.value = finalName
+    editingContent.value = payload.code
+    localFilePath.value = null
+    currentScript.value = {
+      id,
+      name: finalName,
+      type: payload.scriptType,
+      content: payload.code,
+      createdAt: currentScript.value?.createdAt || '',
+      updatedAt: '',
+    }
+
+    // 3. Save to DB (upsert by id)
+    await db.saveScript({ id, name: finalName, type: payload.scriptType, content: payload.code })
+    await loadScriptList()
+
+    const action = isUpdate ? '✓ Updated' : `✓ ${finalName}.${payload.scriptType === 'py' ? 'py' : 'bat'}`
+    showToast(action, true)
+
+    await nextTick()
+    editorRef.value?.focus()
+  } catch (e: any) {
+    showToast(t('scripts.saveFail') + ': ' + (e?.message || e), false)
+  }
+}
+
+// Expose state for AppLayout's global AI panel
+defineExpose({ globalType, editingContent, siblingScriptNames, applyAiScript })
 </script>
 
 <style scoped>

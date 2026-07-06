@@ -2836,3 +2836,174 @@ editor.state.doc.descendants((node, pos) => {
 - **LLM prompt 位置权重**：模型对 prompt 末尾指令遵循度最高——重要规则放末尾，背景信息放开头
 - **CSS specificity 陷阱**：`<style scoped>` 里 `:deep()` 选择器有相当高的 specificity，动态添加的普通类可能显示不出效果；这时 inline style 也未必救得回来（多层图层混合），overlay 才是终极方案
 
+
+---
+
+## Phase 36 — AI 助手全局化 + 脚本页面 AI 写脚本（已完成 ✅）
+
+> 将 `NoteAiPanel` 从笔记页提升为应用级全局组件；触发按钮只在笔记页和脚本页显示；进入不同页面自动切换 AI 模式（无感知）；脚本页 AI 助手支持自动选择 BAT/Python、新建并保存脚本。
+
+### 36.1 架构改动
+
+| 变更 | 说明 |
+|------|------|
+| `NoteAiPanel` 移入 `AppLayout.vue` | 从 `NotesSpacePage` 移除，改由 `AppLayout` 全局宿主管理，生命周期与应用同步，切页不销毁 |
+| 触发按钮可见性 | `showTrigger` computed：只在 `mode === 'notes'` 或 `mode === 'script'` 时显示，其他页面（设备、API、用例、设置）不显示 |
+| 模式自动切换 | `AppLayout` 根据 `route.path` 计算 `aiMode`（`'notes'` / `'script'`），切页时自动更新，用户无感知；面板 watch `mode` 变化时自动关闭，避免在错误页面停留 |
+| `defineExpose` | `NotesSpacePage` expose `{ notes, openNoteById }`；`ScriptSpacePage` expose `{ globalType, editingContent, siblingScriptNames, applyAiScript }` |
+| `pageRef` 通信 | `AppLayout` 通过 `:ref="onPageRef"` 获取当前路由页面实例，读取 expose 的数据传给 `NoteAiPanel` |
+
+### 36.2 新增文件
+
+| 文件 | 说明 |
+|------|------|
+| `src/services/scriptAi.ts` | 脚本 AI 服务层：`callScriptAi()` 构建脚本写作 system prompt，解析 AI 返回的 JSON `{ scriptType, name, code, description }`，处理模型未返回标准 JSON 时的降级 |
+
+### 36.3 NoteAiPanel 多模式改造
+
+**新增 props**：
+```ts
+mode: 'notes' | 'script'
+scriptType?: 'bat' | 'py'
+currentScriptContent?: string   // 编辑器当前内容（用于修改现有脚本）
+scriptNames?: string[]           // 同类型其他脚本名称（供 AI import 感知）
+```
+
+**新增 emit**：`applyScript: [payload: ScriptAiResult]`
+
+**send() 分支**：
+- `mode === 'notes'`：走原有 `chatWithNotes()` RAG 链路，逻辑不变
+- `mode === 'script'`：调用 `callScriptAi()`，回复卡片带「新建并保存此脚本」按钮
+
+### 36.4 脚本 AI 流程
+
+1. 用户在脚本页打开 AI 面板，用自然语言描述需求
+2. `callScriptAi()` 将当前编辑器内容、当前类型、同库脚本名一并发给模型
+3. AI 返回 JSON：`scriptType`（自动决策 bat/py）、`name`（脚本名）、`code`（完整代码）、`description`（一句话说明）
+4. 面板展示代码预览 +「新建并保存此脚本」按钮
+5. 点击按钮触发 `emit('applyScript', payload)` → `AppLayout.onAiApplyScript()` → `ScriptSpacePage.applyAiScript()`
+6. `applyAiScript()` 执行：切换类型 → 去重生成名称 → 加载到编辑器 → 自动保存到 SQLite → Toast 反馈
+
+**已有脚本修改**：如果编辑器有内容，AI 会拿到 `currentScriptContent` 作为上下文，可以直接让 AI 修改/优化现有代码。
+
+**Python 模块互调**：`scriptNames` 包含同类型所有脚本名，AI system prompt 明确告知「可以用 `import <name>` 调用同库脚本，runner 会自动注入 sys.path」。
+
+### 36.5 修改文件汇总
+
+| 文件 | 修改类型 |
+|------|----------|
+| `src/components/notes/NoteAiPanel.vue` | 重构：多模式支持、triggerTitle/panelTitle、脚本模式 UI、showTrigger 控制 |
+| `src/services/scriptAi.ts` | 新增：脚本 AI 服务层 |
+| `src/layouts/AppLayout.vue` | 重构：全局 AI 面板宿主、pageRef 通信、路由感知模式切换 |
+| `src/views/note-space/NotesSpacePage.vue` | 移除本地 `<NoteAiPanel>`、新增 `defineExpose` |
+| `src/views/script-space/ScriptSpacePage.vue` | 新增 `applyAiScript()`、`siblingScriptNames`、`defineExpose` |
+| `src/composables/useI18n.ts` | 新增 `scripts.aiAssistant/aiPlaceholder/aiInputPlaceholder/aiModeHint/aiApplyScript` 双语文案 |
+
+---
+
+## Phase 37 — AI 助手稳定性修复 & 脚本 AI 全面优化（已完成 ✅）
+
+> Phase 36 发布后针对 AI 助手和脚本页面发现的所有问题的修复与优化，包含 API 兼容性、模式自动切换、脚本编辑行为、BAT 编码、提示词工程等多个维度。
+
+### 37.1 API 兼容性修复（`noteAi.ts` / `scriptAi.ts`）
+
+| 问题 | 根本原因 | 修复 |
+|------|----------|------|
+| `temperature does not support 0.2` | Azure 新版及 o-series 模型拒绝非默认 temperature 值 | 完全不发 `temperature` 字段，让部署使用默认值 |
+| `max_tokens is not supported` | 新版 Azure/OpenAI 模型已废弃 `max_tokens` | 全部改用 `max_completion_tokens` |
+| `finish_reason: length` / 空回复 | 之前硬编码 `max_completion_tokens: 2048` 且计算逻辑错误（误用 `maxContextTokens/4`），导致 prompt 占满窗口后输出空间为零 | 完全不发此字段，让模型使用部署默认值（通常 4096+）；`maxContextTokens` 字段只用于 RAG chunk 预算控制，与输出 token 上限无关 |
+| 笔记助手空气泡（无报错） | `chatWithNotes` 拿到空 answer 时静默返回，未抛出错误 | 添加空回复检测，抛出含 `finish_reason` 的可见错误 |
+| AI returned an empty response | Azure o-series 模型收到 `system` role 直接返回空内容 | 新增 `resolveSystemRole(config)`：按模型名称（`o1`/`o3`/`o4-mini` 等精确匹配）判断是否用 `developer` role；`gpt-5` 等不确定名称不再匹配，避免误判 |
+
+**`resolveSystemRole` 设计原则**：
+- 基于 model 名称而非 provider 字段，`custom` endpoint 也能正确识别
+- 只匹配明确的 o-series 名称（`/^o[1-9](-mini|-preview|-pro)?$|^o4-mini/`），宁可漏判也不误判
+- `resolveSystemRole` 作为 export 统一在 `noteAi.ts` 定义，`scriptAi.ts` 导入复用，消除重复实现
+
+### 37.2 AI 触发按钮可见性修复（`NoteAiPanel.vue` / `AppLayout.vue`）
+
+**问题**：触发按钮在设备页、API 页、用例页、设置页等非 AI 页面也显示。
+
+**根本原因**：`showTrigger` computed 依赖 `mode` prop，而 `mode` 在非笔记/脚本页 fallback 为 `'notes'`，条件始终满足。
+
+**修复**：
+- `NoteAiPanel` 新增 `visible: boolean` prop
+- `showTrigger` 改为直接返回 `props.visible`
+- `AppLayout` 计算 `aiPanelVisible`：只有 `/notes-space` 和 `/script-space` 路由返回 `true`
+
+### 37.3 脚本切换后控制台残留输出（`ScriptSpacePage.vue`）
+
+**问题**：运行脚本 A 后切换到脚本 B，控制台仍显示 A 的输出。
+
+**根本原因**：`activeTabId` 是 `useScriptRunner` 模块级全局 ref，切换脚本时只更新编辑器内容，未重置 `activeTabId`。
+
+**修复**：`loadScript()`、`newScript()`、`openLocalFile()` 三处均加入 `activeTabId.value = ""`，切换后控制台显示空的等待提示。
+
+### 37.4 AI 助手重复创建文件问题（`ScriptSpacePage.vue`）
+
+**问题**：用 AI 助手生成脚本后补充信息继续修改，每次都创建新文件而非更新原文件。
+
+**根本原因**：`applyAiScript` 始终调用 `genId()` 生成新 ID。
+
+**修复**：
+- 判断 `currentScript.value` 是否存在
+- **有脚本（更新模式）**：复用原 `id` 和 `name`，`db.saveScript` 做 upsert 覆盖
+- **无脚本（新建模式）**：生成新 `id`，去重命名
+
+### 37.5 脚本 AI 模式锁定（`scriptAi.ts`）
+
+**问题**：AI 助手有时将 BAT 请求改写成 PowerShell 或其他格式。
+
+**根本原因**：system prompt 第1条规则「由 AI 自行决定脚本类型」+ 示例中硬编码 `SCRIPT_TYPE: bat`，模型可能会自主切换类型。
+
+**修复**：
+- 删除「AI 自行决定类型」的规则
+- System prompt 改为强制声明：`You MUST generate a ${scriptTypeName} script. Do NOT use PowerShell, Python, or any other language.`
+- `SCRIPT_TYPE:` 和 `\`\`\`` 中的语言标记均用变量注入，消除歧义
+
+### 37.6 脚本 AI 自动应用（`NoteAiPanel.vue`）
+
+**修改**：AI 生成脚本后不再显示「新建并保存此脚本」手动按钮，改为 `sendScript()` 拿到结果后立即 `emit('applyScript', result)` 自动保存。消息气泡只显示 AI 的一句话描述 + 绿色「已自动新建并保存：{name}」状态提示。
+
+### 37.7 BAT 脚本中文编码问题（`scriptAi.ts`）
+
+**问题**：AI 生成的 BAT 脚本在控制台运行时，`echo`/`rem`/`::` 行中的中文全角标点和 `->` 箭头变成乱码 `◆◆` 并被当作命令执行。
+
+**根本原因**：脚本以 UTF-8 保存，Windows cmd.exe 默认 GBK（CP936）执行，中文 UTF-8 多字节序列被错误解析为命令分隔符。
+
+**修复（双保险）**：
+
+1. **System prompt 规则**：要求 BAT 脚本开头固定写 `@echo off` + `chcp 65001 >nul`；禁止在 echo/rem/注释行使用全角标点和 `->` / `=>` 箭头
+
+2. **`sanitizeBatEchoLines()` 后处理函数**：
+   - 对 `echo`、`rem`、`::` 开头的行自动替换 14 种全角标点为 ASCII 等价字符
+   - 替换 `->` / `=>` 为 ` to `
+   - 如果代码里没有 `chcp 65001`，自动在 `@echo off` 后插入一行
+   - 所有 4 条解析策略（结构化头部、JSON 降级、裸 fence、原始代码）均调用此函数
+
+### 37.8 脚本 AI 不添加环境检测（`scriptAi.ts`）
+
+System prompt 新增规则：**除非用户明确要求，不在脚本里添加 adb/python 等工具的环境检测代码**，默认假设环境已就绪。
+
+### 37.9 代码健康度总结（本次审查）
+
+**无问题项**：
+- `vue-tsc --noEmit` 零错误零警告
+- 所有 AI 调用路径（chatWithNotes / extractMemories / testAiConnection / callScriptAi）统一使用 `resolveSystemRole(config)`，无遗漏的硬编码 `'system'`
+- `scriptAi.ts` 中 `callApi` 的无用 `systemRole` 变量已清理
+- `NoteAiPanel` 的 `scriptPayload` 不写入持久化历史（strip 后再 `setSetting`），避免 SQLite 膨胀
+
+**已知限制**（不影响使用，后续可优化）：
+- `AppLayout` 通过 `:ref="onPageRef"` 读取子页面 expose 数据，`ScriptSpacePage` 没有 keep-alive 缓存，首次进入前 `pageRef.value` 为 null，这一帧内 `scriptType`/`editingContent` 返回默认值；由于 AI 面板只有用户主动打开后才发送请求，此时页面必然已挂载，实际不会出现问题
+- `maxContextTokens` 字段名有歧义（用户可能误以为它控制模型输出 token 数），建议后续在 Settings 页面加 tooltip 说明：「此值控制笔记内容检索时塞入 prompt 的最大 token 预算，建议设为模型上下文窗口的 60%～75%」
+
+### 37.10 修改文件汇总
+
+| 文件 | 修改内容 |
+|------|----------|
+| `src/services/noteAi.ts` | 新增 `resolveSystemRole()` export；`AiChatMessage.role` 加 `'developer'`；`buildRequestBody` 不发 `temperature`/`max_completion_tokens`；三处 AI 调用改用 `resolveSystemRole`；`chatWithNotes` 空回复抛错 |
+| `src/services/scriptAi.ts` | 新增文件（Phase 36）；本 Phase 重构 system prompt（类型锁定）；新增 `sanitizeBatEchoLines()` BAT 编码后处理；响应解析改为结构化文本格式（4 级降级策略）；`resolveSystemRole` 改为从 `noteAi.ts` 导入；清理无用 `systemRole` 变量 |
+| `src/components/notes/NoteAiPanel.vue` | 新增 `visible` prop 控制触发按钮显示；`sendScript()` 改为自动应用；消息气泡改为状态提示 |
+| `src/layouts/AppLayout.vue` | 新增 `aiPanelVisible` computed；传 `:visible` 给 `NoteAiPanel` |
+| `src/views/script-space/ScriptSpacePage.vue` | `loadScript`/`newScript`/`openLocalFile` 加 `activeTabId.value = ""`；`applyAiScript` 改为 upsert 更新模式 |
+| `src/composables/useI18n.ts` | 新增 `scripts.aiAutoSaved` 双语文案 |
