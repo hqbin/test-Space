@@ -995,9 +995,10 @@ async function loadData() {
   try {
     dataLoading.value = true
     spaces.value = await db.loadNoteSpaces()
+    await yieldToMain()
     folders.value = await db.loadNoteFolders()
+    await yieldToMain()
     notes.value = await db.loadNoteList()
-    dataLoading.value = false
     rebuildTitleMap()
     aiConfig.value = await loadAiConfig()
     if (spaces.value.length > 0 && !selectedSpaceId.value) {
@@ -1007,8 +1008,9 @@ async function loadData() {
     _cachedFolders = folders.value
     _cachedNotes = notes.value
   } catch (e) {
-    dataLoading.value = false
     console.error('Failed to load notes:', e)
+  } finally {
+    dataLoading.value = false
   }
 }
 
@@ -1681,11 +1683,7 @@ async function confirmDeleteNote(note: NoteItem) {
 async function doDeleteNote() {
   if (!deleteNoteTarget.value) return
   const id = deleteNoteTarget.value.id
-  try {
-    await db.deleteNote(id)
-  } catch (e) {
-    console.error('Failed to delete note:', e)
-  }
+  // 乐观 UI：立即更新界面，不等待数据库完成
   notes.value = notes.value.filter(n => n.id !== id)
   _contentCache.delete(id)
   _contentJsonCache.delete(id)
@@ -1696,6 +1694,10 @@ async function doDeleteNote() {
     if (editor.value) editor.value.commands.setContent("")
   }
   deleteNoteTarget.value = null
+  // 异步执行数据库删除，不阻塞 UI
+  db.deleteNote(id).catch(e => {
+    console.error('Failed to delete note:', e)
+  })
 }
 
 // ── Favorite ──────────────────────────────────────────────────
@@ -2396,6 +2398,7 @@ onDeactivated(() => {
   if (saveTimer) clearTimeout(saveTimer)
   if (versionTimer) clearTimeout(versionTimer)
   if (searchDebounce) clearTimeout(searchDebounce)
+  if (toastTimer) clearTimeout(toastTimer)
 })
 
 // Expose state for AppLayout's global AI panel

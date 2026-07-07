@@ -891,7 +891,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
+defineOptions({ name: 'DeviceSpacePage' })
+import { ref, computed, watch, onMounted, onUnmounted, onActivated, onDeactivated, nextTick } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useAdb, type DeviceProperties } from "@/composables/useAdb";
@@ -2983,6 +2984,20 @@ onUnmounted(() => {
     import("@tauri-apps/plugin-fs").then(m => m.remove(p)).catch(() => {});
   }
   // Note: log sessions are saved to DB; user can see "running" sessions on next visit
+});
+
+// keep-alive: 切换回设备页时恢复5s轮询
+onActivated(() => {
+  if (!autoRefreshId) {
+    autoRefreshId = setInterval(() => {
+      if (!pkgLoading.value && !scanLoading.value && !connecting.value && !recordingLoading.value) scanDevices(true);
+    }, 5000);
+  }
+});
+
+// keep-alive: 离开设备页时停止5s轮询（日志采集定时器保持运行，它们是用户主动操作）
+onDeactivated(() => {
+  if (autoRefreshId) { clearInterval(autoRefreshId); autoRefreshId = null; }
 });
 </script>
 

@@ -567,7 +567,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick, shallowRef } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, onActivated, onDeactivated, nextTick, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCaseFileStore } from '@/stores/caseFileStore'
 import { useI18n } from '@/composables/useI18n'
@@ -2122,6 +2122,16 @@ onMounted(() => {
       updateVirtualRows()
     })
   })
+})
+
+// keep-alive: 切换回用例编辑器时重新注册快捷键
+onActivated(() => {
+  document.addEventListener('keydown', onKeydown)
+})
+
+// keep-alive: 离开用例编辑器时取消注册快捷键，防止在其他页面触发 Ctrl+S
+onDeactivated(() => {
+  document.removeEventListener('keydown', onKeydown)
 })
 
 onUnmounted(() => {

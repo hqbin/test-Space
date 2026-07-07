@@ -6,7 +6,7 @@
     <TitleBar />
     <main class="px-margin-page pt-3 box-border flex-1 overflow-y-auto overflow-x-hidden min-h-0 flex flex-col">
       <router-view v-slot="{ Component }">
-        <keep-alive :include="['NotesSpacePage']">
+        <keep-alive :include="['NotesSpacePage', 'ScriptSpacePage', 'DeviceSpacePage', 'ApiSpacePage', 'SettingsPage', 'CaseSpacePage']">
           <component :is="Component" :ref="onPageRef" />
         </keep-alive>
       </router-view>
@@ -104,14 +104,18 @@ const aiPanelVisible = computed(() =>
   route.path.startsWith('/notes-space') || route.path.startsWith('/script-space')
 )
 
-// Watch route changes to reload AI config and page-specific data
+// Watch route changes to reload AI config when returning from settings
 watch(
   () => route.path,
   async (path) => {
     await ensureAiConfig()
-    // When switching to notes or script page, re-read AI config in case user changed it in Settings
+    // Re-read AI config only when navigating TO notes/script from settings
+    // (ensureAiConfig has a one-time flag, so only Settings changes need an explicit reload)
     if (path.startsWith('/notes-space') || path.startsWith('/script-space')) {
-      try { aiConfig.value = await loadAiConfig() } catch {}
+      // Only reload if config was already loaded once (i.e. user may have changed it in Settings)
+      if (aiConfigLoaded) {
+        try { aiConfig.value = await loadAiConfig() } catch {}
+      }
     }
   },
   { immediate: true }

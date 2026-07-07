@@ -148,6 +148,14 @@ async function migrateInternal(d: Database) {
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )`)
+  // Add sort_order column if not exists (safe migration for existing installs)
+  try {
+    await d.execute(`ALTER TABLE scripts ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`)
+    // Back-fill existing rows with a stable default order based on updated_at
+    await d.execute(`UPDATE scripts SET sort_order = rowid`)
+  } catch {
+    // Column already exists — ignore
+  }
   // FTS5 full-text search for notes
   try {
     await d.execute(`CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
@@ -584,6 +592,17 @@ function htmlToPlainText(html: string): string {
 }
 
 async function repairEmptyPlainText(d: Database) {
+  // Check persistent flag first — if repair was done in a previous session, skip entirely.
+  try {
+    const rows = await d.select<{ value: string }[]>(
+      `SELECT value FROM app_settings WHERE key = 'plain_text_repaired'`
+    )
+    if (rows.length > 0 && rows[0].value === '1') {
+      _plainTextRepaired = true
+      return
+    }
+  } catch {}
+
   try {
     const rows = await d.select<{ id: string; content: string }[]>(
       `SELECT id, content FROM notes WHERE content IS NOT NULL AND content != '' AND (plain_text IS NULL OR plain_text = '')`
@@ -603,6 +622,11 @@ async function repairEmptyPlainText(d: Database) {
     }
     if (rows.length > 0) console.log(`[DB] Repaired plain_text for ${rows.length} notes`)
     _plainTextRepaired = true
+    // Persist the flag so future startups skip this scan entirely
+    await d.execute(
+      `INSERT INTO app_settings (key, value) VALUES ('plain_text_repaired', '1')
+       ON CONFLICT(key) DO UPDATE SET value = '1'`
+    )
   } catch {}
 }
 
@@ -814,22 +838,31 @@ export interface ScriptItem {
   content: string
   createdAt: string
   updatedAt: string
+  sortOrder?: number
 }
 
-export async function saveScript(script: { id: string; name: string; type: string; content: string }) {
+export async function saveScript(script: { id: string; name: string; type: string; content: string; sortOrder?: number }) {
   const d = await getDb()
   const now = new Date().toISOString()
-  await d.execute(
-    `INSERT INTO scripts (id, name, type, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET name = excluded.name, type = excluded.type, content = excluded.content, updated_at = excluded.updated_at`,
-    [script.id, script.name, script.type, script.content, now, now]
-  )
+  if (script.sortOrder !== undefined) {
+    await d.execute(
+      `INSERT INTO scripts (id, name, type, content, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET name = excluded.name, type = excluded.type, content = excluded.content, sort_order = excluded.sort_order, updated_at = excluded.updated_at`,
+      [script.id, script.name, script.type, script.content, script.sortOrder, now, now]
+    )
+  } else {
+    await d.execute(
+      `INSERT INTO scripts (id, name, type, content, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM scripts WHERE type = ?), ?, ?)
+       ON CONFLICT(id) DO UPDATE SET name = excluded.name, type = excluded.type, content = excluded.content, updated_at = excluded.updated_at`,
+      [script.id, script.name, script.type, script.content, script.type, now, now]
+    )
+  }
 }
 
 export async function loadScript(id: string): Promise<ScriptItem | null> {
   const d = await getDb()
   const rows = await d.select<any[]>(
-    `SELECT id, name, type, content, created_at as createdAt, updated_at as updatedAt FROM scripts WHERE id = ?`,
+    `SELECT id, name, type, content, sort_order as sortOrder, created_at as createdAt, updated_at as updatedAt FROM scripts WHERE id = ?`,
     [id]
   )
   return rows.length > 0 ? rows[0] : null
@@ -838,8 +871,19 @@ export async function loadScript(id: string): Promise<ScriptItem | null> {
 export async function listScripts(): Promise<ScriptItem[]> {
   const d = await getDb()
   return await d.select<any[]>(
-    `SELECT id, name, type, content, created_at as createdAt, updated_at as updatedAt FROM scripts ORDER BY updated_at DESC`
+    `SELECT id, name, type, content, sort_order as sortOrder, created_at as createdAt, updated_at as updatedAt FROM scripts ORDER BY sort_order ASC, updated_at DESC`
   )
+}
+
+/**
+ * Persist a new sort order for a list of script IDs.
+ * Each entry is [id, newSortOrder].
+ */
+export async function updateScriptSortOrders(items: { id: string; sortOrder: number }[]) {
+  const d = await getDb()
+  for (const item of items) {
+    await d.execute(`UPDATE scripts SET sort_order = ? WHERE id = ?`, [item.sortOrder, item.id])
+  }
 }
 
 export async function deleteScript(id: string) {
@@ -1107,8 +1151,8 @@ export async function importAllDataIncremental(backup: AppBackup): Promise<{
 
     try {
       await d.execute(
-        'INSERT INTO notes (id, folder_id, title, content, content_json, tags, is_favorite, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [n.id, localFolderId, n.title ?? '', n.content ?? '', n.contentJson ?? null, JSON.stringify(n.tags ?? []), n.isFavorite ? 1 : 0, n.createdAt, n.updatedAt]
+        'INSERT INTO notes (id, folder_id, title, content, content_json, plain_text, tags, is_favorite, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [n.id, localFolderId, n.title ?? '', n.content ?? '', n.contentJson ?? null, n.plainText ?? n.plain_text ?? '', JSON.stringify(n.tags ?? []), n.isFavorite ? 1 : 0, n.createdAt, n.updatedAt]
       )
       noteIdMap[n.id] = n.id
       freshlyInsertedNoteIds.add(n.id)
@@ -1191,8 +1235,8 @@ export async function importAllDataIncremental(backup: AppBackup): Promise<{
     if (localScriptKeys.has(key)) { skipped++; continue }
     try {
       await d.execute(
-        'INSERT INTO scripts (id, name, type, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-        [s.id, s.name, s.type ?? 'bat', s.content ?? '', s.createdAt ?? s.created_at, s.updatedAt ?? s.updated_at ?? s.createdAt]
+        'INSERT INTO scripts (id, name, type, content, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [s.id, s.name, s.type ?? 'bat', s.content ?? '', s.sortOrder ?? s.sort_order ?? 0, s.createdAt ?? s.created_at, s.updatedAt ?? s.updated_at ?? s.createdAt]
       )
       imported++
     } catch (e: any) { failures.push(`script "${s.name}": ${e.message || e}`) }
@@ -1217,6 +1261,13 @@ export async function importAllDataIncremental(backup: AppBackup): Promise<{
 
   // NOTE: app_settings, input_history, log_sessions, recent_files, favorites, proxy_rules
   // are intentionally NOT touched. Cloud restore preserves local preferences/state.
+
+  // Reset plain_text repair flag so the next loadNoteList() call will re-scan any
+  // newly imported notes whose plain_text may have been empty in the backup.
+  _plainTextRepaired = false
+  try {
+    await d.execute(`DELETE FROM app_settings WHERE key = 'plain_text_repaired'`)
+  } catch {}
 
   if (failures.length > 0) console.warn('[importAllDataIncremental] failures:', failures)
   return { imported, skipped, failures }
@@ -1255,10 +1306,10 @@ export async function importAllData(backup: AppBackup) {
     ['log_sessions', 'id, type, device_serial, status, started_at, metadata', backup.logSessions || [], s => [s.id, s.type, s.deviceSerial, s.status, s.startedAt, s.metadata]],
     ['note_spaces', 'id, name, sort_order, created_at, updated_at', backup.noteSpaces || [], (s: any) => [s.id, s.name, s.sortOrder ?? s.sort_order ?? 0, s.createdAt ?? s.created_at, s.updatedAt ?? s.updated_at]],
     ['note_folders', 'id, space_id, name, parent_id, sort_order, created_at, updated_at', backup.noteFolders || [], (f: any) => [f.id, f.spaceId ?? f.space_id ?? null, f.name, f.parentId ?? f.parent_id ?? null, f.sortOrder ?? f.sort_order ?? 0, f.createdAt ?? f.created_at, f.updatedAt ?? f.updated_at]],
-    ['notes', 'id, folder_id, title, content, content_json, tags, is_favorite, created_at, updated_at', backup.notes || [], (n: any) => [n.id, n.folderId ?? n.folder_id ?? null, n.title ?? '', n.content ?? '', n.contentJson ?? n.content_json ?? null, JSON.stringify(n.tags ?? []), n.isFavorite ? 1 : 0, n.createdAt ?? n.created_at, n.updatedAt ?? n.updated_at]],
+    ['notes', 'id, folder_id, title, content, content_json, plain_text, tags, is_favorite, created_at, updated_at', backup.notes || [], (n: any) => [n.id, n.folderId ?? n.folder_id ?? null, n.title ?? '', n.content ?? '', n.contentJson ?? n.content_json ?? null, n.plainText ?? n.plain_text ?? '', JSON.stringify(n.tags ?? []), n.isFavorite ? 1 : 0, n.createdAt ?? n.created_at, n.updatedAt ?? n.updated_at]],
     ['note_versions', 'id, note_id, content, saved_at', backup.noteVersions || [], (v: any) => [v.id, v.noteId ?? v.note_id, v.content, v.savedAt ?? v.saved_at]],
     ['note_links', 'id, source_note_id, target_note_id, created_at', backup.noteLinks || [], (l: any) => [l.id, l.sourceNoteId ?? l.source_note_id, l.targetNoteId ?? l.target_note_id, l.createdAt ?? l.created_at]],
-    ['scripts', 'id, name, type, content, created_at, updated_at', backup.scripts || [], (s: any) => [s.id, s.name, s.type ?? 'bat', s.content ?? '', s.createdAt ?? s.created_at, s.updatedAt ?? s.updated_at ?? s.createdAt]],
+    ['scripts', 'id, name, type, content, sort_order, created_at, updated_at', backup.scripts || [], (s: any) => [s.id, s.name, s.type ?? 'bat', s.content ?? '', s.sortOrder ?? s.sort_order ?? 0, s.createdAt ?? s.created_at, s.updatedAt ?? s.updated_at ?? s.createdAt]],
     ['note_ai_memories', 'id, content, created_at, updated_at', backup.aiMemories || [], (m: any) => [m.id, m.content, m.createdAt ?? m.created_at, m.updatedAt ?? m.updated_at ?? m.createdAt]],
   ]
   for (const [table, cols, items, toParams] of inserts) {
@@ -1294,4 +1345,10 @@ export async function importAllData(backup: AppBackup) {
     console.warn('[importAllData] failures:', failures)
     throw new Error(`导入部分失败 (${failures.length}项): ${failures[0]}`)
   }
+  // Reset plain_text repair flag so the next loadNoteList() re-scans any
+  // notes whose plain_text was empty in the backup file.
+  _plainTextRepaired = false
+  try {
+    await d.execute(`DELETE FROM app_settings WHERE key = 'plain_text_repaired'`)
+  } catch {}
 }

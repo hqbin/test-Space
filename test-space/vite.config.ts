@@ -19,8 +19,11 @@ export default defineConfig(async () => ({
     hmr: host
       ? { protocol: "ws", host, port: 1421 }
       : undefined,
+    // SPA fallback: serve index.html for all unknown routes so Ctrl+R works on any page
+    historyApiFallback: true,
     proxy: {
-      "/api": {
+      // Only proxy exact /api/* paths (not /api-space or other /api-prefixed routes)
+      "^/api/": {
         target: "http://localhost:8000",
         changeOrigin: true,
       },

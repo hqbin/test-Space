@@ -54,7 +54,7 @@
         </div>
         <div class="px-3 py-1.5 border-b border-white/10 flex items-center gap-2">
           <button class="flex items-center gap-0.5 text-[11px] text-on-surface-variant/50 hover:text-on-surface transition-colors select-none" @click="toggleSort">
-            <span class="material-symbols-outlined text-[13px]">{{ sortAsc ? 'arrow_upward' : 'arrow_downward' }}</span>
+            <span class="material-symbols-outlined text-[13px]">{{ sortMode === 'manual' ? 'drag_indicator' : (sortAsc ? 'arrow_upward' : 'arrow_downward') }}</span>
             {{ sortLabel }}
           </button>
         </div>
@@ -63,10 +63,17 @@
             {{ t("scripts.noScripts") }}
           </div>
           <div v-for="s in pagedScripts" :key="s.id"
+            :data-script-id="s.id"
             class="flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors text-[13px] border-b border-white/[2%]"
-            :class="currentScript?.id === s.id ? 'bg-white/15 text-on-surface font-medium' : 'text-on-surface-variant hover:bg-white/5 hover:text-on-surface'"
-            @click="loadScript(s.id)">
-            <span class="material-symbols-outlined text-[16px] text-on-surface-variant/50 flex-shrink-0">code</span>
+            :class="[
+              currentScript?.id === s.id ? 'bg-white/15 text-on-surface font-medium' : 'text-on-surface-variant hover:bg-white/5 hover:text-on-surface',
+              dragOverId === s.id ? 'border-t-2 border-t-purple-400/60' : '',
+              dragSrcId === s.id ? 'opacity-40' : '',
+            ]"
+            @click="!isDragging && loadScript(s.id)"
+            @mousedown="onItemMousedown(s, $event)">
+            <span v-if="sortMode === 'manual'" class="material-symbols-outlined text-[16px] text-on-surface-variant/30 flex-shrink-0 select-none" style="cursor:grab">drag_indicator</span>
+            <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant/50 flex-shrink-0">code</span>
             <span class="truncate flex-1">{{ s.name }}</span>
             <button class="p-0.5 rounded hover:bg-red-500/20 text-on-surface-variant/20 hover:text-red-400 transition-colors flex-shrink-0 select-none" @click.stop="confirmDelete(s)">
               <span class="material-symbols-outlined text-[14px]">close</span>
@@ -91,6 +98,10 @@
           <!-- Script header bar -->
           <div v-if="currentScript" class="flex items-center gap-3 px-4 py-2 flex-shrink-0 flex-wrap">
             <input v-model="editingName" class="bg-transparent border-b border-transparent focus:border-secondary/40 focus:outline-none text-[20px] font-bold text-on-surface px-1 -ml-1 min-w-0 max-w-[60%] truncate select-text" :placeholder="t('scripts.namePlaceholder')" />
+            <span class="text-[11px] font-caption flex items-center gap-1 flex-shrink-0" :class="scriptSaved ? 'text-green-400/70' : 'text-on-surface-variant/40'">
+              <span class="w-1.5 h-1.5 rounded-full flex-shrink-0" :class="scriptSaved ? 'bg-green-400/70' : 'bg-on-surface-variant/40 animate-pulse'" />
+              {{ scriptSaved ? t('scripts.saved') : t('scripts.saving') }}
+            </span>
             <div class="flex-1"></div>
             <div class="flex items-center gap-1 flex-wrap justify-end min-w-0">
               <div v-for="(snp, idx) in snippets" :key="snp.label" class="relative"
@@ -224,7 +235,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted, onUnmounted, watch } from "vue";
+defineOptions({ name: 'ScriptSpacePage' })
+import { ref, computed, nextTick, onMounted, onUnmounted, onActivated, onDeactivated, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import * as db from "@/services/database";
 import { useScriptRunner } from "@/composables/useScriptRunner";
@@ -249,6 +261,42 @@ const editorRef = ref<HTMLTextAreaElement | null>(null);
 const highlightRef = ref<HTMLElement | null>(null);
 const lineNumbersRef = ref<HTMLElement | null>(null);
 const outputContainer = ref<HTMLElement | null>(null);
+
+// ── Autosave ──────────────────────────────────────────────────
+const scriptSaved = ref(true);
+let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleAutoSave() {
+  if (!currentScript.value) return;
+  scriptSaved.value = false;
+  if (autoSaveTimer) clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(async () => {
+    await doAutoSave();
+  }, 1500);
+}
+
+async function doAutoSave() {
+  if (!currentScript.value) return;
+  const name = editingName.value.trim();
+  if (!name) return; // 名称为空时不自动保存
+  try {
+    const id = currentScript.value.id;
+    await db.saveScript({ id, name, type: editingType.value, content: editingContent.value });
+    currentScript.value = { id, name, type: editingType.value, content: editingContent.value, createdAt: currentScript.value.createdAt || "", updatedAt: "" };
+    // 原地更新列表中对应项，避免每次自动保存都重查全表
+    const idx = scripts.value.findIndex(s => s.id === id);
+    if (idx >= 0) {
+      scripts.value[idx] = { ...scripts.value[idx], name, content: editingContent.value };
+    } else {
+      // 新脚本第一次保存，才需要刷新列表
+      await loadScriptList();
+    }
+    scriptSaved.value = true;
+  } catch (e: any) {
+    console.error('[ScriptSpace] autosave failed:', e);
+    // 保留 scriptSaved = false，让状态停在"保存中..."提示用户有问题
+  }
+}
 
 // ── Dynamic pagination ────────────────────────────────
 const listContainerRef = ref<HTMLElement | null>(null);
@@ -315,14 +363,20 @@ function resetEditor() {
   editingName.value = "";
   editingContent.value = "";
   localFilePath.value = null;
+  scriptSaved.value = true;
+  if (autoSaveTimer) { clearTimeout(autoSaveTimer); autoSaveTimer = null; }
 }
 
 // ── Search / Sort / Pagination ─────────────────────────
 const searchQuery = ref("");
-const sortMode = ref<"name" | "created">("name");
+const sortMode = ref<"name" | "created" | "manual">("name");
 const sortAsc = ref(true);
 
-const sortLabel = computed(() => sortMode.value === "name" ? t("scripts.sortName") : t("scripts.sortTime"));
+const sortLabel = computed(() => {
+  if (sortMode.value === "name") return t("scripts.sortName");
+  if (sortMode.value === "created") return t("scripts.sortTime");
+  return t("scripts.sortManual");
+});
 
 const filteredScripts = computed(() => {
   let list = scripts.value.filter(s => s.type === globalType.value);
@@ -330,6 +384,11 @@ const filteredScripts = computed(() => {
     const q = searchQuery.value.trim().toLowerCase();
     list = list.filter(s => s.name.toLowerCase().includes(q));
   }
+  if (sortMode.value === "manual") {
+    // Manual mode: preserve DB order (sort_order ASC), no client-side sort
+    return list;
+  }
+  list = [...list];
   list.sort((a, b) => {
     const cmp = sortMode.value === "name"
       ? a.name.localeCompare(b.name)
@@ -343,10 +402,13 @@ watch(totalPages, (n) => {
 });
 
 function toggleSort() {
-  if (sortMode.value === "name") {
-    sortMode.value = "created";
-  } else if (sortAsc.value) {
+  if (sortMode.value === "name" && sortAsc.value) {
     sortAsc.value = false;
+  } else if (sortMode.value === "name" && !sortAsc.value) {
+    sortMode.value = "created";
+    sortAsc.value = true;
+  } else if (sortMode.value === "created") {
+    sortMode.value = "manual";
   } else {
     sortMode.value = "name";
     sortAsc.value = true;
@@ -358,6 +420,87 @@ const deleteTarget = ref<db.ScriptItem | null>(null);
 
 function confirmDelete(s: db.ScriptItem) {
   deleteTarget.value = s;
+}
+
+// ── Mouse-based drag sort (compatible with Tauri dragDropEnabled:false) ──────
+// HTML5 draggable API is blocked by Tauri. We simulate drag via mouse events.
+
+const dragSrcId = ref<string | null>(null);
+const dragOverId = ref<string | null>(null);
+
+// Track mouse state for drag simulation
+let _mouseDownScript: db.ScriptItem | null = null;
+const isDragging = ref(false);
+let _startX = 0;
+let _startY = 0;
+
+function onItemMousedown(s: db.ScriptItem, e: MouseEvent) {
+  if (sortMode.value !== 'manual') return;
+  if ((e.target as HTMLElement).closest('button')) return; // ignore delete button
+  _mouseDownScript = s;
+  _startX = e.clientX;
+  _startY = e.clientY;
+  isDragging.value = false;
+  window.addEventListener('mousemove', onWindowMousemove);
+  window.addEventListener('mouseup', onWindowMouseup);
+}
+
+function onWindowMousemove(e: MouseEvent) {
+  if (!_mouseDownScript) return;
+  const dx = e.clientX - _startX;
+  const dy = e.clientY - _startY;
+  if (!isDragging.value && Math.sqrt(dx * dx + dy * dy) > 4) {
+    isDragging.value = true;
+    dragSrcId.value = _mouseDownScript.id;
+  }
+  if (!isDragging.value) return;
+  // Find which item the cursor is over
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  const row = el?.closest('[data-script-id]') as HTMLElement | null;
+  const overId = row?.dataset?.scriptId ?? null;
+  dragOverId.value = (overId && overId !== dragSrcId.value) ? overId : null;
+}
+
+async function onWindowMouseup(_e: MouseEvent) {
+  window.removeEventListener('mousemove', onWindowMousemove);
+  window.removeEventListener('mouseup', onWindowMouseup);
+  const srcId = dragSrcId.value;
+  const dstId = dragOverId.value;
+  dragSrcId.value = null;
+  dragOverId.value = null;
+  isDragging.value = false;
+  _mouseDownScript = null;
+  if (!srcId || !dstId || srcId === dstId) return;
+  await reorderScripts(srcId, dstId);
+}
+
+async function reorderScripts(srcId: string, dstId: string) {
+  const typeList = scripts.value.filter(s => s.type === globalType.value);
+  const srcIdx = typeList.findIndex(s => s.id === srcId);
+  const dstIdx = typeList.findIndex(s => s.id === dstId);
+  if (srcIdx < 0 || dstIdx < 0) return;
+
+  const reordered = [...typeList];
+  const [moved] = reordered.splice(srcIdx, 1);
+  reordered.splice(dstIdx, 0, moved);
+
+  // Assign dense sort_order values
+  const updates = reordered.map((s, i) => ({ id: s.id, sortOrder: i + 1 }));
+
+  // Optimistic UI update
+  const otherTypeScripts = scripts.value.filter(s => s.type !== globalType.value);
+  scripts.value = [
+    ...otherTypeScripts,
+    ...reordered.map((s, i) => ({ ...s, sortOrder: i + 1 })),
+  ];
+
+  // Persist to DB
+  try {
+    await db.updateScriptSortOrders(updates);
+  } catch (err: any) {
+    console.error('[ScriptSpace] sort order persist failed:', err);
+    await loadScriptList();
+  }
 }
 
 async function doDelete() {
@@ -648,6 +791,7 @@ async function newScript() {
   };
   editingContent.value = templates[globalType.value] || "";
   currentScript.value = { id, name: "untitled", type: globalType.value, content: editingContent.value, createdAt: "", updatedAt: "" };
+  scriptSaved.value = true;
   activeTabId.value = "";
   nextTick(() => editorRef.value?.focus());
 }
@@ -682,6 +826,7 @@ async function openLocalFile() {
     const lastSlash = normalized.lastIndexOf('/');
     workingDir.value = lastSlash >= 0 ? path.substring(0, lastSlash) : "";
     currentScript.value = { id: genId(), name: editingName.value, type: editingType.value, content, createdAt: "", updatedAt: "" };
+    scriptSaved.value = true;
     activeTabId.value = "";
     nextTick(() => editorRef.value?.focus());
   } catch (e: any) {
@@ -691,11 +836,13 @@ async function openLocalFile() {
 
 async function saveCurrentScript() {
   if (!editingName.value.trim()) { showToast(t("scripts.nameEmpty"), false); return; }
+  if (autoSaveTimer) { clearTimeout(autoSaveTimer); autoSaveTimer = null; }
   try {
     const name = editingName.value.trim();
     const id = currentScript.value?.id || genId();
     await db.saveScript({ id, name, type: editingType.value, content: editingContent.value });
-    currentScript.value = { id, name, type: editingType.value, content: editingContent.value, createdAt: "", updatedAt: "" };
+    currentScript.value = { id, name, type: editingType.value, content: editingContent.value, createdAt: currentScript.value?.createdAt || "", updatedAt: "" };
+    scriptSaved.value = true;
     await loadScriptList();
     showToast(t("scripts.saveSuccess"), true);
   } catch (e: any) {
@@ -713,6 +860,7 @@ async function loadScript(id: string) {
     localFilePath.value = null; // 数据库脚本无本地文件路径
     // 恢复该脚本的工作目录（按脚本 id 存入 localStorage）
     workingDir.value = localStorage.getItem(`script-work-dir:${id}`) || "";
+    scriptSaved.value = true;
     // 清空控制台：切换脚本时不应显示上一个脚本的输出
     activeTabId.value = "";
   }
@@ -851,6 +999,11 @@ onMounted(async () => {
   if (savedType && typeOptions.some(o => o.value === savedType)) {
     globalType.value = savedType;
   }
+  // 恢复上次排序模式
+  const savedSort = localStorage.getItem('script-space:sort') as "name" | "created" | "manual" | null;
+  if (savedSort && ["name", "created", "manual"].includes(savedSort)) {
+    sortMode.value = savedSort;
+  }
   document.addEventListener("click", handleDocClick);
   setScrollContainer(outputContainer.value);
   await setupRunner();
@@ -862,7 +1015,33 @@ onMounted(async () => {
   }
 });
 
+// keep-alive 切换回脚本页时刷新列表（其他页面可能通过 AI 保存了新脚本）
+onActivated(() => {
+  loadScriptList();
+});
+
+// keep-alive 切走时：清理可能因拖拽中途切页而悬挂的 window 监听器
+// 同时对未保存的编辑内容做一次紧急保存，防止 autoSaveTimer 被清除后内容丢失
+onDeactivated(() => {
+  window.removeEventListener('mousemove', onWindowMousemove);
+  window.removeEventListener('mouseup', onWindowMouseup);
+  dragSrcId.value = null;
+  dragOverId.value = null;
+  isDragging.value = false;
+  _mouseDownScript = null;
+  // 清除待触发的定时器，并立即保存当前未保存内容（防止编辑内容随切页丢失）
+  if (autoSaveTimer) { clearTimeout(autoSaveTimer); autoSaveTimer = null; }
+  if (!scriptSaved.value && currentScript.value && editingName.value.trim()) {
+    const id = currentScript.value.id;
+    const name = editingName.value.trim();
+    db.saveScript({ id, name, type: editingType.value, content: editingContent.value }).then(() => {
+      scriptSaved.value = true;
+    }).catch(() => {});
+  }
+});
+
 watch([globalType, searchQuery, sortMode, sortAsc], () => { currentPage.value = 1; });
+watch(sortMode, (val) => { localStorage.setItem('script-space:sort', val); });
 
 // 工作目录变更时持久化（按脚本 id 存储）
 watch(workingDir, (val) => {
@@ -878,7 +1057,13 @@ watch(workingDir, (val) => {
 // 内容变化时（包括删除导致的自动滚动）同步 pre 和行号的滚动位置
 // 用 rAF 确保在浏览器完成自动滚动并绘制后再同步，避免 pre 停留在旧位置
 watch(editingContent, () => {
+  scheduleAutoSave();
   nextTick(() => requestAnimationFrame(syncScroll));
+});
+
+// 名称变化时也触发自动保存
+watch(editingName, () => {
+  scheduleAutoSave();
 });
 
 onUnmounted(() => {
@@ -886,8 +1071,11 @@ onUnmounted(() => {
   // and can be resumed when the user navigates back to this page.
   teardown();
   document.removeEventListener("click", handleDocClick);
+  window.removeEventListener('mousemove', onWindowMousemove);
+  window.removeEventListener('mouseup', onWindowMouseup);
   if (tipTimer) clearTimeout(tipTimer);
   if (toastTimer) clearTimeout(toastTimer);
+  if (autoSaveTimer) clearTimeout(autoSaveTimer);
   if (resizeObs) resizeObs.disconnect();
 });
 

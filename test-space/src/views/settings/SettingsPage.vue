@@ -363,6 +363,7 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'SettingsPage' })
 import { ref, computed, watch, onMounted, onActivated, onUnmounted } from "vue";
 import * as db from "@/services/database";
 import * as cloudApi from "@/services/cloudBackup";

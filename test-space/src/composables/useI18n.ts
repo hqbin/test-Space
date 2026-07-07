@@ -66,7 +66,9 @@ const messages: Record<Lang, Record<string, string>> = {
     "scripts.aiModeHint": "当前类型：{type}，AI 会自动选择最合适的类型",
     "scripts.aiApplyScript": "新建并保存此脚本",
     "scripts.aiAutoSaved": "已自动新建并保存：{name}",
-
+    "scripts.saved": "已保存",
+    "scripts.saving": "保存中...",
+    "scripts.sortManual": "自定义",
     // Settings page
     "settings.title": "设置",
     "settings.theme": "主题",
@@ -739,6 +741,9 @@ const messages: Record<Lang, Record<string, string>> = {
     "scripts.aiModeHint": "Current type: {type} — AI will choose the best type automatically",
     "scripts.aiApplyScript": "Create & save this script",
     "scripts.aiAutoSaved": "Auto-saved: {name}",
+    "scripts.saved": "Saved",
+    "scripts.saving": "Saving...",
+    "scripts.sortManual": "Custom",
 
     // Settings page
     "settings.title": "Settings",

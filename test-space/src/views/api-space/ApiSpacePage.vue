@@ -449,7 +449,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from "vue"
+defineOptions({ name: 'ApiSpacePage' })
+import { ref, computed, watch, onMounted, onUnmounted, onActivated, onDeactivated } from "vue"
 import { invoke } from "@tauri-apps/api/core"
 import { useI18n } from "@/composables/useI18n"
 import { useApiProxy } from "@/composables/useApiProxy"
@@ -832,6 +833,18 @@ onMounted(async () => {
   localRules.value = [...api.rewriteRules.value]
   await refreshDevices()
   await loadSearchHistory()
+})
+
+// keep-alive: 切换回 API 页时重新注册 Tauri 事件监听器
+onActivated(async () => {
+  await api.init()
+  await api.getCaptured()
+  await refreshDevices()
+})
+
+// keep-alive: 离开 API 页时清理 Tauri 事件监听器，防止叠加注册
+onDeactivated(() => {
+  api.cleanup()
 })
 
 onUnmounted(() => {

@@ -202,6 +202,7 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'CaseSpacePage' })
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCaseFileStore } from '@/stores/caseFileStore'
