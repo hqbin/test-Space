@@ -24,6 +24,11 @@ const router = createRouter({
           component: () => import("@/views/note-space/NotesSpacePage.vue"),
         },
         {
+          path: "auto-space",
+          name: "auto-space",
+          component: () => import("@/views/auto-space/AutoSpacePage.vue"),
+        },
+        {
           path: "case-space",
           component: () => import("@/layouts/CaseSpaceLayout.vue"),
           children: [

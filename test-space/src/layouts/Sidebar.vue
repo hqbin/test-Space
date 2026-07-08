@@ -71,6 +71,7 @@ const navItems: NavItem[] = [
   { path: "/notes-space", labelKey: "nav.notes", icon: "description" },
   { path: "/api-space", labelKey: "nav.api", icon: "api" },
   { path: "/script-space", labelKey: "nav.scripts", icon: "code" },
+  { path: "/auto-space", labelKey: "nav.auto", icon: "smart_toy" },
   { path: "/case-space", labelKey: "nav.case", icon: "folder_shared" },
 ];
 
@@ -110,7 +111,7 @@ function clearTimer() {
 onUnmounted(() => clearTimer());
 
 function isActive(path: string) {
-  if (path === "/case-space" || path === "/api-space") return route.path.startsWith(path);
+  if (path === "/case-space" || path === "/api-space" || path === "/auto-space") return route.path.startsWith(path);
   return route.path === path;
 }
 

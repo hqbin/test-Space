@@ -1,6 +1,6 @@
 ﻿import type Database from '@tauri-apps/plugin-sql'
 import DOMPurify from 'dompurify'
-import type { InputHistoryEntry, LogSession, NoteSpace, NoteFolder, NoteItem, NoteVersion, NoteLink } from '@/types'
+import type { InputHistoryEntry, LogSession, NoteSpace, NoteFolder, NoteItem, NoteVersion, NoteLink, AutoCase, AutoCaseVersion, AutoRunRecord, AutoRunStep, AutoStateGraph } from '@/types'
 import type { ApiRewriteRule } from '@/types'
 
 let db: Database | null = null
@@ -139,6 +139,74 @@ async function migrateInternal(d: Database) {
     content TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
+  )`)
+  // ── Automation (Auto Space) ──────────────────────────────────
+  await d.execute(`CREATE TABLE IF NOT EXISTS auto_cases (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    file_key    TEXT NOT NULL UNIQUE,
+    module      TEXT NOT NULL DEFAULT '',
+    tags        TEXT NOT NULL DEFAULT '[]',
+    priority    TEXT NOT NULL DEFAULT 'P2',
+    author      TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    yaml_content TEXT NOT NULL,
+    version     TEXT NOT NULL DEFAULT '1.0',
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+  )`)
+  try { await d.execute('ALTER TABLE auto_cases ADD COLUMN module TEXT NOT NULL DEFAULT \'\'') } catch {}
+  await d.execute(`CREATE TABLE IF NOT EXISTS auto_case_versions (
+    id          TEXT PRIMARY KEY,
+    case_id     TEXT NOT NULL REFERENCES auto_cases(id) ON DELETE CASCADE,
+    version     TEXT NOT NULL,
+    yaml_content TEXT NOT NULL,
+    saved_by    TEXT NOT NULL DEFAULT '',
+    saved_at    TEXT NOT NULL
+  )`)
+  await d.execute(`CREATE TABLE IF NOT EXISTS auto_run_records (
+    id          TEXT PRIMARY KEY,
+    trigger     TEXT NOT NULL DEFAULT 'manual',
+    device_serial TEXT NOT NULL DEFAULT '',
+    device_info TEXT NOT NULL DEFAULT '{}',
+    suite_config TEXT NOT NULL DEFAULT '{}',
+    status      TEXT NOT NULL DEFAULT 'running',
+    total       INTEGER NOT NULL DEFAULT 0,
+    passed      INTEGER NOT NULL DEFAULT 0,
+    failed      INTEGER NOT NULL DEFAULT 0,
+    healed      INTEGER NOT NULL DEFAULT 0,
+    skipped     INTEGER NOT NULL DEFAULT 0,
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    report_path TEXT NOT NULL DEFAULT '',
+    started_at  TEXT NOT NULL,
+    ended_at    TEXT
+  )`)
+  await d.execute(`CREATE TABLE IF NOT EXISTS auto_run_steps (
+    id            TEXT PRIMARY KEY,
+    run_id        TEXT NOT NULL REFERENCES auto_run_records(id) ON DELETE CASCADE,
+    case_id       TEXT NOT NULL,
+    step_id       TEXT NOT NULL,
+    step_desc     TEXT NOT NULL DEFAULT '',
+    status        TEXT NOT NULL,
+    duration_ms   INTEGER NOT NULL DEFAULT 0,
+    error_message TEXT,
+    heal_log      TEXT,
+    screenshot_before TEXT,
+    screenshot_after  TEXT,
+    screenshot_ref    TEXT,
+    locator_used  TEXT,
+    created_at    TEXT NOT NULL
+  )`)
+  await d.execute(`CREATE TABLE IF NOT EXISTS auto_state_graphs (
+    id          TEXT PRIMARY KEY,
+    app_package TEXT NOT NULL,
+    app_version TEXT NOT NULL DEFAULT '',
+    device_info TEXT NOT NULL DEFAULT '{}',
+    graph_json  TEXT NOT NULL,
+    node_count  INTEGER NOT NULL DEFAULT 0,
+    edge_count  INTEGER NOT NULL DEFAULT 0,
+    explore_duration_ms INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL
   )`)
   await d.execute(`CREATE TABLE IF NOT EXISTS scripts (
     id TEXT PRIMARY KEY,
@@ -827,6 +895,220 @@ export async function getNoteLinks(noteId: string): Promise<{ linkedNoteIds: str
   }
 }
 
+// ── Auto Cases (Automation) ──────────────────────────────────────
+
+export async function listAutoCases(): Promise<AutoCase[]> {
+  const d = await getDb()
+  const rows = await d.select<any[]>(
+    'SELECT * FROM auto_cases ORDER BY updated_at DESC'
+  )
+  return rows.map(r => ({ ...r, tags: safeJsonParse(r.tags, []) }))
+}
+
+export async function loadAutoCase(id: string): Promise<AutoCase | null> {
+  const d = await getDb()
+  const rows = await d.select<any[]>('SELECT * FROM auto_cases WHERE id = ?', [id])
+  if (rows.length === 0) return null
+  const r = rows[0]
+  return { ...r, tags: safeJsonParse(r.tags, []) }
+}
+
+export async function saveAutoCase(c: {
+  id: string
+  name: string
+  file_key: string
+  module?: string
+  tags?: string[]
+  priority?: string
+  author?: string
+  description?: string
+  yaml_content: string
+  version?: string
+}) {
+  const d = await getDb()
+  const now = new Date().toISOString()
+  await d.execute(
+    `INSERT INTO auto_cases (id, name, file_key, module, tags, priority, author, description, yaml_content, version, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       name = excluded.name, file_key = excluded.file_key, module = excluded.module, tags = excluded.tags,
+       priority = excluded.priority, author = excluded.author, description = excluded.description,
+       yaml_content = excluded.yaml_content, version = excluded.version, updated_at = excluded.updated_at`,
+    [c.id, c.name, c.file_key, c.module || '', JSON.stringify(c.tags || []), c.priority || 'P2',
+     c.author || '', c.description || '', c.yaml_content, c.version || '1.0', now, now]
+  )
+}
+
+export async function deleteAutoCase(id: string) {
+  const d = await getDb()
+  await d.execute('DELETE FROM auto_case_versions WHERE case_id = ?', [id])
+  await d.execute('DELETE FROM auto_cases WHERE id = ?', [id])
+}
+
+// ── Auto Case Versions ─────────────────────────────────────────
+
+export async function saveAutoCaseVersion(caseId: string, version: string, yamlContent: string, savedBy = '') {
+  const d = await getDb()
+  const id = crypto.randomUUID()
+  await d.execute(
+    'INSERT INTO auto_case_versions (id, case_id, version, yaml_content, saved_by, saved_at) VALUES (?, ?, ?, ?, ?, ?)',
+    [id, caseId, version, yamlContent, savedBy, new Date().toISOString()]
+  )
+  await d.execute(
+    `DELETE FROM auto_case_versions WHERE case_id = ? AND id NOT IN (
+      SELECT id FROM auto_case_versions WHERE case_id = ? ORDER BY saved_at DESC LIMIT 20
+    )`, [caseId, caseId]
+  )
+}
+
+export async function loadAutoCaseVersions(caseId: string): Promise<AutoCaseVersion[]> {
+  const d = await getDb()
+  return await d.select<any[]>(
+    'SELECT id, case_id as caseId, version, yaml_content as yamlContent, saved_by as savedBy, saved_at as savedAt FROM auto_case_versions WHERE case_id = ? ORDER BY saved_at DESC',
+    [caseId]
+  )
+}
+
+// ── Auto Run Records ───────────────────────────────────────────
+
+export async function saveAutoRunRecord(r: {
+  id: string
+  trigger?: string
+  deviceSerial?: string
+  deviceInfo?: string
+  suiteConfig?: string
+  status?: string
+  total?: number
+  passed?: number
+  failed?: number
+  healed?: number
+  skipped?: number
+  durationMs?: number
+  reportPath?: string
+  startedAt: string
+  endedAt?: string | null
+}) {
+  const d = await getDb()
+  await d.execute(
+    `INSERT INTO auto_run_records (id, trigger, device_serial, device_info, suite_config, status, total, passed, failed, healed, skipped, duration_ms, report_path, started_at, ended_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       status = excluded.status, total = excluded.total, passed = excluded.passed,
+       failed = excluded.failed, healed = excluded.healed, skipped = excluded.skipped,
+       duration_ms = excluded.duration_ms, report_path = excluded.report_path, ended_at = excluded.ended_at`,
+    [r.id, r.trigger || 'manual', r.deviceSerial || '', r.deviceInfo || '{}', r.suiteConfig || '{}',
+     r.status || 'running', r.total || 0, r.passed || 0, r.failed || 0, r.healed || 0, r.skipped || 0,
+     r.durationMs || 0, r.reportPath || '', r.startedAt, r.endedAt || null]
+  )
+}
+
+export async function listAutoRunRecords(limit = 50): Promise<AutoRunRecord[]> {
+  const d = await getDb()
+  return await d.select<any[]>(
+    `SELECT id, trigger, device_serial as deviceSerial, device_info as deviceInfo, suite_config as suiteConfig,
+            status, total, passed, failed, healed, skipped, duration_ms as durationMs,
+            report_path as reportPath, started_at as startedAt, ended_at
+     FROM auto_run_records ORDER BY started_at DESC LIMIT ?`,
+    [limit]
+  )
+}
+
+export async function loadAutoRunRecord(id: string): Promise<AutoRunRecord | null> {
+  const d = await getDb()
+  const rows = await d.select<any[]>(
+    `SELECT id, trigger, device_serial as deviceSerial, device_info as deviceInfo, suite_config as suiteConfig,
+            status, total, passed, failed, healed, skipped, duration_ms as durationMs,
+            report_path as reportPath, started_at as startedAt, ended_at
+     FROM auto_run_records WHERE id = ?`, [id]
+  )
+  return rows.length > 0 ? rows[0] : null
+}
+
+export async function deleteAutoRunRecord(id: string) {
+  const d = await getDb()
+  await d.execute('DELETE FROM auto_run_steps WHERE run_id = ?', [id])
+  await d.execute('DELETE FROM auto_run_records WHERE id = ?', [id])
+}
+
+// ── Auto Run Steps ─────────────────────────────────────────────
+
+export async function saveAutoRunStep(s: {
+  id: string
+  runId: string
+  caseId: string
+  stepId: string
+  stepDesc?: string
+  status: string
+  durationMs?: number
+  errorMessage?: string | null
+  healLog?: string | null
+  screenshotBefore?: string | null
+  screenshotAfter?: string | null
+  screenshotRef?: string | null
+  locatorUsed?: string | null
+}) {
+  const d = await getDb()
+  await d.execute(
+    `INSERT INTO auto_run_steps (id, run_id, case_id, step_id, step_desc, status, duration_ms, error_message, heal_log, screenshot_before, screenshot_after, screenshot_ref, locator_used, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET status = excluded.status, duration_ms = excluded.duration_ms, error_message = excluded.error_message, heal_log = excluded.heal_log`,
+    [s.id, s.runId, s.caseId, s.stepId, s.stepDesc || '', s.status, s.durationMs || 0,
+     s.errorMessage || null, s.healLog || null, s.screenshotBefore || null, s.screenshotAfter || null,
+     s.screenshotRef || null, s.locatorUsed || null, new Date().toISOString()]
+  )
+}
+
+export async function listAutoRunSteps(runId: string): Promise<AutoRunStep[]> {
+  const d = await getDb()
+  return await d.select<any[]>(
+    `SELECT id, run_id as runId, case_id as caseId, step_id as stepId, step_desc as stepDesc,
+            status, duration_ms as durationMs, error_message as errorMessage, heal_log as healLog,
+            screenshot_before as screenshotBefore, screenshot_after as screenshotAfter,
+            screenshot_ref as screenshotRef, locator_used as locatorUsed, created_at as createdAt
+     FROM auto_run_steps WHERE run_id = ? ORDER BY created_at ASC`, [runId]
+  )
+}
+
+// ── State Graphs ───────────────────────────────────────────────
+
+export async function saveAutoStateGraph(g: {
+  id: string
+  appPackage: string
+  appVersion?: string
+  deviceInfo?: string
+  graphJson: string
+  nodeCount?: number
+  edgeCount?: number
+  exploreDurationMs?: number
+}) {
+  const d = await getDb()
+  await d.execute(
+    `INSERT INTO auto_state_graphs (id, app_package, app_version, device_info, graph_json, node_count, edge_count, explore_duration_ms, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET graph_json = excluded.graph_json, node_count = excluded.node_count, edge_count = excluded.edge_count`,
+    [g.id, g.appPackage, g.appVersion || '', g.deviceInfo || '{}', g.graphJson,
+     g.nodeCount || 0, g.edgeCount || 0, g.exploreDurationMs || 0, new Date().toISOString()]
+  )
+}
+
+export async function listAutoStateGraphs(appPackage?: string): Promise<AutoStateGraph[]> {
+  const d = await getDb()
+  if (appPackage) {
+    return await d.select<any[]>(
+      `SELECT id, app_package as appPackage, app_version as appVersion, device_info as deviceInfo,
+              graph_json as graphJson, node_count as nodeCount, edge_count as edgeCount,
+              explore_duration_ms as exploreDurationMs, created_at as createdAt
+       FROM auto_state_graphs WHERE app_package = ? ORDER BY created_at DESC`, [appPackage]
+    )
+  }
+  return await d.select<any[]>(
+    `SELECT id, app_package as appPackage, app_version as appVersion, device_info as deviceInfo,
+            graph_json as graphJson, node_count as nodeCount, edge_count as edgeCount,
+            explore_duration_ms as exploreDurationMs, created_at as createdAt
+     FROM auto_state_graphs ORDER BY created_at DESC`
+  )
+}
+
 // ── Export / Import ──────────────────────────────────────────
 
 // ── Scripts ────────────────────────────────────────────────────
@@ -962,6 +1244,11 @@ export interface AppBackup {
   scripts: ScriptItem[]
   aiMemories: AiMemory[]
   proxyRules?: ApiRewriteRule[]
+  autoCases?: AutoCase[]
+  autoCaseVersions?: AutoCaseVersion[]
+  autoRunRecords?: AutoRunRecord[]
+  autoRunSteps?: AutoRunStep[]
+  autoStateGraphs?: AutoStateGraph[]
 }
 
 function _yieldToMain(): Promise<void> {
@@ -1002,8 +1289,11 @@ export async function exportAllData(): Promise<AppBackup> {
     'SELECT id, content, created_at as createdAt, updated_at as updatedAt FROM note_ai_memories'
   )
   const proxyRules = await loadProxyRules()
+  await _yieldToMain()
+  const autoCases = await listAutoCases()
+  const autoRunRecords = await listAutoRunRecords()
   return {
-    version: '1.7',
+    version: '1.8',
     exportedAt: new Date().toISOString(),
     fieldRuleSets,
     caseFiles,
@@ -1020,13 +1310,18 @@ export async function exportAllData(): Promise<AppBackup> {
     scripts,
     aiMemories,
     proxyRules: proxyRules.length > 0 ? proxyRules : undefined,
+    autoCases: autoCases.length > 0 ? autoCases : undefined,
+    autoCaseVersions: undefined,
+    autoRunRecords: autoRunRecords.length > 0 ? autoRunRecords : undefined,
+    autoRunSteps: undefined,
+    autoStateGraphs: undefined,
   }
 }
 
 function validateBackup(backup: any): string | null {
   if (!backup || typeof backup !== 'object') return '备份数据格式无效'
   if (!backup.version) return '备份文件缺少版本号，可能是旧格式或损坏文件'
-  const tables = ['fieldRuleSets', 'caseFiles', 'recentFiles', 'favorites', 'settings', 'inputHistory', 'logSessions', 'noteSpaces', 'noteFolders', 'notes', 'noteVersions', 'noteLinks', 'scripts', 'aiMemories']
+  const tables = ['fieldRuleSets', 'caseFiles', 'recentFiles', 'favorites', 'settings', 'inputHistory', 'logSessions', 'noteSpaces', 'noteFolders', 'notes', 'noteVersions', 'noteLinks', 'scripts', 'aiMemories', 'autoCases', 'autoRunRecords']
   for (const t of tables) {
     if (backup[t] !== undefined && !Array.isArray(backup[t]) && typeof backup[t] !== 'object') {
       return `字段 "${t}" 类型无效`
@@ -1259,6 +1554,23 @@ export async function importAllDataIncremental(backup: AppBackup): Promise<{
     } catch (e: any) { failures.push(`memory: ${e.message || e}`) }
   }
 
+  // ── 10. AUTO CASES ─ match by file_key ──
+  const localAutoCases = (await d.select<{ file_key: string }[]>(
+    'SELECT file_key FROM auto_cases'
+  )) || []
+  const localAutoKeys = new Set(localAutoCases.map(c => c.file_key))
+  for (const rawC of backup.autoCases || []) {
+    const c: any = rawC
+    if (localAutoKeys.has(c.file_key)) { skipped++; continue }
+    try {
+      await d.execute(
+        'INSERT INTO auto_cases (id, name, file_key, tags, priority, author, description, yaml_content, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [c.id, c.name, c.file_key, JSON.stringify(c.tags ?? []), c.priority || 'P2', c.author || '', c.description || '', c.yaml_content, c.version || '1.0', c.created_at ?? c.createdAt, c.updated_at ?? c.updatedAt]
+      )
+      imported++
+    } catch (e: any) { failures.push(`auto case "${c.name}": ${e.message || e}`) }
+  }
+
   // NOTE: app_settings, input_history, log_sessions, recent_files, favorites, proxy_rules
   // are intentionally NOT touched. Cloud restore preserves local preferences/state.
 
@@ -1291,7 +1603,8 @@ export async function importAllData(backup: AppBackup) {
   const deletes = [
     'field_rule_sets', 'case_files', 'recent_files', 'favorites',
     'app_settings', 'input_history', 'log_sessions',
-    'note_folders', 'notes', 'notes_fts', 'note_versions', 'note_links', 'scripts', 'note_ai_memories'
+    'note_folders', 'notes', 'notes_fts', 'note_versions', 'note_links', 'scripts', 'note_ai_memories',
+    'auto_cases', 'auto_case_versions', 'auto_run_records', 'auto_run_steps', 'auto_state_graphs'
   ]
   for (const table of deletes) {
     try { await d.execute(`DELETE FROM ${table}`) } catch (e: any) { failures.push(`DELETE ${table}: ${e}`) }
@@ -1311,6 +1624,8 @@ export async function importAllData(backup: AppBackup) {
     ['note_links', 'id, source_note_id, target_note_id, created_at', backup.noteLinks || [], (l: any) => [l.id, l.sourceNoteId ?? l.source_note_id, l.targetNoteId ?? l.target_note_id, l.createdAt ?? l.created_at]],
     ['scripts', 'id, name, type, content, sort_order, created_at, updated_at', backup.scripts || [], (s: any) => [s.id, s.name, s.type ?? 'bat', s.content ?? '', s.sortOrder ?? s.sort_order ?? 0, s.createdAt ?? s.created_at, s.updatedAt ?? s.updated_at ?? s.createdAt]],
     ['note_ai_memories', 'id, content, created_at, updated_at', backup.aiMemories || [], (m: any) => [m.id, m.content, m.createdAt ?? m.created_at, m.updatedAt ?? m.updated_at ?? m.createdAt]],
+    ['auto_cases', 'id, name, file_key, tags, priority, author, description, yaml_content, version, created_at, updated_at', backup.autoCases || [], (c: any) => [c.id, c.name, c.file_key, JSON.stringify(c.tags ?? []), c.priority || 'P2', c.author || '', c.description || '', c.yaml_content, c.version || '1.0', c.created_at ?? c.createdAt, c.updated_at ?? c.updatedAt]],
+    ['auto_run_records', 'id, trigger, device_serial, device_info, suite_config, status, total, passed, failed, healed, skipped, duration_ms, report_path, started_at, ended_at', backup.autoRunRecords || [], (r: any) => [r.id, r.trigger || 'manual', r.deviceSerial ?? r.device_serial ?? '', r.deviceInfo ?? r.device_info ?? '{}', r.suiteConfig ?? r.suite_config ?? '{}', r.status || 'running', r.total || 0, r.passed || 0, r.failed || 0, r.healed || 0, r.skipped || 0, r.durationMs ?? r.duration_ms ?? 0, r.reportPath ?? r.report_path ?? '', r.startedAt ?? r.started_at, r.endedAt ?? r.ended_at ?? null]],
   ]
   for (const [table, cols, items, toParams] of inserts) {
     if (!Array.isArray(items) || items.length === 0) continue

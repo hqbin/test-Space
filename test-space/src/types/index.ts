@@ -187,3 +187,76 @@ export interface ApiProxyStatus {
   breakpoint_enabled: boolean
   captured_count: number
 }
+
+// ── Auto Space (Automation Module) ───────────────────────────
+
+export interface AutoCase {
+  id: string
+  name: string
+  file_key: string
+  module: string
+  tags: string[]
+  priority: string
+  author: string
+  description: string
+  yaml_content: string
+  version: string
+  created_at: string
+  updated_at: string
+}
+
+export interface AutoCaseVersion {
+  id: string
+  case_id: string
+  version: string
+  yaml_content: string
+  saved_by: string
+  saved_at: string
+}
+
+export interface AutoRunRecord {
+  id: string
+  trigger: string
+  deviceSerial: string
+  deviceInfo: string
+  suiteConfig: string
+  status: string
+  total: number
+  passed: number
+  failed: number
+  healed: number
+  skipped: number
+  durationMs: number
+  reportPath: string
+  startedAt: string
+  endedAt: string | null
+}
+
+export interface AutoRunStep {
+  id: string
+  runId: string
+  caseId: string
+  stepId: string
+  stepDesc: string
+  status: string
+  durationMs: number
+  errorMessage: string | null
+  healLog: string | null
+  screenshotBefore: string | null
+  screenshotAfter: string | null
+  screenshotRef: string | null
+  locatorUsed: string | null
+  createdAt: string
+}
+
+export interface AutoStateGraph {
+  id: string
+  app_package: string
+  app_version: string
+  device_info: string
+  graph_json: string
+  node_count: number
+  edge_count: number
+  explore_duration_ms: number
+  created_at: string
+}
