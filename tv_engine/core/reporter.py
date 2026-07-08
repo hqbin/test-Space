@@ -456,6 +456,17 @@ function applyFilters() {{
             if step.screenshot_ref and step.status in ("failed", "healed"):
                 rel = self._relative_screenshot_path(step.screenshot_ref)
                 screens.append(f'<div><span style="font-size:11px;color:#64748b;" data-i18n="reference">参考</span><br><img src="{rel}" loading="lazy"></div>')
+            # Generate diff overlay when both before and ref screenshots exist
+            if step.screenshot_before and step.screenshot_ref:
+                diff_data = self._generate_screenshot_diff(step.screenshot_before, step.screenshot_ref)
+                if diff_data:
+                    screens.append(
+                        f'<div><span style="font-size:11px;color:#64748b;" data-i18n="diff">差异叠加</span><br>'
+                        f'<div class="diff-overlay" style="position:relative;">'
+                        f'<img src="{self._relative_screenshot_path(step.screenshot_before)}" style="width:100%;border-radius:8px;border:1px solid #e2e8f0;" loading="lazy">'
+                        f'<img src="{diff_data}" style="position:absolute;top:0;left:0;width:100%;height:100%;opacity:0.6;mix-blend-mode:difference;pointer-events:none;" loading="lazy">'
+                        f'</div></div>'
+                    )
             if screens:
                 screenshots_html = f'<div class="screenshot-grid">{" ".join(screens)}</div>'
 
@@ -623,7 +634,7 @@ const i18n = {
     all:"全部",steps_passed:"步通过",trend_title:"与上次执行对比",
     new_failed:"新增失败",new_healed:"新增修复",new_cases:"新增用例",no_change:"与上次执行无变化",
     back_to_suite:"返回套件报告",author:"作者",priority:"优先级",
-    before:"操作前",after:"操作后",reference:"参考",action:"操作",
+    before:"操作前",after:"操作后",reference:"参考",action:"操作",diff:"差异叠加",
     error:"错误",heal_phase:"修复阶段",heal_method:"方式",confidence:"置信度"
   },
   en: {
@@ -633,7 +644,7 @@ const i18n = {
     all:"All",steps_passed:"passed",trend_title:"vs Previous Run",
     new_failed:"New Failed",new_healed:"New Healed",new_cases:"New Cases",no_change:"No change from previous run",
     back_to_suite:"Back to Suite",author:"Author",priority:"Priority",
-    before:"Before",after:"After",reference:"Reference",action:"Action",
+    before:"Before",after:"After",reference:"Reference",action:"Action",diff:"Diff Overlay",
     error:"Error",heal_phase:"Phase",heal_method:"Method",confidence:"Confidence"
   }
 };

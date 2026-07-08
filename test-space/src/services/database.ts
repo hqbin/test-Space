@@ -1291,7 +1291,18 @@ export async function exportAllData(): Promise<AppBackup> {
   const proxyRules = await loadProxyRules()
   await _yieldToMain()
   const autoCases = await listAutoCases()
+  const autoCaseVersionsData = await d.select<AutoCaseVersion[]>(
+    'SELECT id, case_id as caseId, version, yaml_content as yamlContent, saved_by as savedBy, saved_at as savedAt FROM auto_case_versions ORDER BY saved_at ASC'
+  )
+  await _yieldToMain()
   const autoRunRecords = await listAutoRunRecords()
+  const autoRunStepsData = await d.select<AutoRunStep[]>(
+    'SELECT id, run_id as runId, case_id as caseId, step_id as stepId, step_desc as stepDesc, status, duration_ms as durationMs, error_message as errorMessage, heal_log as healLog, screenshot_before as screenshotBefore, screenshot_after as screenshotAfter, screenshot_ref as screenshotRef, locator_used as locatorUsed, created_at as createdAt FROM auto_run_steps ORDER BY created_at ASC'
+  )
+  await _yieldToMain()
+  const autoStateGraphsData = await d.select<AutoStateGraph[]>(
+    'SELECT id, app_package as appPackage, app_version as appVersion, device_info as deviceInfo, graph_json as graphJson, node_count as nodeCount, edge_count as edgeCount, explore_duration_ms as exploreDurationMs, created_at as createdAt FROM auto_state_graphs ORDER BY created_at DESC'
+  )
   return {
     version: '1.8',
     exportedAt: new Date().toISOString(),
@@ -1311,17 +1322,17 @@ export async function exportAllData(): Promise<AppBackup> {
     aiMemories,
     proxyRules: proxyRules.length > 0 ? proxyRules : undefined,
     autoCases: autoCases.length > 0 ? autoCases : undefined,
-    autoCaseVersions: undefined,
+    autoCaseVersions: autoCaseVersionsData.length > 0 ? autoCaseVersionsData : undefined,
     autoRunRecords: autoRunRecords.length > 0 ? autoRunRecords : undefined,
-    autoRunSteps: undefined,
-    autoStateGraphs: undefined,
+    autoRunSteps: autoRunStepsData.length > 0 ? autoRunStepsData : undefined,
+    autoStateGraphs: autoStateGraphsData.length > 0 ? autoStateGraphsData : undefined,
   }
 }
 
 function validateBackup(backup: any): string | null {
   if (!backup || typeof backup !== 'object') return '备份数据格式无效'
   if (!backup.version) return '备份文件缺少版本号，可能是旧格式或损坏文件'
-  const tables = ['fieldRuleSets', 'caseFiles', 'recentFiles', 'favorites', 'settings', 'inputHistory', 'logSessions', 'noteSpaces', 'noteFolders', 'notes', 'noteVersions', 'noteLinks', 'scripts', 'aiMemories', 'autoCases', 'autoRunRecords']
+  const tables = ['fieldRuleSets', 'caseFiles', 'recentFiles', 'favorites', 'settings', 'inputHistory', 'logSessions', 'noteSpaces', 'noteFolders', 'notes', 'noteVersions', 'noteLinks', 'scripts', 'aiMemories', 'autoCases', 'autoCaseVersions', 'autoRunRecords', 'autoRunSteps', 'autoStateGraphs']
   for (const t of tables) {
     if (backup[t] !== undefined && !Array.isArray(backup[t]) && typeof backup[t] !== 'object') {
       return `字段 "${t}" 类型无效`
@@ -1626,6 +1637,9 @@ export async function importAllData(backup: AppBackup) {
     ['note_ai_memories', 'id, content, created_at, updated_at', backup.aiMemories || [], (m: any) => [m.id, m.content, m.createdAt ?? m.created_at, m.updatedAt ?? m.updated_at ?? m.createdAt]],
     ['auto_cases', 'id, name, file_key, tags, priority, author, description, yaml_content, version, created_at, updated_at', backup.autoCases || [], (c: any) => [c.id, c.name, c.file_key, JSON.stringify(c.tags ?? []), c.priority || 'P2', c.author || '', c.description || '', c.yaml_content, c.version || '1.0', c.created_at ?? c.createdAt, c.updated_at ?? c.updatedAt]],
     ['auto_run_records', 'id, trigger, device_serial, device_info, suite_config, status, total, passed, failed, healed, skipped, duration_ms, report_path, started_at, ended_at', backup.autoRunRecords || [], (r: any) => [r.id, r.trigger || 'manual', r.deviceSerial ?? r.device_serial ?? '', r.deviceInfo ?? r.device_info ?? '{}', r.suiteConfig ?? r.suite_config ?? '{}', r.status || 'running', r.total || 0, r.passed || 0, r.failed || 0, r.healed || 0, r.skipped || 0, r.durationMs ?? r.duration_ms ?? 0, r.reportPath ?? r.report_path ?? '', r.startedAt ?? r.started_at, r.endedAt ?? r.ended_at ?? null]],
+    ['auto_case_versions', 'id, case_id, version, yaml_content, saved_by, saved_at', backup.autoCaseVersions || [], (v: any) => [v.id, v.caseId ?? v.case_id, v.version, v.yamlContent ?? v.yaml_content, v.savedBy ?? v.saved_by ?? '', v.savedAt ?? v.saved_at]],
+    ['auto_run_steps', 'id, run_id, case_id, step_id, step_desc, status, duration_ms, error_message, heal_log, screenshot_before, screenshot_after, screenshot_ref, locator_used, created_at', backup.autoRunSteps || [], (s: any) => [s.id, s.runId ?? s.run_id, s.caseId ?? s.case_id, s.stepId ?? s.step_id, s.stepDesc ?? s.step_desc ?? '', s.status, s.durationMs ?? s.duration_ms ?? 0, s.errorMessage ?? s.error_message ?? null, s.healLog ?? s.heal_log ?? null, s.screenshotBefore ?? s.screenshot_before ?? null, s.screenshotAfter ?? s.screenshot_after ?? null, s.screenshotRef ?? s.screenshot_ref ?? null, s.locatorUsed ?? s.locator_used ?? null, s.createdAt ?? s.created_at]],
+    ['auto_state_graphs', 'id, app_package, app_version, device_info, graph_json, node_count, edge_count, explore_duration_ms, created_at', backup.autoStateGraphs || [], (g: any) => [g.id, g.appPackage ?? g.app_package, g.appVersion ?? g.app_version ?? '', g.deviceInfo ?? g.device_info ?? '{}', g.graphJson ?? g.graph_json, g.nodeCount ?? g.node_count ?? 0, g.edgeCount ?? g.edge_count ?? 0, g.exploreDurationMs ?? g.explore_duration_ms ?? 0, g.createdAt ?? g.created_at]],
   ]
   for (const [table, cols, items, toParams] of inserts) {
     if (!Array.isArray(items) || items.length === 0) continue

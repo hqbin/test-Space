@@ -90,7 +90,7 @@ async function initMonaco() {
         strategies.forEach(s => suggestions.push({ label: s, kind: monaco.languages.CompletionItemKind.Value, insertText: s, range, detail: 'Failure strategy' }))
       }
       if (lineContent.includes('key:')) {
-        const keys = ['DPAD_UP', 'DPAD_DOWN', 'DPAD_LEFT', 'DPAD_RIGHT', 'DPAD_CENTER', 'BACK', 'HOME', 'MENU', 'DPAD_CENTER', 'VOLUME_UP', 'VOLUME_DOWN']
+        const keys = ['DPAD_UP', 'DPAD_DOWN', 'DPAD_LEFT', 'DPAD_RIGHT', 'DPAD_CENTER', 'DPAD_OK', 'BACK', 'HOME', 'MENU', 'VOLUME_UP', 'VOLUME_DOWN', 'POWER', 'ENTER', 'DEL', 'SETTINGS', 'MEDIA_PLAY_PAUSE', 'MEDIA_STOP', 'MEDIA_NEXT', 'MEDIA_PREVIOUS', 'MEDIA_REWIND', 'MEDIA_FAST_FORWARD', 'DPAD_UP_LEFT', 'DPAD_DOWN_LEFT', 'DPAD_UP_RIGHT', 'DPAD_DOWN_RIGHT', 'MOVE_HOME', 'MOVE_END', 'NUMPAD_ENTER', 'APP_SWITCH', 'EXPLORER', 'INFO', 'SEARCH', 'GUIDE', 'DVR', 'LIVE', 'PROGRAM_BROWSER', 'CAPTIONS', 'SUBTITLE', 'STB_INPUT', 'TV_INPUT', 'INPUT', 'MEDIA_AUDIO_TRACK', 'MEDIA_SKIP_FORWARD', 'MEDIA_SKIP_BACKWARD', 'MEDIA_STEP_FORWARD', 'MEDIA_STEP_BACKWARD', 'MEDIA_TOP_MENU', 'MEDIA_CONTEXT_MENU', 'PAGE_UP', 'PAGE_DOWN', 'CHANNEL_UP', 'CHANNEL_DOWN', 'ZOOM_IN', 'ZOOM_OUT', 'SLEEP', 'WAKEUP', 'PAIRING', 'MEDIA_RECORD', 'MEDIA_PLAY', 'MEDIA_PAUSE', 'CAPS_LOCK', 'SPACE', 'TAB']
         keys.forEach(k => suggestions.push({ label: k, kind: monaco.languages.CompletionItemKind.Keyword, insertText: k, range, detail: 'Keycode' }))
       }
 

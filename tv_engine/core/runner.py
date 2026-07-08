@@ -111,15 +111,23 @@ class ActionRegistry:
         the runner to function even when the full set of action files has
         not been created.
         """
-        _builtins: list[tuple[str, str]] = [
+        _builtins: list[tuple[str, str, str]] = [
             ("press_key", "press_key", "handle_press_key"),
-            ("press_key_sequence", "press_key", "handle_press_key"),
+            ("press_key_sequence", "press_key", "handle_press_key_sequence"),
             ("navigate_to", "navigate", "handle_navigate_to"),
             ("wait_for", "wait", "handle_wait_for"),
             ("wait_stable", "wait", "handle_wait_stable"),
+            ("wait_then_assert", "wait", "handle_wait_then_assert"),
             ("assert_focused", "assert_actions", "handle_assert_focused"),
             ("assert_app_foreground", "assert_actions", "handle_assert_app_foreground"),
             ("assert_element", "assert_actions", "handle_assert_element"),
+            ("assert_visual", "assert_actions", "handle_assert_visual"),
+            ("assert_shell", "assert_actions", "handle_assert_shell"),
+            ("launch_app", "launch_app", "handle_launch_app"),
+            ("screenshot", "screenshot", "handle_screenshot"),
+            ("input_text", "input_text", "handle_input_text"),
+            ("swipe", "swipe", "handle_swipe"),
+            ("set_variable", "set_variable", "handle_set_variable"),
         ]
         for action_name, module_name, func_name in _builtins:
             try:
@@ -162,6 +170,7 @@ class TestRunner:
         self.registry = ActionRegistry()
         self.registry.load_builtins()
         self._stopped = False
+        self._last_run_id: Optional[str] = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -234,6 +243,7 @@ class TestRunner:
         context: dict[str, Any] = dict(variables)
 
         result = CaseResult(case_id=case_id, name=case_name)
+        self._last_run_id = run_id
         self.emit("case_start", case_id=case_id, run_id=run_id)
 
         loop_start = time.monotonic()
@@ -321,6 +331,7 @@ class TestRunner:
             run_id=run_id,
             started_at=datetime.now(timezone.utc).isoformat(),
         )
+        self._last_run_id = run_id
         self.emit("suite_start", run_id=run_id, case_count=len(case_ids))
         suite_start = time.monotonic()
 
@@ -383,6 +394,29 @@ class TestRunner:
     # Internal:  action execution & failure handling
     # ------------------------------------------------------------------
 
+    def _take_screenshot(self, step_id: str, label: str) -> Optional[str]:
+        """Take a screenshot and save it to the report directory.
+
+        Returns the absolute file path, or ``None`` on failure.
+        """
+        try:
+            from datetime import datetime as dt
+            run_id = self._last_run_id or "unknown"
+            shot_dir = self.reporter.output_dir / run_id / "screenshots"
+            shot_dir.mkdir(parents=True, exist_ok=True)
+            slug = f"{step_id}_{label}_{dt.now().strftime('%H%M%S%f')}"
+            # Sanitize filename
+            safe = "".join(c if c.isalnum() or c in ('-', '_') else '_' for c in slug)
+            path = str(shot_dir / f"{safe}.png")
+            img = self.device.screenshot()
+            if img:
+                img.save(path)
+                self.emit("screenshot", step_id=step_id, path=path)
+                return path
+        except Exception as exc:
+            logger.debug("Screenshot failed: %s", exc)
+        return None
+
     def _execute_action(self, step: dict, context: dict) -> StepResult:
         """Look up the action in the registry and execute it."""
         step_id = step.get("id", step.get("action", "unknown"))
@@ -394,6 +428,9 @@ class TestRunner:
         start = time.monotonic()
 
         sr = StepResult(step_id=step_id, desc=desc)
+
+        # Auto screenshot before step
+        sr.screenshot_before = self._take_screenshot(step_id, "before")
 
         try:
             handler = self.registry.get(action_name)
@@ -416,6 +453,8 @@ class TestRunner:
             logger.debug("Step %s failed: %s", step_id, sr.error)
 
         finally:
+            # Auto screenshot after step
+            sr.screenshot_after = self._take_screenshot(step_id, "after")
             sr.duration_ms = int((time.monotonic() - start) * 1000)
             event = "step_done" if sr.status == "passed" else "step_fail"
             self.emit(

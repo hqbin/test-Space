@@ -151,6 +151,58 @@
 
       <div class="border-t border-glass-border-light/30 my-5"></div>
 
+      <!-- Automation -->
+      <div class="min-w-0">
+        <span class="font-body-md text-body-md text-on-surface font-medium shrink-0 block mb-4">{{ t("settings.autoAutomation") }}</span>
+        <div class="flex flex-col gap-4">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <div class="font-body-md text-body-md text-on-surface">{{ t("settings.autoAiRepair") }}</div>
+              <div class="text-[12px] text-on-surface-variant/60">{{ t("settings.autoAiRepairDesc") }}</div>
+            </div>
+            <button
+              class="w-10 h-6 rounded-full transition-colors relative shrink-0"
+              :class="autoAiRepairEnabled ? 'bg-green-500' : 'bg-gray-300'"
+              @click="toggleAutoAiRepair"
+            >
+              <div
+                class="w-4 h-4 rounded-full bg-white absolute top-1 transition-transform shadow-sm"
+                :class="autoAiRepairEnabled ? 'translate-x-5' : 'translate-x-1'"
+              ></div>
+            </button>
+          </div>
+          <div class="flex flex-col gap-2">
+            <div class="flex items-center justify-between">
+              <label class="text-[12px] text-on-surface-variant">{{ t("settings.autoConfidenceThreshold") }}</label>
+              <span class="text-[13px] font-medium text-on-surface">{{ autoConfidenceThreshold }}</span>
+            </div>
+            <input
+              v-model.number="autoConfidenceThreshold"
+              type="range"
+              min="0.1"
+              max="1.0"
+              step="0.05"
+              class="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-green-500"
+            />
+            <div class="text-[11px] text-on-surface-variant/60">{{ t("settings.autoConfidenceDesc") }}</div>
+          </div>
+          <div class="flex items-center justify-between gap-4">
+            <span class="text-[12px] text-on-surface-variant">{{ t("settings.autoMaxRetries") }}</span>
+            <input
+              v-model.number="autoMaxRetries"
+              type="number"
+              min="0"
+              max="10"
+              step="1"
+              class="glass-input w-20 px-2 py-1 rounded-lg text-[14px] outline-none select-text text-center"
+            />
+          </div>
+        </div>
+        <p v-if="autoStatusMessage" class="mt-3 font-body-md text-body-md text-[13px]" :class="autoStatusIsError ? 'text-error' : 'text-success-indicator'">{{ autoStatusMessage }}</p>
+      </div>
+
+      <div class="border-t border-glass-border-light/30 my-5"></div>
+
       <!-- AI Configuration -->
       <div class="min-w-0">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
@@ -429,6 +481,42 @@ const memoryStatusMessage = ref("");
 const memoryStatusIsError = ref(false);
 const showMemoryModal = ref(false);
 const selectedMemoryIds = ref(new Set<string>());
+
+// Automation settings
+const autoAiRepairEnabled = ref(true);
+const autoConfidenceThreshold = ref(0.7);
+const autoMaxRetries = ref(2);
+const autoStatusMessage = ref("");
+const autoStatusIsError = ref(false);
+
+function setAutoStatus(msg: string, isError = false) {
+  autoStatusMessage.value = msg;
+  autoStatusIsError.value = isError;
+}
+
+async function toggleAutoAiRepair() {
+  autoAiRepairEnabled.value = !autoAiRepairEnabled.value;
+  await db.setSetting("auto_ai_repair_enabled", autoAiRepairEnabled.value ? "1" : "0");
+  setAutoStatus(autoAiRepairEnabled.value ? "AI repair enabled" : "AI repair disabled");
+  setTimeout(() => setAutoStatus(""), 2000);
+}
+
+watch(autoConfidenceThreshold, async (v) => {
+  await db.setSetting("auto_ai_confidence_threshold", String(v));
+});
+
+watch(autoMaxRetries, async (v) => {
+  await db.setSetting("auto_ai_max_retries", String(v));
+});
+
+async function loadAutoSettings() {
+  const enabled = await db.getSetting("auto_ai_repair_enabled");
+  if (enabled !== null) autoAiRepairEnabled.value = enabled === "1";
+  const threshold = await db.getSetting("auto_ai_confidence_threshold");
+  if (threshold !== null) autoConfidenceThreshold.value = parseFloat(threshold) || 0.7;
+  const retries = await db.getSetting("auto_ai_max_retries");
+  if (retries !== null) autoMaxRetries.value = parseInt(retries) || 2;
+}
 
 function toggleMemorySelect(id: string) {
   const s = selectedMemoryIds.value;
@@ -904,6 +992,7 @@ onMounted(async () => {
   }
   await ensureDeviceId();
   await loadMemories();
+  await loadAutoSettings();
 });
 
 onActivated(() => {

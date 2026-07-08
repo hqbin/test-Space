@@ -51,36 +51,7 @@ class HealResult:
     update_suggestion: Optional[str] = None
 
 
-class DeviceController:
-    """Stub for :mod:`tv_engine.core.device.DeviceController`.
-
-    Replace with the real implementation when ``device.py`` is available.
-    """
-
-    def __init__(self, serial: str = ""):
-        self.serial = serial
-
-    def get_ui_tree(self) -> dict:
-        return {"elements": [], "activity": "com.example.tv.MainActivity"}
-
-    def get_focused_element(self) -> Optional[dict]:
-        return None
-
-    def get_focusable_elements(self) -> list[dict]:
-        return []
-
-    def press_key(self, key: str) -> bool:
-        return True
-
-    def screenshot(self) -> Any:
-        from PIL import Image
-        return Image.new("RGB", (1920, 1080), (0, 0, 0))
-
-    def get_current_activity(self) -> str:
-        return "com.example.tv.MainActivity"
-
-    def wait_stable(self, timeout: int = 3000) -> bool:
-        return True
+from tv_engine.core.device import DeviceController as RealDeviceController
 
 
 class Healer:
@@ -104,9 +75,11 @@ class Healer:
         3c. Replan navigation path
     """
 
-    def __init__(self, device: DeviceController, ai_provider: Optional[AIProvider] = None):
+    def __init__(self, device: RealDeviceController, ai_provider: Optional[AIProvider] = None, confidence_threshold: float = 0.7, high_confidence: float = 0.9):
         self.device = device
         self.ai_provider = ai_provider
+        self.confidence_threshold = confidence_threshold
+        self.high_confidence = high_confidence
 
     # ── Public API ──────────────────────────────────────────────────────
 
@@ -168,7 +141,12 @@ class Healer:
 
         for method_name, strategy_fn, phase in strategies:
             try:
-                result = strategy_fn(step, context) if method_name != "popup" else strategy_fn()
+                if method_name == "fingerprint":
+                    result = strategy_fn(step)
+                elif method_name == "popup":
+                    result = strategy_fn()
+                else:
+                    result = strategy_fn(step, context)
                 if result is None:
                     continue
                 if isinstance(result, bool):
@@ -177,7 +155,7 @@ class Healer:
                             success=True,
                             phase=phase,
                             method=method_name,
-                            confidence=0.85,
+                            confidence=self.confidence_threshold + 0.15,
                             description="Popup detected and auto-closed",
                             repair_actions=[{"action": "close_popup"}],
                         )
@@ -213,7 +191,7 @@ class Healer:
                     success=True,
                     phase=1,
                     method="fingerprint",
-                    confidence=0.95,
+                    confidence=self.high_confidence + 0.05,
                     description=f"Element found via {level} ({by}={value})",
                     repair_actions=[{"level": level, "by": by, "value": value}],
                     new_target={level: locator},
@@ -563,9 +541,15 @@ class Healer:
         """Execute a repair action returned by the LLM."""
         action_map: dict[str, Any] = {
             "press_key": lambda kw: self.device.press_key(kw.get("key", "DPAD_CENTER")),
-            "navigate_to": lambda kw: self.device.press_key("DPAD_CENTER"),
+            "press_key_sequence": lambda kw: [self.device.press_key(k) for k in kw.get("keys", [])],
+            "navigate_to": lambda kw: self._exec_navigate(kw.get("target", {})),
             "wait_for": lambda kw: self.device.wait_stable(kw.get("timeout", 3000)),
+            "wait_stable": lambda kw: self.device.wait_stable(kw.get("timeout", 3000)),
             "close_popup": lambda kw: self._phase1c_popup(),
+            "launch_app": lambda kw: self.device.start_app(kw.get("package", ""), kw.get("wait_activity", "")),
+            "input_text": lambda kw: self.device.shell(f'input text {kw.get("text", "")}'),
+            "back": lambda kw: self.device.press_key("BACK"),
+            "home": lambda kw: self.device.press_key("HOME"),
         }
         handler = action_map.get(action)
         if handler:
@@ -577,14 +561,25 @@ class Healer:
             if sub_handler:
                 sub_handler(step_def)
 
+    def _exec_navigate(self, target: dict) -> None:
+        """Navigate to a target element using the Navigator."""
+        try:
+            from tv_engine.core.navigator import Navigator
+            nav = Navigator(self.device)
+            result = nav.navigate_to(target, max_steps=25)
+            if not result.success:
+                logger.warning("Repair navigate_to failed: %s", result.error)
+        except Exception as exc:
+            logger.warning("Repair navigate_to error: %s", exc)
+
     # ── Phase 3: Local re-exploration ───────────────────────────────────
 
     def _phase3_re_explore(self, step: dict, context: dict) -> Optional[HealResult]:
         """Re-explore from the current activity to find the target element.
 
-        From the current activity, enumerates reachable focusable elements and
-        tries to locate a state that matches the step's target.  If a match is
-        found the local graph is updated and a navigation path is re-planned.
+        Uses Navigator.Level 2 (spatial greedy) / Level 3 (BFS) to search for
+        the target element across all reachable focusable elements.  If found,
+        the navigation path is recorded.
         """
         current_activity = self.device.get_current_activity()
         target = step.get("target", {})
@@ -593,6 +588,7 @@ class Healer:
         if not elements:
             return None
 
+        # First try direct match on current screen
         matched = None
         for level in ("primary", "fallback1", "fallback2", "fallback3"):
             loc = target.get(level)
@@ -616,11 +612,34 @@ class Healer:
                 update_suggestion=f"Navigation path changed from {current_activity}; consider re-recording",
             )
 
+        # If not directly visible, use Navigator BFS (Level 3) to search
+        try:
+            from tv_engine.core.navigator import Navigator
+            nav = Navigator(self.device)
+            nav_result = nav.navigate_to(target, max_steps=30)
+            if nav_result.success and nav_result.final_focus:
+                return HealResult(
+                    success=True,
+                    phase=3,
+                    method="re_explore",
+                    confidence=0.75,
+                    description=f"Navigator BFS found target in {nav_result.steps_taken} steps from {current_activity}",
+                    repair_actions=[{"steps": nav_result.path_used, "level": nav_result.level}],
+                    new_target=target,
+                    update_suggestion=f"Navigation path re-planned from {current_activity}",
+                )
+            # BFS done, navigate back to original position
+            for _ in range(nav_result.steps_taken or 0):
+                self.device.press_key("BACK")
+                self.device.wait_stable(300)
+        except Exception as exc:
+            logger.warning("Phase 3 BFS explore failed: %s", exc)
+
         return HealResult(
             success=False,
             phase=3,
             method="re_explore",
             confidence=0.0,
-            description=f"Re-exploration from {current_activity} found no matching element",
+            description=f"Re-exploration from {current_activity} found no matching element (checked {len(elements)} elements)",
             update_suggestion="Full re-exploration recommended for this activity",
         )

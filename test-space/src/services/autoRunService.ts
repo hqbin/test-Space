@@ -14,6 +14,8 @@ export interface AutoStepEvent {
   passed?: number
   failed?: number
   healed?: number
+  step_total?: number
+  heal_log?: string
 }
 
 let unlistenStep: (() => void) | null = null
@@ -58,6 +60,15 @@ export async function stopAutoRun(runId: string) {
     await invoke("auto_stop_run", { runId })
   } catch (e) {
     console.error("[AutoRun] stop failed:", e)
+  }
+}
+
+export async function autoGenSkeleton(graphJson: string, packageName: string): Promise<string> {
+  try {
+    return await invoke<string>("auto_gen_skeleton", { graphJson, package: packageName })
+  } catch (e) {
+    console.error("[AutoRun] gen skeleton failed:", e)
+    return ""
   }
 }
 

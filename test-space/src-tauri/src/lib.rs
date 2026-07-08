@@ -666,6 +666,7 @@ pub fn run() {
             auto_runner::auto_run_case,
             auto_runner::auto_run_suite,
             auto_runner::auto_stop_run,
+            auto_runner::auto_gen_skeleton,
             auto_runner::auto_check_engine,
         ])
         .run(tauri::generate_context!())

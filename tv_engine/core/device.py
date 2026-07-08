@@ -146,9 +146,9 @@ def _find_all_focusable(node: ET.Element) -> list[dict[str, Any]]:
 
 
 class DeviceController:
-    def __init__(self) -> None:
+    def __init__(self, serial: str = "") -> None:
         self._device: Optional[u2.Device] = None
-        self._serial: Optional[str] = None
+        self._serial: Optional[str] = serial or None
         self._u2_available: bool = _HAS_U2
 
     def connect(self, serial: str) -> bool:

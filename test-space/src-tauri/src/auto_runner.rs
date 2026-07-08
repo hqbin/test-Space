@@ -24,6 +24,8 @@ pub struct AutoStepEvent {
     pub passed: Option<u32>,
     pub failed: Option<u32>,
     pub healed: Option<u32>,
+    pub step_total: Option<u32>,
+    pub heal_log: Option<String>,
 }
 
 pub struct AutoRunnerState {
@@ -119,6 +121,8 @@ fn start_run(
                 passed: None,
                 failed: None,
                 healed: None,
+                step_total: None,
+                heal_log: None,
             },
         );
     });
@@ -183,6 +187,69 @@ pub fn auto_stop_run(
         let _ = child.wait();
     }
     Ok(())
+}
+
+#[tauri::command]
+pub fn auto_gen_skeleton(
+    graph_json: String,
+    package: String,
+) -> Result<String, String> {
+    let data: serde_json::Value =
+        serde_json::from_str(&graph_json).map_err(|e| format!("Invalid graph JSON: {}", e))?;
+    let nodes = data.get("nodes").and_then(|v| v.as_object()).ok_or("No nodes in graph")?;
+    let mut step_count = 0u32;
+    let mut steps_yaml = String::new();
+    for (fp, state) in nodes {
+        let activity = state.get("activity").and_then(|v| v.as_str()).unwrap_or("");
+        let focused_id = state.get("focused_id").and_then(|v| v.as_str()).unwrap_or("");
+        let focused_desc = state.get("focused_desc").and_then(|v| v.as_str()).unwrap_or("");
+        if focused_id.is_empty() && focused_desc.is_empty() {
+            continue;
+        }
+        step_count += 1;
+        steps_yaml.push_str(&format!(
+            r#"  - id: "step_{:02}"
+    desc: "navigate to {}"
+    action: navigate_to
+    target:
+      primary:
+        by: resource_id
+        value: "{}"
+    on_failure: "ai_heal"
+"#,
+            step_count,
+            if focused_desc.is_empty() { focused_id } else { focused_desc },
+            focused_id
+        ));
+    }
+    let skeleton = format!(
+        r#"# Auto-generated from StateGraph - {}
+meta:
+  id: "TC-{}-001"
+  name: "Auto-generated case from {}"
+  author: ""
+  version: "1.0"
+  tags:
+    - "auto_gen"
+  priority: "P2"
+  description: "Auto-generated test case from StateGraph exploration"
+
+setup:
+  - action: launch_app
+    package: "{}"
+    wait_activity: ""
+    timeout: 8000
+
+steps:
+{}
+
+teardown:
+  - action: press_key
+    key: HOME
+"#,
+        package, package, package, package, steps_yaml
+    );
+    Ok(skeleton)
 }
 
 #[tauri::command]

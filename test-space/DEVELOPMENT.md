@@ -659,6 +659,63 @@ Rust 解析每行 JSON 后通过 `tauri::Emitter::emit("auto:step_event", payloa
 - **快捷云端同步**：导航栏 Settings 旁的 `sync` 按钮（见 4.3.2），调用 `src/services/cloudSync.ts` 的 `syncBackupToCloud()`，与「备份到云端」逻辑等价，无需进入设置页
 - **Version**：显示应用版本号，通过 `@tauri-apps/api/app` 的 `getVersion()` 读取
 
+### 4.15 Python TV Automation Engine (`tv_engine/`)
+
+**Python 引擎已实现 100% 功能（与 AUTOMATION_DESIGN.md 完全对齐）。**
+
+**目录结构**：
+```
+tv_engine/
+├── main.py                  # CLI 入口：run/run-suite/explore/diff/check-engine
+├── requirements.txt         # 依赖清单
+├── actions/                 # 16 种 action 处理模块
+│   ├── __init__.py
+│   ├── press_key.py         # press_key, press_key_sequence
+│   ├── navigate.py          # navigate_to
+│   ├── wait.py              # wait_for (含条件检查), wait_stable, wait_then_assert
+│   ├── assert_actions.py    # assert_focused/element/visual/app_foreground/shell
+│   ├── launch_app.py        # launch_app
+│   ├── screenshot.py        # screenshot
+│   ├── input_text.py        # input_text
+│   ├── swipe.py             # swipe
+│   └── set_variable.py      # set_variable
+├── core/
+│   ├── __init__.py
+│   ├── device.py            # DeviceController: ADB/uiautomator2 连接、UI 树解析
+│   ├── state.py             # TVState, StateGraph: 状态图数据结构
+│   ├── locator.py           # Locator: 多层级回退定位
+│   ├── navigator.py         # Navigator: 3 级导航（图回放/空间贪心/BFS穷举）
+│   ├── runner.py            # TestRunner: YAML 解析、变量替换、setup/steps/teardown
+│   ├── explorer.py          # Explorer: BFS 状态图探索 + diff
+│   ├── healer.py            # Healer: 3 阶段 AI 修复（指纹/语义/弹窗 + LLM + 重新探索）
+│   └── reporter.py          # Reporter: 双语 HTML 报告生成、截图差异、JSON 摘要
+├── assets/ref/              # 参考截图存储
+├── cases/                   # YAML 用例文件
+├── graphs/                  # StateGraph JSON
+└── reports/                 # HTML 报告输出
+```
+
+**主要功能**：
+- **TestRunner**（`runner.py`）：完整的用例执行引擎，支持变量替换 `{{var}}`、setup/steps/teardown 生命周期、`on_failure` 策略（skip/abort/retry/ai_heal）、实时 JSON Lines 输出
+- **Healer**（`healer.py`）：3 阶段 AI 修复体系，Phase 1 本地快速修复（多属性指纹匹配、语义编辑距离、弹窗检测关闭）、Phase 2 LLM 视觉修复（构建多模态提示、调用 AI 提供者、解析执行修复动作）、Phase 3 BFS 重新探索（使用 Navigator 穷举搜索目标元素）
+- **Navigator**（`navigator.py`）：3 级导航策略，Level 1 StateGraph 路径回放、Level 2 空间贪心方向计算、Level 3 BFS 穷举探索
+- **Explorer**（`explorer.py`）：BFS 状态图探索，自动发现可达状态和跳转，支持图 diff 和持久化
+- **Reporter**（`reporter.py`）：自包含双语 HTML 报告，指标卡片、标签筛选、截图差异叠加、AI 修复记录、JSON 摘要导出
+
+**与 Rust 后端的集成**：
+- CLI `main.py` 通过 JSON Lines stdout 输出事件
+- Rust `auto_runner.rs` 解析并转发到 Tauri 前端
+- 前端 `autoRunService.ts` 监听 `auto:step_event` 处理实时更新
+
+**CLI 使用**：
+```bash
+python tv_engine/main.py run <yaml_path> --device 192.168.1.100:5555
+python tv_engine/main.py run-suite <case_id1> <case_id2> --tags smoke
+python tv_engine/main.py explore --package com.example.tv --device ...
+python tv_engine/main.py diff --package com.example.tv
+python tv_engine/main.py check-engine
+```
+
 ### 4.11 云端备份服务层
 
 **新增文件**：
