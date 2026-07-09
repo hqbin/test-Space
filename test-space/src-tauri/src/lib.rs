@@ -104,9 +104,22 @@ async fn adb_reboot(serial: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn adb_screenshot(serial: String, save_path: String) -> Result<String, String> {
+async fn adb_screenshot(serial: String, save_path: String, app: tauri::AppHandle) -> Result<String, String> {
+    let screenshots_dir = app.path().app_local_data_dir()
+        .map(|d| d.join("auto_screenshots"))
+        .unwrap_or_else(|_| std::path::PathBuf::from("auto_screenshots"));
+    std::fs::create_dir_all(&screenshots_dir).map_err(|e| format!("Failed to create screenshots dir: {}", e))?;
+    let full_path = screenshots_dir.join(&save_path);
+    let full_str = full_path.to_string_lossy().to_string();
     tokio::task::spawn_blocking(move || {
-        adb::screenshot(&serial, &save_path)
+        adb::screenshot(&serial, &full_str)
+    }).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn adb_dump_ui(serial: String) -> Result<Vec<adb::UiElement>, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::dump_ui(&serial)
     }).await.map_err(|e| e.to_string())?
 }
 
@@ -600,6 +613,7 @@ pub fn run() {
             adb_pull,
             adb_reboot,
             adb_screenshot,
+            adb_dump_ui,
             adb_mirror_start,
             adb_mirror_stop,
             adb_connect,

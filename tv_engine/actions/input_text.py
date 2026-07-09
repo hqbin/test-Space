@@ -4,14 +4,12 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 _TEXT_KEYCODE_MAP: dict[str, int] = {
-    **{chr(i): key for key, i in {
-        29: 'a', 30: 'b', 31: 'c', 32: 'd', 33: 'e', 34: 'f', 35: 'g',
-        36: 'h', 37: 'i', 38: 'j', 39: 'k', 40: 'l', 41: 'm', 42: 'n',
-        43: 'o', 44: 'p', 45: 'q', 46: 'r', 47: 's', 48: 't', 49: 'u',
-        50: 'v', 51: 'w', 52: 'x', 53: 'y', 54: 'z',
-    }.items()},
-    56: '0', 57: '1', 58: '2', 59: '3', 60: '4', 61: '5', 62: '6', 63: '7', 64: '8', 65: '9',
-    66: 'enter', 67: 'del', 62: ' ', 61: 'tab', 115: 'caps_lock',
+    'a': 29, 'b': 30, 'c': 31, 'd': 32, 'e': 33, 'f': 34, 'g': 35,
+    'h': 36, 'i': 37, 'j': 38, 'k': 39, 'l': 40, 'm': 41, 'n': 42,
+    'o': 43, 'p': 44, 'q': 45, 'r': 46, 's': 47, 't': 48, 'u': 49,
+    'v': 50, 'w': 51, 'x': 52, 'y': 53, 'z': 54,
+    '0': 7, '1': 8, '2': 9, '3': 10, '4': 11, '5': 12, '6': 13, '7': 14, '8': 15, '9': 16,
+    ' ': 62, '\t': 61, 'enter': 66, 'del': 67, 'caps_lock': 115,
 }
 
 
@@ -38,8 +36,7 @@ def handle_input_text(*, device: Any, step: dict, context: dict, timeout: int) -
 
 
 def _find_code(char: str) -> int | None:
-    reverse = {v: k for k, v in _TEXT_KEYCODE_MAP.items()}
-    return reverse.get(char)
+    return _TEXT_KEYCODE_MAP.get(char)
 
 
 def _shell_escape(c: str) -> str:

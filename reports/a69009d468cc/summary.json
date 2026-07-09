@@ -1,0 +1,15 @@
+{
+  "run_id": "a69009d468cc",
+  "status": "partial_fail",
+  "total": 2,
+  "passed": 1,
+  "failed": 1,
+  "healed": 0,
+  "skipped": 0,
+  "duration_ms": 8936,
+  "failed_cases": [
+    "TC-测试"
+  ],
+  "healed_cases": [],
+  "report_url": "D:\\code\\test-Space\\reports\\a69009d468cc\\summary.json"
+}

@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,12 @@ def handle_assert_visual(*, device: Any, step: dict, context: dict, timeout: int
     expected = step.get("target", {})
     similarity = step.get("similarity", 0.9)
     ref_path = step.get("ref_screenshot", "")
+    if ref_path and not os.path.isabs(ref_path):
+        screenshots_dir = os.environ.get("TV_SCREENSHOTS_DIR", "")
+        if screenshots_dir:
+            ref_path = os.path.join(screenshots_dir, ref_path)
+        else:
+            ref_path = os.path.join(os.getcwd(), ref_path)
     screenshot = device.screenshot()
 
     from PIL import Image

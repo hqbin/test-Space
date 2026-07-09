@@ -261,20 +261,33 @@ class DeviceController:
 
     def screenshot(self) -> Image.Image:
         if self._device is not None:
-            try:
-                raw = self._device.screenshot(format="raw")
-                buf = io.BytesIO(raw)
-                return Image.open(buf).convert("RGB")
-            except Exception as exc:
-                logger.warning("u2 screenshot failed: %s. Falling back to adb.", exc)
+            for fmt in ("raw", "pillow"):
+                try:
+                    img = self._device.screenshot(format=fmt)
+                    if fmt == "raw":
+                        buf = io.BytesIO(img)
+                        return Image.open(buf).convert("RGB")
+                    else:
+                        return img.convert("RGB")
+                except Exception as exc:
+                    if fmt == "pillow":
+                        logger.warning("u2 screenshot failed on all formats: %s. Falling back to adb.", exc)
         return self._adb_screenshot()
 
     def _adb_screenshot(self) -> Image.Image:
         try:
-            raw = self.shell("screencap -p 2>/dev/null")
+            serial_arg = []
+            if self._serial:
+                serial_arg = ["-s", self._serial]
+            result = subprocess.run(
+                ["adb"] + serial_arg + ["exec-out", "screencap", "-p"],
+                capture_output=True,
+                timeout=30,
+            )
+            raw = result.stdout
             if not raw:
                 raise RuntimeError("Empty screenshot output")
-            buf = io.BytesIO(raw.encode("latin-1") if isinstance(raw, str) else raw)
+            buf = io.BytesIO(raw)
             return Image.open(buf).convert("RGB")
         except Exception as exc:
             logger.error("ADB screenshot failed: %s", exc)

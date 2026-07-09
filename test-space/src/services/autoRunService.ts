@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
 
 export interface AutoStepEvent {
-  type: "step_start" | "step_done" | "step_heal" | "step_fail" | "screenshot" | "suite_done"
+  type: "step_start" | "step_done" | "step_heal" | "step_fail" | "screenshot" | "suite_done" | "engine_log"
   step_id?: string
   desc?: string
   status?: string
@@ -33,24 +33,24 @@ export async function listenAutoEvents(onEvent: (event: AutoStepEvent) => void):
 
 export async function runAutoCase(
   runId: string,
-  caseId: string,
+  yamlContent: string,
   deviceSerial: string,
 ): Promise<void> {
   await invoke("auto_run_case", {
     runId,
-    caseId,
+    yamlContent,
     deviceSerial,
   })
 }
 
 export async function runAutoSuite(
   runId: string,
-  caseIds: string[],
+  yamlContents: string[],
   deviceSerial: string,
 ): Promise<void> {
   await invoke("auto_run_suite", {
     runId,
-    caseIds,
+    yamlContents,
     deviceSerial,
   })
 }

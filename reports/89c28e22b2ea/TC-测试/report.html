@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>测试</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans SC',sans-serif;background:#f0f2f5;color:#1e293b;line-height:1.6;}
+a{color:#3b82f6;text-decoration:none;}
+a:hover{text-decoration:underline;}
+img{max-width:100%;height:auto;}
+</style>
+<style>
+.timeline{position:relative;padding-left:32px;margin:24px 0;}
+.timeline::before{content:'';position:absolute;left:12px;top:0;bottom:0;width:2px;background:#e2e8f0;}
+.step-card{background:#fff;border-radius:16px;padding:16px 20px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.04);position:relative;}
+.step-card::before{content:'';position:absolute;left:-24px;top:20px;width:12px;height:12px;border-radius:50%;border:2px solid #e2e8f0;background:#fff;}
+.step-card.status-passed::before{background:#22c55e;border-color:#22c55e;}
+.step-card.status-failed::before{background:#ef4444;border-color:#ef4444;}
+.step-card.status-healed::before{background:#f97316;border-color:#f97316;}
+.step-card.status-skipped::before{background:#94a3b8;border-color:#94a3b8;}
+.screenshot-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:8px;}
+.screenshot-grid img{width:100%;border-radius:8px;border:1px solid #e2e8f0;}
+.heal-badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;background:#fef3c7;color:#d97706;font-weight:500;margin-left:6px;}
+.diff-overlay{position:relative;}
+</style>
+</head>
+<body style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#1e293b;">
+<div class="glass-header" style="padding:12px 24px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <a href="../index.html" style="color:#3b82f6;text-decoration:none;font-size:14px;" data-i18n="back_to_suite">&larr; 返回套件报告</a>
+      <h1 style="margin:0;font-size:18px;font-weight:600;">测试</h1>
+    </div>
+    <div style="font-size:13px;color:#64748b;">
+      
+    </div>
+  </div>
+  <div style="font-size:12px;color:#64748b;margin-top:4px;">
+    <span data-i18n="author">作者</span>: -
+    &nbsp;|&nbsp; <span data-i18n="priority">优先级</span>: P2
+    &nbsp;|&nbsp; <span data-i18n="duration">耗时</span>: 7.0s
+  </div>
+</div>
+
+<div style="padding:16px 24px;">
+  <div class="timeline">
+    <div class="step-card status-passed"><div style="display:flex;align-items:center;justify-content:space-between;"><div style="display:flex;align-items:center;gap:6px;"><span style="color:#22c55e">&#x2714;</span><strong style="font-size:13px;">press_key</strong><span style="font-size:13px;color:#475569;"></span></div><span style="font-size:12px;color:#94a3b8;">2.4s</span></div><div style="font-size:12px;color:#94a3b8;margin-top:2px;"><span data-i18n="action">操作</span>: </div></div>
+<div class="step-card status-passed"><div style="display:flex;align-items:center;justify-content:space-between;"><div style="display:flex;align-items:center;gap:6px;"><span style="color:#22c55e">&#x2714;</span><strong style="font-size:13px;">1</strong><span style="font-size:13px;color:#475569;"></span></div><span style="font-size:12px;color:#94a3b8;">2.3s</span></div><div style="font-size:12px;color:#94a3b8;margin-top:2px;"><span data-i18n="action">操作</span>: </div></div>
+  </div>
+</div>
+
+<script>
+const i18n = {
+  zh: {
+    suite_title:"测试报告",suite_total:"总用例数",suite_passed:"通过",suite_failed:"失败",
+    suite_healed:"AI修复",run_time:"执行时间",device:"设备",duration:"耗时",
+    filter_tag:"标签筛选",sort:"排序",sort_priority:"优先级",sort_duration:"耗时",sort_status:"状态",
+    all:"全部",steps_passed:"步通过",trend_title:"与上次执行对比",
+    new_failed:"新增失败",new_healed:"新增修复",new_cases:"新增用例",no_change:"与上次执行无变化",
+    back_to_suite:"返回套件报告",author:"作者",priority:"优先级",
+    before:"操作前",after:"操作后",reference:"参考",action:"操作",diff:"差异叠加",
+    error:"错误",heal_phase:"修复阶段",heal_method:"方式",confidence:"置信度"
+  },
+  en: {
+    suite_title:"Test Report",suite_total:"Total",suite_passed:"Passed",suite_failed:"Failed",
+    suite_healed:"Healed",run_time:"Run Time",device:"Device",duration:"Duration",
+    filter_tag:"Filter",sort:"Sort",sort_priority:"Priority",sort_duration:"Duration",sort_status:"Status",
+    all:"All",steps_passed:"passed",trend_title:"vs Previous Run",
+    new_failed:"New Failed",new_healed:"New Healed",new_cases:"New Cases",no_change:"No change from previous run",
+    back_to_suite:"Back to Suite",author:"Author",priority:"Priority",
+    before:"Before",after:"After",reference:"Reference",action:"Action",diff:"Diff Overlay",
+    error:"Error",heal_phase:"Phase",heal_method:"Method",confidence:"Confidence"
+  }
+};
+let lang = 'zh';
+function toggleLang() {
+  lang = lang === 'zh' ? 'en' : 'zh';
+  document.querySelectorAll('[data-i18n]').forEach(function(el) {
+    var key = el.getAttribute('data-i18n');
+    var val = i18n[lang][key];
+    if (val !== undefined) el.textContent = val;
+  });
+}
+</script>
+</body>
+</html>

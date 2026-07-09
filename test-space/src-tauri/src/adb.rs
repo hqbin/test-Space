@@ -400,3 +400,201 @@ pub fn start_screenrecord(serial: &str, file_path: &str, width: u32, height: u32
         .map_err(|e| format!("Failed to start screenrecord: {}", e))?;
     Ok("Recording started".to_string())
 }
+
+#[derive(Serialize)]
+pub struct UiElement {
+    pub resource_id: String,
+    pub class_name: String,
+    pub package: String,
+    pub content_desc: String,
+    pub text: String,
+    pub bounds_left: i32,
+    pub bounds_top: i32,
+    pub bounds_right: i32,
+    pub bounds_bottom: i32,
+    pub clickable: bool,
+    pub focusable: bool,
+    pub enabled: bool,
+    pub index: i32,
+}
+
+pub fn dump_ui(serial: &str) -> Result<Vec<UiElement>, String> {
+    // Check if uiautomator binary exists
+    let check = run_adb(serial, &["shell", "which uiautomator 2>/dev/null || echo not_found"])
+        .unwrap_or_default();
+    if check.trim().contains("not_found") {
+        return Err("uiautomator binary not found on device; this Android TV build may not support UI dump".to_string());
+    }
+
+    // Try multiple approaches to get the UI XML
+    let mut raw = String::new();
+
+    // Approach 1: dump to temp file, cat it, clean up
+    let tmp_path = "/data/local/tmp/uidump.xml";
+    let _rm = run_adb(serial, &["shell", &format!("rm -f {}", tmp_path)])
+        .unwrap_or_default();
+    let dump = run_adb(serial, &[
+        "shell",
+        &format!("uiautomator dump {} 2>/dev/null", tmp_path),
+    ]);
+    if let Ok(_) = dump {
+        let cat = run_adb(serial, &[
+            "shell",
+            &format!("cat {}", tmp_path),
+        ]);
+        if let Ok(out) = cat {
+            raw = out;
+        }
+        let _ = run_adb(serial, &["shell", &format!("rm -f {}", tmp_path)]);
+    }
+
+    // Approach 2: fallback to /sdcard/ for devices where /data/local/tmp is not writable
+    if raw.is_empty() {
+        let tmp_sdcard = "/sdcard/uidump.xml";
+        let _ = run_adb(serial, &["shell", &format!("rm -f {}", tmp_sdcard)]);
+        let dump2 = run_adb(serial, &[
+            "shell",
+            &format!("uiautomator dump {} 2>/dev/null", tmp_sdcard),
+        ]);
+        if let Ok(_) = dump2 {
+            let cat2 = run_adb(serial, &[
+                "shell",
+                &format!("cat {}", tmp_sdcard),
+            ]);
+            if let Ok(out) = cat2 {
+                raw = out;
+            }
+            let _ = run_adb(serial, &["shell", &format!("rm -f {}", tmp_sdcard)]);
+        }
+    }
+
+    // Approach 3: try direct /dev/tty output (some devices support this)
+    if raw.is_empty() {
+        let tty = run_adb(serial, &["shell", "uiautomator dump /dev/tty 2>&1"]);
+        if let Ok(out) = tty {
+            raw = out;
+        }
+    }
+
+    // Extract XML portion (skip potential non-xml prefix output)
+    let xml_start = raw.find('<').unwrap_or(0);
+    let xml_str = &raw[xml_start..];
+
+    if xml_str.is_empty() || !xml_str.starts_with('<') {
+        return Err(format!(
+            "No XML output from uiautomator dump. Raw output: {}",
+            if raw.len() > 200 { &raw[..200] } else { &raw }
+        ));
+    }
+
+    // Parse elements with a simple naive XML parser (uiautomator output format is well-known)
+    let mut elements: Vec<UiElement> = Vec::new();
+    parse_nodes(xml_str, &mut elements, 0);
+
+    if elements.is_empty() {
+        return Err("UI tree parsed but no <node> elements found".to_string());
+    }
+    Ok(elements)
+}
+
+fn parse_nodes(xml: &str, elements: &mut Vec<UiElement>, depth: usize) {
+    // Limit recursion depth
+    if depth > 50 { return; }
+
+    let lower = xml.to_lowercase();
+    let mut pos = 0;
+    while let Some(node_start) = lower[pos..].find("<node ") {
+        let abs_start = pos + node_start;
+
+        // Find the closing '>' of this node
+        let tag_end = match xml[abs_start..].find('>') {
+            Some(p) => abs_start + p + 1,
+            None => break,
+        };
+
+        let tag = &xml[abs_start..tag_end];
+
+        // Extract attributes
+        let resource_id = extract_attr(tag, "resource-id");
+        let class_name = extract_attr(tag, "class");
+        let package = extract_attr(tag, "package");
+        let content_desc = extract_attr(tag, "content-desc");
+        let text = extract_attr(tag, "text");
+        let bounds_str = extract_attr(tag, "bounds");
+        let clickable = extract_attr(tag, "clickable") == "true";
+        let focusable = extract_attr(tag, "focusable") == "true";
+        let enabled = extract_attr(tag, "enabled") != "false";
+        let index = extract_attr(tag, "index").parse::<i32>().unwrap_or(0);
+
+        // Parse bounds: "[left,top][right,bottom]"
+        let (bounds_left, bounds_top, bounds_right, bounds_bottom) = if !bounds_str.is_empty() {
+            parse_bounds(&bounds_str)
+        } else {
+            (0, 0, 0, 0)
+        };
+
+        elements.push(UiElement {
+            resource_id, class_name, package, content_desc, text,
+            bounds_left, bounds_top, bounds_right, bounds_bottom,
+            clickable, focusable, enabled, index,
+        });
+
+        // Check if self-closing (ends with />)
+        if tag.ends_with("/>") || tag.ends_with("/ >") {
+            pos = tag_end;
+            continue;
+        }
+
+        // Find the closing </node> - count nested <node> inside
+        let mut inner_start = tag_end;
+        let mut nested = 1u32;
+        let end_tag = "</node>";
+        while nested > 0 {
+            let next_open = lower[inner_start..].find("<node ");
+            let next_close = lower[inner_start..].find(end_tag);
+            match (next_open, next_close) {
+                (Some(no), Some(nc)) if no < nc => {
+                    nested += 1;
+                    inner_start += no + 6;
+                }
+                (_, Some(nc)) => {
+                    nested -= 1;
+                    inner_start += nc + end_tag.len();
+                }
+                _ => break,
+            }
+        }
+        let inner_xml = &xml[tag_end..inner_start - end_tag.len()];
+        parse_nodes(inner_xml, elements, depth + 1);
+
+        pos = inner_start;
+    }
+}
+
+fn extract_attr(tag: &str, attr_name: &str) -> String {
+    // Look for attr_name="..." or attr_name='...'
+    for quote in ['"', '\''] {
+        let search = format!("{}=\\{}", attr_name, quote);
+        if let Some(start) = tag.find(&search) {
+            let value_start = start + search.len();
+            if let Some(end) = tag[value_start..].find(quote) {
+                return tag[value_start..value_start + end].to_string();
+            }
+        }
+    }
+    String::new()
+}
+
+fn parse_bounds(bounds: &str) -> (i32, i32, i32, i32) {
+    // Format: "[left,top][right,bottom]"
+    let cleaned = bounds.trim_start_matches('[').trim_end_matches(']');
+    let parts: Vec<&str> = cleaned.split("][").collect();
+    if parts.len() == 2 {
+        let first: Vec<i32> = parts[0].split(',').filter_map(|s| s.trim().parse().ok()).collect();
+        let second: Vec<i32> = parts[1].split(',').filter_map(|s| s.trim().parse().ok()).collect();
+        if first.len() == 2 && second.len() == 2 {
+            return (first[0], first[1], second[0], second[1]);
+        }
+    }
+    (0, 0, 0, 0)
+}

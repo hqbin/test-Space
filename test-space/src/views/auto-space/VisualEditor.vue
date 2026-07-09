@@ -5,69 +5,23 @@
       <div class="text-[12px] font-semibold text-on-surface-variant/60 mb-2 flex items-center gap-1.5">
         <span class="material-symbols-outlined text-[14px]">info</span>测试用例信息
       </div>
-      <div class="grid grid-cols-2 gap-2">
+      <div class="grid grid-cols-4 gap-2">
         <div>
           <label class="text-[11px] text-on-surface-variant/50 block mb-1">用例名称</label>
-          <input :value="name" @input="e => $emit('update:name', (e.target as HTMLInputElement).value)" class="w-full bg-white/10 border border-white/20 rounded px-2.5 py-1.5 text-[12px] select-text focus:outline-none focus:border-white/40" placeholder="用例名称" />
+          <input :value="name" @input="e => updateMeta('name', (e.target as HTMLInputElement).value)" class="w-full bg-white/10 border border-white/20 rounded px-2.5 py-1.5 text-[12px] select-text focus:outline-none focus:border-white/40" placeholder="用例名称" />
         </div>
         <div>
           <label class="text-[11px] text-on-surface-variant/50 block mb-1">模块</label>
-          <input :value="module" @input="e => $emit('update:module', (e.target as HTMLInputElement).value)" class="w-full bg-white/10 border border-white/20 rounded px-2.5 py-1.5 text-[12px] select-text focus:outline-none focus:border-white/40" placeholder="模块名" />
+          <input :value="module" @input="e => updateMeta('module', (e.target as HTMLInputElement).value)" class="w-full bg-white/10 border border-white/20 rounded px-2.5 py-1.5 text-[12px] select-text focus:outline-none focus:border-white/40" placeholder="模块名" />
         </div>
         <div>
           <label class="text-[11px] text-on-surface-variant/50 block mb-1">标签</label>
-          <input :value="tags" @input="e => $emit('update:tags', (e.target as HTMLInputElement).value)" class="w-full bg-white/10 border border-white/20 rounded px-2.5 py-1.5 text-[12px] select-text focus:outline-none focus:border-white/40" placeholder="smoke, home, playback" />
+          <input :value="tags" @input="e => updateMeta('tags', (e.target as HTMLInputElement).value)" class="w-full bg-white/10 border border-white/20 rounded px-2.5 py-1.5 text-[12px] select-text focus:outline-none focus:border-white/40" placeholder="smoke, home, playback" />
         </div>
         <div>
           <label class="text-[11px] text-on-surface-variant/50 block mb-1">优先级</label>
-          <VSelect :model-value="priority" @update:model-value="e => $emit('update:priority', e)" :options="[{value:'P0',label:'P0 最高'},{value:'P1',label:'P1 高'},{value:'P2',label:'P2 普通'},{value:'P3',label:'P3 低'}]" placeholder="优先级" />
+          <VSelect :model-value="priority" @update:model-value="e => updateMeta('priority', e)" :options="[{value:'P0',label:'P0 最高'},{value:'P1',label:'P1 高'},{value:'P2',label:'P2 普通'},{value:'P3',label:'P3 低'}]" placeholder="优先级" />
         </div>
-      </div>
-      <div class="mt-2">
-        <label class="text-[11px] text-on-surface-variant/50 block mb-1">描述</label>
-        <input :value="description" @input="e => $emit('update:description', (e.target as HTMLInputElement).value)" class="w-full bg-white/10 border border-white/20 rounded px-2.5 py-1.5 text-[12px] select-text focus:outline-none focus:border-white/40" placeholder="用例描述" />
-      </div>
-    </div>
-
-    <!-- Setup Section -->
-    <div class="glass-panel rounded-lg p-3 bg-white/30">
-      <div class="flex items-center justify-between mb-2">
-        <div class="text-[12px] font-semibold text-on-surface-variant/60 flex items-center gap-1.5">
-          <span class="material-symbols-outlined text-[14px]">playlist_add</span>前置条件 (setup)
-        </div>
-        <button class="glass-button px-2 py-1 rounded text-[10px] flex items-center gap-1 select-none" @click="addSetupStep">
-          <span class="material-symbols-outlined text-[12px]">add</span>添加
-        </button>
-      </div>
-      <div v-if="setupSteps.length === 0" class="text-[11px] text-on-surface-variant/30 text-center py-3">暂无前置步骤</div>
-      <div v-for="(step, idx) in setupSteps" :key="step._key" class="flex items-start gap-2 mb-1.5 p-2 rounded-lg bg-white/20">
-        <div class="flex flex-col gap-0.5 pt-0.5">
-          <button class="p-0.5 rounded hover:bg-white/20 text-on-surface-variant/30" :disabled="idx === 0" @click="moveSetupStep(idx, -1)">
-            <span class="material-symbols-outlined text-[12px]">keyboard_arrow_up</span>
-          </button>
-          <button class="p-0.5 rounded hover:bg-white/20 text-on-surface-variant/30" :disabled="idx === setupSteps.length - 1" @click="moveSetupStep(idx, 1)">
-            <span class="material-symbols-outlined text-[12px]">keyboard_arrow_down</span>
-          </button>
-        </div>
-        <VSelect :model-value="step.action" @update:model-value="e => updateSetupStep(idx, 'action', e)" :options="[{value:'launch_app',label:'启动应用'},{value:'press_key',label:'按键'},{value:'wait_for',label:'等待'},{value:'set_variable',label:'设置变量'}]" placeholder="动作" />
-        <template v-if="step.action === 'launch_app'">
-          <input :value="step.package" @input="e => updateSetupStep(idx, 'package', (e.target as HTMLInputElement).value)" class="flex-1 bg-white/10 border border-white/20 rounded px-2 py-1 text-[11px] select-text focus:outline-none focus:border-white/40 min-w-0" placeholder="包名 com.example" />
-          <input :value="step.wait_activity" @input="e => updateSetupStep(idx, 'wait_activity', (e.target as HTMLInputElement).value)" class="flex-1 bg-white/10 border border-white/20 rounded px-2 py-1 text-[11px] select-text focus:outline-none focus:border-white/40 min-w-0" placeholder="启动页 .MainActivity" />
-          <input :value="step.timeout" type="number" @input="e => updateSetupStep(idx, 'timeout', (e.target as HTMLInputElement).value)" class="w-20 bg-white/10 border border-white/20 rounded px-2 py-1 text-[11px] select-text focus:outline-none focus:border-white/40" placeholder="超时" />
-        </template>
-        <template v-else-if="step.action === 'press_key'">
-          <VSelect :model-value="step.key" @update:model-value="e => updateSetupStep(idx, 'key', e)" :options="[{value:'HOME',label:'HOME'},{value:'BACK',label:'BACK'},{value:'MENU',label:'MENU'},{value:'ENTER',label:'ENTER'}]" placeholder="按键" />
-        </template>
-        <template v-else-if="step.action === 'wait_for'">
-          <input :value="step.duration" type="number" @input="e => updateSetupStep(idx, 'duration', (e.target as HTMLInputElement).value)" class="w-24 bg-white/10 border border-white/20 rounded px-2 py-1 text-[11px] select-text focus:outline-none focus:border-white/40" placeholder="毫秒" />
-        </template>
-        <template v-else-if="step.action === 'set_variable'">
-          <input :value="step.name" @input="e => updateSetupStep(idx, 'name', (e.target as HTMLInputElement).value)" class="flex-1 bg-white/10 border border-white/20 rounded px-2 py-1 text-[11px] select-text focus:outline-none focus:border-white/40 min-w-0" placeholder="变量名" />
-          <input :value="step.value" @input="e => updateSetupStep(idx, 'value', (e.target as HTMLInputElement).value)" class="flex-1 bg-white/10 border border-white/20 rounded px-2 py-1 text-[11px] select-text focus:outline-none focus:border-white/40 min-w-0" placeholder="变量值" />
-        </template>
-        <button class="p-1 rounded hover:bg-red-500/20 text-red-400/60 hover:text-red-400 flex-shrink-0" @click="removeSetupStep(idx)">
-          <span class="material-symbols-outlined text-[14px]">close</span>
-        </button>
       </div>
     </div>
 
@@ -82,47 +36,27 @@
         </button>
       </div>
       <div v-if="steps.length === 0" class="text-[11px] text-on-surface-variant/30 text-center py-3">暂无测试步骤</div>
-      <div v-for="(step, idx) in steps" :key="step._key" class="mb-2 last:mb-0">
+      <div v-for="(step, idx) in steps" :key="step._key" class="mb-1.5 last:mb-0">
         <div class="rounded-lg bg-white/20 border border-white/10 overflow-hidden">
-          <div class="flex items-center gap-2 px-3 py-2 bg-white/10 border-b border-white/10">
-            <div class="flex flex-col gap-0.5">
-              <button class="p-0.5 rounded hover:bg-white/20 text-on-surface-variant/30" :disabled="idx === 0" @click="moveStep(idx, -1)">
-                <span class="material-symbols-outlined text-[12px]">keyboard_arrow_up</span>
+          <div class="px-2.5 py-1.5 space-y-1">
+            <div class="flex items-start gap-1.5">
+              <div class="flex-1 grid grid-cols-4 gap-1.5">
+                <div>
+                  <label class="text-[10px] text-on-surface-variant/40 block mb-0.5">动作类型</label>
+                  <VSelect :model-value="step.action" @update:model-value="e => updateStep(idx, 'action', e)" :options="[{value:'navigate_to',label:'导航点击'},{value:'input_text',label:'输入文本'},{value:'swipe',label:'滑动'},{value:'press_key',label:'按键'},{value:'wait_for',label:'等待条件'},{value:'screenshot',label:'截图'},{value:'assert_element',label:'断言元素'},{value:'assert_visual',label:'图片对比'},{value:'assert_shell',label:'Shell断言'},{value:'set_variable',label:'设置变量'},{value:'launch_app',label:'启动应用'}]" placeholder="动作类型" />
+                </div>
+                <div>
+                  <label class="text-[10px] text-on-surface-variant/40 block mb-0.5">定位方式</label>
+                  <VSelect :model-value="step.targetBy" @update:model-value="e => updateStep(idx, 'targetBy', e)" :options="[{value:'',label:'无'},{value:'resource_id',label:'resource_id (资源ID)'},{value:'content_desc',label:'content_desc (内容描述)'},{value:'text',label:'text (文本)'},{value:'text_contains',label:'text_contains (文本包含)'},{value:'visual_match',label:'visual_match (视觉匹配)'},{value:'index',label:'index (索引)'},{value:'class_and_index',label:'class_and_index (类名+索引)'}]" placeholder="选择定位方式" />
+                </div>
+                <div class="col-span-2">
+                  <label class="text-[10px] text-on-surface-variant/40 block mb-0.5">定位值</label>
+                  <input :value="step.targetValue" @input="e => updateStep(idx, 'targetValue', (e.target as HTMLInputElement).value)" class="w-full bg-white/10 border border-white/20 rounded px-2 py-1 text-[11px] font-mono select-text focus:outline-none focus:border-white/40" placeholder="元素定位值" />
+                </div>
+              </div>
+              <button class="mt-4 p-1 rounded hover:bg-red-500/20 text-red-400/60 hover:text-red-400" @click="removeStep(idx)">
+                <span class="material-symbols-outlined text-[14px]">close</span>
               </button>
-              <button class="p-0.5 rounded hover:bg-white/20 text-on-surface-variant/30" :disabled="idx === steps.length - 1" @click="moveStep(idx, 1)">
-                <span class="material-symbols-outlined text-[12px]">keyboard_arrow_down</span>
-              </button>
-            </div>
-            <span class="text-[11px] font-mono text-on-surface-variant/50 min-w-[50px]">{{ step.id }}</span>
-            <div class="flex-1"></div>
-            <button class="p-1 rounded hover:bg-red-500/20 text-red-400/60 hover:text-red-400" @click="removeStep(idx)">
-              <span class="material-symbols-outlined text-[14px]">close</span>
-            </button>
-          </div>
-          <div class="px-3 py-2 space-y-1.5">
-            <div class="grid grid-cols-2 gap-1.5">
-              <div>
-                <label class="text-[10px] text-on-surface-variant/40 block mb-0.5">步骤ID</label>
-                <input :value="step.id" @input="e => updateStep(idx, 'id', (e.target as HTMLInputElement).value)" class="w-full bg-white/10 border border-white/20 rounded px-2 py-1 text-[11px] font-mono select-text focus:outline-none focus:border-white/40" placeholder="step_01" />
-              </div>
-              <div>
-                <label class="text-[10px] text-on-surface-variant/40 block mb-0.5">描述</label>
-                <input :value="step.desc" @input="e => updateStep(idx, 'desc', (e.target as HTMLInputElement).value)" class="w-full bg-white/10 border border-white/20 rounded px-2 py-1 text-[11px] select-text focus:outline-none focus:border-white/40" placeholder="步骤描述" />
-              </div>
-            </div>
-            <div class="grid grid-cols-4 gap-1.5">
-              <div>
-                <label class="text-[10px] text-on-surface-variant/40 block mb-0.5">动作类型</label>
-                <VSelect :model-value="step.action" @update:model-value="e => updateStep(idx, 'action', e)" :options="[{value:'navigate_to',label:'导航点击'},{value:'input_text',label:'输入文本'},{value:'swipe',label:'滑动'},{value:'press_key',label:'按键'},{value:'wait_for',label:'等待条件'},{value:'screenshot',label:'截图'},{value:'assert_element',label:'断言元素'},{value:'assert_visual',label:'图片对比'},{value:'assert_shell',label:'Shell断言'},{value:'set_variable',label:'设置变量'},{value:'launch_app',label:'启动应用'}]" placeholder="动作类型" />
-              </div>
-              <div>
-                <label class="text-[10px] text-on-surface-variant/40 block mb-0.5">定位方式</label>
-                <VSelect :model-value="step.targetBy" @update:model-value="e => updateStep(idx, 'targetBy', e)" :options="[{value:'',label:'无'},{value:'resource_id',label:'resource-id'},{value:'text',label:'文本'},{value:'content_desc',label:'content-desc'},{value:'class_name',label:'class name'},{value:'xpath',label:'XPath'},{value:'accessibility_id',label:'accessibility id'}]" placeholder="定位方式" />
-              </div>
-              <div class="col-span-2">
-                <label class="text-[10px] text-on-surface-variant/40 block mb-0.5">定位值</label>
-                <input :value="step.targetValue" @input="e => updateStep(idx, 'targetValue', (e.target as HTMLInputElement).value)" class="w-full bg-white/10 border border-white/20 rounded px-2 py-1 text-[11px] font-mono select-text focus:outline-none focus:border-white/40" placeholder="元素定位值" />
-              </div>
             </div>
             <div v-if="step.action === 'navigate_to'">
               <div>
@@ -173,7 +107,7 @@
             <div v-if="step.action === 'press_key'" class="grid grid-cols-1">
               <div>
                 <label class="text-[10px] text-on-surface-variant/40 block mb-0.5">按键</label>
-                <VSelect :model-value="step.key" @update:model-value="e => updateStep(idx, 'key', e)" :options="[{value:'HOME',label:'HOME'},{value:'BACK',label:'BACK'},{value:'MENU',label:'MENU'},{value:'ENTER',label:'ENTER'},{value:'VOLUME_UP',label:'VOLUME_UP'},{value:'VOLUME_DOWN',label:'VOLUME_DOWN'}]" placeholder="按键" />
+                <VSelect :model-value="step.key" @update:model-value="e => updateStep(idx, 'key', e)" :options="KEY_OPTIONS" placeholder="按键" />
               </div>
             </div>
             <div v-if="step.action === 'wait_for'" class="grid grid-cols-1">
@@ -244,41 +178,6 @@
       </div>
     </div>
 
-    <!-- Teardown Section -->
-    <div class="glass-panel rounded-lg p-3 bg-white/30">
-      <div class="flex items-center justify-between mb-2">
-        <div class="text-[12px] font-semibold text-on-surface-variant/60 flex items-center gap-1.5">
-          <span class="material-symbols-outlined text-[14px]">playlist_remove</span>后置处理 (teardown)
-        </div>
-        <button class="glass-button px-2 py-1 rounded text-[10px] flex items-center gap-1 select-none" @click="addTeardownStep">
-          <span class="material-symbols-outlined text-[12px]">add</span>添加
-        </button>
-      </div>
-      <div v-if="teardownSteps.length === 0" class="text-[11px] text-on-surface-variant/30 text-center py-3">暂无后置步骤</div>
-      <div v-for="(step, idx) in teardownSteps" :key="step._key" class="flex items-start gap-2 mb-1.5 p-2 rounded-lg bg-white/20">
-        <div class="flex flex-col gap-0.5 pt-0.5">
-          <button class="p-0.5 rounded hover:bg-white/20 text-on-surface-variant/30" :disabled="idx === 0" @click="moveTeardownStep(idx, -1)">
-            <span class="material-symbols-outlined text-[12px]">keyboard_arrow_up</span>
-          </button>
-          <button class="p-0.5 rounded hover:bg-white/20 text-on-surface-variant/30" :disabled="idx === teardownSteps.length - 1" @click="moveTeardownStep(idx, 1)">
-            <span class="material-symbols-outlined text-[12px]">keyboard_arrow_down</span>
-          </button>
-        </div>
-        <VSelect :model-value="step.action" @update:model-value="e => updateTeardownStep(idx, 'action', e)" :options="[{value:'press_key',label:'按键'},{value:'wait_for',label:'等待'},{value:'screenshot',label:'截图'}]" placeholder="动作" />
-        <template v-if="step.action === 'press_key'">
-          <VSelect :model-value="step.key" @update:model-value="e => updateTeardownStep(idx, 'key', e)" :options="[{value:'HOME',label:'HOME'},{value:'BACK',label:'BACK'},{value:'MENU',label:'MENU'}]" placeholder="按键" />
-        </template>
-        <template v-else-if="step.action === 'wait_for'">
-          <input :value="step.duration" type="number" @input="e => updateTeardownStep(idx, 'duration', (e.target as HTMLInputElement).value)" class="w-24 bg-white/10 border border-white/20 rounded px-2 py-1 text-[11px] select-text focus:outline-none focus:border-white/40" placeholder="毫秒" />
-        </template>
-        <template v-else-if="step.action === 'screenshot'">
-          <input :value="step.path" @input="e => updateTeardownStep(idx, 'path', (e.target as HTMLInputElement).value)" class="flex-1 bg-white/10 border border-white/20 rounded px-2 py-1 text-[11px] select-text focus:outline-none focus:border-white/40 min-w-0" placeholder="final_screen.png" />
-        </template>
-        <button class="p-1 rounded hover:bg-red-500/20 text-red-400/60 hover:text-red-400 flex-shrink-0" @click="removeTeardownStep(idx)">
-          <span class="material-symbols-outlined text-[14px]">close</span>
-        </button>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -304,6 +203,53 @@ const emit = defineEmits<{
   'update:description': [value: string]
   'request-screenshot': []
 }>()
+
+const KEY_OPTIONS = [
+  { value: 'DPAD_UP', label: 'DPAD_UP (↑)' },
+  { value: 'DPAD_DOWN', label: 'DPAD_DOWN (↓)' },
+  { value: 'DPAD_LEFT', label: 'DPAD_LEFT (←)' },
+  { value: 'DPAD_RIGHT', label: 'DPAD_RIGHT (→)' },
+  { value: 'DPAD_CENTER', label: 'DPAD_CENTER' },
+  { value: 'DPAD_OK', label: 'DPAD_OK' },
+  { value: 'ENTER', label: 'ENTER' },
+  { value: 'BACK', label: 'BACK' },
+  { value: 'HOME', label: 'HOME' },
+  { value: 'MENU', label: 'MENU' },
+  { value: 'SETTINGS', label: 'SETTINGS' },
+  { value: 'POWER', label: 'POWER' },
+  { value: 'VOLUME_UP', label: 'VOLUME_UP' },
+  { value: 'VOLUME_DOWN', label: 'VOLUME_DOWN' },
+  { value: 'MEDIA_PLAY_PAUSE', label: 'MEDIA_PLAY_PAUSE' },
+  { value: 'MEDIA_PLAY', label: 'MEDIA_PLAY' },
+  { value: 'MEDIA_PAUSE', label: 'MEDIA_PAUSE' },
+  { value: 'MEDIA_STOP', label: 'MEDIA_STOP' },
+  { value: 'MEDIA_NEXT', label: 'MEDIA_NEXT' },
+  { value: 'MEDIA_PREVIOUS', label: 'MEDIA_PREVIOUS' },
+  { value: 'MEDIA_REWIND', label: 'MEDIA_REWIND' },
+  { value: 'MEDIA_FAST_FORWARD', label: 'MEDIA_FAST_FORWARD' },
+  { value: 'MEDIA_RECORD', label: 'MEDIA_RECORD' },
+  { value: 'SEARCH', label: 'SEARCH' },
+  { value: 'GUIDE', label: 'GUIDE' },
+  { value: 'INFO', label: 'INFO' },
+  { value: 'LIVE', label: 'LIVE' },
+  { value: 'DVR', label: 'DVR' },
+  { value: 'CAPTIONS', label: 'CAPTIONS' },
+  { value: 'SUBTITLE', label: 'SUBTITLE' },
+  { value: 'PAGE_UP', label: 'PAGE_UP' },
+  { value: 'PAGE_DOWN', label: 'PAGE_DOWN' },
+  { value: 'CHANNEL_UP', label: 'CHANNEL_UP' },
+  { value: 'CHANNEL_DOWN', label: 'CHANNEL_DOWN' },
+  { value: 'TAB', label: 'TAB' },
+  { value: 'SPACE', label: 'SPACE' },
+  { value: 'DEL', label: 'DEL' },
+  { value: 'MOVE_HOME', label: 'MOVE_HOME' },
+  { value: 'MOVE_END', label: 'MOVE_END' },
+  { value: 'ZOOM_IN', label: 'ZOOM_IN' },
+  { value: 'ZOOM_OUT', label: 'ZOOM_OUT' },
+  { value: 'INPUT', label: 'INPUT' },
+  { value: 'SLEEP', label: 'SLEEP' },
+  { value: 'WAKEUP', label: 'WAKEUP' },
+]
 
 const VSelect = defineComponent({
   props: ['modelValue', 'options', 'placeholder'],
@@ -521,6 +467,16 @@ function buildYaml() {
     lines.push('')
   }
   return lines.join('\n')
+}
+
+function updateMeta(field: string, value: string) {
+  if (field === 'name') name.value = value
+  else if (field === 'description') description.value = value
+  else if (field === 'tags') tags.value = value
+  else if (field === 'module') module.value = value
+  else if (field === 'priority') priority.value = value
+  emit(`update:${field}` as any, value)
+  rebuildYaml()
 }
 
 function rebuildYaml() {

@@ -22,6 +22,7 @@ import json
 import logging
 import os
 import sys
+import threading
 import time
 import uuid
 from datetime import datetime, timezone
@@ -662,6 +663,17 @@ def build_parser() -> argparse.ArgumentParser:
 # ── Entry point ─────────────────────────────────────────────────────────
 
 
+def _timeout_watchdog(timeout_seconds: int) -> None:
+    """If the main thread doesn't finish within timeout, emit suite_done and force exit."""
+    timer = threading.Timer(timeout_seconds, lambda: (
+        emit({"type": "suite_done", "error": f"Timed out after {timeout_seconds}s", "passed": 0, "failed": 0, "healed": 0, "ms": 0}),
+        logger.error("Engine timed out after %ds", timeout_seconds),
+        os._exit(1),
+    ))
+    timer.daemon = True
+    timer.start()
+
+
 def main() -> int:
     """CLI entry point.
 
@@ -683,6 +695,9 @@ def main() -> int:
     if handler is None:
         parser.print_help()
         return 2
+
+    # Start watchdog timer (120s) to prevent hanging indefinitely
+    _timeout_watchdog(120)
 
     try:
         return handler(args)

@@ -1,0 +1,13 @@
+{
+  "run_id": "51b788c573ee",
+  "status": "passed",
+  "total": 1,
+  "passed": 1,
+  "failed": 0,
+  "healed": 0,
+  "skipped": 0,
+  "duration_ms": 3563,
+  "failed_cases": [],
+  "healed_cases": [],
+  "report_url": "D:\\code\\test-Space\\reports\\51b788c573ee\\summary.json"
+}

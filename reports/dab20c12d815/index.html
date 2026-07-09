@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Automation Report - 测试</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans SC',sans-serif;background:#f0f2f5;color:#1e293b;line-height:1.6;}
+a{color:#3b82f6;text-decoration:none;}
+a:hover{text-decoration:underline;}
+img{max-width:100%;height:auto;}
+</style>
+<style>
+.glass-header{background:rgba(255,255,255,0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid rgba(0,0,0,0.06);position:sticky;top:0;z-index:100;padding:16px 32px;}
+.metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;padding:24px 32px;}
+.metric-card{border-radius:16px;padding:20px;color:#fff;box-shadow:0 4px 20px rgba(0,0,0,0.08);transition:transform 0.2s;}
+.metric-card:hover{transform:translateY(-2px);}
+.metric-card .num{font-size:36px;font-weight:700;line-height:1.2;}
+.metric-card .label{font-size:14px;opacity:0.9;margin-top:4px;}
+.bg-passed{background:linear-gradient(135deg,#22c55e,#16a34a);}
+.bg-failed{background:linear-gradient(135deg,#ef4444,#dc2626);}
+.bg-healed{background:linear-gradient(135deg,#f97316,#ea580c);}
+.bg-total{background:linear-gradient(135deg,#3b82f6,#2563eb);}
+.bg-skipped{background:linear-gradient(135deg,#94a3b8,#64748b);}
+.status-bar{height:8px;border-radius:4px;background:#e2e8f0;overflow:hidden;margin:0 32px;}
+.status-bar-fill{height:100%;transition:width 0.6s ease;}
+.filter-bar{padding:16px 32px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.filter-btn{padding:6px 14px;border-radius:20px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;font-size:13px;transition:all 0.2s;}
+.filter-btn.active{background:#3b82f6;color:#fff;border-color:#3b82f6;}
+.filter-btn:hover{border-color:#3b82f6;}
+.sort-select{padding:6px 12px;border-radius:8px;border:1px solid #e2e8f0;font-size:13px;background:#fff;}
+.case-card{background:#fff;border-radius:16px;padding:16px 20px;margin:0 32px 12px;box-shadow:0 2px 8px rgba(0,0,0,0.04);transition:box-shadow 0.2s;cursor:pointer;}
+.case-card:hover{box-shadow:0 4px 16px rgba(0,0,0,0.08);}
+.case-card .status-icon{font-size:20px;margin-right:10px;}
+.case-card .case-title{font-weight:600;font-size:15px;}
+.case-card .case-meta{font-size:12px;color:#64748b;margin-top:4px;}
+.tag{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;background:#f1f5f9;color:#475569;margin-right:4px;}
+.trend-section{padding:24px 32px;}
+</style>
+</head>
+<body style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#1e293b;">
+<div class="glass-header">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+    <div>
+      <h1 style="margin:0;font-size:20px;font-weight:600;" data-i18n="suite_title">Automation Report - 测试</h1>
+      <div style="font-size:13px;color:#64748b;margin-top:4px;">
+        <span data-i18n="run_time">执行时间</span>: 2026-07-09T09:56:12.232025+00:00
+        &nbsp;|&nbsp; <span data-i18n="device">设备</span>: bh20180dc1816d11f3113 / bh20180dc1816d11f3113 | (1920, 1080)
+        &nbsp;|&nbsp; <span data-i18n="duration">耗时</span>: 9.5s
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button onclick="toggleLang()" style="padding:6px 14px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;font-size:13px;">中/EN</button>
+    </div>
+  </div>
+</div>
+
+<div class="metric-grid">
+  <div class="metric-card bg-total"><div class="num">2</div><div class="label" data-i18n="suite_total">suite_total</div></div>
+<div class="metric-card bg-passed"><div class="num">1</div><div class="label" data-i18n="suite_passed">suite_passed</div></div>
+<div class="metric-card bg-failed"><div class="num">1</div><div class="label" data-i18n="suite_failed">suite_failed</div></div>
+<div class="metric-card bg-healed"><div class="num">0</div><div class="label" data-i18n="suite_healed">suite_healed</div></div>
+</div>
+
+<div class="status-bar"><div class="status-bar-fill" style="width:50.0%;background:#22c55e;display:inline-block;"></div><div class="status-bar-fill" style="width:0.0%;background:#f97316;display:inline-block;"></div><div class="status-bar-fill" style="width:50.0%;background:#ef4444;display:inline-block;"></div><div class="status-bar-fill" style="width:0.0%;background:#94a3b8;display:inline-block;"></div></div>
+
+<div class="filter-bar">
+  <span style="font-size:13px;color:#64748b;" data-i18n="filter_tag">标签筛选</span>:
+  <button class="filter-btn active" data-tag="all" onclick="filterByTag('all')" data-i18n="all">全部</button>
+  <span style="margin-left:16px;font-size:13px;color:#64748b;" data-i18n="sort">排序</span>:
+  <select class="sort-select" onchange="sortCases(this.value)">
+    <option value="priority" data-i18n="sort_priority">优先级</option>
+    <option value="duration" data-i18n="sort_duration">耗时</option>
+    <option value="status" data-i18n="sort_status">状态</option>
+  </select>
+</div>
+
+<div id="case-list">
+  <div class="case-card" data-tags="" data-priority="P2" data-duration="9469" data-status="failed" onclick="location.href='./TC-测试/report.html'"><div style="display:flex;align-items:center;justify-content:space-between;"><div style="display:flex;align-items:center;"><span class="status-icon" style="color:#ef4444">&#x2718;</span><span class="case-title">测试</span></div><span style="font-size:13px;color:#64748b;">9.5s</span></div><div style="margin-top:6px;"></div><div class="case-meta">- &middot; 1/2 <span data-i18n="steps_passed">步骤通过</span></div></div>
+</div>
+
+
+
+<script>
+const i18n = {
+  zh: {
+    suite_title:"测试报告",suite_total:"总用例数",suite_passed:"通过",suite_failed:"失败",
+    suite_healed:"AI修复",run_time:"执行时间",device:"设备",duration:"耗时",
+    filter_tag:"标签筛选",sort:"排序",sort_priority:"优先级",sort_duration:"耗时",sort_status:"状态",
+    all:"全部",steps_passed:"步通过",trend_title:"与上次执行对比",
+    new_failed:"新增失败",new_healed:"新增修复",new_cases:"新增用例",no_change:"与上次执行无变化",
+    back_to_suite:"返回套件报告",author:"作者",priority:"优先级",
+    before:"操作前",after:"操作后",reference:"参考",action:"操作",diff:"差异叠加",
+    error:"错误",heal_phase:"修复阶段",heal_method:"方式",confidence:"置信度"
+  },
+  en: {
+    suite_title:"Test Report",suite_total:"Total",suite_passed:"Passed",suite_failed:"Failed",
+    suite_healed:"Healed",run_time:"Run Time",device:"Device",duration:"Duration",
+    filter_tag:"Filter",sort:"Sort",sort_priority:"Priority",sort_duration:"Duration",sort_status:"Status",
+    all:"All",steps_passed:"passed",trend_title:"vs Previous Run",
+    new_failed:"New Failed",new_healed:"New Healed",new_cases:"New Cases",no_change:"No change from previous run",
+    back_to_suite:"Back to Suite",author:"Author",priority:"Priority",
+    before:"Before",after:"After",reference:"Reference",action:"Action",diff:"Diff Overlay",
+    error:"Error",heal_phase:"Phase",heal_method:"Method",confidence:"Confidence"
+  }
+};
+let lang = 'zh';
+function toggleLang() {
+  lang = lang === 'zh' ? 'en' : 'zh';
+  document.querySelectorAll('[data-i18n]').forEach(function(el) {
+    var key = el.getAttribute('data-i18n');
+    var val = i18n[lang][key];
+    if (val !== undefined) el.textContent = val;
+  });
+}
+</script>
+<script>
+let currentTag = 'all';
+function filterByTag(tag) {
+  currentTag = tag;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b.dataset.tag === tag));
+  applyFilters();
+}
+function sortCases(by) {
+  applyFilters();
+}
+function applyFilters() {
+  const sortBy = document.querySelector('.sort-select').value;
+  const cards = Array.from(document.querySelectorAll('.case-card'));
+  const list = document.getElementById('case-list');
+  cards.forEach(c => {
+    const tags = (c.dataset.tags || '').split(',');
+    c.style.display = (currentTag === 'all' || tags.includes(currentTag)) ? '' : 'none';
+  });
+  const visible = cards.filter(c => c.style.display !== 'none');
+  visible.sort((a, b) => {
+    if (sortBy === 'priority') return (a.dataset.priority || 'P2').localeCompare(b.dataset.priority || 'P2');
+    if (sortBy === 'duration') return parseInt(b.dataset.duration || '0') - parseInt(a.dataset.duration || '0');
+    return (a.dataset.status || '').localeCompare(b.dataset.status || '');
+  });
+  visible.forEach(c => list.appendChild(c));
+}
+</script>
+</body>
+</html>

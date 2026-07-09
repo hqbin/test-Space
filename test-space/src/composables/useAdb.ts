@@ -7,6 +7,22 @@ interface AdbDeviceInfo {
   android_version: string;
 }
 
+interface UiElement {
+  resource_id: string;
+  class_name: string;
+  package: string;
+  content_desc: string;
+  text: string;
+  bounds_left: number;
+  bounds_top: number;
+  bounds_right: number;
+  bounds_bottom: number;
+  clickable: boolean;
+  focusable: boolean;
+  enabled: boolean;
+  index: number;
+}
+
 interface DeviceProperties {
   model: string;
   brand: string;
@@ -43,6 +59,9 @@ export function useAdb() {
 
   const reboot = (serial: string) =>
     invoke<string>("adb_reboot", { serial });
+
+  const dumpUi = (serial: string) =>
+    invoke<UiElement[]>("adb_dump_ui", { serial });
 
   const screenshot = (serial: string, savePath: string) =>
     invoke<string>("adb_screenshot", { serial, savePath });
@@ -137,6 +156,7 @@ export function useAdb() {
   return {
     listDevices,
     shell,
+    dumpUi,
     installApk,
     installApkBytes,
     uninstallApk,
@@ -177,4 +197,4 @@ export function useAdb() {
   };
 }
 
-export type { AdbDeviceInfo, DeviceProperties };
+export type { AdbDeviceInfo, DeviceProperties, UiElement };

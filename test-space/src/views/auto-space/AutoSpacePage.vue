@@ -45,6 +45,11 @@
           <span class="material-symbols-outlined text-[16px]">stop</span>
           <span class="text-[12px]">{{ t('auto.stop') }}</span>
         </button>
+        <div class="w-px h-5 bg-white/10 mx-1"></div>
+        <button class="glass-button px-3 py-1.5 rounded-full font-caption text-caption font-normal flex items-center gap-1.5 select-none" @click="openInspector" title="UI Inspector">
+          <span class="material-symbols-outlined text-[16px]">touch_app</span>
+          <span class="text-[12px]">Inspector</span>
+        </button>
       </div>
 
       <div class="relative" @click.stop>
@@ -267,7 +272,7 @@
           <div v-if="latestScreenshot" class="w-48 flex-shrink-0 border-l border-white/10 flex flex-col" style="background: #0d0d1a;">
             <div class="text-[11px] text-[#6b7280] px-3 py-2 border-b border-white/5">{{ t('auto.latestScreenshot') }}</div>
             <div class="flex-1 flex items-center justify-center p-2">
-              <img :src="latestScreenshot" class="max-w-full max-h-full object-contain rounded-lg cursor-pointer" @click="screenshotZoom = latestScreenshot" />
+              <img :src="latestScreenshot ? convertFileSrc(latestScreenshot) : ''" class="max-w-full max-h-full object-contain rounded-lg cursor-pointer" @click="screenshotZoom = latestScreenshot" />
             </div>
           </div>
         </div>
@@ -409,7 +414,59 @@
     <Teleport to="body">
       <div v-if="screenshotZoom" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="screenshotZoom = null">
         <div class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
-        <img :src="screenshotZoom" class="max-w-[90vw] max-h-[90vh] object-contain relative z-10 rounded-2xl shadow-2xl" @click="screenshotZoom = null" />
+        <img :src="screenshotZoom ? convertFileSrc(screenshotZoom) : ''" class="max-w-[90vw] max-h-[90vh] object-contain relative z-10 rounded-2xl shadow-2xl" @click="screenshotZoom = null" />
+      </div>
+    </Teleport>
+
+    <!-- Screen Inspector -->
+    <Teleport to="body">
+      <div v-if="inspectorOpen" class="fixed inset-0 z-50 flex flex-col" @click.self="closeInspector">
+        <div class="absolute inset-0 bg-black/80 backdrop-blur-sm"></div>
+        <div class="relative z-10 flex flex-col flex-1 p-4">
+          <div class="flex items-center justify-between mb-2">
+            <div class="text-white text-[13px] font-semibold">UI Inspector</div>
+            <div class="flex items-center gap-2">
+              <span class="text-[11px] text-white/50">点击截图上的元素查看属性</span>
+              <button class="glass-button px-3 py-1.5 rounded-lg text-[11px] text-white/80 hover:text-white" @click="closeInspector">关闭</button>
+            </div>
+          </div>
+          <div class="flex-1 flex gap-3 min-h-0">
+            <div class="flex-1 relative overflow-hidden rounded-xl flex items-center justify-center" style="background:#0d0d1a;">
+              <img ref="inspectorImgRef"
+                :src="inspectorScreenshot ? convertFileSrc(inspectorScreenshot) : ''"
+                class="max-w-full max-h-full object-contain select-none cursor-crosshair"
+                @load="onInspectorImgLoad"
+                @mousemove="onInspectorMouseMove"
+                @click="onInspectorClick" />
+              <!-- Highlight overlay -->
+              <div v-if="inspectorHighlight"
+                class="absolute pointer-events-none border-2 border-cyan-400 bg-cyan-400/10 transition-all duration-75"
+                :style="inspectorHighlightStyle"></div>
+            </div>
+            <!-- Element info panel -->
+            <div v-if="inspectorElement" class="w-72 flex-shrink-0 overflow-y-auto custom-scrollbar rounded-xl p-3" style="background:#0d0d1a;">
+              <div class="text-[12px] font-semibold text-white mb-3">元素属性</div>
+              <div class="space-y-2">
+                <div v-for="(val, key) in inspectorFields" :key="key" class="flex items-start gap-2">
+                  <div class="text-[10px] text-white/50 w-24 flex-shrink-0 pt-0.5 font-mono">{{ key }}</div>
+                  <div class="flex-1 min-w-0">
+                    <div class="text-[11px] text-white/90 font-mono break-all bg-white/5 rounded px-1.5 py-0.5">{{ val }}</div>
+                    <button v-if="val" class="text-[10px] text-cyan-400 hover:text-cyan-300 mt-0.5" @click="copyText(val)">复制</button>
+                  </div>
+                </div>
+              </div>
+              <hr class="border-white/10 my-3" />
+              <div class="text-[11px] text-white/70">bounds (实际像素)</div>
+              <div class="text-[10px] text-white/40 font-mono mt-1">{{ inspectorElement.bounds_left }}, {{ inspectorElement.bounds_top }} → {{ inspectorElement.bounds_right }}, {{ inspectorElement.bounds_bottom }}</div>
+              <hr class="border-white/10 my-3" />
+              <div class="text-[11px] text-white/70">class</div>
+              <div class="text-[10px] text-white/40 font-mono mt-1">{{ inspectorElement.class_name }}</div>
+            </div>
+            <div v-else class="w-72 flex-shrink-0 rounded-xl p-3 flex items-center justify-center" style="background:#0d0d1a;">
+              <div class="text-[12px] text-white/30 text-center">点击截图中的元素<br />查看属性</div>
+            </div>
+          </div>
+        </div>
       </div>
     </Teleport>
 
@@ -468,12 +525,13 @@
 <script setup lang="ts">
 defineOptions({ name: 'AutoSpacePage' })
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from "vue"
+import { convertFileSrc } from "@tauri-apps/api/core"
 import * as db from "@/services/database"
 import type { AutoCase, AutoRunRecord } from "@/types"
 import { useI18n } from "@/composables/useI18n"
 import { useAdb } from "@/composables/useAdb"
-import type { AdbDeviceInfo } from "@/composables/useAdb"
-import { runAutoCase, runAutoSuite, stopAutoRun, listenAutoEvents } from "@/services/autoRunService"
+import type { AdbDeviceInfo, UiElement } from "@/composables/useAdb"
+import { runAutoCase, runAutoSuite, stopAutoRun, listenAutoEvents, checkPythonEngine } from "@/services/autoRunService"
 import type { AutoStepEvent } from "@/services/autoRunService"
 import VisualEditor from "./VisualEditor.vue"
 import ReportViewer from "./ReportViewer.vue"
@@ -509,9 +567,19 @@ const consoleOutput = ref<{ text: string; type: string }[]>([])
 const consoleStepCurrent = ref(0)
 const consoleStepTotal = ref(0)
 const latestScreenshot = ref<string | null>(null)
+const runTimeoutHandle = ref<ReturnType<typeof setTimeout> | null>(null)
 const runRecords = ref<AutoRunRecord[]>([])
 const reportRunId = ref<string | null>(null)
 const screenshotZoom = ref<string | null>(null)
+const inspectorOpen = ref(false)
+const inspectorScreenshot = ref<string | null>(null)
+const inspectorElements = ref<UiElement[]>([])
+const inspectorElement = ref<UiElement | null>(null)
+const inspectorHighlight = ref(false)
+const inspectorHighlightStyle = ref({})
+const inspectorImgRef = ref<HTMLImageElement | null>(null)
+let inspectorImgNaturalW = 0
+let inspectorImgNaturalH = 0
 
 const workspaceTabs = [
   { key: 'editor' as const, icon: 'edit', labelKey: 'auto.editor' },
@@ -522,7 +590,7 @@ const workspaceTabs = [
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
 let eventUnlisten: (() => void) | null = null
 
-const { listDevices, screenshot: adbScreenshot } = useAdb()
+const { listDevices, screenshot: adbScreenshot, dumpUi } = useAdb()
 const screenshotResult = ref('')
 const deviceList = ref<AdbDeviceInfo[]>([])
 const selectedDevice = ref(localStorage.getItem('last_device_serial') || '')
@@ -547,6 +615,122 @@ function selectDevice(serial: string) {
   selectedDevice.value = serial
   if (serial) localStorage.setItem('last_device_serial', serial)
   else localStorage.removeItem('last_device_serial')
+}
+
+const inspectorFields = computed(() => {
+  const el = inspectorElement.value
+  if (!el) return {}
+  const fields: Record<string, string> = {}
+  if (el.resource_id) fields['resource-id'] = el.resource_id
+  if (el.text) fields['text'] = el.text
+  if (el.content_desc) fields['content-desc'] = el.content_desc
+  if (el.class_name) fields['class'] = el.class_name
+  if (el.package) fields['package'] = el.package
+  fields['clickable'] = String(el.clickable)
+  fields['focusable'] = String(el.focusable)
+  fields['enabled'] = String(el.enabled)
+  fields['index'] = String(el.index)
+  return fields
+})
+
+function onInspectorImgLoad() {
+  const img = inspectorImgRef.value
+  if (img) {
+    inspectorImgNaturalW = img.naturalWidth
+    inspectorImgNaturalH = img.naturalHeight
+  }
+}
+
+function onInspectorMouseMove(e: MouseEvent) {
+  const img = inspectorImgRef.value
+  if (!img || inspectorElements.value.length === 0) return
+  const rect = img.getBoundingClientRect()
+  const scaleX = inspectorImgNaturalW / rect.width
+  const scaleY = inspectorImgNaturalH / rect.height
+  const mx = (e.clientX - rect.left) * scaleX
+  const my = (e.clientY - rect.top) * scaleY
+  const el = findElementAt(mx, my)
+  if (el) {
+    inspectorElement.value = el
+    inspectorHighlight.value = true
+    inspectorHighlightStyle.value = {
+      left: `${(el.bounds_left / scaleX) + rect.left - 2}px`,
+      top: `${(el.bounds_top / scaleY) + rect.top - 2}px`,
+      width: `${(el.bounds_right - el.bounds_left) / scaleX + 4}px`,
+      height: `${(el.bounds_bottom - el.bounds_top) / scaleY + 4}px`,
+    }
+  } else {
+    inspectorHighlight.value = false
+  }
+}
+
+function onInspectorClick(e: MouseEvent) {
+  const img = inspectorImgRef.value
+  if (!img || inspectorElements.value.length === 0) return
+  const rect = img.getBoundingClientRect()
+  const scaleX = inspectorImgNaturalW / rect.width
+  const scaleY = inspectorImgNaturalH / rect.height
+  const mx = (e.clientX - rect.left) * scaleX
+  const my = (e.clientY - rect.top) * scaleY
+  const el = findElementAt(mx, my)
+  if (el) {
+    inspectorElement.value = el
+    inspectorHighlight.value = true
+    inspectorHighlightStyle.value = {
+      left: `${(el.bounds_left / scaleX) + rect.left - 2}px`,
+      top: `${(el.bounds_top / scaleY) + rect.top - 2}px`,
+      width: `${(el.bounds_right - el.bounds_left) / scaleX + 4}px`,
+      height: `${(el.bounds_bottom - el.bounds_top) / scaleY + 4}px`,
+    }
+  }
+}
+
+function findElementAt(x: number, y: number): UiElement | null {
+  let best: UiElement | null = null
+  let bestArea = Infinity
+  for (const el of inspectorElements.value) {
+    if (x >= el.bounds_left && x <= el.bounds_right && y >= el.bounds_top && y <= el.bounds_bottom) {
+      const area = (el.bounds_right - el.bounds_left) * (el.bounds_bottom - el.bounds_top)
+      if (area > 0 && area < bestArea) {
+        best = el
+        bestArea = area
+      }
+    }
+  }
+  return best
+}
+
+async function openInspector() {
+  const serial = selectedDevice.value
+  if (!serial) { showToast('请先连接设备', false); return }
+  try {
+    const ts = new Date().toISOString().replace(/[:.]/g, '-')
+    const savePath = `inspector_${ts}.png`
+    const result = await adbScreenshot(serial, savePath)
+    inspectorScreenshot.value = result || savePath
+    const elements = await dumpUi(serial)
+    inspectorElements.value = elements
+    inspectorElement.value = null
+    inspectorHighlight.value = false
+    inspectorOpen.value = true
+  } catch (e) {
+    showToast(`Inspector failed: ${e}`, false)
+  }
+}
+
+function closeInspector() {
+  inspectorOpen.value = false
+  inspectorScreenshot.value = null
+  inspectorElements.value = []
+  inspectorElement.value = null
+  inspectorHighlight.value = false
+}
+
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+    showToast('已复制: ' + text, true)
+  } catch { /* ignore */ }
 }
 
 async function handleEditorScreenshot() {
@@ -1058,8 +1242,11 @@ function onAutoEvent(event: AutoStepEvent) {
         errorMessage: event.error || '', healLog: null,
       }).catch(() => {})
     }
+  } else if (event.type === 'engine_log') {
+    consoleOutput.value.push({ text: `  ⚙ ${event.desc || ''}`, type: 'info' })
   } else if (event.type === 'screenshot') {
     latestScreenshot.value = event.path || null
+    // event.path is absolute path; convertFileSrc converts it to an asset:// URL for display
   } else if (event.type === 'suite_done') {
     consoleOutput.value.push({ text: `  ✅ Suite completed (passed: ${event.passed || 0}, failed: ${event.failed || 0}, healed: ${event.healed || 0})`, type: 'step_done' })
     const isRealRun = (event.passed || 0) > 0 || (event.failed || 0) > 0 || (event.healed || 0) > 0
@@ -1103,6 +1290,16 @@ async function runCases(cases: AutoCase[]) {
   latestScreenshot.value = null
   consoleStepCurrent.value = 0
   consoleStepTotal.value = 0
+
+  // Pre-flight: check Python engine
+  const engineOk = await checkPythonEngine()
+  if (!engineOk) {
+    consoleOutput.value.push({ text: '  ❌ Python not found in PATH. Please install Python 3.', type: 'step_fail' })
+    running.value = false
+    showToast('Python not found', false)
+    return
+  }
+
   const runId = genId()
   currentRunId.value = runId
   const now = new Date().toISOString()
@@ -1112,10 +1309,10 @@ async function runCases(cases: AutoCase[]) {
   try {
     if (cases.length === 1) {
       consoleOutput.value.push({ text: `▶ Running: ${cases[0].name}`, type: 'step_start' })
-      await runAutoCase(runId, cases[0].id, device)
+      await runAutoCase(runId, cases[0].yaml_content, device)
     } else {
       consoleOutput.value.push({ text: `▶ Running suite: ${cases.length} cases`, type: 'step_start' })
-      await runAutoSuite(runId, cases.map(c => c.id), device)
+      await runAutoSuite(runId, cases.map(c => c.yaml_content), device)
     }
   } catch (e: any) {
     consoleOutput.value.push({ text: `  ❌ ${e?.message || e}`, type: 'step_fail' })
@@ -1123,8 +1320,8 @@ async function runCases(cases: AutoCase[]) {
     cleanupRun()
     showToast('Run failed: ' + (e?.message || e), false)
   }
-  // If suite_done never fires (engine not running), abort after 10s
-  setTimeout(() => {
+  // If suite_done never fires (engine not running), abort after 60s
+  runTimeoutHandle.value = setTimeout(() => {
     if (running.value && currentRunId.value) {
       const rid = currentRunId.value
       consoleOutput.value.push({ text: '  ❌ No response from engine - check Python environment', type: 'step_fail' })
@@ -1132,7 +1329,7 @@ async function runCases(cases: AutoCase[]) {
       cleanupRun()
       showToast('Engine not responding', false)
     }
-  }, 10000)
+  }, 60000)
 }
 
 function cleanupRun() {
@@ -1140,6 +1337,7 @@ function cleanupRun() {
   running.value = false
   if (runId) lastRunId.value = runId
   currentRunId.value = null
+  if (runTimeoutHandle.value) { clearTimeout(runTimeoutHandle.value); runTimeoutHandle.value = null }
   if (eventUnlisten) { eventUnlisten(); eventUnlisten = null }
   loadRunRecords()
 }
