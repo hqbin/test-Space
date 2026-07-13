@@ -67,8 +67,8 @@
             <span class="material-symbols-outlined text-[14px] text-on-surface-variant">expand_more</span>
           </button>
         </div>
-        <button class="glass-button px-2 py-1 rounded-full font-caption text-caption font-normal flex items-center gap-1 select-none" @click="refreshDevices" title="Refresh">
-          <span class="material-symbols-outlined text-[14px]">refresh</span>
+        <button class="glass-button px-2 py-1 rounded-full font-caption text-caption font-normal flex items-center gap-1 select-none" @click="refreshDevices" :disabled="refreshing" title="Refresh">
+          <span class="material-symbols-outlined text-[14px]" :class="refreshing ? 'animate-spin' : ''">refresh</span>
         </button>
       </div>
 
@@ -445,6 +445,16 @@
         </div>
       </Transition>
     </Teleport>
+
+    <!-- Toast -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div v-if="toastMsg" class="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 glass-panel rounded-full px-5 py-2.5 flex items-center gap-2 shadow-lg">
+          <span class="material-symbols-outlined text-[18px]" :class="toastType === 'error' ? 'text-error' : 'text-success-indicator'">{{ toastType === 'error' ? 'error' : 'check_circle' }}</span>
+          <span class="font-body-md text-body-md text-on-surface">{{ toastMsg }}</span>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -459,6 +469,16 @@ import { addInputHistory, getInputHistory } from "@/services/database"
 
 const { t } = useI18n()
 const api = useApiProxy()
+
+const toastMsg = ref("")
+const toastType = ref<"success" | "error">("success")
+let toastTimer: number | null = null
+function showToast(message: string, type: "success" | "error" = "success") {
+  toastMsg.value = message
+  toastType.value = type
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = window.setTimeout(() => { toastMsg.value = "" }, 2500)
+}
 
 const searchQuery = ref("")
 const searchHistory = ref<string[]>([])
@@ -533,14 +553,23 @@ function deviceName(serial: string) {
   return d ? (d.model || d.serial) : serial
 }
 
+const refreshing = ref(false)
+
 async function refreshDevices() {
+  if (refreshing.value) return
+  refreshing.value = true
   try {
-    const list = await invoke<{ serial: string; model: string }[]>("adb_list_devices")
+    const list = await invoke<{ serial: string; model: string; status: string }[]>("adb_list_devices")
     devices.value = list
     if (list.length > 0 && !deviceSerial.value) {
       deviceSerial.value = list[0].serial
     }
-  } catch { /* no adb or no devices */ }
+    showToast(`${t('api.deviceCount', { count: String(list.length) })}`)
+  } catch (e: any) {
+    showToast(`${t('api.scanFailed')}: ${e}`, "error")
+  } finally {
+    refreshing.value = false
+  }
 }
 
 const detailTabs = computed(() => [
