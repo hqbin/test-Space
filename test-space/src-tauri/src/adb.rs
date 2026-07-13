@@ -107,10 +107,17 @@ pub fn shell_command(serial: &str, command: &str) -> Result<String, String> {
         .args(["-s", serial, "shell", command])
         .output()
         .map_err(|e| format!("ADB shell failed: {}", e))?;
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let mut result = stdout;
+    if !stderr.is_empty() {
+        if !result.is_empty() { result.push('\n'); }
+        result.push_str(&stderr);
+    }
+    if output.status.success() || !result.is_empty() {
+        Ok(result)
     } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
+        Err(stderr)
     }
 }
 
