@@ -636,7 +636,7 @@
                 <div class="flex flex-col gap-0.5">
                   <span class="font-label-md text-label-md text-on-surface font-medium text-[13px] break-all">{{ item.key }}</span>
                   <div class="flex items-start gap-1">
-                    <span class="font-body-sm text-body-sm text-secondary break-all text-[12px]">{{ item.value }}</span>
+                    <span class="font-body-sm text-body-sm break-all text-[12px]" :class="keyValueClass(item.value)">{{ item.value }}</span>
                     <button v-if="item.raw" class="shrink-0 text-[11px] text-secondary hover:text-secondary/70 select-none" @click="toggleInfoExpand(idx)">
                       <span class="material-symbols-outlined text-[14px]">{{ infoDialogExpanded.has(idx) ? 'expand_less' : 'expand_more' }}</span>
                     </button>
@@ -1574,6 +1574,11 @@ function toggleInfoExpand(idx: number) {
   if (s.has(idx)) s.delete(idx); else s.add(idx);
   infoDialogExpanded.value = s;
 }
+function keyValueClass(value: string) {
+  if (value.startsWith(t("device.keySupported")) || /\bDolby MS12版本:/.test(value)) return "text-success-indicator";
+  if (value.startsWith(t("device.keyNotSupported"))) return "text-error";
+  return "text-secondary";
+}
 
 function showDeviceInfoDialog() {
   if (!selectedDevice.value || !deviceProps.value) { showToast(t("device.selectDeviceFirst"), "error"); return; }
@@ -2244,7 +2249,7 @@ async function queryInfo(type: string) {
   try {
     const serial = selectedDevice.value.serial;
     let title = "";
-    let entries: { key: string; value: string }[] = [];
+    let entries: { key: string; value: string; raw?: string }[] = [];
     if (type === "basic") {
       title = t("device.basicDeviceInfo");
       const props = await getProperties(serial);
@@ -2275,20 +2280,61 @@ async function queryInfo(type: string) {
       entries = aospKeys.map((key, i) => ({ key, value: results[i].trim() || t("device.empty") }));
     } else if (type === "keys") {
       title = t("device.keyCheckResult");
-      const checks = [
-        { name: "HDCP 1.4", cmd: "tee_provision -qt 0x31" },
-        { name: "HDCP 2.2", cmd: "tee_provision -qt 0x32" },
-        { name: "MGKID", cmd: "tee_provision -qt 0xa2" },
-        { name: "Widevine", cmd: "drminfo -d" },
-        { name: "Dolby", cmd: "dolby_fw_dolbyms12 /smart/etc/ms12/libdolbyms12.so /data/test.so" },
-      ];
-      const checkResults = await Promise.all(checks.map(c =>
-        shell(serial, c.cmd).then(r => {
-          const success = !r.toLowerCase().includes("not provisioned") && !r.toLowerCase().includes("error");
-          return { key: c.name, value: `${success ? t("device.keyPassed") : t("device.keyFailed")}\n> ${c.cmd}`, raw: r };
-        }).catch((e: any) => ({ key: c.name, value: t("device.keyExecError"), raw: `${e}` }))
-      ));
-      entries = checkResults;
+      try {
+        await adbRoot(serial);
+        for (let i = 0; i < 30; i++) {
+          await new Promise(r => setTimeout(r, 100));
+          try { await shell(serial, "echo ok"); break; } catch {}
+        }
+      } catch {}
+      const results: { key: string; value: string; raw: string }[] = [];
+      // HDCP 1.4
+      try {
+        const r = await shell(serial, "tee_provision -qt 0x31");
+        const ok = r.includes("provisioned") && !r.includes("not provisioned");
+        results.push({ key: "HDCP 1.4", value: ok ? "检测到设备支持HDCP1.4" : `检测到设备不支持HDCP1.4    ${t("device.hdcp14Warning")}`, raw: r });
+      } catch (e: any) { results.push({ key: "HDCP 1.4", value: `检测到设备不支持HDCP1.4    ${t("device.hdcp14Warning")}`, raw: `${e}` }); }
+      // HDCP 2.2
+      try {
+        const r = await shell(serial, "tee_provision -qt 0x32");
+        const ok = r.includes("provisioned") && !r.includes("not provisioned");
+        results.push({ key: "HDCP 2.2", value: ok ? "检测到设备支持HDCP2.2" : `检测到设备不支持HDCP2.2    ${t("device.hdcp22Warning")}`, raw: r });
+      } catch (e: any) { results.push({ key: "HDCP 2.2", value: `检测到设备不支持HDCP2.2    ${t("device.hdcp22Warning")}`, raw: `${e}` }); }
+      // MGKID
+      try {
+        const r = await shell(serial, "tee_provision -qt 0xa2");
+        const ok = r.includes("provisioned") && !r.includes("not provisioned");
+        results.push({ key: "MGKID", value: ok ? "检测到设备支持MGKID" : `检测到设备不支持MGKID    ${t("device.mgkidWarning")}`, raw: r });
+      } catch (e: any) { results.push({ key: "MGKID", value: `检测到设备不支持MGKID    ${t("device.mgkidWarning")}`, raw: `${e}` }); }
+      // Widevine
+      try {
+        const r = await shell(serial, "drminfo -d");
+        const lines = r.split("\n").filter(l => l.toLowerCase().includes("systemid"));
+        const filtered = lines.join("\n");
+        const ok = /\bsystemId[=\s]+\d{5}\b/i.test(filtered) || /\bsystemId\b.*\d{5}/i.test(filtered);
+        results.push({ key: "Widevine", value: ok ? "检测到设备支持Widevine" : `检测到设备不支持Widevine    ${t("device.widevineWarning")}`, raw: filtered || r });
+      } catch (e: any) { results.push({ key: "Widevine", value: `检测到设备不支持Widevine    ${t("device.widevineWarning")}`, raw: `${e}` }); }
+      // Dolby
+      let dolbyOk = false;
+      try {
+        const r = await shell(serial, "dolby_fw_dolbyms12 /smart/etc/ms12/libdolbyms12.so /data/test.so");
+        dolbyOk = r.includes("exits!") && r.includes("done!");
+        results.push({ key: "Dolby", value: dolbyOk ? "检测到设备支持Dolby" : `检测到设备不支持Dolby    ${t("device.dolbyWarning")}`, raw: r });
+      } catch (e: any) { results.push({ key: "Dolby", value: `检测到设备不支持Dolby    ${t("device.dolbyWarning")}`, raw: `${e}` }); }
+      // Dolby version
+      if (dolbyOk) {
+        try {
+          const vr = await shell(serial, "dumpsys media.audio_flinger --hal");
+          const line = vr.split("\n").find(l => /build ms12 version/i.test(l));
+          if (line) {
+            const m = line.match(/build ms12 version:\s*(\d+)/);
+            const verMap: Record<string, string> = { "2": "2.4.2", "3": "2.8.2" };
+            const ver = m ? (verMap[m[1]] || m[1]) : "?";
+            results.push({ key: "Dolby MS12", value: `Dolby MS12版本: ${ver}`, raw: line.trim() });
+          }
+        } catch {}
+      }
+      entries = results;
     } else if (type === "storage") {
       title = t("device.storageInfoTitle");
       const toGBMB = (kb: number): string => {
