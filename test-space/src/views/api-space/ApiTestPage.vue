@@ -148,11 +148,11 @@
                     <span v-else class="text-on-surface/60">{{ ep.path }}</span>
                   </span>
                   <span class="text-caption text-on-surface-variant shrink-0 relative pointer-events-none">{{ ep.cases.length }}</span>
-                  <button class="glass-hover rounded-lg p-1 text-on-surface-variant hover:text-secondary opacity-0 group-hover:opacity-100 transition-all relative z-10" @click.stop="startEditEndpointName(ep)">
-                    <span class="material-symbols-outlined text-[14px]">edit</span>
+                  <button class="glass-hover rounded-lg p-2 text-on-surface-variant hover:text-secondary opacity-0 group-hover:opacity-100 transition-all relative z-20 flex items-center justify-center" @click.stop="startEditEndpointName(ep)">
+                    <span class="material-symbols-outlined text-[16px]">edit</span>
                   </button>
-                  <button class="glass-hover rounded-lg p-1 text-on-surface-variant hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all relative z-10" @click.stop="handleDeleteEndpoint(group.id, ep.method, ep.path)">
-                    <span class="material-symbols-outlined text-[14px]">delete</span>
+                  <button class="glass-hover rounded-lg p-2 text-on-surface-variant hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all relative z-20 flex items-center justify-center" @click.stop="handleDeleteEndpoint(group.id, ep.method, ep.path)">
+                    <span class="material-symbols-outlined text-[16px]">delete</span>
                   </button>
                 </div>
 

@@ -3237,3 +3237,18 @@ System prompt 新增规则：**除非用户明确要求，不在脚本里添加 
 | 检查项 | 结果 |
 |--------|------|
 | `npx vue-tsc --noEmit` | ✅ 通过 |
+## Phase 42 — 全局认证自动检测去重（已完成 ✅）
+
+修复全局认证自动检测的 bug：当不同接口使用不同的 Authorization 值时，utoDetectToken() 将所有不同的（name, value）对都添加到 globalAuthHeaders，导致 pplyGlobalAuth() 运行时对同一个 header name 多次覆盖，只有最后一个值生效，部分接口运行失败。
+
+**修复方案**：新增 setAuthHeader() 辅助函数，按 header name 去重（同名时只保留最后一个检测到的值）。utoDetectToken() 中所有 globalAuthHeaders.value.push() 改为调用 setAuthHeader()。这样 globalAuthHeaders 始终只有一个 entry 对应一个 header name，pplyGlobalAuth() 可以正确覆盖所有测试用例的认证头。
+
+| 模块 | 说明 | 状态 |
+|------|------|------|
+| src/composables/useApiTest.ts | 新增 ddAuthHeader() 辅助函数（始终追加，不去重）；utoDetectToken() 步骤顺序改为 S2→S4→S3→S1（请求头最后处理，确保 Bearer 前缀不被抹掉）；tokenPatterns 重排（Bearer 前缀优先）；pplyGlobalAuth() 新增按 header name 去重（同名只取最后一个值，支持用户手动编辑）；移除 hasAuthHeader() 和 hasAuthPair() | ✅ |
+
+**编译验证**：
+| 检查项 | 结果 |
+|--------|------|
+| 
+px vue-tsc --noEmit | ✅ 通过 |

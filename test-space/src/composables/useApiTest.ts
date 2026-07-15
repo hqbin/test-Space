@@ -157,11 +157,16 @@ export function useApiTest() {
     return cases.map(tc => {
       let merged = [...tc.headers]
       let url = tc.url
-      for (const h of hdrs) {
-        // Overwrite matching headers
+     for (const h of hdrs) {
+        // Overwrite matching headers (Authorization: keep test case's own value)
+        const isAuth = h.name.toLowerCase() === "authorization"
         const idx = merged.findIndex(([k]) => k.toLowerCase() === h.name.toLowerCase())
         if (idx !== -1) {
-          merged[idx] = [h.name, h.value]
+          if (!isAuth) {
+            merged[idx] = [h.name, h.value]
+          }
+        } else {
+          merged.push([h.name, h.value])
         }
         // Replace matching URL query parameter (e.g. ?token=old → ?token=new)
         try {

@@ -265,20 +265,25 @@ export async function runTestCases(
   let totalDuration = 0
   let passedCount = 0
 
-  let idx = 0
-  for (const tc of testCases) {
-    if (!tc.enabled) continue
-    idx++
-    onProgress?.(idx)
-    const result = await runSingleTestCase(tc)
-    result.reportId = reportId
-    result.caseId = tc.id
-    if (result.passed) passedCount++
-    if (result.duration) totalDuration += result.duration
-    await db.saveApiTestResult(result)
-    results.push(result)
+  let completedCount = 0
+  // Run with concurrency: process in batches of 5
+  const concurrency = 5
+  for (let i = 0; i < testCases.length; i += concurrency) {
+    const batch = testCases.slice(i, i + concurrency).filter(tc => tc.enabled)
+    if (batch.length === 0) continue
+    const batchResults = await Promise.all(batch.map(async tc => {
+      const result = await runSingleTestCase(tc)
+      result.reportId = reportId
+      result.caseId = tc.id
+      if (result.passed) passedCount++
+      if (result.duration) totalDuration += result.duration
+      await db.saveApiTestResult(result)
+      completedCount++
+      onProgress?.(completedCount)
+      return result
+    }))
+    results.push(...batchResults)
   }
-
   report.passedCases = passedCount
   report.failedCases = results.length - passedCount
   report.totalDuration = totalDuration
