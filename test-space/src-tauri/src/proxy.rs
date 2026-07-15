@@ -1315,3 +1315,143 @@ pub async fn proxy_replay(
         ..captured
     })
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestRunResult {
+    pub status_code: u16,
+    pub status_text: String,
+    pub headers: Vec<Vec<String>>,
+    pub body: String,
+    pub body_is_base64: bool,
+    pub duration_ms: f64,
+    pub error: Option<String>,
+}
+
+#[tauri::command]
+pub async fn proxy_run_test(
+    method: String,
+    url: String,
+    headers: Vec<Vec<String>>,
+    body: Option<String>,
+    timeout_secs: Option<u64>,
+) -> Result<TestRunResult, String> {
+    let start_time = get_timestamp();
+    let encoded_url = encode_url_for_hyper(&url);
+    let uri: http_mitm_proxy::hyper::http::Uri = encoded_url.parse()
+        .map_err(|e| format!("无效URL: {} (原始: {})", e, url))?;
+
+    let mut builder = Request::builder()
+        .method(method.as_str())
+        .uri(&uri);
+
+    for h in &headers {
+        if h.len() >= 2 {
+            if let (Ok(name), Ok(value)) = (
+                http_mitm_proxy::hyper::http::HeaderName::from_bytes(h[0].as_bytes()),
+                http_mitm_proxy::hyper::http::HeaderValue::from_str(&h[1]),
+            ) {
+                builder = builder.header(name, value);
+            }
+        }
+    }
+
+    // Ensure Host header is set from URL if not provided
+    if !headers.iter().any(|h| h.len() >= 2 && h[0].to_lowercase() == "host") {
+        if let Some(host) = uri.host() {
+            if let Ok(host_val) = http_mitm_proxy::hyper::http::HeaderValue::from_str(host) {
+                builder = builder.header(http_mitm_proxy::hyper::http::header::HOST, host_val);
+            }
+        }
+    }
+
+    let body_str = body.clone().unwrap_or_default();
+    let req = builder.body(box_body(Bytes::from(body_str)))
+        .map_err(|e| format!("无法构建请求: {}", e))?;
+
+    let client = DefaultClient::new();
+    let timeout_dur = Duration::from_secs(timeout_secs.unwrap_or(30));
+
+    let result = match timeout(timeout_dur, client.send_request(req)).await {
+        Ok(Ok(res)) => res,
+        Ok(Err(e)) => {
+            return Ok(TestRunResult {
+                status_code: 0,
+                status_text: String::new(),
+                headers: Vec::new(),
+                body: String::new(),
+                body_is_base64: false,
+                duration_ms: 0.0,
+                error: Some(format!("请求失败: {}", e)),
+            })
+        }
+        Err(_) => {
+            return Ok(TestRunResult {
+                status_code: 0,
+                status_text: String::new(),
+                headers: Vec::new(),
+                body: String::new(),
+                body_is_base64: false,
+                duration_ms: 0.0,
+                error: Some("请求超时".to_string()),
+            })
+        }
+    };
+
+    let end_time = get_timestamp();
+    let duration_ms = ((end_time - start_time) * 1000.0 * 100.0).round() / 100.0;
+    let (res_parts, res_body) = result.0.into_parts();
+    let res_body_bytes = read_body_bytes(res_body).await;
+    let res_body_bytes = decompress_body(get_content_encoding(&res_parts.headers).as_deref(), &res_body_bytes);
+    let (res_body_str, res_body_is_base64) = body_to_string(&res_body_bytes);
+
+    Ok(TestRunResult {
+        status_code: res_parts.status.as_u16(),
+        status_text: res_parts.status.canonical_reason().unwrap_or("Unknown").to_string(),
+        headers: headers_to_vec(&res_parts.headers),
+        body: res_body_str.unwrap_or_default(),
+        body_is_base64: res_body_is_base64,
+        duration_ms,
+        error: None,
+    })
+}
+
+/// Percent-encode URL characters that `http::Uri` rejects (spaces, braces, pipe, non-ASCII, etc.)
+fn encode_url_for_hyper(raw: &str) -> String {
+    let raw = raw.trim();
+    // Find the scheme+authority prefix (keep it as-is)
+    let split_pos = if let Some(scheme_end) = raw.find("://") {
+        let after_scheme = &raw[scheme_end + 3..];
+        after_scheme.find('/').map(|i| scheme_end + 3 + i)
+            .or_else(|| after_scheme.find('?').map(|i| scheme_end + 3 + i))
+            .or_else(|| after_scheme.find('#').map(|i| scheme_end + 3 + i))
+            .unwrap_or(raw.len())
+    } else {
+        0
+    };
+
+    let (base, rest) = raw.split_at(split_pos);
+    let mut result = String::with_capacity(raw.len() + 32);
+    result.push_str(base);
+    for ch in rest.chars() {
+        match ch {
+            ' ' | '{' | '}' | '|' | '\\' | '^' | '`' | '"' | '<' | '>' | '\t' | '\n' | '\r' => {
+                for b in encode_char(ch) {
+                    result.push_str(&format!("%{:02X}", b));
+                }
+            }
+            c if c > '\x7E' => {
+                for b in encode_char(c) {
+                    result.push_str(&format!("%{:02X}", b));
+                }
+            }
+            c => result.push(c),
+        }
+    }
+    result
+}
+
+fn encode_char(ch: char) -> Vec<u8> {
+    let mut buf = [0u8; 4];
+    let s = ch.encode_utf8(&mut buf);
+    s.as_bytes().to_vec()
+}

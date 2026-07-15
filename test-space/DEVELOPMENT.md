@@ -3097,6 +3097,42 @@ System prompt 新增规则：**除非用户明确要求，不在脚本里添加 
 
 ---
 
+## Phase 38 — API 接口测试功能（已完成 ✅）
+
+实现完整的 API 接口测试功能，在现有代理抓包页面基础上，支持自动生成测试用例、批量执行、报告管理。
+
+| 模块 | 说明 | 状态 |
+|------|------|------|
+| `src/types/index.ts` | 新增类型：`ApiTestCase`、`ApiTestGroup`、`ApiTestReport`、`ApiTestResult`、`ApiTestAssertion`、`TestCaseType`、`AssertionOperator` | ✅ |
+| `src/services/database.ts` | 新增 4 张表迁移（`api_test_cases`、`api_test_groups`、`api_test_reports`、`api_test_results`）+ 完整 CRUD 函数（`saveApiTestCase`/`loadApiTestCases`/`deleteApiTestCase`/`deleteApiTestCasesByGroup`、`saveApiTestGroup`/`loadApiTestGroups`/`deleteApiTestGroup`、`saveApiTestReport`/`loadApiTestReports`/`deleteApiTestReport`、`saveApiTestResult`/`loadApiTestResults`）；所有带索引 | ✅ |
+| `src/services/apiTestAi.ts` | 新建文件：`generateSmartTestCases()` 基于规则的智能生成（正向+反向场景）；`mergeRequests()` 按 method:path 去重合并端点；`generateTestCasesWithAi()` 调用 LLM 生成；`isBinaryContent()`/`isBinaryRequest()` 过滤图片/视频/音频/二进制；`autoGenerateFromRequests()` 编排入口 | ✅ |
+| `src/services/apiTestService.ts` | 新建文件：`autoGenerateTestCases()` 生成入口（AI 优先，回退规则）；`runSingleTestCase()` 通过 Rust `proxy_run_test` 执行单用例；`runTestCases()` 批量执行并生成报告；`getOrCreateDefaultGroup()` 默认分组管理；`validateJsonSchema()` Schema 验证 | ✅ |
+| `src/composables/useApiTest.ts` | 新建 composable：`testCases`/`groups`/`reports` 等响应式状态；`filteredCases`/`groupedCases` 计算属性；`generateCases()`/`runAll()`/`runGroup()`/`runSingle()` 操作函数；`processedSourceIds` 追踪已处理请求实现追加生成 | ✅ |
+| `src/views/api-space/ApiTestPage.vue` | 新建页面：顶栏（返回/生成/运行/报告/分组管理）+ 过滤栏（搜索/分组选择/统计）+ 案例列表（分组视图）+ 详情面板（概览/请求头/请求体/断言/结果 5 Tab）+ 分组管理弹窗 + 报告列表/详情弹窗 + 翻转动画容器（rotateY + scale + opacity）；通过 `provide('apiProxy', ...)` 共享代理实例 | ✅ |
+| `src/views/api-space/ApiSpacePage.vue` | 新增「接口测试」按钮 + `provide('apiProxy', api)` 共享代理实例；翻转动画修复（CSS `rotateY + scale + opacity` 替代 `backface-visibility`） | ✅ |
+| `src-tauri/src/proxy.rs` | 新增 `proxy_run_test` Rust 命令（`TestRunResult` 结构体）；使用 `DefaultClient` 绕过 Tauri HTTP 插件 URL 白名单限制，支持任意设备域名 | ✅ |
+| `src-tauri/src/lib.rs` | 注册 `proxy_run_test` 命令 | ✅ |
+
+**编译验证**：
+| 检查项 | 结果 |
+|--------|------|
+| `npx vue-tsc --noEmit` | ✅ 通过 |
+| `cargo build --no-default-features` | ✅ 通过 |
+
+## Phase 39 — API 测试增强：批量删除 + 报告导出 + 全局Token（已完成 ✅）
+
+| 模块 | 说明 | 状态 |
+|------|------|------|
+| `src/views/api-space/ApiTestPage.vue` | 新增分组「清空」按钮（批量删除分组下所有用例）；新增报告「导出」按钮（HTML 独立报告 + JSON 数据，优先 Tauri dialog+fs，兜底 Blob 下载）；新增全局认证对话框 | ✅ |
+| `src/composables/useApiTest.ts` | 新增 `deleteCasesByGroup()` 批量删除；新增 `globalAuthHeader`/`saveGlobalAuthHeader()`；`generateCases()` 改为使用 `selectedGroupId` 而非总是创建默认分组；新增 `applyGlobalAuth()` 注入认证头 | ✅ |
+| `src/services/apiTestService.ts` | 新增 `exportReport()` 导出函数 + `generateReportHtml()` HTML 报告模板 + `escapeHtml()` 工具函数 | ✅ |
+
+**编译验证**：
+| 检查项 | 结果 |
+|--------|------|
+| `npx vue-tsc --noEmit` | ✅ 通过 |
+| `cargo build --no-default-features` | ✅ 通过 |
+
 ## 三十九、代码健康度全面评估（2026-07-07）
 
 ### 39.1 评估结论
@@ -3166,3 +3202,38 @@ System prompt 新增规则：**除非用户明确要求，不在脚本里添加 
 |------|----------|
 | `src/views/script-space/ScriptSpacePage.vue` | `doAutoSave` 改为原地更新列表（消除冗余 DB 全表读）；新增 `onDeactivated`（清理拖拽悬挂监听器 + autoSaveTimer）；import 加 `onDeactivated` |
 | `vite.config.ts` | 新增 `historyApiFallback: true`（修复任意页面 Ctrl+R 500 错误）；proxy 规则从 `"/api"` 改为 `"^/api/"`（防止 `/api-space` 被误代理） |
+
+---
+
+## Phase 40 — API 测试 UI/UX 优化 + 域名过滤 + 自动Token（已完成 ✅）
+
+| 模块 | 说明 | 状态 |
+|------|------|------|
+| `src/composables/useApiTest.ts` | 移除 `processedSourceIds`/`resetProcessedIds`（生成不再追踪已处理ID）；新增 `autoDetectToken()` 自动检测 token（递归扫描 JSON 响应体 + 兜底 Set-Cookie/Authorization 响应头）；新增 `filterByDomainKeywords()` 按域名关键字筛选；新增 `deleteEndpointCases()` 按 method:path 删除整组用例；新增 `getEndpointCases()` 按 method:path 分组计算属性；新增 `saveDomainKeywords()`/`loadDomainKeywords()` 持久化；新增 `findNestedValue()` 工具；`generateCases()` 中自动检测 token + 域名过滤 | ✅ |
+| `src/views/api-space/ApiTestPage.vue` | 移除「重置已处理」按钮；移除「运行全部」按钮；原生 `<select>` 替换为自定义玻璃下拉（Teleport body，`fixed` 定位防 `backdrop-filter` 堆叠上下文裁剪）；下拉底部「管理分组」入口替代独立按钮；用例列表改为接口端点三级结构（分组→method:path→用例），端点行悬浮显示删除按钮；全局认证对话框（自动检测 + 手动编辑）；域名关键字对话框（多行文本编辑）；列表标题不可编辑（仅详情面板可改） | ✅ |
+| `src/services/apiTestService.ts` | `autoGenerateTestCases()` 移除 `processedSourceIds` 参数 | ✅ |
+| `src/services/apiTestAi.ts` | `autoGenerateFromRequests()` 移除 `processedSourceIds` 参数 | ✅ |
+
+**编译验证**：
+| 检查项 | 结果 |
+|--------|------|
+| `npx vue-tsc --noEmit` | ✅ 通过 |
+| `cargo build --no-default-features` | ✅ 通过 |
+
+---
+
+## Phase 41 — API 测试：手动添加接口 + JSON 路径探索 + 断言修复 + 分页（已完成 ✅）
+
+| 模块 | 说明 | 状态 |
+|------|------|------|
+| `src/composables/useApiTest.ts` | 新增 `createManualTestCase()` 手动创建测试用例（URL 解析 host/path/query）；`applyGlobalAuth()` 增强：除覆盖同名请求头外，同时替换 URL 中匹配的查询参数（如 `?token=old→new`）；`autoDetectToken()` 新增第 4 步：扫描 URL 查询参数中的认证模式（token/auth/key/secret/session）；`globalAuthHeaders` 改为数组支持多认证头（`{name,value}[]`）；`endpointNames` 持久化端点自定义名称；导出 `createManualTestCase` | ✅ |
+| `src/components/JsonExplorer.vue` | 新建文件：JSON 路径探索容器组件，递归渲染 JSON 树 | ✅ |
+| `src/components/JsonNode.vue` | 新建文件：JSON 节点递归组件，支持展开/折叠对象和数组；叶子节点点击值或 `+` 按钮触发 `select` 事件（传递路径+值）；路径生成支持数组下标语法（如 `data.list[0]`）；按类型着色（字符串绿/数字蓝/布尔紫/null 灰） | ✅ |
+| `src/services/apiTestService.ts` | 断言结果 `expected` 字段修复：`body_contains` 类型显示 `包含/不包含"xxx"`；`response_time` 类型显示 `</> Nms`；`json_path` 类型路径解析支持数组下标语法（`data.list[0]` → 先取 key 再按索引）；数组/对象比较用 `JSON.stringify` 替代 `String()`（修复 `["A","B"]` vs `"A,B"` 不匹配）；根级数组下标处理（空 key 跳过） | ✅ |
+| `src/views/api-space/ApiTestPage.vue` | 新增「添加接口」按钮（每个分组 header）+ 手动添加对话框（方法/URL/名称/类型/请求头/请求体）；JSON 路径探索区（响应体下方，点击节点自动创建 json_path 断言并 toast 提示，不跳转）；结果标签页内容区 `flex flex-col` + 响应头/响应体 `flex-1`（填充空白）；报告详情对话框最大高度限制 `max-h-[min(85vh,750px)]`；分组接口列表分页（页码显示在「xx 接口」后，运行按钮前；`pageSize` 按窗口高度自动计算，resize 时重置）；`autoResizeTextarea` 用例切换时自动执行（`watch(selectedCase) + nextTick`）；Detail Tab 容器加 `flex flex-col` | ✅ |
+| `src/services/database.ts` | `importAllDataIncremental()` 云端增量恢复新增 API 测试数据导入：groups（按名称去重）→ cases（按 group_id+method+path+name 去重）→ reports（按名称去重）→ results（仅导入新插入的 report 的 results） | ✅ |
+
+**编译验证**：
+| 检查项 | 结果 |
+|--------|------|
+| `npx vue-tsc --noEmit` | ✅ 通过 |

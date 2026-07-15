@@ -187,3 +187,79 @@ export interface ApiProxyStatus {
   breakpoint_enabled: boolean
   captured_count: number
 }
+
+// ── API Test Cases ──────────────────────────────────────────
+
+export type TestCaseType = 'positive' | 'negative'
+
+export type AssertionOperator = 'equals' | 'not_equals' | 'contains' | 'not_contains' | 'exists' | 'not_exists' | 'greater_than' | 'less_than' | 'regex' | 'json_schema' | 'status_code' | 'response_time_lt'
+
+export interface ApiTestAssertion {
+  id: string
+  type: 'status_code' | 'json_path' | 'header' | 'body_contains' | 'response_time' | 'json_schema'
+  operator: AssertionOperator
+  target: string       // e.g. "data.id", "Content-Type", status code value
+  expectedValue: string
+  description?: string
+}
+
+export interface ApiTestCase {
+  id: string
+  groupId: string
+  name: string
+  description: string
+  type: TestCaseType
+  method: string
+  url: string
+  host: string
+  path: string
+  query: string | null
+  headers: string[][]
+  body: string | null
+  bodyIsBase64: boolean
+  assertions: ApiTestAssertion[]
+  sourceRequestId: string | null
+  enabled: boolean
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ApiTestGroup {
+  id: string
+  name: string
+  description: string
+  color: string
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ApiTestResult {
+  id: string
+  caseId: string
+  reportId: string
+  passed: boolean
+  statusCode: number | null
+  responseBody: string | null
+  responseHeaders: string[][] | null
+  duration: number | null
+  errorMessage: string | null
+  assertionResults: { assertionId: string; passed: boolean; actual: string; expected: string }[]
+  startedAt: string
+  completedAt: string | null
+}
+
+export interface ApiTestReport {
+  id: string
+  name: string
+  description: string
+  totalCases: number
+  passedCases: number
+  failedCases: number
+  totalDuration: number | null
+  startedAt: string
+  completedAt: string | null
+  status: 'running' | 'completed' | 'failed'
+  createdAt: string
+}

@@ -1,87 +1,99 @@
 <template>
-  <div class="flex flex-col flex-1 min-h-0 gap-4 pt-0 pb-4 select-none overflow-hidden">
-    <!-- Rewrite Rules Dropdown (below control bar) -->
-    <div v-if="showRules" class="glass-panel rounded-xl px-5 py-3">
-      <div class="flex items-center justify-between mb-2">
-        <span class="font-label-md font-semibold">{{ t('api.rules') }}</span>
-        <button class="glass-button px-2.5 py-1 rounded-full font-caption text-caption font-normal flex items-center gap-1 select-none" @click="showRuleEditor = true">
-          <span class="material-symbols-outlined text-[14px]">add</span>
-          {{ t('api.addRule') }}
-        </button>
-      </div>
-      <div class="space-y-1 max-h-[120px] overflow-y-auto custom-scrollbar">
-        <div v-if="localRules.length === 0" class="text-caption text-on-surface-variant py-2 text-center">{{ t('api.noRules') }}</div>
-        <div v-for="rule in localRules" :key="rule.id" class="flex items-center gap-2 bg-white/5 rounded-lg px-3 py-1.5">
-          <button class="text-[16px]" :class="rule.enabled ? 'text-green-500' : 'text-on-surface-variant'" @click="toggleRule(rule)">
-            <span class="material-symbols-outlined">{{ rule.enabled ? 'toggle_on' : 'toggle_off' }}</span>
+  <div class="flip-container">
+    <!-- API Proxy (front) -->
+    <div class="flip-page flip-front" :class="{ 'flipped': showTestPage }">
+      <div class="flex flex-col flex-1 min-h-0 gap-4 pt-0 pb-4 select-none overflow-hidden">
+        <!-- Rewrite Rules Dropdown (below control bar) -->
+        <div v-if="showRules" class="glass-panel rounded-xl px-5 py-3">
+          <div class="flex items-center justify-between mb-2">
+            <span class="font-label-md font-semibold">{{ t('api.rules') }}</span>
+            <button class="glass-button px-2.5 py-1 rounded-full font-caption text-caption font-normal flex items-center gap-1 select-none" @click="showRuleEditor = true">
+              <span class="material-symbols-outlined text-[14px]">add</span>
+              {{ t('api.addRule') }}
+            </button>
+          </div>
+          <div class="space-y-1 max-h-[120px] overflow-y-auto custom-scrollbar">
+            <div v-if="localRules.length === 0" class="text-caption text-on-surface-variant py-2 text-center">{{ t('api.noRules') }}</div>
+            <div v-for="rule in localRules" :key="rule.id" class="flex items-center gap-2 bg-white/5 rounded-lg px-3 py-1.5">
+              <button class="text-[16px]" :class="rule.enabled ? 'text-green-500' : 'text-on-surface-variant'" @click="toggleRule(rule)">
+                <span class="material-symbols-outlined">{{ rule.enabled ? 'toggle_on' : 'toggle_off' }}</span>
+              </button>
+              <span class="font-mono text-caption flex-1 truncate">{{ rule.name }} — <span class="text-on-surface-variant">{{ rule.url_pattern }}</span></span>
+              <button class="glass-hover rounded-lg p-1 text-on-surface-variant" @click="editRule(rule)">
+                <span class="material-symbols-outlined text-[14px]">edit</span>
+              </button>
+              <button class="glass-hover rounded-lg p-1 text-on-surface-variant" @click="deleteRule(rule.id)">
+                <span class="material-symbols-outlined text-[14px]">close</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Control Bar -->
+        <div class="glass-panel rounded-xl px-4 py-2 flex items-center gap-3 flex-wrap">
+          <button v-if="!api.running.value" class="glass-button px-3 py-1.5 rounded-full font-caption text-caption font-normal flex items-center gap-1.5 select-none" :disabled="api.isStarting.value" @click="handleStart">
+            <span class="material-symbols-outlined text-[16px]">play_arrow</span>
+            <span class="whitespace-nowrap">{{ api.isStarting.value ? 'Starting...' : t('api.start') }}</span>
           </button>
-          <span class="font-mono text-caption flex-1 truncate">{{ rule.name }} — <span class="text-on-surface-variant">{{ rule.url_pattern }}</span></span>
-          <button class="glass-hover rounded-lg p-1 text-on-surface-variant" @click="editRule(rule)">
-            <span class="material-symbols-outlined text-[14px]">edit</span>
+          <button v-else class="glass-button px-3 py-1.5 rounded-full font-caption text-caption font-normal flex items-center gap-1.5 select-none" :disabled="api.isStopping.value" @click="handleStop">
+            <span class="material-symbols-outlined text-[16px]">stop</span>
+            <span class="whitespace-nowrap">{{ api.isStopping.value ? 'Stopping...' : t('api.stop') }}</span>
           </button>
-          <button class="glass-hover rounded-lg p-1 text-on-surface-variant" @click="deleteRule(rule.id)">
-            <span class="material-symbols-outlined text-[14px]">close</span>
+
+          <div v-if="api.running.value" class="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/20 rounded-full">
+            <span class="w-2 h-2 rounded-full bg-green-500 status-pulse" />
+            <span class="text-body-md text-green-600 font-medium">{{ t('api.running') }}</span>
+            <span class="text-body-md text-on-surface-variant ml-1">{{ t('api.port') }}: {{ api.currentPort.value }}</span>
+          </div>
+
+          <div class="w-px h-6 bg-white/20" />
+
+          <button class="glass-button px-3 py-1.5 rounded-full font-caption text-caption font-normal flex items-center gap-1.5 transition-all relative select-none"
+            :class="api.breakpointEnabled.value ? 'glass-active' : ''"
+            @click="api.toggleBreakpoint(!api.breakpointEnabled.value, breakpointUrlPattern)">
+            <span class="material-symbols-outlined text-[16px]">error_outline</span>
+            <span class="whitespace-nowrap">{{ t('api.breakpoint') }}</span>
+            <span v-if="api.pendingCount.value > 0"
+              class="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1">
+              {{ api.pendingCount.value }}
+            </span>
+          </button>
+          <input v-if="api.running.value" v-model="breakpointUrlPattern" class="bg-white/50 border border-outline-variant/60 rounded-xl px-3 py-1.5 text-body-md font-mono w-[140px] focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all select-text" placeholder="/api/..." title="输入 URL 路径，仅拦截匹配的请求（留空则拦截全部）" />
+
+          <div class="w-px h-6 bg-white/20" />
+
+          <div class="flex items-center gap-2">
+            <div ref="deviceDropdownRef" class="relative">
+              <button class="bg-white/50 border border-outline-variant/60 rounded-xl px-3 py-1.5 text-body-md min-w-[140px] max-w-[200px] flex items-center gap-2 cursor-pointer select-none hover:bg-white/70 transition-all" @click="openDeviceDropdown">
+                <span class="w-2 h-2 rounded-full shrink-0" :class="deviceSerial ? 'bg-green-500' : 'bg-gray-300'" />
+                <span class="truncate flex-1 text-left">{{ deviceSerial ? deviceName(deviceSerial) : t('api.selectDevice') }}</span>
+                <span class="material-symbols-outlined text-[14px] text-on-surface-variant">expand_more</span>
+              </button>
+            </div>
+            <button class="glass-button px-2 py-1 rounded-full font-caption text-caption font-normal flex items-center gap-1 select-none" @click="refreshDevices" :disabled="refreshing" title="Refresh">
+              <span class="material-symbols-outlined text-[14px]" :class="refreshing ? 'animate-spin' : ''">refresh</span>
+            </button>
+          </div>
+
+          <div class="w-px h-6 bg-white/20" />
+
+          <button class="glass-button px-3 py-1.5 rounded-full font-caption text-caption font-normal flex items-center gap-1.5 transition-all select-none"
+            :class="showRules ? 'glass-active' : ''"
+            @click="showRules = !showRules">
+            <span class="material-symbols-outlined text-[16px]">rule</span>
+            <span class="whitespace-nowrap">Rules</span>
+            <span v-if="localRules.length > 0" class="text-caption text-on-surface-variant bg-white/10 rounded-full px-1.5 py-0.5">{{ localRules.filter(r => r.enabled).length }}/{{ localRules.length }}</span>
+          </button>
+
+          <div class="w-px h-6 bg-white/20" />
+
+          <button class="glass-button px-3 py-1.5 rounded-full font-caption text-caption font-normal flex items-center gap-1.5 transition-all select-none"
+            :class="showTestPage ? 'glass-active' : ''"
+            @click="showTestPage = true">
+            <span class="material-symbols-outlined text-[16px]">science</span>
+            <span class="whitespace-nowrap">接口测试</span>
           </button>
         </div>
-      </div>
-    </div>
-
-    <!-- Control Bar -->
-    <div class="glass-panel rounded-xl px-4 py-2 flex items-center gap-3 flex-wrap">
-      <button v-if="!api.running.value" class="glass-button px-3 py-1.5 rounded-full font-caption text-caption font-normal flex items-center gap-1.5 select-none" :disabled="api.isStarting.value" @click="handleStart">
-        <span class="material-symbols-outlined text-[16px]">play_arrow</span>
-        <span class="whitespace-nowrap">{{ api.isStarting.value ? 'Starting...' : t('api.start') }}</span>
-      </button>
-      <button v-else class="glass-button px-3 py-1.5 rounded-full font-caption text-caption font-normal flex items-center gap-1.5 select-none" :disabled="api.isStopping.value" @click="handleStop">
-        <span class="material-symbols-outlined text-[16px]">stop</span>
-        <span class="whitespace-nowrap">{{ api.isStopping.value ? 'Stopping...' : t('api.stop') }}</span>
-      </button>
-
-      <div v-if="api.running.value" class="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/20 rounded-full">
-        <span class="w-2 h-2 rounded-full bg-green-500 status-pulse" />
-        <span class="text-body-md text-green-600 font-medium">{{ t('api.running') }}</span>
-        <span class="text-body-md text-on-surface-variant ml-1">{{ t('api.port') }}: {{ api.currentPort.value }}</span>
-      </div>
-
-      <div class="w-px h-6 bg-white/20" />
-
-      <button class="glass-button px-3 py-1.5 rounded-full font-caption text-caption font-normal flex items-center gap-1.5 transition-all relative select-none"
-        :class="api.breakpointEnabled.value ? 'glass-active' : ''"
-        @click="api.toggleBreakpoint(!api.breakpointEnabled.value, breakpointUrlPattern)">
-        <span class="material-symbols-outlined text-[16px]">error_outline</span>
-        <span class="whitespace-nowrap">{{ t('api.breakpoint') }}</span>
-        <span v-if="api.pendingCount.value > 0"
-          class="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1">
-          {{ api.pendingCount.value }}
-        </span>
-      </button>
-      <input v-if="api.running.value" v-model="breakpointUrlPattern" class="bg-white/50 border border-outline-variant/60 rounded-xl px-3 py-1.5 text-body-md font-mono w-[140px] focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all select-text" placeholder="/api/..." title="输入 URL 路径，仅拦截匹配的请求（留空则拦截全部）" />
-
-      <div class="w-px h-6 bg-white/20" />
-
-      <div class="flex items-center gap-2">
-        <div ref="deviceDropdownRef" class="relative">
-          <button class="bg-white/50 border border-outline-variant/60 rounded-xl px-3 py-1.5 text-body-md min-w-[140px] max-w-[200px] flex items-center gap-2 cursor-pointer select-none hover:bg-white/70 transition-all" @click="openDeviceDropdown">
-            <span class="w-2 h-2 rounded-full shrink-0" :class="deviceSerial ? 'bg-green-500' : 'bg-gray-300'" />
-            <span class="truncate flex-1 text-left">{{ deviceSerial ? deviceName(deviceSerial) : t('api.selectDevice') }}</span>
-            <span class="material-symbols-outlined text-[14px] text-on-surface-variant">expand_more</span>
-          </button>
-        </div>
-        <button class="glass-button px-2 py-1 rounded-full font-caption text-caption font-normal flex items-center gap-1 select-none" @click="refreshDevices" :disabled="refreshing" title="Refresh">
-          <span class="material-symbols-outlined text-[14px]" :class="refreshing ? 'animate-spin' : ''">refresh</span>
-        </button>
-      </div>
-
-      <div class="w-px h-6 bg-white/20" />
-
-      <button class="glass-button px-3 py-1.5 rounded-full font-caption text-caption font-normal flex items-center gap-1.5 transition-all select-none"
-        :class="showRules ? 'glass-active' : ''"
-        @click="showRules = !showRules">
-        <span class="material-symbols-outlined text-[16px]">rule</span>
-        <span class="whitespace-nowrap">Rules</span>
-        <span v-if="localRules.length > 0" class="text-caption text-on-surface-variant bg-white/10 rounded-full px-1.5 py-0.5">{{ localRules.filter(r => r.enabled).length }}/{{ localRules.length }}</span>
-      </button>
-    </div>
 
     <!-- Device Dropdown (Teleport to body) -->
     <Teleport to="body">
@@ -455,20 +467,29 @@
         </div>
       </Transition>
     </Teleport>
+      </div>
+    </div>
+
+    <!-- API Test Page (back) -->
+    <div class="flip-page flip-back-page" :class="{ 'flipped': showTestPage }">
+      <ApiTestPage @back="showTestPage = false" />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 defineOptions({ name: 'ApiSpacePage' })
-import { ref, computed, watch, onMounted, onUnmounted, onActivated, onDeactivated } from "vue"
+import { ref, computed, watch, onMounted, onUnmounted, onActivated, onDeactivated, provide } from "vue"
 import { invoke } from "@tauri-apps/api/core"
 import { useI18n } from "@/composables/useI18n"
 import { useApiProxy } from "@/composables/useApiProxy"
 import type { ApiCapturedRequest, ApiRewriteRule } from "@/types"
 import { addInputHistory, getInputHistory } from "@/services/database"
+import ApiTestPage from "./ApiTestPage.vue"
 
 const { t } = useI18n()
 const api = useApiProxy()
+provide('apiProxy', api)
 
 const toastMsg = ref("")
 const toastType = ref<"success" | "error">("success")
@@ -514,6 +535,7 @@ const activeDetailTab = ref("request")
 const showRules = ref(false)
 const showRuleEditor = ref(false)
 const editingRule = ref<ApiRewriteRule | null>(null)
+const showTestPage = ref(false)
 const showBreakpointEditor = ref(false)
 const breakpointPhase = ref<"request" | "response">("request")
 const breakpointRequestId = ref("")
@@ -896,5 +918,55 @@ onUnmounted(() => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+.flip-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.flip-page {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.4s ease,
+              filter 0.4s ease;
+  transform-origin: center center;
+}
+
+/* Front page: visible by default */
+.flip-front {
+  transform: rotateY(0deg) scale(1);
+  opacity: 1;
+  filter: blur(0);
+  z-index: 2;
+}
+.flip-front.flipped {
+  transform: rotateY(-90deg) scale(0.85);
+  opacity: 0;
+  filter: blur(4px);
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Back page: hidden by default */
+.flip-back-page {
+  transform: rotateY(90deg) scale(0.85);
+  opacity: 0;
+  filter: blur(4px);
+  z-index: 1;
+}
+.flip-back-page.flipped {
+  transform: rotateY(0deg) scale(1);
+  opacity: 1;
+  filter: blur(0);
+  z-index: 2;
+  pointer-events: auto;
 }
 </style>

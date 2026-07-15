@@ -1,6 +1,6 @@
 ﻿import type Database from '@tauri-apps/plugin-sql'
 import DOMPurify from 'dompurify'
-import type { InputHistoryEntry, LogSession, NoteSpace, NoteFolder, NoteItem, NoteVersion, NoteLink } from '@/types'
+import type { InputHistoryEntry, LogSession, NoteSpace, NoteFolder, NoteItem, NoteVersion, NoteLink, ApiTestCase, ApiTestGroup, ApiTestReport, ApiTestResult } from '@/types'
 import type { ApiRewriteRule } from '@/types'
 
 let db: Database | null = null
@@ -165,6 +165,67 @@ async function migrateInternal(d: Database) {
   } catch (e) {
     console.warn('[DB] FTS5 not available, falling back to LIKE search')
   }
+
+  // ── API Test Cases ──────────────────────────────────────────
+  await d.execute(`CREATE TABLE IF NOT EXISTS api_test_groups (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    color TEXT NOT NULL DEFAULT '#6366f1',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`)
+  await d.execute(`CREATE TABLE IF NOT EXISTS api_test_cases (
+    id TEXT PRIMARY KEY,
+    group_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    type TEXT NOT NULL DEFAULT 'positive',
+    method TEXT NOT NULL,
+    url TEXT NOT NULL,
+    host TEXT NOT NULL DEFAULT '',
+    path TEXT NOT NULL DEFAULT '',
+    query TEXT,
+    headers TEXT NOT NULL DEFAULT '[]',
+    body TEXT,
+    body_is_base64 INTEGER NOT NULL DEFAULT 0,
+    assertions TEXT NOT NULL DEFAULT '[]',
+    source_request_id TEXT,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`)
+  await d.execute(`CREATE TABLE IF NOT EXISTS api_test_reports (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    total_cases INTEGER NOT NULL DEFAULT 0,
+    passed_cases INTEGER NOT NULL DEFAULT 0,
+    failed_cases INTEGER NOT NULL DEFAULT 0,
+    total_duration REAL,
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    status TEXT NOT NULL DEFAULT 'running',
+    created_at TEXT NOT NULL
+  )`)
+  await d.execute(`CREATE TABLE IF NOT EXISTS api_test_results (
+    id TEXT PRIMARY KEY,
+    case_id TEXT NOT NULL,
+    report_id TEXT NOT NULL,
+    passed INTEGER NOT NULL DEFAULT 0,
+    status_code INTEGER,
+    response_body TEXT,
+    response_headers TEXT,
+    duration REAL,
+    error_message TEXT,
+    assertion_results TEXT NOT NULL DEFAULT '[]',
+    started_at TEXT NOT NULL,
+    completed_at TEXT
+  )`)
+  await d.execute(`CREATE INDEX IF NOT EXISTS idx_api_test_cases_group ON api_test_cases(group_id)`)
+  await d.execute(`CREATE INDEX IF NOT EXISTS idx_api_test_results_report ON api_test_results(report_id)`)
 }
 
 export async function closeDb() {
@@ -962,6 +1023,10 @@ export interface AppBackup {
   scripts: ScriptItem[]
   aiMemories: AiMemory[]
   proxyRules?: ApiRewriteRule[]
+  apiTestGroups?: ApiTestGroup[]
+  apiTestCases?: ApiTestCase[]
+  apiTestReports?: ApiTestReport[]
+  apiTestResults?: ApiTestResult[]
 }
 
 function _yieldToMain(): Promise<void> {
@@ -1002,8 +1067,28 @@ export async function exportAllData(): Promise<AppBackup> {
     'SELECT id, content, created_at as createdAt, updated_at as updatedAt FROM note_ai_memories'
   )
   const proxyRules = await loadProxyRules()
+  const apiTestGroups = await loadApiTestGroups()
+  await _yieldToMain()
+  const apiTestCases = await loadApiTestCases()
+  await _yieldToMain()
+  const apiTestReports = await d.select<any[]>(
+    `SELECT id, name, description, total_cases as totalCases, passed_cases as passedCases,
+            failed_cases as failedCases, total_duration as totalDuration,
+            started_at as startedAt, completed_at as completedAt,
+            status, created_at as createdAt
+     FROM api_test_reports ORDER BY created_at DESC`
+  )
+  await _yieldToMain()
+  const apiTestResults = await d.select<any[]>(
+    `SELECT id, report_id as reportId, case_id as caseId, passed,
+            status_code as statusCode, response_body as responseBody,
+            response_headers as responseHeaders, duration,
+            error_message as errorMessage, assertion_results as assertionResults,
+            started_at as startedAt, completed_at as completedAt
+     FROM api_test_results`
+  )
   return {
-    version: '1.7',
+    version: '1.8',
     exportedAt: new Date().toISOString(),
     fieldRuleSets,
     caseFiles,
@@ -1020,13 +1105,17 @@ export async function exportAllData(): Promise<AppBackup> {
     scripts,
     aiMemories,
     proxyRules: proxyRules.length > 0 ? proxyRules : undefined,
+    apiTestGroups: apiTestGroups.length > 0 ? apiTestGroups : undefined,
+    apiTestCases: apiTestCases.length > 0 ? apiTestCases : undefined,
+    apiTestReports: apiTestReports.length > 0 ? apiTestReports : undefined,
+    apiTestResults: apiTestResults.length > 0 ? apiTestResults : undefined,
   }
 }
 
 function validateBackup(backup: any): string | null {
   if (!backup || typeof backup !== 'object') return '备份数据格式无效'
   if (!backup.version) return '备份文件缺少版本号，可能是旧格式或损坏文件'
-  const tables = ['fieldRuleSets', 'caseFiles', 'recentFiles', 'favorites', 'settings', 'inputHistory', 'logSessions', 'noteSpaces', 'noteFolders', 'notes', 'noteVersions', 'noteLinks', 'scripts', 'aiMemories']
+  const tables = ['fieldRuleSets', 'caseFiles', 'recentFiles', 'favorites', 'settings', 'inputHistory', 'logSessions', 'noteSpaces', 'noteFolders', 'notes', 'noteVersions', 'noteLinks', 'scripts', 'aiMemories', 'apiTestGroups', 'apiTestCases', 'apiTestReports', 'apiTestResults']
   for (const t of tables) {
     if (backup[t] !== undefined && !Array.isArray(backup[t]) && typeof backup[t] !== 'object') {
       return `字段 "${t}" 类型无效`
@@ -1259,6 +1348,87 @@ export async function importAllDataIncremental(backup: AppBackup): Promise<{
     } catch (e: any) { failures.push(`memory: ${e.message || e}`) }
   }
 
+  // ── 10. API TEST GROUPS ─ match by name ──
+  const localGroups = (await d.select<{ name: string }[]>(
+    'SELECT name FROM api_test_groups'
+  )) || []
+  const localGroupNames = new Set(localGroups.map(g => g.name))
+  const groupIdMap: Record<string, string> = {}
+  for (const rawG of backup.apiTestGroups || []) {
+    const g: any = rawG
+    if (localGroupNames.has(g.name)) { skipped++; continue }
+    try {
+      await d.execute(
+        'INSERT INTO api_test_groups (id, name, description, color, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [g.id, g.name, g.description ?? '', g.color ?? '#6366f1', g.sortOrder ?? g.sort_order ?? 0, g.createdAt ?? g.created_at, g.updatedAt ?? g.updated_at]
+      )
+      groupIdMap[g.id] = g.id
+      imported++
+    } catch (e: any) { failures.push(`group "${g.name}": ${e.message || e}`) }
+  }
+
+  // ── 11. API TEST CASES ─ match by (group_id, method, path, name); only for newly inserted groups ──
+  const localCases = (await d.select<{ group_id: string; method: string; path: string; name: string }[]>(
+    'SELECT group_id, method, path, name FROM api_test_cases'
+  )) || []
+  const localCaseKeys = new Set(localCases.map(c => `${c.group_id}::${c.method}::${c.path}::${c.name}`))
+  const caseIdMap: Record<string, string> = {}
+  const freshlyInsertedCaseIds = new Set<string>()
+  for (const rawC of backup.apiTestCases || []) {
+    const c: any = rawC
+    const bkGroupId = c.groupId ?? c.group_id
+    const localGroupId = groupIdMap[bkGroupId] ?? bkGroupId
+    const caseKey = `${localGroupId}::${c.method}::${c.path}::${c.name}`
+    if (localCaseKeys.has(caseKey)) { skipped++; continue }
+    try {
+      await d.execute(
+        `INSERT INTO api_test_cases (id, group_id, name, description, type, method, url, host, path, query, headers, body, body_is_base64, assertions, source_request_id, enabled, sort_order, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [c.id, localGroupId, c.name, c.description ?? '', c.type, c.method, c.url, c.host ?? '', c.path, c.query ?? null, JSON.stringify(c.headers ?? []), c.body ?? null, c.bodyIsBase64 ? 1 : 0, JSON.stringify(c.assertions ?? []), c.sourceRequestId ?? c.source_request_id ?? null, c.enabled ? 1 : 0, c.sortOrder ?? c.sort_order ?? 0, c.createdAt ?? c.created_at, c.updatedAt ?? c.updated_at]
+      )
+      caseIdMap[c.id] = c.id
+      freshlyInsertedCaseIds.add(c.id)
+      imported++
+    } catch (e: any) { failures.push(`case "${c.name}": ${e.message || e}`) }
+  }
+
+  // ── 12. API TEST REPORTS ─ match by name ──
+  const localReports = (await d.select<{ name: string }[]>(
+    'SELECT name FROM api_test_reports'
+  )) || []
+  const localReportNames = new Set(localReports.map(r => r.name))
+  const reportIdMap: Record<string, string> = {}
+  const freshlyInsertedReportIds = new Set<string>()
+  for (const rawR of backup.apiTestReports || []) {
+    const r: any = rawR
+    if (localReportNames.has(r.name)) { skipped++; continue }
+    try {
+      await d.execute(
+        `INSERT INTO api_test_reports (id, name, description, total_cases, passed_cases, failed_cases, total_duration, started_at, completed_at, status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [r.id, r.name, r.description ?? '', r.totalCases ?? r.total_cases ?? 0, r.passedCases ?? r.passed_cases ?? 0, r.failedCases ?? r.failed_cases ?? 0, r.totalDuration ?? r.total_duration ?? 0, r.startedAt ?? r.started_at, r.completedAt ?? r.completed_at ?? null, r.status, r.createdAt ?? r.created_at]
+      )
+      reportIdMap[r.id] = r.id
+      freshlyInsertedReportIds.add(r.id)
+      imported++
+    } catch (e: any) { failures.push(`report "${r.name}": ${e.message || e}`) }
+  }
+
+  // ── 13. API TEST RESULTS ─ only for freshly-inserted reports ──
+  for (const rawR of backup.apiTestResults || []) {
+    const r: any = rawR
+    const bkReportId = r.reportId ?? r.report_id
+    if (!freshlyInsertedReportIds.has(bkReportId)) continue
+    try {
+      await d.execute(
+        `INSERT INTO api_test_results (id, report_id, case_id, passed, status_code, response_body, response_headers, duration, error_message, assertion_results, started_at, completed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [r.id, bkReportId, r.caseId ?? r.case_id, r.passed ? 1 : 0, r.statusCode ?? r.status_code ?? null, r.responseBody ?? r.response_body ?? null, r.responseHeaders ?? r.response_headers ? JSON.stringify(r.responseHeaders ?? r.response_headers) : null, r.duration ?? null, r.errorMessage ?? r.error_message ?? null, r.assertionResults ?? r.assertion_results ? JSON.stringify(r.assertionResults ?? r.assertion_results) : null, r.startedAt ?? r.started_at, r.completedAt ?? r.completed_at]
+      )
+      imported++
+    } catch { /* ignore individual result failures */ }
+  }
+
   // NOTE: app_settings, input_history, log_sessions, recent_files, favorites, proxy_rules
   // are intentionally NOT touched. Cloud restore preserves local preferences/state.
 
@@ -1291,7 +1461,8 @@ export async function importAllData(backup: AppBackup) {
   const deletes = [
     'field_rule_sets', 'case_files', 'recent_files', 'favorites',
     'app_settings', 'input_history', 'log_sessions',
-    'note_folders', 'notes', 'notes_fts', 'note_versions', 'note_links', 'scripts', 'note_ai_memories'
+    'note_folders', 'notes', 'notes_fts', 'note_versions', 'note_links', 'scripts', 'note_ai_memories',
+    'api_test_groups', 'api_test_cases', 'api_test_reports', 'api_test_results',
   ]
   for (const table of deletes) {
     try { await d.execute(`DELETE FROM ${table}`) } catch (e: any) { failures.push(`DELETE ${table}: ${e}`) }
@@ -1311,6 +1482,10 @@ export async function importAllData(backup: AppBackup) {
     ['note_links', 'id, source_note_id, target_note_id, created_at', backup.noteLinks || [], (l: any) => [l.id, l.sourceNoteId ?? l.source_note_id, l.targetNoteId ?? l.target_note_id, l.createdAt ?? l.created_at]],
     ['scripts', 'id, name, type, content, sort_order, created_at, updated_at', backup.scripts || [], (s: any) => [s.id, s.name, s.type ?? 'bat', s.content ?? '', s.sortOrder ?? s.sort_order ?? 0, s.createdAt ?? s.created_at, s.updatedAt ?? s.updated_at ?? s.createdAt]],
     ['note_ai_memories', 'id, content, created_at, updated_at', backup.aiMemories || [], (m: any) => [m.id, m.content, m.createdAt ?? m.created_at, m.updatedAt ?? m.updated_at ?? m.createdAt]],
+    ['api_test_groups', 'id, name, description, color, sort_order, created_at, updated_at', backup.apiTestGroups || [], (g: any) => [g.id, g.name, g.description ?? '', g.color ?? '#6366f1', g.sortOrder ?? g.sort_order ?? 0, g.createdAt ?? g.created_at, g.updatedAt ?? g.updated_at]],
+    ['api_test_cases', 'id, group_id, name, description, type, method, url, host, path, query, headers, body, body_is_base64, assertions, source_request_id, enabled, sort_order, created_at, updated_at', backup.apiTestCases || [], (c: any) => [c.id, c.groupId ?? c.group_id, c.name, c.description ?? '', c.type, c.method, c.url, c.host ?? '', c.path, c.query ?? null, JSON.stringify(c.headers ?? []), c.body ?? null, c.bodyIsBase64 ? 1 : 0, JSON.stringify(c.assertions ?? []), c.sourceRequestId ?? c.source_request_id ?? null, c.enabled ? 1 : 0, c.sortOrder ?? c.sort_order ?? 0, c.createdAt ?? c.created_at, c.updatedAt ?? c.updated_at]],
+    ['api_test_reports', 'id, name, description, total_cases, passed_cases, failed_cases, total_duration, started_at, completed_at, status, created_at', backup.apiTestReports || [], (r: any) => [r.id, r.name, r.description ?? '', r.totalCases ?? r.total_cases ?? 0, r.passedCases ?? r.passed_cases ?? 0, r.failedCases ?? r.failed_cases ?? 0, r.totalDuration ?? r.total_duration ?? 0, r.startedAt ?? r.started_at, r.completedAt ?? r.completed_at ?? null, r.status, r.createdAt ?? r.created_at]],
+    ['api_test_results', 'id, report_id, case_id, passed, status_code, response_body, response_headers, duration, error_message, assertion_results, started_at, completed_at', backup.apiTestResults || [], (r: any) => [r.id, r.reportId ?? r.report_id, r.caseId ?? r.case_id, r.passed ? 1 : 0, r.statusCode ?? r.status_code ?? null, r.responseBody ?? r.response_body ?? null, r.responseHeaders ?? r.response_headers ? JSON.stringify(r.responseHeaders ?? r.response_headers) : null, r.duration ?? null, r.errorMessage ?? r.error_message ?? null, r.assertionResults ?? r.assertion_results ? JSON.stringify(r.assertionResults ?? r.assertion_results) : null, r.startedAt ?? r.started_at, r.completedAt ?? r.completed_at]],
   ]
   for (const [table, cols, items, toParams] of inserts) {
     if (!Array.isArray(items) || items.length === 0) continue
@@ -1351,4 +1526,182 @@ export async function importAllData(backup: AppBackup) {
   try {
     await d.execute(`DELETE FROM app_settings WHERE key = 'plain_text_repaired'`)
   } catch {}
+}
+
+// ── API Test Groups ──────────────────────────────────────────
+
+export async function loadApiTestGroups(): Promise<ApiTestGroup[]> {
+  const d = await getDb()
+  return await d.select<ApiTestGroup[]>(
+    `SELECT id, name, description, color, sort_order as sortOrder, created_at as createdAt, updated_at as updatedAt
+     FROM api_test_groups ORDER BY sort_order ASC, created_at ASC`
+  )
+}
+
+export async function saveApiTestGroup(group: { id: string; name: string; description?: string; color?: string; sortOrder?: number }) {
+  const d = await getDb()
+  const now = new Date().toISOString()
+  await d.execute(
+    `INSERT INTO api_test_groups (id, name, description, color, sort_order, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       name = excluded.name, description = excluded.description,
+       color = excluded.color, sort_order = excluded.sort_order, updated_at = excluded.updated_at`,
+    [group.id, group.name, group.description || '', group.color || '#6366f1', group.sortOrder || 0, now, now]
+  )
+}
+
+export async function deleteApiTestGroup(id: string) {
+  const d = await getDb()
+  await d.execute('DELETE FROM api_test_cases WHERE group_id = ?', [id])
+  await d.execute('DELETE FROM api_test_groups WHERE id = ?', [id])
+}
+
+// ── API Test Cases ────────────────────────────────────────────
+
+function caseRowToCase(row: any): ApiTestCase {
+  return {
+    ...row,
+    headers: safeJsonParse(row.headers, []),
+    assertions: safeJsonParse(row.assertions, []),
+    bodyIsBase64: !!row.body_is_base64,
+    enabled: !!row.enabled,
+    query: row.query || null,
+    body: row.body || null,
+    sourceRequestId: row.source_request_id || null,
+    sortOrder: row.sort_order ?? 0,
+  }
+}
+
+export async function loadApiTestCases(groupId?: string): Promise<ApiTestCase[]> {
+  const d = await getDb()
+  if (groupId) {
+    const rows = await d.select<any[]>(
+      `SELECT id, group_id as groupId, name, description, type, method, url, host, path, query,
+              headers, body, body_is_base64 as bodyIsBase64, assertions, source_request_id as sourceRequestId,
+              enabled, sort_order as sortOrder, created_at as createdAt, updated_at as updatedAt
+       FROM api_test_cases WHERE group_id = ? ORDER BY sort_order ASC, created_at ASC`,
+      [groupId]
+    )
+    return rows.map(caseRowToCase)
+  }
+  const rows = await d.select<any[]>(
+    `SELECT id, group_id as groupId, name, description, type, method, url, host, path, query,
+            headers, body, body_is_base64 as bodyIsBase64, assertions, source_request_id as sourceRequestId,
+            enabled, sort_order as sortOrder, created_at as createdAt, updated_at as updatedAt
+     FROM api_test_cases ORDER BY sort_order ASC, created_at ASC`
+  )
+  return rows.map(caseRowToCase)
+}
+
+export async function saveApiTestCase(testCase: ApiTestCase) {
+  const d = await getDb()
+  const now = new Date().toISOString()
+  await d.execute(
+    `INSERT INTO api_test_cases (id, group_id, name, description, type, method, url, host, path, query,
+      headers, body, body_is_base64, assertions, source_request_id, enabled, sort_order, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       group_id = excluded.group_id, name = excluded.name, description = excluded.description,
+       type = excluded.type, method = excluded.method, url = excluded.url, host = excluded.host,
+       path = excluded.path, query = excluded.query, headers = excluded.headers, body = excluded.body,
+       body_is_base64 = excluded.body_is_base64, assertions = excluded.assertions,
+       source_request_id = excluded.source_request_id, enabled = excluded.enabled,
+       sort_order = excluded.sort_order, updated_at = excluded.updated_at`,
+    [
+      testCase.id, testCase.groupId, testCase.name, testCase.description, testCase.type,
+      testCase.method, testCase.url, testCase.host, testCase.path, testCase.query,
+      JSON.stringify(testCase.headers), testCase.body, testCase.bodyIsBase64 ? 1 : 0,
+      JSON.stringify(testCase.assertions), testCase.sourceRequestId, testCase.enabled ? 1 : 0,
+      testCase.sortOrder, testCase.createdAt || now, now
+    ]
+  )
+}
+
+export async function deleteApiTestCase(id: string) {
+  const d = await getDb()
+  await d.execute('DELETE FROM api_test_cases WHERE id = ?', [id])
+}
+
+export async function deleteApiTestCasesByGroup(groupId: string) {
+  const d = await getDb()
+  await d.execute('DELETE FROM api_test_cases WHERE group_id = ?', [groupId])
+}
+
+// ── API Test Reports ──────────────────────────────────────────
+
+export async function loadApiTestReports(limit = 50): Promise<ApiTestReport[]> {
+  const d = await getDb()
+  return await d.select<ApiTestReport[]>(
+    `SELECT id, name, description, total_cases as totalCases, passed_cases as passedCases,
+            failed_cases as failedCases, total_duration as totalDuration,
+            started_at as startedAt, completed_at as completedAt, status, created_at as createdAt
+     FROM api_test_reports ORDER BY created_at DESC LIMIT ?`,
+    [limit]
+  )
+}
+
+export async function saveApiTestReport(report: ApiTestReport) {
+  const d = await getDb()
+  await d.execute(
+    `INSERT INTO api_test_reports (id, name, description, total_cases, passed_cases, failed_cases,
+      total_duration, started_at, completed_at, status, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       total_cases = excluded.total_cases, passed_cases = excluded.passed_cases,
+       failed_cases = excluded.failed_cases, total_duration = excluded.total_duration,
+       completed_at = excluded.completed_at, status = excluded.status`,
+    [
+      report.id, report.name, report.description, report.totalCases, report.passedCases,
+      report.failedCases, report.totalDuration, report.startedAt, report.completedAt,
+      report.status, report.createdAt
+    ]
+  )
+}
+
+export async function deleteApiTestReport(id: string) {
+  const d = await getDb()
+  await d.execute('DELETE FROM api_test_results WHERE report_id = ?', [id])
+  await d.execute('DELETE FROM api_test_reports WHERE id = ?', [id])
+}
+
+// ── API Test Results ──────────────────────────────────────────
+
+export async function loadApiTestResults(reportId: string): Promise<ApiTestResult[]> {
+  const d = await getDb()
+  const rows = await d.select<any[]>(
+    `SELECT id, case_id as caseId, report_id as reportId, passed, status_code as statusCode,
+            response_body as responseBody, response_headers as responseHeaders, duration,
+            error_message as errorMessage, assertion_results as assertionResults,
+            started_at as startedAt, completed_at as completedAt
+     FROM api_test_results WHERE report_id = ? ORDER BY started_at ASC`,
+    [reportId]
+  )
+  return rows.map(r => ({
+    ...r,
+    passed: !!r.passed,
+    assertionResults: safeJsonParse(r.assertionResults, []),
+    responseHeaders: safeJsonParse(r.responseHeaders, null),
+  }))
+}
+
+export async function saveApiTestResult(result: ApiTestResult) {
+  const d = await getDb()
+  await d.execute(
+    `INSERT INTO api_test_results (id, case_id, report_id, passed, status_code, response_body,
+      response_headers, duration, error_message, assertion_results, started_at, completed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       passed = excluded.passed, status_code = excluded.status_code,
+       response_body = excluded.response_body, response_headers = excluded.response_headers,
+       duration = excluded.duration, error_message = excluded.error_message,
+       assertion_results = excluded.assertion_results, completed_at = excluded.completed_at`,
+    [
+      result.id, result.caseId, result.reportId, result.passed ? 1 : 0,
+      result.statusCode, result.responseBody,
+      result.responseHeaders ? JSON.stringify(result.responseHeaders) : null,
+      result.duration, result.errorMessage,
+      JSON.stringify(result.assertionResults), result.startedAt, result.completedAt
+    ]
+  )
 }

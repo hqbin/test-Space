@@ -661,6 +661,7 @@ pub fn run() {
             proxy::proxy_clear_device_proxy,
             proxy::proxy_install_cert,
             proxy::proxy_replay,
+            proxy::proxy_run_test,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
