@@ -407,3 +407,338 @@ pub fn start_screenrecord(serial: &str, file_path: &str, width: u32, height: u32
         .map_err(|e| format!("Failed to start screenrecord: {}", e))?;
     Ok("Recording started".to_string())
 }
+
+#[derive(Serialize)]
+pub struct PerfSnapshot {
+    pub cpu_total: f64,
+    pub mem_total_kb: u64,
+    pub mem_free_kb: u64,
+    pub mem_avail_kb: u64,
+    pub swap_total_kb: u64,
+    pub swap_free_kb: u64,
+    pub zram_total_kb: u64,
+    pub storage_total_kb: u64,
+    pub storage_used_kb: u64,
+    pub storage_avail_kb: u64,
+    pub procs: Vec<PerfProcess>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct PerfProcess {
+    pub pid: u32,
+    pub name: String,
+    pub pss_kb: u64,
+    pub cpu_percent: f64,
+}
+
+fn parse_kb_val(line: &str) -> u64 {
+    // line format: "MemTotal:        8388608 kB"  or  "MemTotal:       1000"
+    let parts: Vec<&str> = line.split_whitespace().collect();
+    if parts.len() >= 2 {
+        let val = parts[1].parse::<u64>().unwrap_or(0);
+        if parts.len() >= 3 && parts[2] == "kB" { val } else { val }
+    } else { 0 }
+}
+
+pub fn get_perf_snapshot(serial: &str, watch_app: Option<&str>) -> Result<PerfSnapshot, String> {
+    // Collect meminfo, top, df, and ps in a single shell call.
+    // Use `ps -A` (not `-o PID,PSS,NAME` which is unsupported on many Android devices).
+    let combined = shell_command(serial, "cat /proc/meminfo 2>/dev/null; echo '---TOP---'; top -n 1 -b 2>/dev/null; echo '---DF---'; df /data 2>/dev/null; echo '---PROC---'; ps -A 2>/dev/null")?;
+
+    let mut mem_total_kb: u64 = 0;
+    let mut mem_free_kb: u64 = 0;
+    let mut mem_avail_kb: u64 = 0;
+    let mut swap_total_kb: u64 = 0;
+    let mut swap_free_kb: u64 = 0;
+
+    let mut cpu_total: f64 = 0.0;
+    let mut core_count: f64 = 1.0; // number of CPU cores, derived from %cpu line
+    let mut storage_total_kb: u64 = 0;
+    let mut storage_used_kb: u64 = 0;
+    let mut storage_avail_kb: u64 = 0;
+    let mut zram_total_kb: u64 = 0;
+
+    // PID -> (name, pss_kb) — primary source is dumpsys meminfo (accurate PSS)
+    let mut pid_to_pss: std::collections::HashMap<u32, (String, u64)> = std::collections::HashMap::new();
+    // PID -> cpu_percent — from top output
+    let mut pid_to_cpu: std::collections::HashMap<u32, f64> = std::collections::HashMap::new();
+    // Names seen in top output (for processes not in dumpsys meminfo)
+    let mut top_names: std::collections::HashMap<u32, String> = std::collections::HashMap::new();
+
+    let mut section = "meminfo";
+
+    for line in combined.lines() {
+        match line.trim() {
+            "---TOP---" => { section = "top"; continue; }
+            "---DF---" => { section = "df"; continue; }
+            "---PROC---" => { section = "proc"; continue; }
+            _ => {}
+        }
+
+        match section {
+            "meminfo" => {
+                if line.starts_with("MemTotal:") { mem_total_kb = parse_kb_val(line); }
+                else if line.starts_with("MemFree:") { mem_free_kb = parse_kb_val(line); }
+                else if line.starts_with("MemAvailable:") { mem_avail_kb = parse_kb_val(line); }
+                else if line.starts_with("SwapTotal:") { swap_total_kb = parse_kb_val(line); }
+                else if line.starts_with("SwapFree:") { swap_free_kb = parse_kb_val(line); }
+            }
+            "top" => {
+                let trimmed = line.trim();
+
+                // Parse total CPU from line like:
+                //   "400%cpu 103%user 0%nice 19%sys 274%idle 0%iow 3%irq 0%sirq 0%host"
+                // cpu_total = (total_capacity - idle) / total_capacity * 100
+                if trimmed.contains("%cpu") && trimmed.contains("%idle") {
+                    let mut total_capacity = 0.0f64;
+                    let mut idle_val = 0.0f64;
+                    for word in trimmed.split_whitespace() {
+                        if word.ends_with("%cpu") {
+                            let cleaned = word.trim_end_matches("cpu").trim_end_matches('%');
+                            if let Ok(v) = cleaned.parse::<f64>() { total_capacity = v; }
+                        } else if word.ends_with("%idle") {
+                            let cleaned = word.trim_end_matches("idle").trim_end_matches('%');
+                            if let Ok(v) = cleaned.parse::<f64>() { idle_val = v; }
+                        }
+                    }
+                    if total_capacity > 0.0 {
+                        cpu_total = ((total_capacity - idle_val) / total_capacity * 100.0).clamp(0.0, 100.0);
+                        // Derive core count: "400%cpu" means 4 cores (400/100)
+                        core_count = (total_capacity / 100.0).max(1.0);
+                    }
+                }
+
+                // Skip header line: "  PID USER  PR  NI VIRT  RES  SHR S[%CPU] %MEM  TIME+ ARGS"
+                if trimmed.starts_with("PID") && trimmed.contains("USER") { continue; }
+
+                // Parse per-process: "  2033 system  20  0  1.3G  98M  63M  S  96.7  5.0  79:54.56  com.app"
+                // Column positions (0-indexed): 0=PID, 1=USER, 2=PR, 3=NI, 4=VIRT, 5=RES, 6=SHR,
+                //   7=S(state), 8=%CPU, 9=%MEM, 10=TIME+, 11+=ARGS
+                let parts: Vec<&str> = trimmed.split_whitespace().collect();
+                if parts.len() >= 11 {
+                    if let Ok(pid) = parts[0].parse::<u32>() {
+                        if pid > 0 {
+                            if let Ok(cpu_val) = parts[8].parse::<f64>() {
+                                if cpu_val >= 0.0 && cpu_val <= 800.0 {
+                                    // Normalize per-process CPU to 0-100% by dividing by core count.
+                                    // Android `top` reports per-process CPU relative to a single core,
+                                    // so a process using 2 full cores on a 4-core device shows 200%.
+                                    // Dividing by core_count gives the percentage of total device CPU.
+                                    let normalized_cpu = (cpu_val / core_count).clamp(0.0, 100.0);
+                                    // Command name is the last token (Android package names have no spaces)
+                                    let cmd = parts[parts.len() - 1].trim();
+                                    if !cmd.is_empty() && !cmd.starts_with('[') {
+                                        pid_to_cpu.insert(pid, normalized_cpu);
+                                        top_names.insert(pid, cmd.to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            "df" => {
+                // df /data: "Filesystem  1K-blocks  Used  Available  Use%  Mounted on"
+                //           "/dev/block/xxx  8388608  4194304  4194304  50%  /data"
+                if line.starts_with('/') || line.contains("/data") {
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if parts.len() >= 4 {
+                        storage_total_kb = parts[1].parse::<u64>().unwrap_or(0);
+                        storage_used_kb = parts[2].parse::<u64>().unwrap_or(0);
+                        storage_avail_kb = parts[3].parse::<u64>().unwrap_or(0);
+                    }
+                }
+            }
+            "proc" => {
+                // ps -A format: "USER  PID  PPID  VSIZE  RSS  WCHAN  ...  STATE  NAME"
+                // Example: "system  1428  555  1930600  344660  do_epoll_wait  0  S  com.whaletv.launcher"
+                // We only use this as a fallback for name/PID mapping; PSS comes from dumpsys meminfo.
+                let trimmed = line.trim();
+                if trimmed.is_empty() || trimmed.starts_with("USER") { continue; }
+                let parts: Vec<&str> = trimmed.split_whitespace().collect();
+                if parts.len() >= 8 {
+                    // USER=0, PID=1
+                    if let Ok(pid) = parts[1].parse::<u32>() {
+                        if pid > 0 {
+                            let name = parts[parts.len() - 1].trim().to_string();
+                            if !name.is_empty() && !name.starts_with('[') {
+                                // Use RSS as approximate PSS if dumpsys doesn't have it
+                                let rss_kb = parts[4].parse::<u64>().unwrap_or(0);
+                                pid_to_pss.entry(pid).or_insert((name, rss_kb));
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // Fallback for total CPU: use dumpsys cpuinfo if top parsing failed
+    if cpu_total == 0.0 {
+        if let Ok(cpuinfo_out) = shell_command(serial, "dumpsys cpuinfo 2>/dev/null") {
+            for line in cpuinfo_out.lines() {
+                let trimmed = line.trim();
+                if trimmed.contains("% TOTAL:") || trimmed.contains("% total:") {
+                    if let Some(pct) = trimmed.split('%').next() {
+                        cpu_total = pct.trim().parse::<f64>().unwrap_or(0.0).clamp(0.0, 100.0);
+                    }
+                }
+            }
+        }
+    }
+
+    // Get accurate PSS from dumpsys meminfo (overrides ps RSS values)
+    if let Ok(dumpsys_out) = shell_command(serial, "dumpsys meminfo 2>/dev/null") {
+        for line in dumpsys_out.lines() {
+            let trimmed = line.trim();
+            // ZRAM line: "ZRAM: 123456K physical used for 78901K in swap (512000K total swap)"
+            if trimmed.contains("ZRAM") {
+                for word in trimmed.split_whitespace() {
+                    let cleaned = word.replace(',', "");
+                    let cleaned = cleaned.trim_end_matches('K').trim_end_matches("kB");
+                    if let Ok(v) = cleaned.parse::<u64>() {
+                        if v > zram_total_kb { zram_total_kb = v; }
+                    }
+                }
+            }
+            // Process PSS line: "    400,056K: com.whaletv.launcher (pid 1428 / activities)"
+            // Note: PSS values may contain commas (e.g., "400,056K") which must be stripped.
+            if trimmed.contains("(pid") {
+                let tokens: Vec<&str> = trimmed.split_whitespace().collect();
+                if !tokens.is_empty() {
+                    // Strip commas: "400,056K:" -> "400056K:"
+                    let first_clean = tokens[0].replace(',', "");
+                    let first = first_clean
+                        .trim_end_matches(|c: char| c == 'K' || c == 'k' || c == 'B' || c == 'b' || c == ':');
+                    if let Ok(size_kb) = first.parse::<u64>() {
+                        if size_kb > 0 {
+                            // Name is between PSS value and "(pid"
+                            let name_parts: Vec<&str> = tokens.iter().skip(1)
+                                .take_while(|t| !t.starts_with("(pid"))
+                                .copied()
+                                .collect();
+                            let name = name_parts.join(" ");
+                            if !name.is_empty() {
+                                let pid = tokens.iter().find(|t| t.starts_with("(pid"))
+                                    .and_then(|t| t.strip_prefix("(pid"))
+                                    .and_then(|s| s.trim_end_matches(')').trim().parse::<u32>().ok())
+                                    .unwrap_or(0);
+                                if pid > 0 {
+                                    pid_to_pss.insert(pid, (name, size_kb));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Build final procs list: merge PSS (from dumpsys) with CPU (from top)
+    let mut procs: Vec<PerfProcess> = Vec::new();
+
+    // First, add all processes that have PSS data
+    for (pid, (name, pss_kb)) in &pid_to_pss {
+        let cpu_percent = pid_to_cpu.get(pid).copied().unwrap_or(0.0);
+        procs.push(PerfProcess {
+            pid: *pid,
+            name: name.clone(),
+            pss_kb: *pss_kb,
+            cpu_percent,
+        });
+    }
+
+    // Also add processes from top that have CPU but no PSS (e.g., short-lived processes)
+    for (pid, name) in &top_names {
+        if !pid_to_pss.contains_key(pid) {
+            let cpu_percent = pid_to_cpu.get(pid).copied().unwrap_or(0.0);
+            if cpu_percent > 0.0 {
+                procs.push(PerfProcess {
+                    pid: *pid,
+                    name: name.clone(),
+                    pss_kb: 0,
+                    cpu_percent,
+                });
+            }
+        }
+    }
+
+    // Deduplicate by name (keep entry with highest PSS)
+    let mut deduped: std::collections::HashMap<String, PerfProcess> = std::collections::HashMap::new();
+    for p in procs.drain(..) {
+        let entry = deduped.entry(p.name.clone()).or_insert(p.clone());
+        if p.pss_kb > entry.pss_kb || (p.pss_kb == entry.pss_kb && p.cpu_percent > entry.cpu_percent) {
+            *entry = p;
+        }
+    }
+    procs = deduped.into_values().collect();
+
+    // If a watch_app is specified, extract it from procs before truncation so it's
+    // always retained in the result even if it's not in top 40 PSS or top 10 CPU.
+    // This is critical for single-app monitoring: without this, the user-selected
+    // app may be dropped during truncation and the single-app chart will be empty.
+    let watch_proc: Option<PerfProcess> = if let Some(name) = watch_app {
+        let name = name.trim();
+        if !name.is_empty() {
+            // Match by exact name, prefix (e.g. "com.app" matches "com.app:service"), or partial
+            let idx = procs.iter().position(|p| {
+                p.name == name
+                || p.name.starts_with(&format!("{}:", name))
+                || p.name.contains(name)
+            });
+            idx.map(|i| procs.remove(i))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    // Keep top 40 by PSS plus top 10 by CPU (not already included) so that both the
+    // memory chart and the CPU chart on the frontend have enough data. Sorting by
+    // PSS alone would drop high-CPU-but-low-PSS processes before they reach the UI,
+    // which prevented new high-CPU apps from pushing the lowest one out of Top N.
+    procs.sort_by(|a, b| b.pss_kb.cmp(&a.pss_kb));
+    let pss_keep = 40.min(procs.len());
+    let mut kept: Vec<PerfProcess> = procs.drain(..pss_keep).collect();
+
+    // Fill remaining slots with highest-CPU processes not already kept
+    let kept_names: std::collections::HashSet<String> =
+        kept.iter().map(|p| p.name.clone()).collect();
+    procs.sort_by(|a, b| {
+        b.cpu_percent
+            .partial_cmp(&a.cpu_percent)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    for p in procs.iter() {
+        if kept.len() >= 50 {
+            break;
+        }
+        if !kept_names.contains(&p.name) {
+            kept.push(p.clone());
+        }
+    }
+    // Re-add watch_app if it was extracted and is not already in kept.
+    // This guarantees the single-app chart always has data when the app is running.
+    if let Some(wp) = watch_proc {
+        if !kept.iter().any(|p| p.name == wp.name) {
+            kept.push(wp);
+        }
+    }
+    procs = kept;
+
+    Ok(PerfSnapshot {
+        cpu_total,
+        mem_total_kb,
+        mem_free_kb,
+        mem_avail_kb,
+        swap_total_kb,
+        swap_free_kb,
+        zram_total_kb,
+        storage_total_kb,
+        storage_used_kb,
+        storage_avail_kb,
+        procs,
+    })
+}

@@ -6,7 +6,7 @@
     <TitleBar />
     <main class="px-margin-page pt-3 box-border flex-1 overflow-y-auto overflow-x-hidden min-h-0 flex flex-col">
       <router-view v-slot="{ Component }">
-        <keep-alive :include="['NotesSpacePage', 'ScriptSpacePage', 'DeviceSpacePage', 'ApiSpacePage', 'SettingsPage', 'CaseSpacePage']">
+        <keep-alive :include="['NotesSpacePage', 'ScriptSpacePage', 'DeviceSpacePage', 'ApiSpacePage', 'SettingsPage', 'PerfMonitorPage']">
           <component :is="Component" :ref="onPageRef" />
         </keep-alive>
       </router-view>
@@ -44,12 +44,6 @@ const router = useRouter()
 // ── Background gradient ───────────────────────────────────────
 const bgStyle = computed(() => {
   const path = route.path
-  if (path.startsWith('/case-space')) {
-    return {
-      background:
-        'radial-gradient(circle at top left, rgba(226,223,255,0.4) 0%, transparent 40%), radial-gradient(circle at bottom right, rgba(0,80,203,0.05) 0%, transparent 40%), #F9F9FB',
-    }
-  }
   if (path.startsWith('/api-space')) {
     return {
       background:
@@ -60,6 +54,12 @@ const bgStyle = computed(() => {
     return {
       background:
         'radial-gradient(circle at 15% 50%, rgba(76,74,202,0.05), transparent 25%), radial-gradient(circle at 85% 30%, rgba(0,80,203,0.05), transparent 25%), #F9F9FB',
+    }
+  }
+  if (path.startsWith('/device-space/perf-monitor')) {
+    return {
+      background:
+        'radial-gradient(circle at 20% 40%, rgba(0,200,150,0.06), transparent 30%), radial-gradient(circle at 80% 60%, rgba(0,100,200,0.05), transparent 30%), #F9F9FB',
     }
   }
   if (path.startsWith('/notes-space')) {

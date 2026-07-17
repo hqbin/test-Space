@@ -35,34 +35,6 @@ async function getDb(): Promise<Database> {
 }
 
 async function migrateInternal(d: Database) {
-  await d.execute(`CREATE TABLE IF NOT EXISTS field_rule_sets (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    rules TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  )`)
-  await d.execute(`CREATE TABLE IF NOT EXISTS case_files (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    data TEXT NOT NULL,
-    tags TEXT NOT NULL DEFAULT '[]',
-    custom_fields TEXT NOT NULL DEFAULT '[]',
-    rule_set_id TEXT DEFAULT '',
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  )`)
-  await d.execute(`CREATE TABLE IF NOT EXISTS recent_files (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    path TEXT UNIQUE NOT NULL,
-    name TEXT NOT NULL,
-    case_count INTEGER NOT NULL DEFAULT 0,
-    last_opened TEXT NOT NULL
-  )`)
-  await d.execute(`CREATE TABLE IF NOT EXISTS favorites (
-    path TEXT PRIMARY KEY,
-    added_at TEXT NOT NULL
-  )`)
   await d.execute(`CREATE TABLE IF NOT EXISTS app_settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -226,6 +198,18 @@ async function migrateInternal(d: Database) {
   )`)
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_api_test_cases_group ON api_test_cases(group_id)`)
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_api_test_results_report ON api_test_results(report_id)`)
+
+  // ── Perf Monitor ────────────────────────────────────────────
+  await d.execute(`CREATE TABLE IF NOT EXISTS perf_sessions (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    device_serial TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    ended_at TEXT,
+    interval_ms INTEGER NOT NULL DEFAULT 2000,
+    data TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL
+  )`)
 }
 
 export async function closeDb() {
@@ -293,135 +277,6 @@ export async function getDeviceIdNames(): Promise<Record<string, string>> {
 
 export async function saveDeviceIdNames(names: Record<string, string>) {
   await setSetting(DEVICE_ID_NAMES_KEY, JSON.stringify(names));
-}
-
-// ── Field Rule Sets ──────────────────────────────────────────
-
-export async function loadFieldRuleSets(): Promise<any[]> {
-  const d = await getDb()
-  const rows = await d.select<{ id: string; name: string; rules: string; created_at: string; updated_at: string }[]>(
-    'SELECT * FROM field_rule_sets ORDER BY created_at ASC'
-  )
-  return rows.map(r => ({ ...r, rules: safeJsonParse(r.rules, []) }))
-}
-
-export async function saveFieldRuleSet(set: { id: string; name: string; rules: any[]; createdAt: string; updatedAt?: string }) {
-  const d = await getDb()
-  const now = new Date().toISOString()
-  await d.execute(
-    `INSERT INTO field_rule_sets (id, name, rules, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET name = excluded.name, rules = excluded.rules, updated_at = excluded.updated_at`,
-    [set.id, set.name, JSON.stringify(set.rules), set.createdAt, set.updatedAt || now]
-  )
-}
-
-export async function deleteFieldRuleSet(id: string) {
-  const d = await getDb()
-  await d.execute('DELETE FROM field_rule_sets WHERE id = ?', [id])
-}
-
-// ── Case Files ───────────────────────────────────────────────
-
-export async function loadCaseFiles(): Promise<any[]> {
-  const d = await getDb()
-  return await d.select('SELECT * FROM case_files ORDER BY updated_at DESC')
-}
-
-export async function loadCaseFile(id: string): Promise<any | null> {
-  const d = await getDb()
-  const rows = await d.select<any[]>('SELECT * FROM case_files WHERE id = ?', [id])
-  return rows.length > 0 ? rows[0] : null
-}
-
-export async function saveCaseFile(file: { id: string; name: string; data: any; tags?: string[]; customFields?: any[]; ruleSetId?: string; createdAt: string; updatedAt?: string }) {
-  const d = await getDb()
-  const now = new Date().toISOString()
-  await d.execute(
-    `INSERT INTO case_files (id, name, data, tags, custom_fields, rule_set_id, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET
-       name = excluded.name,
-       data = excluded.data,
-       tags = excluded.tags,
-       custom_fields = excluded.custom_fields,
-       rule_set_id = excluded.rule_set_id,
-       updated_at = excluded.updated_at`,
-    [
-      file.id,
-      file.name,
-      JSON.stringify(file.data),
-      JSON.stringify(file.tags || []),
-      JSON.stringify(file.customFields || []),
-      file.ruleSetId || '',
-      file.createdAt,
-      file.updatedAt || now,
-    ]
-  )
-}
-
-export async function deleteCaseFile(id: string) {
-  const d = await getDb()
-  await d.execute('DELETE FROM case_files WHERE id = ?', [id])
-}
-
-export async function searchCaseFiles(query: string): Promise<any[]> {
-  const d = await getDb()
-  return await d.select(
-    'SELECT * FROM case_files WHERE name LIKE ? ESCAPE \'\\\' ORDER BY updated_at DESC',
-    [`%${escapeLike(query)}%`]
-  )
-}
-
-// ── Recent Files ─────────────────────────────────────────────
-
-export async function getRecentFiles(): Promise<any[]> {
-  const d = await getDb()
-  return await d.select('SELECT * FROM recent_files ORDER BY last_opened DESC LIMIT 50')
-}
-
-export async function addRecentFile(path: string, name: string, caseCount: number) {
-  const d = await getDb()
-  await d.execute(
-    `INSERT INTO recent_files (path, name, case_count, last_opened)
-     VALUES (?, ?, ?, ?)
-     ON CONFLICT(path) DO UPDATE SET
-       name = excluded.name,
-       case_count = excluded.case_count,
-       last_opened = excluded.last_opened`,
-    [path, name, caseCount, new Date().toISOString()]
-  )
-}
-
-export async function removeRecentFile(path: string) {
-  const d = await getDb()
-  await d.execute('DELETE FROM recent_files WHERE path = ?', [path])
-}
-
-// ── Favorites ────────────────────────────────────────────────
-
-export async function getFavorites(): Promise<string[]> {
-  const d = await getDb()
-  const rows = await d.select<{ path: string }[]>('SELECT path FROM favorites ORDER BY added_at DESC')
-  return rows.map(r => r.path)
-}
-
-export async function toggleFavorite(path: string): Promise<boolean> {
-  const d = await getDb()
-  const existing = await d.select<{ path: string }[]>('SELECT path FROM favorites WHERE path = ?', [path])
-  if (existing.length > 0) {
-    await d.execute('DELETE FROM favorites WHERE path = ?', [path])
-    return false
-  } else {
-    await d.execute('INSERT OR IGNORE INTO favorites (path, added_at) VALUES (?, ?)', [path, new Date().toISOString()])
-    return true
-  }
-}
-
-export async function isFavorite(path: string): Promise<boolean> {
-  const d = await getDb()
-  const rows = await d.select<{ path: string }[]>('SELECT path FROM favorites WHERE path = ?', [path])
-  return rows.length > 0
 }
 
 // ── Input History ────────────────────────────────────────────
@@ -1008,10 +863,6 @@ export async function loadProxyRules(): Promise<ApiRewriteRule[]> {
 export interface AppBackup {
   version: string
   exportedAt: string
-  fieldRuleSets: any[]
-  caseFiles: any[]
-  recentFiles: string[]
-  favorites: string[]
   settings: Record<string, string>
   inputHistory: InputHistoryEntry[]
   logSessions: LogSession[]
@@ -1027,6 +878,18 @@ export interface AppBackup {
   apiTestCases?: ApiTestCase[]
   apiTestReports?: ApiTestReport[]
   apiTestResults?: ApiTestResult[]
+  perfSessions?: PerfSessionBackup[]
+}
+
+export interface PerfSessionBackup {
+  id: string
+  name: string
+  device_serial: string
+  started_at: string
+  ended_at: string | null
+  interval_ms: number
+  data: string
+  created_at: string
 }
 
 function _yieldToMain(): Promise<void> {
@@ -1034,11 +897,6 @@ function _yieldToMain(): Promise<void> {
 }
 
 export async function exportAllData(): Promise<AppBackup> {
-  const fieldRuleSets = await loadFieldRuleSets()
-  const caseFiles = await loadCaseFiles()
-  await _yieldToMain()
-  const recentFiles = await getRecentFiles()
-  const favPaths = await getFavorites()
   const settings = await loadSettings()
   await _yieldToMain()
   const d = await getDb()
@@ -1087,13 +945,9 @@ export async function exportAllData(): Promise<AppBackup> {
             started_at as startedAt, completed_at as completedAt
      FROM api_test_results`
   )
-  return {
-    version: '1.8',
+  const backup: AppBackup = {
+    version: '1.9',
     exportedAt: new Date().toISOString(),
-    fieldRuleSets,
-    caseFiles,
-    recentFiles,
-    favorites: favPaths,
     settings,
     inputHistory,
     logSessions,
@@ -1109,13 +963,19 @@ export async function exportAllData(): Promise<AppBackup> {
     apiTestCases: apiTestCases.length > 0 ? apiTestCases : undefined,
     apiTestReports: apiTestReports.length > 0 ? apiTestReports : undefined,
     apiTestResults: apiTestResults.length > 0 ? apiTestResults : undefined,
+    perfSessions: undefined,
   }
+  try {
+    const ps = await d.select<PerfSessionBackup[]>('SELECT * FROM perf_sessions ORDER BY created_at DESC')
+    if (ps.length > 0) backup.perfSessions = ps
+  } catch {}
+  return backup
 }
 
 function validateBackup(backup: any): string | null {
   if (!backup || typeof backup !== 'object') return '备份数据格式无效'
   if (!backup.version) return '备份文件缺少版本号，可能是旧格式或损坏文件'
-  const tables = ['fieldRuleSets', 'caseFiles', 'recentFiles', 'favorites', 'settings', 'inputHistory', 'logSessions', 'noteSpaces', 'noteFolders', 'notes', 'noteVersions', 'noteLinks', 'scripts', 'aiMemories', 'apiTestGroups', 'apiTestCases', 'apiTestReports', 'apiTestResults']
+  const tables = ['settings', 'inputHistory', 'logSessions', 'noteSpaces', 'noteFolders', 'notes', 'noteVersions', 'noteLinks', 'scripts', 'aiMemories', 'apiTestGroups', 'apiTestCases', 'apiTestReports', 'apiTestResults', 'perfSessions']
   for (const t of tables) {
     if (backup[t] !== undefined && !Array.isArray(backup[t]) && typeof backup[t] !== 'object') {
       return `字段 "${t}" 类型无效`
@@ -1281,39 +1141,7 @@ export async function importAllDataIncremental(backup: AppBackup): Promise<{
     } catch { /* ignore */ }
   }
 
-  // ── 6. FIELD RULE SETS ─ match by name ──
-  const localRuleSets = (await d.select<{ name: string }[]>(
-    'SELECT name FROM field_rule_sets'
-  )) || []
-  const localRuleNames = new Set(localRuleSets.map(r => r.name))
-  for (const r of backup.fieldRuleSets || []) {
-    if (localRuleNames.has(r.name)) { skipped++; continue }
-    try {
-      await d.execute(
-        'INSERT INTO field_rule_sets (id, name, rules, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-        [r.id, r.name, JSON.stringify(r.rules), r.createdAt || r.created_at, r.updatedAt || r.updated_at || r.createdAt]
-      )
-      imported++
-    } catch (e: any) { failures.push(`ruleset "${r.name}": ${e.message || e}`) }
-  }
-
-  // ── 7. CASE FILES ─ match by name ──
-  const localCaseFiles = (await d.select<{ name: string }[]>(
-    'SELECT name FROM case_files'
-  )) || []
-  const localCaseNames = new Set(localCaseFiles.map(f => f.name))
-  for (const f of backup.caseFiles || []) {
-    if (localCaseNames.has(f.name)) { skipped++; continue }
-    try {
-      await d.execute(
-        'INSERT INTO case_files (id, name, data, tags, custom_fields, rule_set_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [f.id, f.name, f.data || JSON.stringify(f), JSON.stringify(f.tags || []), JSON.stringify(f.custom_fields || f.customFields || []), f.rule_set_id || f.ruleSetId || '', f.created_at || f.createdAt, f.updated_at || f.updatedAt]
-      )
-      imported++
-    } catch (e: any) { failures.push(`case file "${f.name}": ${e.message || e}`) }
-  }
-
-  // ── 8. SCRIPTS ─ match by (type, name); scripts of same name in different types coexist ──
+  // ── 6. SCRIPTS ─ match by (type, name); scripts of same name in different types coexist ──
   const localScripts = (await d.select<{ type: string; name: string }[]>(
     'SELECT type, name FROM scripts'
   )) || []
@@ -1331,7 +1159,7 @@ export async function importAllDataIncremental(backup: AppBackup): Promise<{
     } catch (e: any) { failures.push(`script "${s.name}": ${e.message || e}`) }
   }
 
-  // ── 9. AI MEMORIES ─ dedup by content (already the identity for user-visible memories) ──
+  // ── 7. AI MEMORIES ─ dedup by content (already the identity for user-visible memories) ──
   const localMems = (await d.select<{ content: string }[]>(
     'SELECT content FROM note_ai_memories'
   )) || []
@@ -1348,7 +1176,7 @@ export async function importAllDataIncremental(backup: AppBackup): Promise<{
     } catch (e: any) { failures.push(`memory: ${e.message || e}`) }
   }
 
-  // ── 10. API TEST GROUPS ─ match by name ──
+  // ── 8. API TEST GROUPS ─ match by name ──
   const localGroups = (await d.select<{ name: string }[]>(
     'SELECT name FROM api_test_groups'
   )) || []
@@ -1367,7 +1195,7 @@ export async function importAllDataIncremental(backup: AppBackup): Promise<{
     } catch (e: any) { failures.push(`group "${g.name}": ${e.message || e}`) }
   }
 
-  // ── 11. API TEST CASES ─ match by (group_id, method, path, name); only for newly inserted groups ──
+  // ── 9. API TEST CASES ─ match by (group_id, method, path, name); only for newly inserted groups ──
   const localCases = (await d.select<{ group_id: string; method: string; path: string; name: string }[]>(
     'SELECT group_id, method, path, name FROM api_test_cases'
   )) || []
@@ -1392,7 +1220,7 @@ export async function importAllDataIncremental(backup: AppBackup): Promise<{
     } catch (e: any) { failures.push(`case "${c.name}": ${e.message || e}`) }
   }
 
-  // ── 12. API TEST REPORTS ─ match by name ──
+  // ── 10. API TEST REPORTS ─ match by name ──
   const localReports = (await d.select<{ name: string }[]>(
     'SELECT name FROM api_test_reports'
   )) || []
@@ -1414,7 +1242,7 @@ export async function importAllDataIncremental(backup: AppBackup): Promise<{
     } catch (e: any) { failures.push(`report "${r.name}": ${e.message || e}`) }
   }
 
-  // ── 13. API TEST RESULTS ─ only for freshly-inserted reports ──
+  // ── 11. API TEST RESULTS ─ only for freshly-inserted reports ──
   for (const rawR of backup.apiTestResults || []) {
     const r: any = rawR
     const bkReportId = r.reportId ?? r.report_id
@@ -1459,20 +1287,15 @@ export async function importAllData(backup: AppBackup) {
   }
   const failures: string[] = []
   const deletes = [
-    'field_rule_sets', 'case_files', 'recent_files', 'favorites',
     'app_settings', 'input_history', 'log_sessions',
     'note_folders', 'notes', 'notes_fts', 'note_versions', 'note_links', 'scripts', 'note_ai_memories',
-    'api_test_groups', 'api_test_cases', 'api_test_reports', 'api_test_results',
+    'api_test_groups', 'api_test_cases', 'api_test_reports', 'api_test_results', 'perf_sessions',
   ]
   for (const table of deletes) {
     try { await d.execute(`DELETE FROM ${table}`) } catch (e: any) { failures.push(`DELETE ${table}: ${e}`) }
   }
   try { await d.execute('DELETE FROM note_spaces') } catch {}
   const inserts: [string, string, any[], (item: any) => unknown[]][] = [
-    ['field_rule_sets', 'id, name, rules, created_at, updated_at', backup.fieldRuleSets || [], s => [s.id, s.name, JSON.stringify(s.rules), s.createdAt || s.created_at, s.updatedAt || s.updated_at || s.createdAt]],
-    ['case_files', 'id, name, data, tags, custom_fields, rule_set_id, created_at, updated_at', backup.caseFiles || [], f => [f.id, f.name, f.data || JSON.stringify(f), JSON.stringify(f.tags || []), JSON.stringify(f.custom_fields || f.customFields || []), f.rule_set_id || f.ruleSetId || '', f.created_at || f.createdAt, f.updated_at || f.updatedAt]],
-    ['recent_files', 'path, name, case_count, last_opened', backup.recentFiles || [], r => [r.path, r.name, r.case_count || r.caseCount || 0, r.last_opened || r.lastOpened]],
-    ['favorites', 'path, added_at', backup.favorites || [], path => [path, new Date().toISOString()]],
     ['input_history', 'key_name, value, created_at, sort_order', backup.inputHistory || [], h => [h.keyName, h.value, h.createdAt, Date.parse(h.createdAt)]],
     ['log_sessions', 'id, type, device_serial, status, started_at, metadata', backup.logSessions || [], s => [s.id, s.type, s.deviceSerial, s.status, s.startedAt, s.metadata]],
     ['note_spaces', 'id, name, sort_order, created_at, updated_at', backup.noteSpaces || [], (s: any) => [s.id, s.name, s.sortOrder ?? s.sort_order ?? 0, s.createdAt ?? s.created_at, s.updatedAt ?? s.updated_at]],
@@ -1486,6 +1309,7 @@ export async function importAllData(backup: AppBackup) {
     ['api_test_cases', 'id, group_id, name, description, type, method, url, host, path, query, headers, body, body_is_base64, assertions, source_request_id, enabled, sort_order, created_at, updated_at', backup.apiTestCases || [], (c: any) => [c.id, c.groupId ?? c.group_id, c.name, c.description ?? '', c.type, c.method, c.url, c.host ?? '', c.path, c.query ?? null, JSON.stringify(c.headers ?? []), c.body ?? null, c.bodyIsBase64 ? 1 : 0, JSON.stringify(c.assertions ?? []), c.sourceRequestId ?? c.source_request_id ?? null, c.enabled ? 1 : 0, c.sortOrder ?? c.sort_order ?? 0, c.createdAt ?? c.created_at, c.updatedAt ?? c.updated_at]],
     ['api_test_reports', 'id, name, description, total_cases, passed_cases, failed_cases, total_duration, started_at, completed_at, status, created_at', backup.apiTestReports || [], (r: any) => [r.id, r.name, r.description ?? '', r.totalCases ?? r.total_cases ?? 0, r.passedCases ?? r.passed_cases ?? 0, r.failedCases ?? r.failed_cases ?? 0, r.totalDuration ?? r.total_duration ?? 0, r.startedAt ?? r.started_at, r.completedAt ?? r.completed_at ?? null, r.status, r.createdAt ?? r.created_at]],
     ['api_test_results', 'id, report_id, case_id, passed, status_code, response_body, response_headers, duration, error_message, assertion_results, started_at, completed_at', backup.apiTestResults || [], (r: any) => [r.id, r.reportId ?? r.report_id, r.caseId ?? r.case_id, r.passed ? 1 : 0, r.statusCode ?? r.status_code ?? null, r.responseBody ?? r.response_body ?? null, r.responseHeaders ?? r.response_headers ? JSON.stringify(r.responseHeaders ?? r.response_headers) : null, r.duration ?? null, r.errorMessage ?? r.error_message ?? null, r.assertionResults ?? r.assertion_results ? JSON.stringify(r.assertionResults ?? r.assertion_results) : null, r.startedAt ?? r.started_at, r.completedAt ?? r.completed_at]],
+    ['perf_sessions', 'id, name, device_serial, started_at, ended_at, interval_ms, data, created_at', backup.perfSessions || [], (s: any) => [s.id, s.name, s.device_serial, s.started_at, s.ended_at, s.interval_ms, s.data, s.created_at]],
   ]
   for (const [table, cols, items, toParams] of inserts) {
     if (!Array.isArray(items) || items.length === 0) continue
@@ -1701,7 +1525,45 @@ export async function saveApiTestResult(result: ApiTestResult) {
       result.statusCode, result.responseBody,
       result.responseHeaders ? JSON.stringify(result.responseHeaders) : null,
       result.duration, result.errorMessage,
-      JSON.stringify(result.assertionResults), result.startedAt, result.completedAt
+      JSON.stringify(result.assertionResults),       result.startedAt, result.completedAt
     ]
   )
+}
+
+// ── Perf Sessions ──────────────────────────────────────────────
+
+export interface PerfSessionRow {
+  id: string
+  name: string
+  device_serial: string
+  started_at: string
+  ended_at: string | null
+  interval_ms: number
+  data: string
+  created_at: string
+}
+
+export async function savePerfSession(session: PerfSessionRow) {
+  const d = await getDb()
+  await d.execute(
+    `INSERT OR REPLACE INTO perf_sessions (id, name, device_serial, started_at, ended_at, interval_ms, data, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [session.id, session.name, session.device_serial, session.started_at, session.ended_at, session.interval_ms, session.data, session.created_at]
+  )
+}
+
+export async function listPerfSessions(): Promise<PerfSessionRow[]> {
+  const d = await getDb()
+  return d.select<PerfSessionRow[]>('SELECT * FROM perf_sessions ORDER BY created_at DESC')
+}
+
+export async function getPerfSession(id: string): Promise<PerfSessionRow | null> {
+  const d = await getDb()
+  const rows = await d.select<PerfSessionRow[]>('SELECT * FROM perf_sessions WHERE id = ?', [id])
+  return rows.length > 0 ? rows[0] : null
+}
+
+export async function deletePerfSession(id: string) {
+  const d = await getDb()
+  await d.execute('DELETE FROM perf_sessions WHERE id = ?', [id])
 }

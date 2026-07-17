@@ -86,10 +86,14 @@
               <span v-if="infoLoading === 'storage'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
               <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">database</span> {{ t('device.storageInfo') }}
             </button>
-            <button class="bg-white/30 border border-outline-variant/30 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm col-span-2 select-none"
+            <button class="bg-white/30 border border-outline-variant/30 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm col-span-1 select-none"
               :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('keys')">
               <span v-if="infoLoading === 'keys'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
               <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">vpn_key</span> {{ t('device.checkKeys') }}
+            </button>
+            <button class="bg-white/30 border border-outline-variant/30 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm col-span-1 select-none"
+              :disabled="!selectedDevice" @click="goPerfMonitor">
+              <span class="material-symbols-outlined text-[16px] text-on-surface-variant">monitoring</span> {{ t('device.perfMonitor') }}
             </button>
           </div>
           <hr class="border-outline-variant/30 my-1">
@@ -893,6 +897,7 @@
 <script setup lang="ts">
 defineOptions({ name: 'DeviceSpacePage' })
 import { ref, computed, watch, onMounted, onUnmounted, onActivated, onDeactivated, nextTick } from "vue";
+import { useRouter } from "vue-router";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useAdb, type DeviceProperties } from "@/composables/useAdb";
@@ -2977,6 +2982,12 @@ async function toggleRecording() {
     } catch { finishCmdExec(t("device.recordingStartFailed")); showToast(t("device.recordingStartFailed"), "error"); }
   }
   recordingLoading.value = false;
+}
+
+// ── Navigation ──
+const router = useRouter()
+function goPerfMonitor() {
+  router.push('/device-space/perf-monitor')
 }
 
 // ── Output Panel ──

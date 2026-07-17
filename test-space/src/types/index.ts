@@ -30,54 +30,6 @@ export interface LogEntry {
   tid?: number;
 }
 
-export interface CaseItem {
-  id: string
-  module: string
-  title: string
-  precondition: string
-  steps: string
-  expected: string
-  priority: string
-  tags: string[]
-  assignee: string
-  remarks: string
-  [key: string]: any
-}
-
-export interface CustomFieldDef {
-  key: string
-  label: string
-  type: 'text' | 'select' | 'textarea'
-  options?: string[]
-}
-
-export interface CaseFile {
-  id: string
-  name: string
-  version: string
-  cases: CaseItem[]
-  createdAt: string
-  updatedAt: string
-  tags: string[]
-  customFields?: CustomFieldDef[]
-}
-
-export interface RecentFileInfo {
-  path: string
-  name: string
-  caseCount: number
-  lastOpened: string
-  isFavorite: boolean
-  isPinned: boolean
-}
-
-export interface FileTab {
-  fileId: string
-  fileName: string
-  isDirty: boolean
-  path: string | null
-}
-
 export interface InputHistoryEntry {
   id: number
   keyName: string

@@ -15,6 +15,7 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use std::sync::Mutex;
 use std::time::Duration;
+use std::io::{BufRead, Write};
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 use tauri::Emitter;
@@ -23,6 +24,9 @@ use tauri_plugin_single_instance::init as single_instance_init;
 
 type MirrorKey = (String, String); // (serial, window_label)
 struct MirrorState(Mutex<HashMap<MirrorKey, (Arc<AtomicBool>, u16)>>);
+
+#[derive(Default)]
+struct LogcatState(Mutex<HashMap<String, std::process::Child>>);
 
 static NEXT_MIRROR_PORT: AtomicU16 = AtomicU16::new(27183);
 
@@ -345,6 +349,52 @@ async fn adb_get_current_app(serial: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+async fn adb_logcat_start(serial: String, file_path: String, state: tauri::State<'_, LogcatState>) -> Result<String, String> {
+    if let Some(mut child) = state.0.lock().unwrap().remove(&serial) {
+        let _ = child.kill();
+    }
+
+    let mut file = std::fs::File::create(&file_path).map_err(|e| e.to_string())?;
+    let mut child = std::process::Command::new("adb")
+        .args(["-s", &serial, "logcat", "-v", "time"])
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| e.to_string())?;
+
+    let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+    std::thread::spawn(move || {
+        let reader = std::io::BufReader::new(stdout);
+        let mut buf = String::with_capacity(1024);
+        for line in reader.lines() {
+            match line {
+                Ok(ref s) => {
+                    buf.clear();
+                    buf.push_str(s);
+                    buf.push('\n');
+                    if file.write_all(buf.as_bytes()).is_err() {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+    });
+
+    state.0.lock().unwrap().insert(serial, child);
+    Ok("Logcat started".to_string())
+}
+
+#[tauri::command]
+async fn adb_logcat_stop(serial: String, state: tauri::State<'_, LogcatState>) -> Result<String, String> {
+    if let Some(mut child) = state.0.lock().unwrap().remove(&serial) {
+        child.kill().map_err(|e| e.to_string())?;
+        Ok("Logcat stopped".to_string())
+    } else {
+        Ok("No active logcat".to_string())
+    }
+}
+
+#[tauri::command]
 async fn adb_logcat_clear(serial: String) -> Result<String, String> {
     tokio::task::spawn_blocking(move || {
         adb::logcat_clear(&serial)
@@ -390,6 +440,13 @@ async fn adb_get_cpu(serial: String) -> Result<String, String> {
 async fn adb_get_memory(serial: String) -> Result<String, String> {
     tokio::task::spawn_blocking(move || {
         adb::get_memory_info(&serial)
+    }).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn perf_get_snapshot(serial: String, watch_app: Option<String>) -> Result<adb::PerfSnapshot, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::get_perf_snapshot(&serial, watch_app.as_deref())
     }).await.map_err(|e| e.to_string())?
 }
 
@@ -497,6 +554,17 @@ fn write_text_file(path: String, content: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn append_text_file(path: String, content: String) -> Result<(), String> {
+    use std::io::Write;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(|e| e.to_string())?;
+    file.write_all(content.as_bytes()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn write_script_file(path: String, content: String, interpreter: String) -> Result<(), String> {
     if interpreter == "bat" {
         // Normalize to CRLF for cmd.exe compatibility
@@ -532,6 +600,7 @@ pub fn run() {
             port: Mutex::new(None),
         })
         .manage(MirrorState(Mutex::new(HashMap::new())))
+        .manage(LogcatState::default())
         .manage(ScriptManager::new())
         .manage(proxy::ProxyState::new())
         .setup(|app| {
@@ -617,11 +686,14 @@ pub fn run() {
             adb_stop_app,
             adb_clear_app_data,
             adb_get_current_app,
+            adb_logcat_start,
+            adb_logcat_stop,
             adb_logcat_clear,
             adb_logcat,
             adb_get_battery,
             adb_get_cpu,
             adb_get_memory,
+            perf_get_snapshot,
             adb_logcat_buffer_resize,
             adb_bugreport,
             adb_dmesg,
@@ -643,6 +715,7 @@ pub fn run() {
             script_spawn,
             script_kill,
             write_text_file,
+            append_text_file,
             write_script_file,
             read_text_file,
             proxy::proxy_start,

@@ -10,7 +10,7 @@ import { useI18n } from "@/composables/useI18n";
 
 const { initLanguage } = useI18n();
 
-const pages = ["/device-space", "/notes-space", "/api-space", "/script-space", "/case-space", "/settings"];
+const pages = ["/device-space", "/notes-space", "/api-space", "/script-space", "/settings"];
 
 const router = useRouter();
 
@@ -24,7 +24,7 @@ function onKeydown(e: KeyboardEvent) {
     } else {
       router.push(pages[(idx + 1) % pages.length]);
     }
-  } else if (e.ctrlKey && e.key >= "1" && e.key <= "6") {
+  } else if (e.ctrlKey && e.key >= "1" && e.key <= "5") {
     e.preventDefault();
     router.push(pages[parseInt(e.key) - 1]);
   }

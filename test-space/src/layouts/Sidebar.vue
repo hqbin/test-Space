@@ -71,7 +71,6 @@ const navItems: NavItem[] = [
   { path: "/notes-space", labelKey: "nav.notes", icon: "description" },
   { path: "/api-space", labelKey: "nav.api", icon: "api" },
   { path: "/script-space", labelKey: "nav.scripts", icon: "code" },
-  { path: "/case-space", labelKey: "nav.case", icon: "folder_shared" },
 ];
 
 const syncBusy = ref(false);
@@ -110,7 +109,7 @@ function clearTimer() {
 onUnmounted(() => clearTimer());
 
 function isActive(path: string) {
-  if (path === "/case-space" || path === "/api-space") return route.path.startsWith(path);
+  if (path === "/api-space") return route.path.startsWith(path);
   return route.path === path;
 }
 

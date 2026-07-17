@@ -54,20 +54,11 @@ function filterOversizedItems(data: AppBackup): AppBackup {
     return true;
   });
 
-  const caseFiles = data.caseFiles.filter(f => {
-    const dataSize = typeof f.data === 'string' ? f.data.length : JSON.stringify(f.data || '').length;
-    if (dataSize >= CLOUD_MAX_ITEM_SIZE) {
-      skipped.push(`用例文件 ${f.id} (${Math.round(dataSize / 1024 / 1024 * 100) / 100}MB)`);
-      return false;
-    }
-    return true;
-  });
-
   if (skipped.length > 0) {
     console.warn(`[cloudSync] 跳过 ${skipped.length} 个超大项目:\n${skipped.join('\n')}`);
   }
 
-  return { ...data, notes, noteVersions, caseFiles };
+  return { ...data, notes, noteVersions };
 }
 
 export { filterOversizedItems };
