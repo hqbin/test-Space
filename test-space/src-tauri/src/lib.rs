@@ -355,7 +355,10 @@ async fn adb_logcat_start(serial: String, file_path: String, state: tauri::State
     }
 
     let mut file = std::fs::File::create(&file_path).map_err(|e| e.to_string())?;
-    let mut child = std::process::Command::new("adb")
+    let mut cmd = std::process::Command::new("adb");
+    #[cfg(target_os = "windows")]
+    { cmd.creation_flags(0x08000000); } // CREATE_NO_WINDOW - prevent black console window on packaged exe
+    let mut child = cmd
         .args(["-s", &serial, "logcat", "-v", "time"])
         .stdout(std::process::Stdio::piped())
         .spawn()
