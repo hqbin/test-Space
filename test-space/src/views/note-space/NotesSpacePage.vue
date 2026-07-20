@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="flex flex-1 min-h-0 -mx-margin-page overflow-hidden pb-4 box-border select-none">
     <!-- Left: Search + File Tree -->
     <div class="flex-shrink-0 flex flex-col w-64 ml-3 overflow-hidden rounded-xl bg-white/10 backdrop-blur-[60px] border border-white/50 shadow-lg">
@@ -1095,7 +1095,17 @@ function openFolderAddDropdown(folderId: string, event: MouseEvent) {
     return
   }
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
-  folderAddDropdownPos.value = { x: rect.right - 140, y: rect.bottom + 4 }
+  const dropdownWidth = 140
+  const dropdownHeight = 80
+  let x = rect.right - dropdownWidth
+  let y = rect.bottom + 4
+  if (y + dropdownHeight > window.innerHeight) {
+    y = rect.top - dropdownHeight - 4
+  }
+  if (x < 0) {
+    x = rect.left
+  }
+  folderAddDropdownPos.value = { x, y }
   folderAddDropdownId.value = folderId
 }
 
