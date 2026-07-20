@@ -368,6 +368,7 @@ async fn adb_logcat_start(serial: String, file_path: String, state: tauri::State
     std::thread::spawn(move || {
         let reader = std::io::BufReader::new(stdout);
         let mut buf = String::with_capacity(1024);
+        let mut lines_since_flush = 0;
         for line in reader.lines() {
             match line {
                 Ok(ref s) => {
@@ -377,10 +378,17 @@ async fn adb_logcat_start(serial: String, file_path: String, state: tauri::State
                     if file.write_all(buf.as_bytes()).is_err() {
                         break;
                     }
+                    lines_since_flush += 1;
+                    // Flush every 10 lines or when buffer is large
+                    if lines_since_flush >= 10 {
+                        let _ = file.flush();
+                        lines_since_flush = 0;
+                    }
                 }
                 Err(_) => break,
             }
         }
+        let _ = file.flush();
     });
 
     state.0.lock().unwrap().insert(serial, child);
