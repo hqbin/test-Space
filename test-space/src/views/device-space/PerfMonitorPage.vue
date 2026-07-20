@@ -815,7 +815,6 @@ function buildBuiltinAssessment(
     const cpus = pts.map(p => p.cpu)
     const maxCpu = safeMax(cpus)
     if (maxCpu > 80) {
-      // Find which apps contributed most to the peak CPU
       const peakApps = topCpu
         .map(p => ({ name: p.name, max: safeMax(p.data.map(d => d.cpuPercent)) }))
         .filter(p => p.max > 5)
@@ -849,40 +848,48 @@ function buildBuiltinAssessment(
       }
     }
 
-    // 4. Memory leak detection: PSS grows continuously and final > initial * 1.3
-    const minPointsForTrend = Math.min(10, Math.floor(pts.length / 2))
+    // 4. Device memory trend analysis
+    const deviceMemData = pts.map(p => ({ time: p.time, pssKb: p.memUsedKb }))
+    const deviceMemAnalysis = analyzeMemoryTrend(deviceMemData)
+    if (deviceMemAnalysis.isLeak) {
+      leaks.push(deviceMemAnalysis.description.replace('内存', '设备内存使用量'))
+    } else if (deviceMemAnalysis.isRising) {
+      rising.push(deviceMemAnalysis.description.replace('内存', '设备内存使用量'))
+    }
+
+    // 5. CPU overall trend analysis
+    const cpuData = pts.map(p => ({ time: p.time, pssKb: p.cpu }))
+    const cpuAnalysis = analyzeMemoryTrend(cpuData)
+    if (cpuAnalysis.isLeak) {
+      issues.push(cpuAnalysis.description.replace('内存', 'CPU 使用率').replace('MB', '%'))
+    } else if (cpuAnalysis.isRising) {
+      rising.push(cpuAnalysis.description.replace('内存', 'CPU 使用率').replace('MB', '%'))
+    }
+
+    // 6. Memory leak detection using linear regression + segmented trend analysis
     for (const p of topMem) {
-      if (p.data.length < minPointsForTrend * 2) continue
-      const firstAvg = safeAvg(p.data.slice(0, minPointsForTrend).map(d => d.pssKb))
-      const lastAvg = safeAvg(p.data.slice(-minPointsForTrend).map(d => d.pssKb))
-      if (firstAvg > 0 && lastAvg > firstAvg * 1.3) {
-        const growth = ((lastAvg - firstAvg) / firstAvg * 100).toFixed(1)
-        if (lastAvg > firstAvg * 1.5) {
-          leaks.push(`应用 ${p.name} PSS 从 ${formatKb(firstAvg)} ${formatKbUnit(firstAvg)} 增长到 ${formatKb(lastAvg)} ${formatKbUnit(lastAvg)}（+${growth}%），疑似内存泄露`)
-        } else {
-          rising.push(`应用 ${p.name} PSS 持续上涨 ${growth}%（${formatKb(firstAvg)} → ${formatKb(lastAvg)} ${formatKbUnit(lastAvg)}）`)
-        }
+      const analysis = analyzeMemoryTrend(p.data)
+      if (analysis.isLeak) {
+        leaks.push(analysis.description.replace('内存', `应用 ${p.name} PSS`))
+      } else if (analysis.isRising) {
+        rising.push(analysis.description.replace('内存', `应用 ${p.name} PSS`))
       }
     }
 
-    // 5. Single app memory leak
-    if (singleData.length >= minPointsForTrend * 2) {
-      const firstAvg = safeAvg(singleData.slice(0, minPointsForTrend).map(d => d.pssKb))
-      const lastAvg = safeAvg(singleData.slice(-minPointsForTrend).map(d => d.pssKb))
-      if (firstAvg > 0 && lastAvg > firstAvg * 1.3) {
-        const growth = ((lastAvg - firstAvg) / firstAvg * 100).toFixed(1)
-        if (lastAvg > firstAvg * 1.5) {
-          leaks.push(`单应用 ${singleName} PSS 从 ${formatKb(firstAvg)} ${formatKbUnit(firstAvg)} 增长到 ${formatKb(lastAvg)} ${formatKbUnit(lastAvg)}（+${growth}%），疑似内存泄露`)
-        } else {
-          rising.push(`单应用 ${singleName} PSS 持续上涨 ${growth}%`)
-        }
+    // 7. Single app memory leak
+    if (singleData.length >= 10) {
+      const analysis = analyzeMemoryTrend(singleData)
+      if (analysis.isLeak) {
+        leaks.push(analysis.description.replace('内存', `单应用 ${singleName} PSS`))
+      } else if (analysis.isRising) {
+        rising.push(analysis.description.replace('内存', `单应用 ${singleName} PSS`))
       }
     }
 
-    // 6. CPU sustained high
+    // 8. CPU sustained high
     for (const p of topCpu) {
-      if (p.data.length < minPointsForTrend * 2) continue
-      const lastAvg = safeAvg(p.data.slice(-minPointsForTrend).map(d => d.cpuPercent))
+      if (p.data.length < 10) continue
+      const lastAvg = safeAvg(p.data.slice(-10).map(d => d.cpuPercent))
       if (lastAvg > 30) {
         rising.push(`应用 ${p.name} 近期 CPU 均值 ${lastAvg.toFixed(1)}%，持续高占用`)
       }
@@ -902,7 +909,7 @@ function buildBuiltinAssessment(
   return `<div class="card">
   <h2>整体评估</h2>
   <div style="background:#fef9e7;border:1px solid #f0e0a0;border-radius:8px;padding:.6rem .8rem;margin-bottom:1rem;font-size:.85rem;color:#8a6d3b">
-    <strong>⚠️ 仅供参考：</strong>以下评估基于采集期间的统计数据和简单趋势检测，不构成确定性诊断。实际表现可能受设备状态、系统调度、测试场景等多种因素影响，请结合具体场景综合判断。
+    <strong>⚠️ 仅供参考：</strong>以下评估基于采集期间的统计数据和趋势分析（线性回归 + 分段趋势检测），不构成确定性诊断。实际表现可能受设备状态、系统调度、测试场景等多种因素影响，请结合具体场景综合判断。
   </div>
   <h3 style="color:#e74c3c;font-size:.95rem;margin:1rem 0 .4rem 0">异常情况</h3>
   <ul>${issueHtml}</ul>
@@ -911,6 +918,152 @@ function buildBuiltinAssessment(
   <h3 style="color:#f39c12;font-size:.95rem;margin:1rem 0 .4rem 0">持续上涨情况</h3>
   <ul>${risingHtml}</ul>
 </div>`
+}
+
+function analyzeMemoryTrend(data: { time: number; pssKb: number }[]): {
+  isLeak: boolean;
+  isRising: boolean;
+  description: string;
+} {
+  if (data.length < 10) {
+    return { isLeak: false, isRising: false, description: '' }
+  }
+
+  const values = data.map(d => d.pssKb)
+  const times = data.map(d => d.time)
+  
+  const firstAvg = safeAvg(values.slice(0, Math.min(10, Math.floor(values.length / 4))))
+  const lastAvg = safeAvg(values.slice(-Math.min(10, Math.floor(values.length / 4))))
+  
+  if (firstAvg <= 0) {
+    return { isLeak: false, isRising: false, description: '' }
+  }
+
+  const growthPercent = ((lastAvg - firstAvg) / firstAvg * 100).toFixed(1)
+  
+  const slopeResult = linearRegression(times, values)
+  const slopeKbPerSec = slopeResult.slope
+  const r2 = slopeResult.r2
+  
+  const stdDev = calculateStdDev(values)
+  const cv = stdDev / safeAvg(values)
+  
+  const segments = splitIntoSegments(data, 3)
+  const segmentSlopes = segments.map(s => linearRegression(s.times, s.values).slope)
+  
+  const durationSec = (times[times.length - 1] - times[0]) / 1000
+  const totalGrowthKb = lastAvg - firstAvg
+  const avgGrowthRateKbPerSec = totalGrowthKb / durationSec
+  
+  const lastSegmentSlope = segmentSlopes[segmentSlopes.length - 1]
+  const firstSegmentSlope = segmentSlopes[0]
+  
+  const isLastSlopePositive = lastSegmentSlope > 0.01
+  const isLastSlopeHigher = lastSegmentSlope >= firstSegmentSlope * 0.5
+  
+  const growthThreshold = 1.2
+  
+  if (lastAvg <= firstAvg * growthThreshold) {
+    return { isLeak: false, isRising: false, description: '' }
+  }
+
+  if (r2 > 0.6 && isLastSlopePositive && isLastSlopeHigher && avgGrowthRateKbPerSec > 0.1) {
+    const rateStr = formatGrowthRate(avgGrowthRateKbPerSec)
+    const durStr = formatDuration(durationSec)
+    return {
+      isLeak: true,
+      isRising: false,
+      description: `内存从 ${formatKb(firstAvg)} ${formatKbUnit(firstAvg)} 持续增长至 ${formatKb(lastAvg)} ${formatKbUnit(lastAvg)}（+${growthPercent}%），${durStr} 内平均增速 ${rateStr}，且后期增长趋势未减缓（R²=${r2.toFixed(2)}），疑似内存泄露`
+    }
+  }
+
+  if (lastSegmentSlope <= 0.01 || (!isLastSlopeHigher && firstSegmentSlope > 0.1)) {
+    return {
+      isLeak: false,
+      isRising: true,
+      description: `内存初始阶段增长 ${growthPercent}%（${formatKb(firstAvg)} → ${formatKb(lastAvg)} ${formatKbUnit(lastAvg)}），但后期趋于稳定，属于正常启动加载特征`
+    }
+  }
+
+  if (cv > 0.2) {
+    return {
+      isLeak: false,
+      isRising: true,
+      description: `内存波动较大（变异系数 ${(cv * 100).toFixed(0)}%），整体呈上升趋势 ${growthPercent}%，建议结合更长时间观察确认是否存在泄露`
+    }
+  }
+
+  return {
+    isLeak: false,
+    isRising: true,
+    description: `内存呈上升趋势 ${growthPercent}%（${formatKb(firstAvg)} → ${formatKb(lastAvg)} ${formatKbUnit(lastAvg)}），建议持续观察`
+  }
+}
+
+function linearRegression(x: number[], y: number[]): { slope: number; intercept: number; r2: number } {
+  const n = x.length
+  if (n < 2) return { slope: 0, intercept: 0, r2: 0 }
+  
+  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0
+  for (let i = 0; i < n; i++) {
+    sumX += x[i]
+    sumY += y[i]
+    sumXY += x[i] * y[i]
+    sumX2 += x[i] * x[i]
+  }
+  
+  const denominator = n * sumX2 - sumX * sumX
+  if (denominator === 0) return { slope: 0, intercept: 0, r2: 0 }
+  
+  const slope = (n * sumXY - sumX * sumY) / denominator
+  const intercept = (sumY - slope * sumX) / n
+  
+  let ssTot = 0, ssRes = 0
+  const meanY = sumY / n
+  for (let i = 0; i < n; i++) {
+    ssTot += Math.pow(y[i] - meanY, 2)
+    ssRes += Math.pow(y[i] - (slope * x[i] + intercept), 2)
+  }
+  
+  const r2 = ssTot === 0 ? 0 : 1 - ssRes / ssTot
+  
+  return { slope, intercept, r2 }
+}
+
+function calculateStdDev(values: number[]): number {
+  if (values.length === 0) return 0
+  const mean = safeAvg(values)
+  const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length
+  return Math.sqrt(variance)
+}
+
+function splitIntoSegments(data: { time: number; pssKb: number }[], count: number): Array<{ times: number[]; values: number[] }> {
+  const segmentSize = Math.floor(data.length / count)
+  const segments: Array<{ times: number[]; values: number[] }> = []
+  
+  for (let i = 0; i < count; i++) {
+    const start = i * segmentSize
+    const end = i === count - 1 ? data.length : (i + 1) * segmentSize
+    segments.push({
+      times: data.slice(start, end).map(d => d.time),
+      values: data.slice(start, end).map(d => d.pssKb)
+    })
+  }
+  
+  return segments
+}
+
+function formatGrowthRate(kbPerSec: number): string {
+  if (kbPerSec >= 1024) {
+    return `${(kbPerSec / 1024).toFixed(2)} MB/s`
+  }
+  return `${kbPerSec.toFixed(2)} KB/s`
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${Math.round(seconds)}秒`
+  if (seconds < 3600) return `${Math.round(seconds / 60)}分钟`
+  return `${(seconds / 3600).toFixed(1)}小时`
 }
 
 async function exportReport() {
