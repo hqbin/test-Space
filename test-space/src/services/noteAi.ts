@@ -555,6 +555,11 @@ export async function extractMemories(
   return [...new Set(lines)]
 }
 
+export async function callAiChat(config: AiConfig, messages: AiChatMessage[]): Promise<string> {
+  const json = await callChatApi(config, messages)
+  return json.choices?.[0]?.message?.content?.trim() || ''
+}
+
 export async function testAiConnection(config: AiConfig): Promise<string> {
   const messages: AiChatMessage[] = [
     { role: resolveSystemRole(config), content: '你是一个助手' },

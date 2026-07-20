@@ -114,16 +114,16 @@
         </Transition>
       </Teleport>
       <div class="flex-1"></div>
-      <button class="glass-button px-2 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1" @click="showSaveDialog = true">
+      <button class="glass-button px-2 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1" @click="showSaveDialog = true" :disabled="store.isCollecting" :title="store.isCollecting ? '监控运行中不可用' : ''">
         <span class="material-symbols-outlined text-[14px]">save</span>{{ t('perf.saveSession') }}
       </button>
-      <button class="glass-button px-2 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1" @click="openLoadDialog">
+      <button class="glass-button px-2 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1" @click="openLoadDialog" :disabled="store.isCollecting" :title="store.isCollecting ? '监控运行中不可用' : ''">
         <span class="material-symbols-outlined text-[14px]">history</span>{{ t('perf.loadSession') }}
       </button>
-      <button class="glass-button px-2 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1" @click="exportReport">
+      <button class="glass-button px-2 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1" @click="exportReport" :disabled="store.isCollecting" :title="store.isCollecting ? '监控运行中不可用' : ''">
         <span class="material-symbols-outlined text-[14px]">file_download</span>{{ t('perf.exportReport') }}
       </button>
-      <button class="glass-button px-2 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1" @click="clearHistory">
+      <button class="glass-button px-2 py-1.5 rounded-lg font-caption text-caption flex items-center gap-1" @click="clearHistory" :disabled="store.isCollecting" :title="store.isCollecting ? '监控运行中不可用' : ''">
         <span class="material-symbols-outlined text-[14px]">delete_sweep</span>{{ t('perf.clearHistory') }}
       </button>
     </div>
@@ -303,6 +303,19 @@
         </div>
       </Transition>
     </Teleport>
+
+    <!-- Load Session Loading Overlay -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div v-if="loadingSession" class="fixed inset-0 z-[9998] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div class="glass-panel rounded-2xl p-8 flex flex-col items-center gap-4 bg-white/95 shadow-2xl min-w-[320px]">
+            <div class="w-12 h-12 rounded-full border-4 border-secondary/20 border-t-secondary animate-spin"></div>
+            <span class="font-label-md text-label-md text-on-surface">加载历史会话中</span>
+            <span class="font-caption text-caption text-on-surface-variant text-center max-w-[280px]">{{ loadingSessionText }}</span>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -314,6 +327,8 @@ import { usePerfMonitor, type PerfSnapshot } from '@/composables/usePerfMonitor'
 import { useAdb } from '@/composables/useAdb'
 import { usePerfMonitorStore } from '@/stores/usePerfMonitorStore'
 import { savePerfSession, listPerfSessions, deletePerfSession, type PerfSessionRow } from '@/services/database'
+import { loadAiConfig, isAiConfigured, type AiConfig } from '@/services/aiSettings'
+import { callAiChat, resolveSystemRole, type AiChatMessage } from '@/services/noteAi'
 import { mkdir, writeTextFile, readTextFile, readDir } from '@tauri-apps/plugin-fs'
 import { appDataDir } from '@tauri-apps/api/path'
 import { open } from '@tauri-apps/plugin-dialog'
@@ -462,24 +477,24 @@ function toggleCpuApp(name: string) {
   if (s.has(name)) s.delete(name)
   else s.add(name)
   cpuHiddenApps.value = s
-  updateCpuChart()
+  updateCpuChartDebounced()
 }
 function toggleTopApp(name: string) {
   const s = new Set(topAppHiddenApps.value)
   if (s.has(name)) s.delete(name)
   else s.add(name)
   topAppHiddenApps.value = s
-  updateTopAppChart()
+  updateTopAppChartDebounced()
 }
-function cpuSelectAll() { cpuHiddenApps.value = new Set(); updateCpuChart() }
+function cpuSelectAll() { cpuHiddenApps.value = new Set(); updateCpuChartDebounced() }
 function cpuSelectNone() {
   cpuHiddenApps.value = new Set(cpuAppNames.value)
-  updateCpuChart()
+  updateCpuChartDebounced()
 }
-function topAppSelectAll() { topAppHiddenApps.value = new Set(); updateTopAppChart() }
+function topAppSelectAll() { topAppHiddenApps.value = new Set(); updateTopAppChartDebounced() }
 function topAppSelectNone() {
   topAppHiddenApps.value = new Set(topAppNames.value)
-  updateTopAppChart()
+  updateTopAppChartDebounced()
 }
 
 // Click outside to close dropdowns
@@ -542,13 +557,13 @@ const appSearch = ref('')
 function updateSingleAppName() {
   const name = appSearch.value.trim()
   store.singleAppName = name
-  updateSingleAppChart()
+  updateSingleAppChartDebounced()
 }
 
 function clearSingleApp() {
   store.singleAppName = ''
   appSearch.value = ''
-  updateSingleAppChart()
+  updateSingleAppChartDebounced()
 }
 
 // Toast
@@ -566,6 +581,9 @@ function showToast(msg: string, err = false) {
 // Save/Load dialogs
 const showSaveDialog = ref(false)
 const showLoadDialog = ref(false)
+// 加载历史会话的loading遮罩状态
+const loadingSession = ref(false)
+const loadingSessionText = ref('')
 const sessionName = ref('')
 const sessions = ref<PerfSessionRow[]>([])
 
@@ -585,11 +603,11 @@ async function doSaveSession() {
     id,
     name: sessionName.value.trim(),
     device_serial: deviceSerial.value,
-    started_at: new Date(store.history[0]?.time ?? Date.now()).toISOString(),
-    ended_at: new Date().toISOString(),
+    started_at: formatLocalTime(new Date(store.history[0]?.time ?? Date.now())),
+    ended_at: formatLocalTime(new Date()),
     interval_ms: store.intervalMs,
     data: sessionData,
-    created_at: new Date().toISOString(),
+    created_at: formatLocalTime(new Date()),
   })
   showSaveDialog.value = false
   sessionName.value = ''
@@ -602,24 +620,49 @@ async function openLoadDialog() {
 }
 
 async function doLoadSession(s: PerfSessionRow) {
+  loadingSession.value = true
+  loadingSessionText.value = '正在准备加载会话...'
+  // 让UI先渲染遮罩，再执行后续操作（避免长任务阻塞导致看不到遮罩）
+  await new Promise(resolve => requestAnimationFrame(resolve))
   try {
+    loadingSessionText.value = '正在解析数据...'
+    await new Promise(resolve => requestAnimationFrame(resolve))
     const parsed = JSON.parse(s.data)
     // Handle both old format (array of points) and new format (object with history + process maps)
     if (Array.isArray(parsed)) {
       store.restoreHistory(parsed)
     } else {
+      loadingSessionText.value = '正在恢复历史数据...'
+      await new Promise(resolve => requestAnimationFrame(resolve))
       store.restoreFullSession(parsed)
     }
     store.setInterval(s.interval_ms)
     intervalMs.value = String(s.interval_ms)
     showLoadDialog.value = false
-    // Must call all 4 update functions so every chart reloads from restored data
-    updateCharts()
-    updateTopAppChart()
-    updateCpuChart()
-    updateSingleAppChart()
-    showToast(t('perf.sessionLoaded'))
-  } catch { showToast('Failed to load session', true) }
+    // 大数据量加载时，分批异步渲染避免阻塞UI线程
+    const dataSize = store.history.length
+    if (dataSize > 5000) {
+      loadingSessionText.value = `正在渲染 ${dataSize} 个数据点（约${(dataSize/3600).toFixed(1)}小时）...`
+    } else {
+      loadingSessionText.value = '正在渲染图表...'
+    }
+    // 让UI刷新遮罩文字
+    await new Promise(resolve => requestAnimationFrame(resolve))
+    // 使用setTimeout拆分任务，给UI响应机会
+    // 第一个图表先立即渲染（响应快），其余图表延后到下一个事件循环
+    updateCpuChartDebounced()
+    setTimeout(() => updateTopAppChartDebounced(), 0)
+    setTimeout(() => updateSingleAppChartDebounced(), 50)
+    setTimeout(() => updateChartsDebounced(), 100)
+    // 等待所有图表完成渲染后关闭遮罩
+    setTimeout(() => {
+      loadingSession.value = false
+      showToast(t('perf.sessionLoaded'))
+    }, 500)
+  } catch (e: any) {
+    loadingSession.value = false
+    showToast('Failed to load session: ' + (e?.message || e), true)
+  }
 }
 
 async function doDeleteSession(s: PerfSessionRow) {
@@ -677,11 +720,90 @@ function downsample<T>(arr: T[], maxLen: number): T[] {
   return result
 }
 
+// Bucketing-based downsampling: for each time bucket, keep min/max/first/last points
+// to preserve spikes and trends that simple stride-based downsampling would miss.
+// 优化：避免在循环内创建Set/filter，使用数组push+排序去重，大幅提升大数据量渲染速度
+function bucketingDownsample<T extends { time: number }>(arr: T[], valueFn: (x: T) => number, maxLen: number): T[] {
+  if (arr.length <= maxLen) return arr
+  const bucketSize = arr.length / maxLen
+  const n = arr.length
+  const result: T[] = new Array(maxLen * 4) // 预分配，避免push扩容
+  let outLen = 0
+  for (let b = 0; b < maxLen; b++) {
+    const start = Math.floor(b * bucketSize)
+    const end = b === maxLen - 1 ? n : Math.floor((b + 1) * bucketSize)
+    if (start >= end) continue
+    let minV = valueFn(arr[start]), minIdx = start
+    let maxV = minV, maxIdx = start
+    for (let i = start + 1; i < end; i++) {
+      const v = valueFn(arr[i])
+      if (v < minV) { minV = v; minIdx = i }
+      else if (v > maxV) { maxV = v; maxIdx = i }
+    }
+    // 顺序: start, minIdx, maxIdx, end-1，去重并按索引升序
+    const idx = [start, minIdx, maxIdx, end - 1]
+    // 内联去重（4个元素，O(1) 排序）
+    const uniq: number[] = []
+    if (idx[0] !== idx[1] && idx[0] !== idx[2] && idx[0] !== idx[3]) uniq.push(idx[0])
+    else if (idx[0] !== idx[1] && idx[0] !== idx[2]) uniq.push(idx[0])
+    else if (idx[0] !== idx[1]) uniq.push(idx[0])
+    if (idx[1] !== idx[0] && idx[1] !== idx[2] && idx[1] !== idx[3]) uniq.push(idx[1])
+    else if (idx[1] !== idx[0] && idx[1] !== idx[2]) uniq.push(idx[1])
+    if (idx[2] !== idx[0] && idx[2] !== idx[1] && idx[2] !== idx[3]) uniq.push(idx[2])
+    else if (idx[2] !== idx[0] && idx[2] !== idx[1]) uniq.push(idx[2])
+    if (idx[3] !== idx[0] && idx[3] !== idx[1] && idx[3] !== idx[2]) uniq.push(idx[3])
+    uniq.sort((a, c) => a - c)
+    for (let k = 0; k < uniq.length; k++) result[outLen++] = arr[uniq[k]]
+  }
+  result.length = outLen
+  return result
+}
+
 // Build an overall assessment section based on collected data.
 // Heuristics: high CPU peaks, low available memory, PSS surges,
 // memory-leak-like continuous growth, sustained rising trends.
 // NOTE: For reference only — not a definitive diagnosis.
-function buildOverallAssessment(
+let aiConfig: AiConfig | null = null
+
+async function buildOverallAssessment(
+  pts: { time: number; cpu: number; memUsedKb: number; memTotalKb: number; memAvailKb: number }[],
+  topMem: { name: string; data: { time: number; pssKb: number }[] }[],
+  topCpu: { name: string; data: { time: number; cpuPercent: number }[] }[],
+  singleName: string,
+  singleData: { time: number; pssKb: number }[],
+): Promise<string> {
+  if (!aiConfig) {
+    try {
+      aiConfig = await loadAiConfig()
+    } catch {}
+  }
+
+  if (aiConfig && isAiConfigured(aiConfig)) {
+    try {
+      // AI调用设置30秒超时，防止长时间等待影响报告生成
+      const aiResult = await Promise.race([
+        buildAiAssessment(aiConfig, pts, topMem, topCpu, singleName, singleData),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('AI 调用超时 (30s)')), 30000)
+        ),
+      ])
+      return aiResult
+    } catch (e: any) {
+      const errMsg = e?.message || String(e)
+      console.warn('[buildOverallAssessment] AI assessment failed, falling back to built-in:', errMsg)
+      // 如果是网络错误或超时，在报告中提示AI调用失败
+      const builtinResult = buildBuiltinAssessment(pts, topMem, topCpu, singleName, singleData)
+      return builtinResult.replace(
+        '<div class="card">',
+        `<div class="card">\n<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:.5rem .8rem;margin-bottom:1rem;font-size:.85rem;color:#856404"><strong>⚠️ AI评估失败：</strong>${errMsg}，已使用内置规则评估</div>`
+      )
+    }
+  }
+
+  return buildBuiltinAssessment(pts, topMem, topCpu, singleName, singleData)
+}
+
+function buildBuiltinAssessment(
   pts: { time: number; cpu: number; memUsedKb: number; memTotalKb: number; memAvailKb: number }[],
   topMem: { name: string; data: { time: number; pssKb: number }[] }[],
   topCpu: { name: string; data: { time: number; cpuPercent: number }[] }[],
@@ -786,6 +908,103 @@ function buildOverallAssessment(
 </div>`
 }
 
+async function buildAiAssessment(
+  config: AiConfig,
+  pts: { time: number; cpu: number; memUsedKb: number; memTotalKb: number; memAvailKb: number }[],
+  topMem: { name: string; data: { time: number; pssKb: number }[] }[],
+  topCpu: { name: string; data: { time: number; cpuPercent: number }[] }[],
+  singleName: string,
+  singleData: { time: number; pssKb: number }[],
+): Promise<string> {
+  const cpus = pts.map(p => p.cpu)
+  const cpuAvg = safeAvg(cpus)
+  const cpuMax = safeMax(cpus)
+  const memAvail = pts.map(p => p.memAvailKb)
+  const minAvail = safeMin(memAvail)
+  const totalMem = pts[0]?.memTotalKb || 0
+  const memUsedPct = totalMem > 0 ? (pts[0].memTotalKb - minAvail) / totalMem * 100 : 0
+  const sampleCount = pts.length
+  const durationMin = pts.length >= 2 ? (pts[pts.length - 1].time - pts[0].time) / 60000 : 0
+
+  const topMemSummary = topMem.slice(0, 10).map(p => {
+    const data = p.data
+    if (data.length < 2) return `${p.name}: 数据不足`
+    const first = safeAvg(data.slice(0, Math.min(3, data.length)).map(d => d.pssKb))
+    const last = safeAvg(data.slice(-Math.min(3, data.length)).map(d => d.pssKb))
+    const max = safeMax(data.map(d => d.pssKb))
+    const growth = first > 0 ? ((last - first) / first * 100).toFixed(1) : 'N/A'
+    return `${p.name}: ${formatKb(first)}→${formatKb(last)} ${formatKbUnit(last)} (增长${growth}%, 峰值${formatKb(max)} ${formatKbUnit(max)})`
+  }).join('\n')
+
+  const topCpuSummary = topCpu.slice(0, 10).map(p => {
+    const data = p.data
+    if (data.length < 2) return `${p.name}: 数据不足`
+    const avg = safeAvg(data.map(d => d.cpuPercent))
+    const max = safeMax(data.map(d => d.cpuPercent))
+    return `${p.name}: 均值${avg.toFixed(1)}% 峰值${max.toFixed(1)}%`
+  }).join('\n')
+
+  const singleSummary = singleData.length >= 2
+    ? `${singleName}: ${singleData.length}个数据点，PSS范围 ${formatKb(safeMin(singleData.map(d => d.pssKb)))}~${formatKb(safeMax(singleData.map(d => d.pssKb)))} ${formatKbUnit(singleData[0].pssKb)}`
+    : `单应用 ${singleName}: 数据不足`
+
+  const sysRole = resolveSystemRole(config)
+  const messages: AiChatMessage[] = [
+    {
+      role: sysRole,
+      content: `你是一个专业的Android性能分析助手。请根据以下性能监控数据，生成一份详细的整体评估报告。
+
+报告要求：
+1. 格式要求：必须输出HTML格式，包含<h2>整体评估</h2>标题和一个黄色警告条（⚠️ 仅供参考）
+2. 内容结构：包含三个部分：异常情况、内存泄露情况、持续上涨情况
+3. 每个部分用<h3>标题（颜色分别为红色#e74c3c、紫色#9b59b6、橙色#f39c12）和<ul><li>列表
+4. 语言：中文，专业但易懂
+5. 分析维度：
+   - CPU：峰值、均值、突发情况
+   - 内存：可用内存、总内存占比、OOM风险
+   - Top应用：PSS增长趋势、CPU占用
+   - 单应用：内存变化趋势
+6. 如果没有问题，每个部分显示"未检测到..."（绿色#22c55e）
+7. 输出必须是纯HTML片段，不要包含markdown代码块标记`
+    },
+    {
+      role: 'user',
+      content: `请分析以下Android性能监控数据并生成评估报告：
+
+【采集概况】
+- 采样数: ${sampleCount}
+- 持续时间: ${durationMin.toFixed(1)}分钟
+- 总内存: ${formatKb(totalMem)} ${formatKbUnit(totalMem)}
+
+【CPU数据】
+- 均值: ${cpuAvg.toFixed(1)}%
+- 峰值: ${cpuMax.toFixed(1)}%
+
+【内存数据】
+- 最低可用内存: ${formatKb(minAvail)} ${formatKbUnit(minAvail)}（占总内存 ${memUsedPct.toFixed(1)}%）
+
+【Top 10 内存应用】
+${topMemSummary}
+
+【Top 10 CPU应用】
+${topCpuSummary}
+
+【单应用监控${singleName ? `(${singleName})` : ''}】
+${singleSummary}`
+    }
+  ]
+
+  const aiAnswer = await callAiChat(config, messages)
+  let html = aiAnswer.trim()
+  if (!html.startsWith('<div')) {
+    html = `<div class="card">${html}</div>`
+  }
+  if (!html.includes('⚠️')) {
+    html = html.replace(/<h2[^>]*>整体评估<\/h2>/i, `<h2>整体评估</h2>\n<div style="background:#fef9e7;border:1px solid #f0e0a0;border-radius:8px;padding:.6rem .8rem;margin-bottom:1rem;font-size:.85rem;color:#8a6d3b"><strong>⚠️ 仅供参考：</strong>以下评估基于AI分析，不构成确定性诊断。请结合具体场景综合判断。</div>`)
+  }
+  return html
+}
+
 async function exportReport() {
   const pts = store.history
   if (pts.length === 0) { showToast('暂无数据可导出', true); return }
@@ -820,7 +1039,7 @@ async function exportReport() {
     // Save perf_data.csv
     const csvHeader = 'Time,CPU(%),MemUsed(KB),MemTotal(KB),MemAvail(KB),ZRAM(KB),StorageUsed(KB),StorageTotal(KB)'
     const csvRows = pts.map(p =>
-      `${new Date(p.time).toISOString()},${p.cpu.toFixed(1)},${p.memUsedKb},${p.memTotalKb},${p.memAvailKb},${p.zramKb},${p.storageUsedKb},${p.storageTotalKb}`
+      `${formatLocalTime(new Date(p.time))},${p.cpu.toFixed(1)},${p.memUsedKb},${p.memTotalKb},${p.memAvailKb},${p.zramKb},${p.storageUsedKb},${p.storageTotalKb}`
     )
     await writeTextFile(dir + '/perf_data.csv', csvHeader + '\n' + csvRows.join('\n'))
 
@@ -830,7 +1049,7 @@ async function exportReport() {
       const maxLen = safeMax(topN.map(p => p.data.length))
       const topRows: string[] = []
       for (let i = 0; i < maxLen; i++) {
-        const t = i < topN[0].data.length ? new Date(topN[0].data[i].time).toISOString() : ''
+        const t = i < topN[0].data.length ? formatLocalTime(new Date(topN[0].data[i].time)) : ''
         const vals = topN.map(p => i < p.data.length ? p.data[i].pssKb.toString() : '')
         topRows.push(t + ',' + vals.join(','))
       }
@@ -842,7 +1061,7 @@ async function exportReport() {
       const maxLen = safeMax(topCpu.map(p => p.data.length))
       const rows: string[] = []
       for (let i = 0; i < maxLen; i++) {
-        const t = i < topCpu[0].data.length ? new Date(topCpu[0].data[i].time).toISOString() : ''
+        const t = i < topCpu[0].data.length ? formatLocalTime(new Date(topCpu[0].data[i].time)) : ''
         const vals = topCpu.map(p => i < p.data.length ? p.data[i].cpuPercent.toFixed(1) : '')
         rows.push(t + ',' + vals.join(','))
       }
@@ -851,17 +1070,18 @@ async function exportReport() {
 
     // Save perf_single_app.csv
     if (singleData.length > 0) {
-      const singleCsv = 'Time,PSS(KB)\n' + singleData.map(d => `${new Date(d.time).toISOString()},${d.pssKb}`).join('\n')
+      const singleCsv = 'Time,PSS(KB)\n' + singleData.map(d => `${formatLocalTime(new Date(d.time))},${d.pssKb}`).join('\n')
       await writeTextFile(dir + '/perf_single_app.csv', singleCsv)
     }
 
     // Save perf_report.html — downsample data for interactive charts to keep
-    // the HTML file manageable (max 2000 points per series) even for multi-day runs
-    const DOWNSAMPLE_MAX = 2000
-    const dsPts = downsample(pts, DOWNSAMPLE_MAX)
-    const dsTopN = topN.map(p => ({ ...p, data: downsample(p.data, DOWNSAMPLE_MAX) }))
-    const dsTopCpu = topCpu.map(p => ({ ...p, data: downsample(p.data, DOWNSAMPLE_MAX) }))
-    const dsSingleData = downsample(singleData, DOWNSAMPLE_MAX)
+    // the HTML file manageable (max 4000 points per series) even for multi-day runs.
+    // 使用bucketing下采样保留极值，支持一周数据的有效分析
+    const DOWNSAMPLE_MAX = 4000
+    const dsPts = bucketingDownsample(pts, p => p.cpu, DOWNSAMPLE_MAX)
+    const dsTopN = topN.map(p => ({ ...p, data: bucketingDownsample(p.data, d => d.pssKb, DOWNSAMPLE_MAX) }))
+    const dsTopCpu = topCpu.map(p => ({ ...p, data: bucketingDownsample(p.data, d => d.cpuPercent, DOWNSAMPLE_MAX) }))
+    const dsSingleData = bucketingDownsample(singleData, d => d.pssKb, DOWNSAMPLE_MAX)
     const interactiveHtml = buildInteractiveChartsHtml(dsPts, dsTopN, dsTopCpu, singleName || '', dsSingleData)
     const html = `<!DOCTYPE html>
 <html lang="zh">
@@ -891,9 +1111,8 @@ img.chart{max-width:100%;border:1px solid #ddd;border-radius:8px;margin:.5rem 0}
   <h2>采集信息</h2>
   <p><strong>设备:</strong> ${deviceSerial.value || 'N/A'}</p>
   <p><strong>采样数:</strong> ${pts.length}</p>
-  <p><strong>时间范围:</strong> ${new Date(pts[0].time).toISOString()} ~ ${new Date(pts[pts.length-1].time).toISOString()}</p>
-  <p><strong>采集间隔:</strong> ${store.intervalMs}ms</p>
-  <p><strong>导出目录:</strong> ${dir}</p>
+  <p><strong>时间范围:</strong> ${formatLocalTime(new Date(pts[0].time))} ~ ${formatLocalTime(new Date(pts[pts.length-1].time))}</p>
+  <p><strong>采集间隔:</strong> ${(store.intervalMs / 1000).toFixed(0)}s</p>
 </div>
 ${buildOverallAssessment(pts, topN, topCpu, singleName || '', singleData)}
 <div class="card">
@@ -938,16 +1157,6 @@ ${buildOverallAssessment(pts, topN, topCpu, singleName || '', singleData)}
   })() : '<p>暂无数据</p>'}
 </div>
 ${interactiveHtml}
-<div class="card">
-  <h2>导出文件清单</h2>
-  <ul>
-    <li><code>perf_data.csv</code> — CPU/内存/存储 时序数据</li>
-    <li><code>perf_top_apps.csv</code> — Top N 应用 PSS 时序数据</li>
-    <li><code>perf_top_cpu.csv</code> — Top N 应用 CPU 时序数据</li>
-    <li><code>perf_single_app.csv</code> — 单个应用 PSS 时序数据</li>
-    <li><code>perf_report.html</code> — 本报告（含交互式图表，需联网加载图表库）</li>
-  </ul>
-</div>
 </body></html>`
     await writeTextFile(dir + '/perf_report.html', html)
 
@@ -1147,7 +1356,6 @@ async function captureOneTimeLogs(serial: string) {
   try { await writeTextFile(sessionLogDir.value + 'dmesg.txt', await dmesg(serial)) } catch {}
   try { await writeTextFile(sessionLogDir.value + 'ps.txt', await shell(serial, 'ps -A 2>/dev/null')) } catch {}
   try { await writeTextFile(sessionLogDir.value + 'df.txt', await shell(serial, 'df 2>/dev/null')) } catch {}
-  try { await writeTextFile(sessionLogDir.value + 'battery.txt', await shell(serial, 'dumpsys battery 2>/dev/null')) } catch {}
   try { await writeTextFile(sessionLogDir.value + 'proc_stat.txt', await shell(serial, 'cat /proc/stat 2>/dev/null')) } catch {}
 }
 
@@ -1155,7 +1363,7 @@ async function captureOneTimeLogs(serial: string) {
 async function collectLogs(serial: string) {
   if (!serial || !sessionLogDir.value) return
   try {
-    const ts = new Date().toISOString().replace(/[:.]/g, '-')
+    const ts = formatLocalTime(new Date()).replace(/[:.]/g, '-')
     const memDir = sessionLogDir.value + 'meminfo/'
     try { await mkdir(memDir, { recursive: true }) } catch {}
     const meminfo = await shell(serial, 'cat /proc/meminfo 2>/dev/null')
@@ -1165,7 +1373,145 @@ async function collectLogs(serial: string) {
 
 function goBack() { router.push('/device-space') }
 
+function formatLocalTime(date: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
 let pollErrorCount = 0
+let renderTimer: ReturnType<typeof setTimeout> | null = null
+let renderPending = false
+// 实时图表最大点数：提升到600以支持更长时间运行时的精度
+// 同时使用bucketing下采样保留极值（峰值、谷值），避免简单步进下采样丢失关键信息
+const MAX_CHART_POINTS = 600
+
+function scheduleRender() {
+  renderPending = true
+  if (renderTimer) return
+  renderTimer = setTimeout(() => {
+    renderTimer = null
+    if (renderPending && isPageActive.value) {
+      renderPending = false
+      updateChartsDebounced()
+      updateTopAppChartDebounced()
+      updateSingleAppChartDebounced()
+    }
+  }, 300)
+}
+
+function updateChartsDebounced() {
+  if (!memChart) return
+  const pts = store.history
+  if (pts.length === 0) return
+  const dsPts = bucketingDownsample(pts, p => p.memUsedKb, MAX_CHART_POINTS)
+  memChart.setOption({ series: [
+    { data: dsPts.map(p => [p.time, p.memUsedKb] as [number, number]) },
+    { data: dsPts.map(p => [p.time, p.memAvailKb] as [number, number]) },
+  ]})
+  updateCpuChartDebounced()
+}
+
+function updateCpuChartDebounced() {
+  if (!cpuChart) return
+  const hist = store.processCpuHistory
+  if (hist.size === 0) {
+    cpuChart.setOption({ series: [] }, { replaceMerge: ['series'] })
+    return
+  }
+
+  // 性能优化：先按最后值排序筛出Top N候选，再只对前N×2的进程做下采样
+  // 避免对50+进程全部做bucketing下采样（大数据量时性能瓶颈）
+  const candidates = Array.from(hist.entries())
+    .map(([name, data]) => ({
+      name,
+      lastCpu: data[data.length - 1]?.cpuPercent ?? 0,
+      data,
+    }))
+  // 排除隐藏应用
+  const visible = candidates.filter(p => !cpuHiddenApps.value.has(p.name))
+  visible.sort((a, b) => b.lastCpu - a.lastCpu)
+  // 只对需要的Top N + 少量缓冲做下采样（避免对所有进程做O(n)计算）
+  const topN = visible.slice(0, store.cpuTopNCount).map(p => ({
+    ...p,
+    data: bucketingDownsample(p.data, d => d.cpuPercent, MAX_CHART_POINTS),
+  }))
+
+  if (topN.length === 0) {
+    cpuChart.setOption({ series: [] }, { replaceMerge: ['series'] })
+    return
+  }
+
+  const series = topN.map(p => ({
+    type: 'line',
+    name: p.name,
+    data: p.data.map(h => [h.time, h.cpuPercent] as [number, number]),
+    smooth: true,
+    symbol: 'none',
+    lineStyle: { width: 1.5 },
+    animation: false,
+  }))
+
+  cpuChart.setOption({ series }, { replaceMerge: ['series'] })
+}
+
+function updateTopAppChartDebounced() {
+  if (!topAppChart) return
+  const hist = store.processPssHistory
+  if (hist.size === 0) {
+    topAppChart.setOption({ series: [] }, { replaceMerge: ['series'] })
+    return
+  }
+
+  // 性能优化：先按最后值排序筛出Top N候选，再只对前N个进程做下采样
+  // 避免对所有进程做bucketing下采样（大数据量时性能瓶颈）
+  const candidates = Array.from(hist.entries())
+    .map(([name, data]) => ({
+      name,
+      lastPss: data[data.length - 1]?.pssKb ?? 0,
+      data,
+    }))
+  const visible = candidates.filter(p => !topAppHiddenApps.value.has(p.name))
+  visible.sort((a, b) => b.lastPss - a.lastPss)
+  const topN = visible.slice(0, store.topAppCount).map(p => ({
+    ...p,
+    data: bucketingDownsample(p.data, d => d.pssKb, MAX_CHART_POINTS),
+  }))
+
+  if (topN.length === 0) {
+    topAppChart.setOption({ series: [] }, { replaceMerge: ['series'] })
+    return
+  }
+
+  const series = topN.map(p => ({
+    type: 'line',
+    name: p.name,
+    data: p.data.map(h => [h.time, h.pssKb] as [number, number]),
+    smooth: true,
+    symbol: 'none',
+    lineStyle: { width: 1.5 },
+    animation: false,
+  }))
+
+  topAppChart.setOption({ series }, { replaceMerge: ['series'] })
+}
+
+function updateSingleAppChartDebounced() {
+  if (!singleAppChart) return
+  const name = store.singleAppName
+  if (!name) { singleAppChart.setOption({ series: [{ data: [] }] }); return }
+
+  const hist = store.processPssHistory.get(name)
+  if (!hist || hist.length === 0) { singleAppChart.setOption({ series: [{ data: [] }] }); return }
+
+  const dsHist = bucketingDownsample(hist, d => d.pssKb, MAX_CHART_POINTS)
+  singleAppChart.setOption({
+    series: [{
+      name: name,
+      data: dsHist.map(h => [h.time, h.pssKb] as [number, number]),
+    }],
+  })
+}
+
 async function pollOnce() {
   if (!deviceSerial.value) return
   try {
@@ -1174,13 +1520,10 @@ async function pollOnce() {
     store.addPoint(snap)
     bufferCsvPoint(snap)
     flushCsvBuffer()
-    // Skip chart rendering when page is deactivated (user on another page).
+    // Schedule chart rendering with debounce to avoid jank with large datasets.
+    // Charts are updated at most once every 300ms, and only when the page is active.
     // Data still collects in the store; charts update when user returns.
-    if (isPageActive.value) {
-      updateCharts()
-      updateTopAppChart()
-      updateSingleAppChart()
-    }
+    scheduleRender()
   } catch (e: any) {
     pollErrorCount++
     if (pollErrorCount >= 3) {
@@ -1218,7 +1561,7 @@ function initCsvFiles(dir: string, hasProcs: boolean) {
 
 function bufferCsvPoint(snap: PerfSnapshot) {
   const now = new Date()
-  const row = `${now.toISOString()},${snap.cpu_total.toFixed(1)},${snap.mem_total_kb - snap.mem_free_kb},${snap.mem_total_kb},${snap.mem_avail_kb},${snap.zram_total_kb},${snap.storage_used_kb},${snap.storage_total_kb}`
+  const row = `${formatLocalTime(now)},${snap.cpu_total.toFixed(1)},${snap.mem_total_kb - snap.mem_free_kb},${snap.mem_total_kb},${snap.mem_avail_kb},${snap.zram_total_kb},${snap.storage_used_kb},${snap.storage_total_kb}`
   csvBuffer.push(row)
   if (csvBuffer.length >= CSV_FLUSH_THRESHOLD) {
     flushCsvBuffer()
@@ -1253,7 +1596,7 @@ async function startPolling() {
   } catch {}
 
   // 3. Create session log dir
-  const ts = new Date().toISOString().replace(/[:.]/g, '-')
+  const ts = formatLocalTime(new Date()).replace(/[:.]/g, '-')
   sessionLogDir.value = chosenDir + '/TestSpace_Perf_' + ts + '/'
   try { await mkdir(sessionLogDir.value, { recursive: true }) } catch {}
 
@@ -1366,7 +1709,7 @@ async function autoExportReport(dir: string) {
       const maxLen = safeMax(topMem.map(p => p.data.length))
       const rows = []
       for (let i = 0; i < maxLen; i++) {
-        const t = i < topMem[0].data.length ? new Date(topMem[0].data[i].time).toISOString() : ''
+        const t = i < topMem[0].data.length ? formatLocalTime(new Date(topMem[0].data[i].time)) : ''
         const vals = topMem.map(p => i < p.data.length ? p.data[i].pssKb.toString() : '')
         rows.push(t + ',' + vals.join(','))
       }
@@ -1377,7 +1720,7 @@ async function autoExportReport(dir: string) {
       const maxLen = safeMax(topCpu.map(p => p.data.length))
       const rows = []
       for (let i = 0; i < maxLen; i++) {
-        const t = i < topCpu[0].data.length ? new Date(topCpu[0].data[i].time).toISOString() : ''
+        const t = i < topCpu[0].data.length ? formatLocalTime(new Date(topCpu[0].data[i].time)) : ''
         const vals = topCpu.map(p => i < p.data.length ? p.data[i].cpuPercent.toFixed(1) : '')
         rows.push(t + ',' + vals.join(','))
       }
@@ -1385,15 +1728,16 @@ async function autoExportReport(dir: string) {
     }
 
     if (singleData.length > 0) {
-      await writeTextFile(dir + 'perf_single_app.csv', 'Time,PSS(KB)\n' + singleData.map(d => `${new Date(d.time).toISOString()},${d.pssKb}`).join('\n'))
+      await writeTextFile(dir + 'perf_single_app.csv', 'Time,PSS(KB)\n' + singleData.map(d => `${formatLocalTime(new Date(d.time))},${d.pssKb}`).join('\n'))
     }
 
     // Downsample for interactive HTML charts to keep file size manageable
-    const DOWNSAMPLE_MAX = 2000
-    const dsPts = downsample(pts, DOWNSAMPLE_MAX)
-    const dsTopMem = topMem.map(p => ({ ...p, data: downsample(p.data, DOWNSAMPLE_MAX) }))
-    const dsTopCpu = topCpu.map(p => ({ ...p, data: downsample(p.data, DOWNSAMPLE_MAX) }))
-    const dsSingleData = downsample(singleData, DOWNSAMPLE_MAX)
+    // 使用bucketing下采样保留极值，确保一周数据也能有效分析
+    const DOWNSAMPLE_MAX = 4000
+    const dsPts = bucketingDownsample(pts, p => p.cpu, DOWNSAMPLE_MAX)
+    const dsTopMem = topMem.map(p => ({ ...p, data: bucketingDownsample(p.data, d => d.pssKb, DOWNSAMPLE_MAX) }))
+    const dsTopCpu = topCpu.map(p => ({ ...p, data: bucketingDownsample(p.data, d => d.cpuPercent, DOWNSAMPLE_MAX) }))
+    const dsSingleData = bucketingDownsample(singleData, d => d.pssKb, DOWNSAMPLE_MAX)
     const interactiveHtml = buildInteractiveChartsHtml(dsPts, dsTopMem, dsTopCpu, singleName || '', dsSingleData)
     await writeTextFile(dir + 'perf_report.html', `<!DOCTYPE html>
 <html lang="zh">
@@ -1423,11 +1767,10 @@ img.chart{max-width:100%;border:1px solid #ddd;border-radius:8px;margin:.5rem 0}
   <h2>采集信息</h2>
   <p><strong>设备:</strong> ${deviceSerial.value || 'N/A'}</p>
   <p><strong>采样数:</strong> ${pts.length}</p>
-  <p><strong>时间范围:</strong> ${new Date(pts[0].time).toISOString()} ~ ${new Date(pts[pts.length-1].time).toISOString()}</p>
-  <p><strong>采集间隔:</strong> ${store.intervalMs}ms</p>
-  <p><strong>报告目录:</strong> ${dir}</p>
+  <p><strong>时间范围:</strong> ${formatLocalTime(new Date(pts[0].time))} ~ ${formatLocalTime(new Date(pts[pts.length-1].time))}</p>
+  <p><strong>采集间隔:</strong> ${(store.intervalMs / 1000).toFixed(0)}s</p>
 </div>
-${buildOverallAssessment(pts, topMem, topCpu, singleName || '', singleData)}
+${await buildOverallAssessment(pts, topMem, topCpu, singleName || '', singleData)}
 <div class="card">
   <h2>汇总统计</h2>
   <div class="stat-grid">
@@ -1470,16 +1813,6 @@ ${buildOverallAssessment(pts, topMem, topCpu, singleName || '', singleData)}
   })() : '<p>暂无数据</p>'}
 </div>
 ${interactiveHtml}
-<div class="card">
-  <h2>导出文件清单</h2>
-  <ul>
-    <li><code>perf_data.csv</code> — CPU/内存/存储 时序数据</li>
-    <li><code>perf_top_apps.csv</code> — Top N 应用 PSS 时序数据</li>
-    <li><code>perf_top_cpu.csv</code> — Top N 应用 CPU 时序数据</li>
-    <li><code>perf_single_app.csv</code> — 单个应用 PSS 时序数据</li>
-    <li><code>perf_report.html</code> — 本报告（含交互式图表，需联网加载图表库）</li>
-  </ul>
-</div>
 </body></html>`,)
 
     showToast('报告已自动导出到:\n' + dir)
@@ -1499,9 +1832,9 @@ function clearHistory() {
 }
 
 // Watch topAppCount changes to re-render chart
-watch(() => store.topAppCount, () => { updateTopAppChart() })
-watch(() => store.cpuTopNCount, () => { updateCpuChart() })
-watch(() => store.singleAppName, () => { updateSingleAppChart(); if (store.singleAppName) appSearch.value = store.singleAppName })
+watch(() => store.topAppCount, () => { updateTopAppChartDebounced() })
+watch(() => store.cpuTopNCount, () => { updateCpuChartDebounced() })
+watch(() => store.singleAppName, () => { updateSingleAppChartDebounced(); if (store.singleAppName) appSearch.value = store.singleAppName })
 
 function initCharts() {
   const chartColors = ['#7c5cfc', '#22c55e', '#f59e0b', '#ef4444', '#3b82f6', '#ec4899', '#14b8a6', '#f97316', '#8b5cf6', '#06b6d4']
@@ -1608,6 +1941,10 @@ function initCharts() {
       xAxis: { type: 'time', axisLabel: timeAxisLabel },
       yAxis: { type: 'value', min: 0, max: 100, axisLabel: { fontSize: 10, formatter: '{value}%' } },
       dataZoom: [{ type: 'inside', start: 0, end: 100 }],
+      // 渐进式渲染：超过1000个点时分批渲染，避免主线程阻塞
+      // 这是ECharts官方推荐的大数据渲染方案
+      progressive: 1000,
+      progressiveThreshold: 1000,
       series: [],
       color: chartColors,
     })
@@ -1623,6 +1960,8 @@ function initCharts() {
       xAxis: { type: 'time', axisLabel: timeAxisLabel },
       yAxis: { type: 'value', axisLabel: { fontSize: 10, formatter: (v: number) => v >= 1048576 ? (v / 1048576).toFixed(1) + 'G' : v >= 1024 ? (v / 1024).toFixed(0) + 'M' : v + 'K' } },
       dataZoom: [{ type: 'inside', start: 0, end: 100 }],
+      progressive: 1000,
+      progressiveThreshold: 1000,
       series: [
         { type: 'line', name: t('perf.used'), data: [], smooth: true, symbol: 'none', lineStyle: { width: 2, color: '#7c5cfc' }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(124,92,252,0.25)' }, { offset: 1, color: 'rgba(124,92,252,0.02)' }]) }, animationDuration: 300 },
         { type: 'line', name: t('perf.free'), data: [], smooth: true, symbol: 'none', lineStyle: { width: 2, color: '#22c55e' }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(34,197,94,0.2)' }, { offset: 1, color: 'rgba(34,197,94,0.02)' }]) }, animationDuration: 300 },
@@ -1662,6 +2001,9 @@ function initCharts() {
       xAxis: { type: 'time', axisLabel: { ...timeAxisLabel, fontSize: 8 } },
       yAxis: { type: 'value', axisLabel: { fontSize: 8, formatter: (v: number) => v >= 1024 ? (v / 1024).toFixed(0) + 'M' : v + 'K' } },
       dataZoom: [{ type: 'inside', start: 0, end: 100 }],
+      // Top N应用图，N通常在5-30之间，系列数较多，需要渐进式渲染
+      progressive: 1000,
+      progressiveThreshold: 1000,
       series: [],
       color: chartColors,
       animationDuration: 300,
@@ -1677,6 +2019,8 @@ function initCharts() {
       xAxis: { type: 'time', axisLabel: timeAxisLabel },
       yAxis: { type: 'value', axisLabel: { fontSize: 10, formatter: (v: number) => v >= 1024 ? (v / 1024).toFixed(0) + 'M' : v + 'K' } },
       dataZoom: [{ type: 'inside', start: 0, end: 100 }],
+      progressive: 1000,
+      progressiveThreshold: 1000,
       series: [{ type: 'line', name: '', data: [], smooth: true, symbol: 'none', lineStyle: { width: 2, color: '#7c5cfc' }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(124,92,252,0.25)' }, { offset: 1, color: 'rgba(124,92,252,0.02)' }]) }, animationDuration: 300 }],
     })
   }
@@ -1690,105 +2034,7 @@ function updateCharts() {
     { data: pts.map(p => [p.time, p.memUsedKb] as [number, number]) },
     { data: pts.map(p => [p.time, p.memAvailKb] as [number, number]) },
   ]})
-  updateCpuChart()
-}
-
-function updateCpuChart() {
-  if (!cpuChart) return
-  const hist = store.processCpuHistory
-  if (hist.size === 0) {
-    cpuChart.setOption({ series: [] }, { replaceMerge: ['series'] })
-    return
-  }
-
-  // Sort by last CPU value descending, filter out hidden apps first, then take top N.
-  // Filtering BEFORE slice ensures hidden apps don't waste Top N slots, so the
-  // Top N highest visible apps always show and a new higher-usage app pushes out
-  // the lowest visible one.
-  const topN = Array.from(hist.entries())
-    .map(([name, data]) => ({
-      name,
-      lastCpu: data[data.length - 1]?.cpuPercent ?? 0,
-      data,
-    }))
-    .sort((a, b) => b.lastCpu - a.lastCpu)
-    .filter(p => !cpuHiddenApps.value.has(p.name))
-    .slice(0, store.cpuTopNCount)
-
-  if (topN.length === 0) {
-    cpuChart.setOption({ series: [] }, { replaceMerge: ['series'] })
-    return
-  }
-
-  // Rebuild series completely each time — replaceMerge removes dropped apps automatically
-  const series = topN.map(p => ({
-    type: 'line',
-    name: p.name,
-    data: p.data.map(h => [h.time, h.cpuPercent] as [number, number]),
-    smooth: true,
-    symbol: 'none',
-    lineStyle: { width: 1.5 },
-    animation: false,
-  }))
-
-  cpuChart.setOption({ series }, { replaceMerge: ['series'] })
-}
-
-function updateTopAppChart() {
-  if (!topAppChart) return
-  const hist = store.processPssHistory
-  if (hist.size === 0) {
-    topAppChart.setOption({ series: [] }, { replaceMerge: ['series'] })
-    return
-  }
-
-  // Sort by last PSS value descending, filter out hidden apps first, then take top N.
-  // Filtering BEFORE slice ensures hidden apps don't waste Top N slots, so the
-  // Top N highest visible apps always show and a new higher-usage app pushes out
-  // the lowest visible one.
-  const topN = Array.from(hist.entries())
-    .map(([name, data]) => ({
-      name,
-      lastPss: data[data.length - 1]?.pssKb ?? 0,
-      data,
-    }))
-    .sort((a, b) => b.lastPss - a.lastPss)
-    .filter(p => !topAppHiddenApps.value.has(p.name))
-    .slice(0, store.topAppCount)
-
-  if (topN.length === 0) {
-    topAppChart.setOption({ series: [] }, { replaceMerge: ['series'] })
-    return
-  }
-
-  // Rebuild series completely each time — replaceMerge removes dropped apps automatically
-  const series = topN.map(p => ({
-    type: 'line',
-    name: p.name,
-    data: p.data.map(h => [h.time, h.pssKb] as [number, number]),
-    smooth: true,
-    symbol: 'none',
-    lineStyle: { width: 1.5 },
-    animation: false,
-  }))
-
-  topAppChart.setOption({ series }, { replaceMerge: ['series'] })
-}
-
-function updateSingleAppChart() {
-  if (!singleAppChart) return
-  const name = store.singleAppName
-  if (!name) { singleAppChart.setOption({ series: [{ data: [] }] }); return }
-
-  const hist = store.processPssHistory.get(name)
-  if (!hist || hist.length === 0) { singleAppChart.setOption({ series: [{ data: [] }] }); return }
-
-  singleAppChart.setOption({
-    series: [{
-      name: name,
-      data: hist.map(h => [h.time, h.pssKb] as [number, number]),
-    }],
-  })
+  updateCpuChartDebounced()
 }
 
 function resizeCharts() {
@@ -1819,7 +2065,7 @@ onActivated(() => {
       if (!pollTimer) startPolling()
       else {
         // Redraw all charts with data collected while page was inactive
-        updateCharts(); updateTopAppChart(); updateCpuChart(); updateSingleAppChart()
+        updateChartsDebounced(); updateTopAppChartDebounced(); updateSingleAppChartDebounced()
       }
     }
   })
