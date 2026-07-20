@@ -469,13 +469,6 @@ async fn adb_logcat_buffer_resize(serial: String, size_mb: u32) -> Result<String
 }
 
 #[tauri::command]
-async fn adb_dmesg(serial: String) -> Result<String, String> {
-    tokio::task::spawn_blocking(move || {
-        adb::dmesg(&serial)
-    }).await.map_err(|e| e.to_string())?
-}
-
-#[tauri::command]
 async fn adb_bugreport(serial: String, save_path: String) -> Result<String, String> {
     tokio::task::spawn_blocking(move || {
         adb::bugreport(&serial, &save_path)
@@ -707,7 +700,6 @@ pub fn run() {
             perf_get_snapshot,
             adb_logcat_buffer_resize,
             adb_bugreport,
-            adb_dmesg,
             adb_kill_server,
             adb_start_server,
             adb_start_screenrecord,

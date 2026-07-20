@@ -122,9 +122,6 @@ export function useAdb() {
   const bugreport = (serial: string, savePath: string) =>
     invoke<string>("adb_bugreport", { serial, savePath });
 
-  const dmesg = (serial: string) =>
-    invoke<string>("adb_dmesg", { serial });
-
   const killServer = () => invoke<string>("adb_kill_server");
   const startServer = () => invoke<string>("adb_start_server");
 
@@ -169,7 +166,6 @@ export function useAdb() {
     getAppInfo,
     logcatBufferResize,
     bugreport,
-    dmesg,
     startScreenrecord,
     killServer,
     startServer,

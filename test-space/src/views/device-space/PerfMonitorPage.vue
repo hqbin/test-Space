@@ -25,17 +25,11 @@
       </div>
       <!-- Hidden chart toggle buttons -->
       <div v-if="Object.values(chartVisibility).some(v => !v)" class="flex items-center gap-1 ml-2 pl-2 border-l border-glass-border-dark">
-        <button v-if="!chartVisibility.mem" class="glass-button p-1.5 rounded-lg" title="显示内存趋势" @click="toggleChartVisibility('mem')">
-          <span class="material-symbols-outlined text-[14px]">memory_alt</span>
-        </button>
-        <button v-if="!chartVisibility.cpu" class="glass-button p-1.5 rounded-lg" title="显示CPU使用率" @click="toggleChartVisibility('cpu')">
-          <span class="material-symbols-outlined text-[14px]">memory</span>
-        </button>
         <button v-if="!chartVisibility.topApp" class="glass-button p-1.5 rounded-lg" title="显示TopN应用内存" @click="toggleChartVisibility('topApp')">
           <span class="material-symbols-outlined text-[14px]">lan</span>
         </button>
-        <button v-if="!chartVisibility.singleApp" class="glass-button p-1.5 rounded-lg" title="显示单个应用内存" @click="toggleChartVisibility('singleApp')">
-          <span class="material-symbols-outlined text-[14px]">app_badging</span>
+        <button v-if="!chartVisibility.cpu" class="glass-button p-1.5 rounded-lg" title="显示CPU使用率" @click="toggleChartVisibility('cpu')">
+          <span class="material-symbols-outlined text-[14px]">memory</span>
         </button>
       </div>
       <Teleport to="body">
@@ -97,54 +91,9 @@
       </button>
     </div>
 
-    <!-- 2x2 Grid: Memory/CPU (top) + Top N / Single app (bottom) -->
-    <div :class="['grid gap-4 flex-1 min-h-0', gridClass]">
-      <!-- Memory trend -->
-      <div v-show="chartVisibility.mem" class="glass-panel rounded-xl p-4 shadow-md flex flex-col min-h-0">
-        <h3 class="font-label-md text-label-md text-on-surface mb-2 shrink-0 flex items-center gap-3 flex-wrap">
-          <span class="material-symbols-outlined text-[16px] text-secondary">memory_alt</span>{{ t('perf.memTrend') }}
-          <span class="flex items-center gap-3 ml-auto flex-wrap">
-            <span class="flex items-center gap-1 font-caption text-caption cursor-pointer"
-              :class="showMemUsed ? 'text-on-surface' : 'text-on-surface-variant/30'"
-              @click="toggleMemSeries('used')">
-              <span class="w-2.5 h-2.5 rounded-full" :class="showMemUsed ? '' : 'opacity-30'" style="background:#7c5cfc"></span>{{ t('perf.used') }}
-            </span>
-            <span class="flex items-center gap-1 font-caption text-caption cursor-pointer"
-              :class="showMemFree ? 'text-on-surface' : 'text-on-surface-variant/30'"
-              @click="toggleMemSeries('free')">
-              <span class="w-2.5 h-2.5 rounded-full" :class="showMemFree ? '' : 'opacity-30'" style="background:#22c55e"></span>{{ t('perf.free') }}
-            </span>
-            <button class="glass-hover rounded-lg p-1 ml-1" title="隐藏图表" @click="toggleChartVisibility('mem')">
-              <span class="material-symbols-outlined text-[14px]">visibility_off</span>
-            </button>
-          </span>
-        </h3>
-        <div ref="memChartRef" class="flex-1 min-h-0"></div>
-      </div>
-
-      <!-- CPU trend -->
-      <div v-show="chartVisibility.cpu" class="glass-panel rounded-xl p-4 shadow-md flex flex-col min-h-0">
-        <h3 class="font-label-md text-label-md text-on-surface mb-2 shrink-0 flex items-center gap-2 flex-wrap">
-          <span class="material-symbols-outlined text-[16px] text-secondary">memory</span>Top{{ store.cpuTopNCount }} 应用CPU使用率
-          <span class="flex items-center gap-1 ml-auto">
-            <span class="font-caption text-caption text-on-surface-variant text-nowrap">Top</span>
-            <div class="relative" ref="cpuDropdownRef">
-              <button class="glass-hover rounded-xl px-3 py-1.5 text-body-md flex items-center gap-2 select-none min-w-[56px]"
-                @click="toggleCpuDropdown">
-                <span class="flex-1 text-left">{{ store.cpuTopNCount }}</span>
-                <span class="material-symbols-outlined text-[16px] transition-transform" :class="cpuDropdownOpen ? 'rotate-180' : ''">expand_more</span>
-              </button>
-            </div>
-            <button class="glass-hover rounded-lg p-1 ml-1" title="隐藏图表" @click="toggleChartVisibility('cpu')">
-              <span class="material-symbols-outlined text-[14px]">visibility_off</span>
-            </button>
-          </span>
-        </h3>
-        <div ref="cpuChartRef" class="flex-1 min-h-0"></div>
-      </div>
-
-      <!-- Top N app memory trend -->
-      <div v-show="chartVisibility.topApp" class="glass-panel rounded-xl p-4 shadow-md flex flex-col min-h-0">
+    <!-- Top N app memory (top) + CPU (bottom) -->
+    <div class="flex flex-col gap-4 flex-1 min-h-0">
+      <div v-show="chartVisibility.topApp" class="glass-panel rounded-xl p-4 shadow-md flex flex-col min-h-0 flex-1">
         <h3 class="font-label-md text-label-md text-on-surface mb-2 shrink-0 flex items-center gap-2 flex-wrap">
           <span class="material-symbols-outlined text-[16px] text-secondary">lan</span>Top{{ store.topAppCount }} 应用内存
             <span class="flex items-center gap-1 ml-auto">
@@ -164,23 +113,24 @@
         <div ref="topAppChartRef" class="flex-1 min-h-0"></div>
       </div>
 
-      <!-- Single app memory trend -->
-      <div v-show="chartVisibility.singleApp" class="glass-panel rounded-xl p-4 shadow-md flex flex-col min-h-0">
+      <div v-show="chartVisibility.cpu" class="glass-panel rounded-xl p-4 shadow-md flex flex-col min-h-0 flex-1">
         <h3 class="font-label-md text-label-md text-on-surface mb-2 shrink-0 flex items-center gap-2 flex-wrap">
-          <span class="material-symbols-outlined text-[16px] text-secondary">app_badging</span>单个应用内存
+          <span class="material-symbols-outlined text-[16px] text-secondary">memory</span>Top{{ store.cpuTopNCount }} 应用CPU使用率
           <span class="flex items-center gap-1 ml-auto">
-            <input v-model="appSearch" placeholder="输入应用包名..."
-              class="w-48 bg-white/60 backdrop-blur-sm border border-outline-variant/50 rounded-xl px-3 py-1.5 font-caption text-caption text-on-surface outline-none focus:ring-2 focus:ring-secondary/40 shadow-sm"
-              @change="updateSingleAppName" />
-            <button v-if="store.singleAppName" class="glass-hover rounded-xl px-2 py-1.5" @click="clearSingleApp">
-              <span class="material-symbols-outlined text-[16px]">clear</span>
-            </button>
-            <button class="glass-hover rounded-lg p-1 ml-1" title="隐藏图表" @click="toggleChartVisibility('singleApp')">
+            <span class="font-caption text-caption text-on-surface-variant text-nowrap">Top</span>
+            <div class="relative" ref="cpuDropdownRef">
+              <button class="glass-hover rounded-xl px-3 py-1.5 text-body-md flex items-center gap-2 select-none min-w-[56px]"
+                @click="toggleCpuDropdown">
+                <span class="flex-1 text-left">{{ store.cpuTopNCount }}</span>
+                <span class="material-symbols-outlined text-[16px] transition-transform" :class="cpuDropdownOpen ? 'rotate-180' : ''">expand_more</span>
+              </button>
+            </div>
+            <button class="glass-hover rounded-lg p-1 ml-1" title="隐藏图表" @click="toggleChartVisibility('cpu')">
               <span class="material-symbols-outlined text-[14px]">visibility_off</span>
             </button>
           </span>
         </h3>
-        <div ref="singleAppChartRef" class="flex-1 min-h-0"></div>
+        <div ref="cpuChartRef" class="flex-1 min-h-0"></div>
       </div>
     </div>
 
@@ -308,7 +258,7 @@ defineOptions({ name: 'PerfMonitorPage' })
 const router = useRouter()
 const { t } = useI18n()
 const { getSnapshot } = usePerfMonitor()
-const { shell, dmesg, rootDevice, pullFile } = useAdb()
+const { shell, rootDevice, pullFile } = useAdb()
 const store = usePerfMonitorStore()
 
 const deviceSerial = ref(localStorage.getItem('last_device_serial') || '')
@@ -319,19 +269,17 @@ const intervalMs = ref(String(store.intervalMs))
 const isPageActive = ref(true)
 
 // Chart visibility state with localStorage persistence
-const chartVisibility = ref(JSON.parse(localStorage.getItem('perfChartVisibility') || '{"mem": true, "cpu": true, "topApp": true, "singleApp": true}'))
+const chartVisibility = ref(JSON.parse(localStorage.getItem('perfChartVisibility') || '{"cpu": true, "topApp": true}'))
 watch(chartVisibility, (val, oldVal) => {
   localStorage.setItem('perfChartVisibility', JSON.stringify(val))
   // Resize charts when they become visible
   nextTick(() => {
-    if (val.mem && !oldVal.mem) memChart?.resize()
     if (val.cpu && !oldVal.cpu) cpuChart?.resize()
     if (val.topApp && !oldVal.topApp) topAppChart?.resize()
-    if (val.singleApp && !oldVal.singleApp) singleAppChart?.resize()
   })
 }, { deep: true })
 
-function toggleChartVisibility(chart: 'mem' | 'cpu' | 'topApp' | 'singleApp') {
+function toggleChartVisibility(chart: 'cpu' | 'topApp') {
   chartVisibility.value[chart] = !chartVisibility.value[chart]
 }
 
@@ -365,14 +313,6 @@ function selectSeries(
     })
   }
 }
-
-// Get grid class based on visible charts
-const gridClass = computed(() => {
-  const visibleCount = Object.values(chartVisibility.value).filter(Boolean).length
-  if (visibleCount === 1) return 'grid-cols-1 grid-rows-1'
-  if (visibleCount === 2) return 'grid-cols-1 grid-rows-2'
-  return 'grid-cols-2 grid-rows-2'
-})
 
 // Interval dropdown
 const intervalDropdownOpen = ref(false)
@@ -545,51 +485,13 @@ function handleDropdownClick(e: MouseEvent) {
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let logTimer: ReturnType<typeof setInterval> | null = null
-let dmesgTimer: ReturnType<typeof setInterval> | null = null
 const sessionLogDir = ref('')
 const sessionLogPaths = ref<string[]>([])
 let cpuChart: echarts.ECharts | null = null
-let memChart: echarts.ECharts | null = null
 let topAppChart: echarts.ECharts | null = null
-let singleAppChart: echarts.ECharts | null = null
 let chartResizeObserver: ResizeObserver | null = null
 const cpuChartRef = ref<HTMLElement | null>(null)
-const memChartRef = ref<HTMLElement | null>(null)
 const topAppChartRef = ref<HTMLElement | null>(null)
-const singleAppChartRef = ref<HTMLElement | null>(null)
-
-// Series visibility
-const showCpu = ref(true)
-const showMemUsed = ref(true)
-const showMemFree = ref(true)
-
-function toggleCpu() {
-  showCpu.value = !showCpu.value
-  cpuChart?.dispatchAction({ type: 'legendToggleSelect', name: 'CPU' })
-}
-function toggleMemSeries(name: string) {
-  if (name === 'used') {
-    showMemUsed.value = !showMemUsed.value
-    memChart?.dispatchAction({ type: 'legendToggleSelect', name: t('perf.used') })
-  } else {
-    showMemFree.value = !showMemFree.value
-    memChart?.dispatchAction({ type: 'legendToggleSelect', name: t('perf.free') })
-  }
-}
-
-const appSearch = ref('')
-
-function updateSingleAppName() {
-  const name = appSearch.value.trim()
-  store.singleAppName = name
-  updateSingleAppChartDebounced()
-}
-
-function clearSingleApp() {
-  store.singleAppName = ''
-  appSearch.value = ''
-  updateSingleAppChartDebounced()
-}
 
 // Toast
 const toastMsg = ref('')
@@ -677,8 +579,6 @@ async function doLoadSession(s: PerfSessionRow) {
     // 第一个图表先立即渲染（响应快），其余图表延后到下一个事件循环
     updateCpuChartDebounced()
     setTimeout(() => updateTopAppChartDebounced(), 0)
-    setTimeout(() => updateSingleAppChartDebounced(), 50)
-    setTimeout(() => updateChartsDebounced(), 100)
     // 等待所有图表完成渲染后关闭遮罩
     setTimeout(() => {
       loadingSession.value = false
@@ -706,12 +606,6 @@ function formatKbUnit(v: number): string {
   if (v >= 1024) return 'MB'
   return 'KB'
 }
-function formatMem(v: number): string {
-  const gb = (v / 1048576).toFixed(2)
-  const mb = Math.round(v / 1024)
-  return `${gb}GB(${mb}MB)`
-}
-
 // Safe max/min for large arrays — Math.max(...arr) stack-overflows on >~65K elements
 function safeMax(arr: number[]): number {
   let m = -Infinity
@@ -1094,25 +988,18 @@ async function exportReport() {
       .sort((a, b) => b.lastCpu - a.lastCpu)
       .slice(0, store.cpuTopNCount)
     const topNames = topN.map(p => p.name)
-    const singleName = store.singleAppName
-    const singleData = singleName ? (hist.get(singleName) || []) : []
-
-    // Save perf_data.csv
-    const csvHeader = 'Time,CPU(%),MemUsed(KB),MemTotal(KB),MemAvail(KB),ZRAM(KB),StorageUsed(KB),StorageTotal(KB)'
-    const csvRows = pts.map(p =>
-      `${formatLocalTime(new Date(p.time))},${p.cpu.toFixed(1)},${p.memUsedKb},${p.memTotalKb},${p.memAvailKb},${p.zramKb},${p.storageUsedKb},${p.storageTotalKb}`
-    )
-    await writeTextFile(dir + '/perf_data.csv', csvHeader + '\n' + csvRows.join('\n'))
 
     // Save perf_top_apps.csv
     if (topN.length > 0) {
-      const topHeader = 'Time,' + topNames.map(n => `"${n}(KB)"`).join(',')
-      const maxLen = safeMax(topN.map(p => p.data.length))
+      const topHeader = 'Time,Free_RAM(KB),Swap_Free(KB),' + topNames.map(n => `"${n}(KB)"`).join(',')
+      const maxLen = pts.length
       const topRows: string[] = []
       for (let i = 0; i < maxLen; i++) {
-        const t = i < topN[0].data.length ? formatLocalTime(new Date(topN[0].data[i].time)) : ''
+        const t = formatLocalTime(new Date(pts[i].time))
+        const freeRam = pts[i].memAvailKb.toString()
+        const swapFree = pts[i].swapFreeKb.toString()
         const vals = topN.map(p => i < p.data.length ? p.data[i].pssKb.toString() : '')
-        topRows.push(t + ',' + vals.join(','))
+        topRows.push(t + ',' + freeRam + ',' + swapFree + ',' + vals.join(','))
       }
       await writeTextFile(dir + '/perf_top_apps.csv', topHeader + '\n' + topRows.join('\n'))
     }
@@ -1129,12 +1016,6 @@ async function exportReport() {
       await writeTextFile(dir + '/perf_top_cpu.csv', 'Time,' + topCpu.map(p => `"${p.name}(%)"`).join(',') + '\n' + rows.join('\n'))
     }
 
-    // Save perf_single_app.csv
-    if (singleData.length > 0) {
-      const singleCsv = 'Time,PSS(KB)\n' + singleData.map(d => `${formatLocalTime(new Date(d.time))},${d.pssKb}`).join('\n')
-      await writeTextFile(dir + '/perf_single_app.csv', singleCsv)
-    }
-
     // Save perf_report.html — downsample data for interactive charts to keep
     // the HTML file manageable (max 4000 points per series) even for multi-day runs.
     // 使用bucketing下采样保留极值，支持一周数据的有效分析
@@ -1142,13 +1023,17 @@ async function exportReport() {
     const dsPts = bucketingDownsample(pts, p => p.cpu, DOWNSAMPLE_MAX)
     const dsTopN = topN.map(p => ({ ...p, data: bucketingDownsample(p.data, d => d.pssKb, DOWNSAMPLE_MAX) }))
     const dsTopCpu = topCpu.map(p => ({ ...p, data: bucketingDownsample(p.data, d => d.cpuPercent, DOWNSAMPLE_MAX) }))
-    const dsSingleData = bucketingDownsample(singleData, d => d.pssKb, DOWNSAMPLE_MAX)
-    const interactiveHtml = buildInteractiveChartsHtml(dsPts, dsTopN, dsTopCpu, singleName || '', dsSingleData)
+    const interactiveHtml = buildInteractiveChartsHtml(dsPts, dsTopN, dsTopCpu)
+    const freeRamVals = pts.map(p => p.memAvailKb)
+    const swapFreeVals = pts.map(p => p.swapFreeKb)
+    const memFreeRows = `<tr><td></td><td><strong>Free RAM</strong></td><td>${formatKb(safeMin(freeRamVals))} ${formatKbUnit(safeMin(freeRamVals))}</td><td>${formatKb(safeMax(freeRamVals))} ${formatKbUnit(safeMax(freeRamVals))}</td><td>${formatKb(safeAvg(freeRamVals))} ${formatKbUnit(safeAvg(freeRamVals))}</td></tr>
+<tr><td></td><td><strong>Swap Free</strong></td><td>${formatKb(safeMin(swapFreeVals))} ${formatKbUnit(safeMin(swapFreeVals))}</td><td>${formatKb(safeMax(swapFreeVals))} ${formatKbUnit(safeMax(swapFreeVals))}</td><td>${formatKb(safeAvg(swapFreeVals))} ${formatKbUnit(safeAvg(swapFreeVals))}</td></tr>
+`
     const html = `<!DOCTYPE html>
 <html lang="zh">
 <head><meta charset="utf-8"><title>性能报告</title>
 <style>
-body{font-family:system-ui,-apple-system,sans-serif;max-width:1100px;margin:auto;padding:2rem;background:#f5f5f5;color:#222}
+body{font-family:system-ui,-apple-system,sans-serif;max-width:1400px;margin:auto;padding:2rem;background:#f5f5f5;color:#222}
 h1{color:#333;border-bottom:2px solid #7c5cfc;padding-bottom:.5rem}
 h2{color:#444;margin-top:1.5rem}
 table{border-collapse:collapse;width:100%;margin:1rem 0;font-size:.85rem}
@@ -1175,7 +1060,7 @@ img.chart{max-width:100%;border:1px solid #ddd;border-radius:8px;margin:.5rem 0}
   <p><strong>时间范围:</strong> ${formatLocalTime(new Date(pts[0].time))} ~ ${formatLocalTime(new Date(pts[pts.length-1].time))}</p>
   <p><strong>采集间隔:</strong> ${(store.intervalMs / 1000).toFixed(0)}s</p>
 </div>
-${buildOverallAssessment(pts, topN, topCpu, singleName || '', singleData)}
+${buildOverallAssessment(pts, topN, topCpu, '', [])}
 <div class="card">
   <h2>汇总统计</h2>
   <div class="stat-grid">
@@ -1189,7 +1074,7 @@ ${buildOverallAssessment(pts, topN, topCpu, singleName || '', singleData)}
 <div class="card">
   <h2>Top${store.topAppCount} 应用内存使用情况</h2>
   <table><thead><tr><th>#</th><th>应用包名</th><th>最小 PSS</th><th>最大 PSS</th><th>平均 PSS</th></tr></thead>
-  <tbody>${topN.map((p, i) => {
+  <tbody>${memFreeRows}${topN.map((p, i) => {
     const vals = p.data.map(d => d.pssKb)
     const mn = vals.length ? safeMin(vals) : 0
     const mx = vals.length ? safeMax(vals) : 0
@@ -1207,16 +1092,7 @@ ${buildOverallAssessment(pts, topN, topCpu, singleName || '', singleData)}
     const av = vals.length ? safeAvg(vals) : 0
     return `<tr><td>${i+1}</td><td>${p.name}</td><td>${mn.toFixed(1)}%</td><td>${mx.toFixed(1)}%</td><td>${av.toFixed(1)}%</td></tr>`
   }).join('')}</tbody></table>
-</div>
-<div class="card">
-  <h2>单个应用内存使用情况: ${singleName || '(未选择)'}</h2>
-  ${singleData.length ? (() => {
-    const vals = singleData.map(d => d.pssKb)
-    const mn = safeMin(vals); const mx = safeMax(vals); const av = safeAvg(vals)
-    return `<table><thead><tr><th>最小 PSS</th><th>最大 PSS</th><th>平均 PSS</th><th>采样数</th></tr></thead>
-      <tbody><tr><td>${formatKb(mn)} ${formatKbUnit(mn)}</td><td>${formatKb(mx)} ${formatKbUnit(mx)}</td><td>${formatKb(av)} ${formatKbUnit(av)}</td><td>${singleData.length}</td></tr></tbody></table>`
-  })() : '<p>暂无数据</p>'}
-</div>
+    </div>
 ${interactiveHtml}
 </body></html>`
     await writeTextFile(dir + '/perf_report.html', html)
@@ -1236,8 +1112,6 @@ function buildInteractiveChartsHtml(
   pts: any[],
   topMem: { name: string; data: { time: number; pssKb: number }[] }[],
   topCpu: { name: string; data: { time: number; cpuPercent: number }[] }[],
-  singleName: string,
-  singleData: { time: number; pssKb: number }[],
 ): string {
   // Stable color assignment: same package name always gets same color
   const allColors = ['#7c5cfc', '#22c55e', '#f59e0b', '#ef4444', '#3b82f6', '#ec4899', '#14b8a6', '#f97316', '#8b5cf6', '#06b6d4', '#84cc16', '#a855f7', '#f43f5e', '#0ea5e9', '#10b981', '#eab308', '#d946ef', '#6366f1', '#fb923c', '#14b8a6']
@@ -1250,24 +1124,29 @@ function buildInteractiveChartsHtml(
     return colorMap[name]
   }
 
-  const memSeries = [
-    { name: '已用', data: pts.map(p => [p.time, p.memUsedKb] as [number, number]) },
-    { name: '可用', data: pts.map(p => [p.time, p.memAvailKb] as [number, number]) },
-  ]
   const cpuSeries = topCpu.map(p => ({
     name: p.name,
     data: p.data.map(d => [d.time, d.cpuPercent] as [number, number]),
     color: getColor(p.name),
   }))
-  const topSeries = topMem.map(p => ({
+  const topSeries: { name: string; data: [number, number][]; color: string }[] = []
+  if (pts.length > 0) {
+    topSeries.push({
+      name: 'Free RAM',
+      data: pts.map(p => [p.time, p.memAvailKb] as [number, number]),
+      color: '#22c55e',
+    })
+    topSeries.push({
+      name: 'Swap Free',
+      data: pts.map(p => [p.time, p.swapFreeKb] as [number, number]),
+      color: '#3b82f6',
+    })
+  }
+  topSeries.push(...topMem.map(p => ({
     name: p.name,
     data: p.data.map(d => [d.time, d.pssKb] as [number, number]),
     color: getColor(p.name),
-  }))
-  const singleSeries = singleData.length > 0 ? [{
-    name: singleName,
-    data: singleData.map(d => [d.time, d.pssKb] as [number, number]),
-  }] : []
+  })))
 
   const jsonStr = (v: any) => JSON.stringify(v).replace(/</g, '\\u003c')
 
@@ -1277,13 +1156,11 @@ function buildInteractiveChartsHtml(
   <p style="font-size:.85rem;color:#666;margin-bottom:.5rem">点击折线或包名选中单个应用，再次点击显示全部。需要联网加载图表库。</p>
   <div id="chart-loading" style="padding:2rem;text-align:center;color:#888;font-size:.9rem">正在加载图表库...</div>
   <div id="charts-container" style="display:none">
-    <div class="interactive-chart"><h3>设备内存趋势</h3><div id="ic-mem" style="width:100%;height:360px"></div></div>
-    <div class="interactive-chart"><h3>Top ${topCpu.length} 应用 CPU 使用率</h3><div id="ic-cpu" style="width:100%;height:360px"></div></div>
     <div class="interactive-chart"><h3>Top ${topMem.length} 应用内存</h3><div id="ic-top" style="width:100%;height:360px"></div></div>
-    <div class="interactive-chart"><h3>单个应用内存: ${singleName || '(未选择)'}</h3><div id="ic-single" style="width:100%;height:360px"></div></div>
+    <div class="interactive-chart"><h3>Top ${topCpu.length} 应用 CPU 使用率</h3><div id="ic-cpu" style="width:100%;height:360px"></div></div>
   </div>
   <script type="application/json" id="ic-data">${jsonStr({
-    mem: memSeries, cpu: cpuSeries, top: topSeries, single: singleSeries,
+    cpu: cpuSeries, top: topSeries,
   })}<\/script>
   <script>
   (function() {
@@ -1298,6 +1175,20 @@ function buildInteractiveChartsHtml(
       if (!el) return;
       var data;
       try { data = JSON.parse(el.textContent); } catch(e) { return; }
+      var latestCpuValues = {};
+      (data.cpu || []).forEach(function(s) {
+        if (s.data && s.data.length > 0) {
+          var last = s.data[s.data.length - 1];
+          latestCpuValues[s.name] = last[1];
+        }
+      });
+      var latestTopValues = {};
+      (data.top || []).forEach(function(s) {
+        if (s.data && s.data.length > 0) {
+          var last = s.data[s.data.length - 1];
+          latestTopValues[s.name] = last[1];
+        }
+      });
       var cpuSelected = null;
       var topSelected = null;
       function getAllNames(chart) {
@@ -1349,11 +1240,11 @@ function buildInteractiveChartsHtml(
         legend: {
           type: 'scroll', orient: 'vertical', right: 10, top: 'middle',
           icon: 'circle', itemWidth: 12, itemHeight: 10,
-          textStyle: { fontSize: 11, width: 160, overflow: 'truncate' },
+          textStyle: { fontSize: 11, width: 340, overflow: 'breakAll' },
           pageTextStyle: { fontSize: 11 }, pageIconSize: 12,
           selectedMode: 'multiple',
         },
-        grid: { left: 60, right: 200, top: 15, bottom: 40 },
+        grid: { left: 60, right: 380, top: 15, bottom: 40 },
         xAxis: {
           type: 'time',
           axisLabel: {
@@ -1364,7 +1255,7 @@ function buildInteractiveChartsHtml(
               if (isNaN(d.getTime())) return '';
               var pad = function(n) { return n < 10 ? '0' + n : '' + n; };
               var allT = [];
-              ['mem','cpu','top','single'].forEach(function(k) {
+              ['cpu','top'].forEach(function(k) {
                 (data[k] || []).forEach(function(s) {
                   (s.data || []).forEach(function(p) { allT.push(p[0]); });
                 });
@@ -1400,16 +1291,25 @@ function buildInteractiveChartsHtml(
         return Object.assign({}, opts, {
           yAxis: Object.assign({}, opts.yAxis, { axisLabel: Object.assign({}, opts.yAxis.axisLabel, { formatter: yFmt }) }),
           tooltip: tooltipOpt,
+          legend: Object.assign({}, opts.legend, {
+            formatter: function(name) {
+              var map = isCpu ? latestCpuValues : latestTopValues;
+              var v = map[name];
+              if (v !== undefined) {
+                if (isCpu) {
+                  return name + ' (' + v.toFixed(1) + '%)';
+                } else {
+                  return name + ' (' + (v >= 1024 ? (v / 1024).toFixed(0) + 'M' : v + 'K') + ')';
+                }
+              }
+              return name;
+            }
+          }),
           series: series.map(function(s) {
             return { type: 'line', name: s.name, data: s.data, smooth: true, symbol: 'none', lineStyle: { width: 2, color: s.color }, itemStyle: { color: s.color } };
           }),
         });
       }
-      var KB = 1048576;
-      function fmtKb(v) { return v >= KB ? (v / KB).toFixed(2) + ' GB' : (v / 1024).toFixed(0) + ' MB'; }
-      echarts.init(document.getElementById('ic-mem')).setOption(mk(data.mem,
-        function(v) { return v >= KB ? (v / KB).toFixed(0) + 'G' : (v / 1024).toFixed(0) + 'M'; },
-        function(v) { return fmtKb(v); }));
       var cpuChart = echarts.init(document.getElementById('ic-cpu'));
       cpuChart.setOption(mk(data.cpu,
         function(v) { return v + '%'; },
@@ -1424,7 +1324,7 @@ function buildInteractiveChartsHtml(
       var topChart = echarts.init(document.getElementById('ic-top'));
       topChart.setOption(mk(data.top,
         function(v) { return v >= 1024 ? (v / 1024).toFixed(0) + 'M' : v + 'K'; },
-        function(v) { return fmtKb(v); }, false, true));
+        function(v) { return v >= 1024 ? (v / 1024).toFixed(0) + 'M' : v + 'K'; }, false, true));
       topChart.on('click', function(params) {
         if (params.componentType !== 'series') return;
         selectSeries(topChart, params.seriesName, 'top');
@@ -1432,11 +1332,8 @@ function buildInteractiveChartsHtml(
       topChart.on('legendselectchanged', function(params) {
         selectSeries(topChart, params.name, 'top');
       });
-      echarts.init(document.getElementById('ic-single')).setOption(mk(data.single,
-        function(v) { return v >= 1024 ? (v / 1024).toFixed(0) + 'M' : v + 'K'; },
-        function(v) { return fmtKb(v); }));
       window.addEventListener('resize', function() {
-        ['ic-mem','ic-cpu','ic-top','ic-single'].forEach(function(id) {
+        ['ic-cpu','ic-top'].forEach(function(id) {
           var inst = echarts.getInstanceByDom(document.getElementById(id));
           if (inst) inst.resize();
         });
@@ -1496,7 +1393,6 @@ async function captureOneTimeLogs(serial: string) {
   } catch {}
 
   // Extra one-time logs
-  try { await writeTextFile(sessionLogDir.value + 'dmesg.txt', await dmesg(serial)) } catch {}
   try { await writeTextFile(sessionLogDir.value + 'ps.txt', await shell(serial, 'ps -A 2>/dev/null')) } catch {}
   try { await writeTextFile(sessionLogDir.value + 'df.txt', await shell(serial, 'df 2>/dev/null')) } catch {}
   try { await writeTextFile(sessionLogDir.value + 'proc_stat.txt', await shell(serial, 'cat /proc/stat 2>/dev/null')) } catch {}
@@ -1514,18 +1410,6 @@ async function collectLogs(serial: string) {
   } catch {}
 }
 
-// Periodic dmesg collection — append mode for realtime output
-async function collectDmesg(serial: string) {
-  if (!serial || !sessionLogDir.value) return
-  try {
-    const output = await dmesg(serial)
-    if (output && output.length > 0) {
-      const header = '--- ' + formatLocalTime(new Date()) + ' ---\n'
-      await writeTextFile(sessionLogDir.value + 'dmesg.txt', header + output + '\n', { append: true })
-    }
-  } catch {}
-}
-
 function goBack() { router.push('/device-space') }
 
 function formatLocalTime(date: Date): string {
@@ -1539,6 +1423,8 @@ let renderPending = false
 // 实时图表最大点数：提升到600以支持更长时间运行时的精度
 // 同时使用bucketing下采样保留极值（峰值、谷值），避免简单步进下采样丢失关键信息
 const MAX_CHART_POINTS = 600
+const latestTopAppValues = ref<Record<string, number>>({})
+const latestCpuValues = ref<Record<string, number>>({})
 
 function scheduleRender() {
   renderPending = true
@@ -1547,26 +1433,10 @@ function scheduleRender() {
     renderTimer = null
     if (renderPending && isPageActive.value) {
       renderPending = false
-      if (chartVisibility.value.mem || chartVisibility.value.cpu) updateChartsDebounced()
+      updateCpuChartDebounced()
       if (chartVisibility.value.topApp) updateTopAppChartDebounced()
-      if (chartVisibility.value.singleApp) updateSingleAppChartDebounced()
     }
   }, 300)
-}
-
-function updateChartsDebounced() {
-  const pts = store.history
-  if (pts.length === 0) return
-  const dsPts = bucketingDownsample(pts, p => p.memUsedKb, MAX_CHART_POINTS)
-  if (chartVisibility.value.mem && memChart) {
-    memChart.setOption({ series: [
-      { data: dsPts.map(p => [p.time, p.memUsedKb] as [number, number]) },
-      { data: dsPts.map(p => [p.time, p.memAvailKb] as [number, number]) },
-    ]})
-  }
-  if (chartVisibility.value.cpu) {
-    updateCpuChartDebounced()
-  }
 }
 
 function updateCpuChartDebounced() {
@@ -1597,27 +1467,42 @@ function updateCpuChartDebounced() {
     return
   }
 
-  const series = topN.map(p => ({
-    type: 'line',
-    name: p.name,
-    data: p.data.map(h => [h.time, h.cpuPercent] as [number, number]),
-    smooth: true,
-    symbol: 'none',
-    symbolSize: 4,
-    lineStyle: { width: 2, color: getColor(p.name) },
-    itemStyle: { color: getColor(p.name) },
-    animation: false,
-    triggerLineEvent: true,
-    emphasis: {
-      focus: 'series',
-      blurScope: 'coordinateSystem',
-      lineStyle: { width: 3 },
-      itemStyle: { borderWidth: 2 },
-      showSymbol: true,
-    },
-  }))
+  const newLatest: Record<string, number> = {}
+  const series = topN.map(p => {
+    const last = p.data[p.data.length - 1]
+    if (last) newLatest[p.name] = last.cpuPercent
+    return {
+      type: 'line',
+      name: p.name,
+      data: p.data.map(h => [h.time, h.cpuPercent] as [number, number]),
+      smooth: true,
+      symbol: 'none',
+      symbolSize: 4,
+      lineStyle: { width: 2, color: getColor(p.name) },
+      itemStyle: { color: getColor(p.name) },
+      animation: false,
+      triggerLineEvent: true,
+      emphasis: {
+        focus: 'series',
+        blurScope: 'coordinateSystem',
+        lineStyle: { width: 3 },
+        itemStyle: { borderWidth: 2 },
+        showSymbol: true,
+      },
+    }
+  })
+  latestCpuValues.value = newLatest
 
-  cpuChart.setOption({ series }, { replaceMerge: ['series'] })
+  cpuChart.setOption({
+    series,
+    legend: {
+      formatter: (name: string) => {
+        const v = latestCpuValues.value[name]
+        if (v !== undefined) return name + ' (' + v.toFixed(1) + '%)'
+        return name
+      },
+    },
+  }, { replaceMerge: ['series'] })
 
   // Apply series visibility based on selection
   series.forEach(s => {
@@ -1637,93 +1522,152 @@ function updateCpuChartDebounced() {
 
 function updateTopAppChartDebounced() {
   if (!topAppChart) return
+  const pts = store.history
   const hist = store.processPssHistory
-  if (hist.size === 0) {
-    topAppChart.setOption({ series: [] }, { replaceMerge: ['series'] })
-    return
+  const series: any[] = []
+  const newLatest: Record<string, number> = {}
+
+  // Series 1: Free RAM (always first, green)
+  if (pts.length > 0) {
+    const freeRamData = bucketingDownsample(
+      pts.map(p => ({ time: p.time, pssKb: p.memAvailKb })),
+      d => d.pssKb,
+      MAX_CHART_POINTS,
+    )
+    series.push({
+      type: 'line',
+      name: 'Free RAM',
+      data: freeRamData.map(h => [h.time, h.pssKb] as [number, number]),
+      smooth: true,
+      symbol: 'none',
+      symbolSize: 4,
+      lineStyle: { width: 2, color: '#22c55e' },
+      itemStyle: { color: '#22c55e' },
+      areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(34,197,94,0.2)' }, { offset: 1, color: 'rgba(34,197,94,0.02)' }]) },
+      animation: false,
+      triggerLineEvent: true,
+      emphasis: {
+        focus: 'series',
+        blurScope: 'coordinateSystem',
+        lineStyle: { width: 3 },
+        itemStyle: { borderWidth: 2 },
+        showSymbol: true,
+      },
+    })
+    const last = freeRamData[freeRamData.length - 1]
+    if (last) newLatest['Free RAM'] = last.pssKb
   }
 
-  // 性能优化：先按最后值排序筛出Top N候选，再只对前N个进程做下采样
-  const candidates = Array.from(hist.entries())
-    .map(([name, data]) => ({
-      name,
-      lastPss: data[data.length - 1]?.pssKb ?? 0,
-      data,
+  // Series 2: Swap Free (always second, blue)
+  if (pts.length > 0) {
+    const swapFreeData = bucketingDownsample(
+      pts.map(p => ({ time: p.time, pssKb: p.swapFreeKb })),
+      d => d.pssKb,
+      MAX_CHART_POINTS,
+    )
+    series.push({
+      type: 'line',
+      name: 'Swap Free',
+      data: swapFreeData.map(h => [h.time, h.pssKb] as [number, number]),
+      smooth: true,
+      symbol: 'none',
+      symbolSize: 4,
+      lineStyle: { width: 2, color: '#3b82f6' },
+      itemStyle: { color: '#3b82f6' },
+      areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(59,130,246,0.2)' }, { offset: 1, color: 'rgba(59,130,246,0.02)' }]) },
+      animation: false,
+      triggerLineEvent: true,
+      emphasis: {
+        focus: 'series',
+        blurScope: 'coordinateSystem',
+        lineStyle: { width: 3 },
+        itemStyle: { borderWidth: 2 },
+        showSymbol: true,
+      },
+    })
+    const last = swapFreeData[swapFreeData.length - 1]
+    if (last) newLatest['Swap Free'] = last.pssKb
+  }
+
+  // Top N app memory series
+  if (hist.size > 0) {
+    const candidates = Array.from(hist.entries())
+      .map(([name, data]) => ({
+        name,
+        lastPss: data[data.length - 1]?.pssKb ?? 0,
+        data,
+      }))
+    candidates.sort((a, b) => b.lastPss - a.lastPss)
+    const topN = candidates.slice(0, store.topAppCount).map(p => ({
+      ...p,
+      data: bucketingDownsample(p.data, d => d.pssKb, MAX_CHART_POINTS),
     }))
-  candidates.sort((a, b) => b.lastPss - a.lastPss)
-  const topN = candidates.slice(0, store.topAppCount).map(p => ({
-    ...p,
-    data: bucketingDownsample(p.data, d => d.pssKb, MAX_CHART_POINTS),
-  }))
 
-  if (topN.length === 0) {
+    for (const p of topN) {
+      series.push({
+        type: 'line',
+        name: p.name,
+        data: p.data.map(h => [h.time, h.pssKb] as [number, number]),
+        smooth: true,
+        symbol: 'none',
+        symbolSize: 4,
+        lineStyle: { width: 2, color: getColor(p.name) },
+        itemStyle: { color: getColor(p.name) },
+        animation: false,
+        triggerLineEvent: true,
+        emphasis: {
+          focus: 'series',
+          blurScope: 'coordinateSystem',
+          lineStyle: { width: 3 },
+          itemStyle: { borderWidth: 2 },
+          showSymbol: true,
+        },
+      })
+      const last = p.data[p.data.length - 1]
+      if (last) newLatest[p.name] = last.pssKb
+    }
+  }
+
+  if (series.length === 0) {
     topAppChart.setOption({ series: [] }, { replaceMerge: ['series'] })
     return
   }
+  latestTopAppValues.value = newLatest
 
-  const series = topN.map(p => ({
-    type: 'line',
-    name: p.name,
-    data: p.data.map(h => [h.time, h.pssKb] as [number, number]),
-    smooth: true,
-    symbol: 'none',
-    symbolSize: 4,
-    lineStyle: { width: 2, color: getColor(p.name) },
-    itemStyle: { color: getColor(p.name) },
-    animation: false,
-    triggerLineEvent: true,
-    emphasis: {
-      focus: 'series',
-      blurScope: 'coordinateSystem',
-      lineStyle: { width: 3 },
-      itemStyle: { borderWidth: 2 },
-      showSymbol: true,
+  topAppChart.setOption({
+    series,
+    legend: {
+      formatter: (name: string) => {
+        const v = latestTopAppValues.value[name]
+        if (v !== undefined) {
+          const val = v >= 1048576 ? (v / 1048576).toFixed(1) + 'G' : v >= 1024 ? (v / 1024).toFixed(0) + 'M' : v + 'K'
+          return name + ' (' + val + ')'
+        }
+        return name
+      },
     },
-  }))
-
-  topAppChart.setOption({ series }, { replaceMerge: ['series'] })
+  }, { replaceMerge: ['series'] })
 
   // Apply series visibility based on selection
   series.forEach(s => {
     if (topAppSelectedSeries.value) {
-      // Show only selected series
       if (s.name === topAppSelectedSeries.value) {
         topAppChart?.dispatchAction({ type: 'legendSelect', name: s.name })
       } else {
         topAppChart?.dispatchAction({ type: 'legendUnSelect', name: s.name })
       }
     } else {
-      // Show all series
       topAppChart?.dispatchAction({ type: 'legendSelect', name: s.name })
     }
-  })
-}
-
-function updateSingleAppChartDebounced() {
-  if (!singleAppChart) return
-  const name = store.singleAppName
-  if (!name) { singleAppChart.setOption({ series: [{ data: [] }] }); return }
-
-  const hist = store.processPssHistory.get(name)
-  if (!hist || hist.length === 0) { singleAppChart.setOption({ series: [{ data: [] }] }); return }
-
-  const dsHist = bucketingDownsample(hist, d => d.pssKb, MAX_CHART_POINTS)
-  singleAppChart.setOption({
-    series: [{
-      name: name,
-      data: dsHist.map(h => [h.time, h.pssKb] as [number, number]),
-    }],
   })
 }
 
 async function pollOnce() {
   if (!deviceSerial.value) return
   try {
-    const snap = await getSnapshot(deviceSerial.value, store.singleAppName || undefined)
+    const snap = await getSnapshot(deviceSerial.value)
     pollErrorCount = 0
     store.addPoint(snap)
-    bufferCsvPoint(snap)
-    flushCsvBuffer()
     // Schedule chart rendering with debounce to avoid jank with large datasets.
     // Charts are updated at most once every 300ms, and only when the page is active.
     // Data still collects in the store; charts update when user returns.
@@ -1757,10 +1701,6 @@ function initCsvFiles(dir: string, hasProcs: boolean) {
   csvBaseDir = dir
   csvHasProcs = hasProcs
   csvBuffer = []
-  // Write headers immediately (overwrite any existing file)
-  try {
-    invoke('write_text_file', { path: dir + '/perf_data.csv', content: 'Time,CPU(%),MemUsed(KB),MemTotal(KB),MemAvail(KB),ZRAM(KB),StorageUsed(KB),StorageTotal(KB)\n' })
-  } catch {}
 }
 
 function bufferCsvPoint(snap: PerfSnapshot) {
@@ -1773,12 +1713,7 @@ function bufferCsvPoint(snap: PerfSnapshot) {
 }
 
 async function flushCsvBuffer() {
-  if (csvBuffer.length === 0 || !csvBaseDir) return
-  const data = csvBuffer.join('\n') + '\n'
   csvBuffer = []
-  try {
-    await invoke('append_text_file', { path: csvBaseDir + '/perf_data.csv', content: data })
-  } catch {}
 }
 
 async function startPolling() {
@@ -1815,28 +1750,23 @@ async function startPolling() {
     showToast('启动 logcat 流式抓取失败: ' + String(e), true)
   }
 
-  // 5. Capture one-time logs
-  await captureOneTimeLogs(serial)
-
-  // 6. Start polling immediately
+  // 5. Start polling immediately (before one-time logs to show data ASAP)
   store.setCollecting(true)
   pollOnce()
   pollTimer = setInterval(pollOnce, store.intervalMs)
 
+  // 6. Capture one-time logs in background (fire-and-forget, don't block first poll)
+  captureOneTimeLogs(serial)
+
   // 7. Start periodic meminfo collection (first after 5s, then every 30s)
   setTimeout(() => collectLogs(serial), 5000)
   logTimer = setInterval(() => collectLogs(serial), 30000)
-
-  // 8. Start periodic dmesg collection (first after 3s, then every 5s for near-realtime)
-  setTimeout(() => collectDmesg(serial), 3000)
-  dmesgTimer = setInterval(() => collectDmesg(serial), 5000)
 }
 async function stopPolling() {
   // Show loading overlay immediately on pause — before any async work
   store.setCollecting(false)
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
   if (logTimer) { clearInterval(logTimer); logTimer = null }
-  if (dmesgTimer) { clearInterval(dmesgTimer); dmesgTimer = null }
 
   // Skip everything if no data collected
   if (store.history.length === 0) {
@@ -1854,9 +1784,6 @@ async function stopPolling() {
   }, 60000)
 
   try {
-    // Flush any remaining CSV buffer to disk
-    await flushCsvBuffer()
-
     // Stop logcat stream
     if (deviceSerial.value) {
       try { await invoke('adb_logcat_stop', { serial: deviceSerial.value }) } catch {}
@@ -1908,21 +1835,18 @@ async function autoExportReport(dir: string) {
       .slice(0, store.cpuTopNCount)
 
     const topNames = topMem.map(p => p.name)
-    const singleName = store.singleAppName
-    const singleData = singleName ? (pssHist.get(singleName) || []) : []
-
-    // perf_data.csv already streamed to disk during collection — flush remaining buffer first
-    await flushCsvBuffer()
 
     if (topMem.length > 0) {
-      const maxLen = safeMax(topMem.map(p => p.data.length))
+      const maxLen = pts.length
       const rows = []
       for (let i = 0; i < maxLen; i++) {
-        const t = i < topMem[0].data.length ? formatLocalTime(new Date(topMem[0].data[i].time)) : ''
+        const t = formatLocalTime(new Date(pts[i].time))
+        const freeRam = pts[i].memAvailKb.toString()
+        const swapFree = pts[i].swapFreeKb.toString()
         const vals = topMem.map(p => i < p.data.length ? p.data[i].pssKb.toString() : '')
-        rows.push(t + ',' + vals.join(','))
+        rows.push(t + ',' + freeRam + ',' + swapFree + ',' + vals.join(','))
       }
-      await writeTextFile(dir + 'perf_top_apps.csv', 'Time,' + topNames.map(n => `"${n}(KB)"`).join(',') + '\n' + rows.join('\n'))
+      await writeTextFile(dir + 'perf_top_apps.csv', 'Time,Free_RAM(KB),Swap_Free(KB),' + topNames.map(n => `"${n}(KB)"`).join(',') + '\n' + rows.join('\n'))
     }
 
     if (topCpu.length > 0) {
@@ -1936,23 +1860,23 @@ async function autoExportReport(dir: string) {
       await writeTextFile(dir + 'perf_top_cpu.csv', 'Time,' + topCpu.map(p => `"${p.name}(%)"`).join(',') + '\n' + rows.join('\n'))
     }
 
-    if (singleData.length > 0) {
-      await writeTextFile(dir + 'perf_single_app.csv', 'Time,PSS(KB)\n' + singleData.map(d => `${formatLocalTime(new Date(d.time))},${d.pssKb}`).join('\n'))
-    }
-
     // Downsample for interactive HTML charts to keep file size manageable
     // 使用bucketing下采样保留极值，确保一周数据也能有效分析
     const DOWNSAMPLE_MAX = 4000
     const dsPts = bucketingDownsample(pts, p => p.cpu, DOWNSAMPLE_MAX)
     const dsTopMem = topMem.map(p => ({ ...p, data: bucketingDownsample(p.data, d => d.pssKb, DOWNSAMPLE_MAX) }))
     const dsTopCpu = topCpu.map(p => ({ ...p, data: bucketingDownsample(p.data, d => d.cpuPercent, DOWNSAMPLE_MAX) }))
-    const dsSingleData = bucketingDownsample(singleData, d => d.pssKb, DOWNSAMPLE_MAX)
-    const interactiveHtml = buildInteractiveChartsHtml(dsPts, dsTopMem, dsTopCpu, singleName || '', dsSingleData)
+    const interactiveHtml = buildInteractiveChartsHtml(dsPts, dsTopMem, dsTopCpu)
+    const freeRamVals2 = pts.map(p => p.memAvailKb)
+    const swapFreeVals2 = pts.map(p => p.swapFreeKb)
+    const memFreeRows2 = `<tr><td></td><td><strong>Free RAM</strong></td><td>${formatKb(safeMin(freeRamVals2))} ${formatKbUnit(safeMin(freeRamVals2))}</td><td>${formatKb(safeMax(freeRamVals2))} ${formatKbUnit(safeMax(freeRamVals2))}</td><td>${formatKb(safeAvg(freeRamVals2))} ${formatKbUnit(safeAvg(freeRamVals2))}</td></tr>
+<tr><td></td><td><strong>Swap Free</strong></td><td>${formatKb(safeMin(swapFreeVals2))} ${formatKbUnit(safeMin(swapFreeVals2))}</td><td>${formatKb(safeMax(swapFreeVals2))} ${formatKbUnit(safeMax(swapFreeVals2))}</td><td>${formatKb(safeAvg(swapFreeVals2))} ${formatKbUnit(safeAvg(swapFreeVals2))}</td></tr>
+`
     await writeTextFile(dir + 'perf_report.html', `<!DOCTYPE html>
 <html lang="zh">
 <head><meta charset="utf-8"><title>性能报告</title>
 <style>
-body{font-family:system-ui,-apple-system,sans-serif;max-width:1100px;margin:auto;padding:2rem;background:#f5f5f5;color:#222}
+body{font-family:system-ui,-apple-system,sans-serif;max-width:1400px;margin:auto;padding:2rem;background:#f5f5f5;color:#222}
 h1{color:#333;border-bottom:2px solid #7c5cfc;padding-bottom:.5rem}
 h2{color:#444;margin-top:1.5rem}
 table{border-collapse:collapse;width:100%;margin:1rem 0;font-size:.85rem}
@@ -1979,7 +1903,7 @@ img.chart{max-width:100%;border:1px solid #ddd;border-radius:8px;margin:.5rem 0}
   <p><strong>时间范围:</strong> ${formatLocalTime(new Date(pts[0].time))} ~ ${formatLocalTime(new Date(pts[pts.length-1].time))}</p>
   <p><strong>采集间隔:</strong> ${(store.intervalMs / 1000).toFixed(0)}s</p>
 </div>
-${buildOverallAssessment(pts, topMem, topCpu, singleName || '', singleData)}
+${buildOverallAssessment(pts, topMem, topCpu, '', [])}
 <div class="card">
   <h2>汇总统计</h2>
   <div class="stat-grid">
@@ -1993,7 +1917,7 @@ ${buildOverallAssessment(pts, topMem, topCpu, singleName || '', singleData)}
 <div class="card">
   <h2>Top${store.topAppCount} 应用内存使用情况</h2>
   <table><thead><tr><th>#</th><th>应用包名</th><th>最小 PSS</th><th>最大 PSS</th><th>平均 PSS</th></tr></thead>
-  <tbody>${topMem.map((p, i) => {
+  <tbody>${memFreeRows2}${topMem.map((p, i) => {
     const vals = p.data.map(d => d.pssKb)
     const mn = vals.length ? safeMin(vals) : 0
     const mx = vals.length ? safeMax(vals) : 0
@@ -2012,15 +1936,6 @@ ${buildOverallAssessment(pts, topMem, topCpu, singleName || '', singleData)}
     return `<tr><td>${i+1}</td><td>${p.name}</td><td>${mn.toFixed(1)}%</td><td>${mx.toFixed(1)}%</td><td>${av.toFixed(1)}%</td></tr>`
   }).join('')}</tbody></table>
 </div>
-<div class="card">
-  <h2>单个应用内存使用情况: ${singleName || '(未选择)'}</h2>
-  ${singleData.length ? (() => {
-    const vals = singleData.map(d => d.pssKb)
-    const mn = safeMin(vals); const mx = safeMax(vals); const av = safeAvg(vals)
-    return `<table><thead><tr><th>最小 PSS</th><th>最大 PSS</th><th>平均 PSS</th><th>采样数</th></tr></thead>
-      <tbody><tr><td>${formatKb(mn)} ${formatKbUnit(mn)}</td><td>${formatKb(mx)} ${formatKbUnit(mx)}</td><td>${formatKb(av)} ${formatKbUnit(av)}</td><td>${singleData.length}</td></tr></tbody></table>`
-  })() : '<p>暂无数据</p>'}
-</div>
 ${interactiveHtml}
 </body></html>`,)
 
@@ -2038,15 +1953,12 @@ function clearHistory() {
   cpuSelectedSeries.value = null
   topAppSelectedSeries.value = null
   cpuChart?.setOption({ series: [] }, { replaceMerge: ['series'] })
-  memChart?.setOption({ series: [{ data: [] }, { data: [] }] })
   topAppChart?.setOption({ series: [] }, { replaceMerge: ['series'] })
-  singleAppChart?.setOption({ series: [{ data: [] }] })
 }
 
 // Watch topAppCount changes to re-render chart
 watch(() => store.topAppCount, () => { updateTopAppChartDebounced() })
 watch(() => store.cpuTopNCount, () => { updateCpuChartDebounced() })
-watch(() => store.singleAppName, () => { updateSingleAppChartDebounced(); if (store.singleAppName) appSearch.value = store.singleAppName })
 
 // Stable color assignment per process name: same package always gets same color
 // across the whole session, regardless of its current rank in Top N.
@@ -2159,7 +2071,7 @@ function initCharts() {
       }
     })
     cpuChart.setOption({
-      grid: { left: 45, right: 200, top: 15, bottom: 25 },
+      grid: { left: 45, right: 260, top: 15, bottom: 25 },
       tooltip: {
         trigger: 'axis',
         axisPointer: {
@@ -2209,7 +2121,7 @@ function initCharts() {
         top: 'middle',
         itemWidth: 12,
         itemHeight: 10,
-        textStyle: { fontSize: 11, width: 160, overflow: 'truncate' },
+        textStyle: { fontSize: 11, width: 220, overflow: 'breakAll' },
         pageTextStyle: { fontSize: 11 },
         pageIconSize: [12, 12],
         animation: false,
@@ -2221,25 +2133,6 @@ function initCharts() {
       progressive: 1000,
       progressiveThreshold: 1000,
       series: [],
-    })
-  }
-  if (memChartRef.value && !memChart) {
-    memChart = echarts.init(memChartRef.value)
-    memChart.setOption({
-      grid: { left: 45, right: 12, top: 5, bottom: 25 },
-      tooltip: { trigger: 'axis',
-        axisPointer: { type: 'cross', label: { show: false } },
-        valueFormatter: (v: any) => formatMem(v as number) },
-      legend: { show: false },
-      xAxis: { type: 'time', axisLabel: timeAxisLabel },
-      yAxis: { type: 'value', axisLabel: { fontSize: 10, formatter: (v: number) => v >= 1048576 ? (v / 1048576).toFixed(1) + 'G' : v >= 1024 ? (v / 1024).toFixed(0) + 'M' : v + 'K' } },
-      dataZoom: [{ type: 'inside', start: 0, end: 100 }],
-      progressive: 1000,
-      progressiveThreshold: 1000,
-      series: [
-        { type: 'line', name: t('perf.used'), data: [], smooth: true, symbol: 'none', lineStyle: { width: 2, color: '#7c5cfc' }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(124,92,252,0.25)' }, { offset: 1, color: 'rgba(124,92,252,0.02)' }]) }, animationDuration: 300 },
-        { type: 'line', name: t('perf.free'), data: [], smooth: true, symbol: 'none', lineStyle: { width: 2, color: '#22c55e' }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(34,197,94,0.2)' }, { offset: 1, color: 'rgba(34,197,94,0.02)' }]) }, animationDuration: 300 },
-      ],
     })
   }
   if (topAppChartRef.value && !topAppChart) {
@@ -2271,7 +2164,7 @@ function initCharts() {
       }
     })
     topAppChart.setOption({
-      grid: { left: 45, right: 200, top: 15, bottom: 25 },
+      grid: { left: 45, right: 260, top: 15, bottom: 25 },
       tooltip: {
         trigger: 'axis',
         axisPointer: {
@@ -2322,7 +2215,7 @@ function initCharts() {
         top: 'middle',
         itemWidth: 12,
         itemHeight: 10,
-        textStyle: { fontSize: 11, width: 160, overflow: 'truncate' },
+        textStyle: { fontSize: 11, width: 220, overflow: 'breakAll' },
         pageTextStyle: { fontSize: 11 },
         pageIconSize: [12, 12],
         animation: false,
@@ -2338,44 +2231,16 @@ function initCharts() {
     })
 
   }
-  if (singleAppChartRef.value && !singleAppChart) {
-    singleAppChart = echarts.init(singleAppChartRef.value)
-    singleAppChart.setOption({
-      grid: { left: 45, right: 12, top: 5, bottom: 25 },
-      tooltip: { trigger: 'axis',
-        axisPointer: { type: 'cross', label: { show: false } },
-        valueFormatter: (v: any) => (v as number) >= 1024 ? ((v as number) / 1024).toFixed(1) + 'MB' : (v as number) + 'KB' },
-      xAxis: { type: 'time', axisLabel: timeAxisLabel },
-      yAxis: { type: 'value', axisLabel: { fontSize: 10, formatter: (v: number) => v >= 1024 ? (v / 1024).toFixed(0) + 'M' : v + 'K' } },
-      dataZoom: [{ type: 'inside', start: 0, end: 100 }],
-      progressive: 1000,
-      progressiveThreshold: 1000,
-      series: [{ type: 'line', name: '', data: [], smooth: true, symbol: 'none', lineStyle: { width: 2, color: '#7c5cfc' }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(124,92,252,0.25)' }, { offset: 1, color: 'rgba(124,92,252,0.02)' }]) }, animationDuration: 300 }],
-    })
-  }
-}
-
-function updateCharts() {
-  if (!memChart) return
-  const pts = store.history
-  if (pts.length === 0) return
-  memChart.setOption({ series: [
-    { data: pts.map(p => [p.time, p.memUsedKb] as [number, number]) },
-    { data: pts.map(p => [p.time, p.memAvailKb] as [number, number]) },
-  ]})
-  updateCpuChartDebounced()
 }
 
 function resizeCharts() {
-  if (chartVisibility.value.mem) memChart?.resize()
   if (chartVisibility.value.cpu) cpuChart?.resize()
   if (chartVisibility.value.topApp) topAppChart?.resize()
-  if (chartVisibility.value.singleApp) singleAppChart?.resize()
 }
 
 function setupResizeObserver() {
   if (chartResizeObserver) return
-  const containers = [cpuChartRef.value, memChartRef.value, topAppChartRef.value, singleAppChartRef.value].filter(Boolean)
+  const containers = [cpuChartRef.value, topAppChartRef.value].filter(Boolean)
   if (containers.length === 0) return
   chartResizeObserver = new ResizeObserver(() => resizeCharts())
   containers.forEach(el => chartResizeObserver!.observe(el!))
@@ -2397,7 +2262,7 @@ onActivated(() => {
       if (!pollTimer) startPolling()
       else {
         // Redraw all charts with data collected while page was inactive
-        updateChartsDebounced(); updateTopAppChartDebounced(); updateSingleAppChartDebounced()
+        updateCpuChartDebounced(); updateTopAppChartDebounced()
       }
     }
   })
@@ -2410,9 +2275,7 @@ onUnmounted(() => {
   stopPolling()
   if (chartResizeObserver) { chartResizeObserver.disconnect(); chartResizeObserver = null }
   cpuChart?.dispose(); cpuChart = null
-  memChart?.dispose(); memChart = null
   topAppChart?.dispose(); topAppChart = null
-  singleAppChart?.dispose(); singleAppChart = null
 })
 </script>
 

@@ -917,7 +917,7 @@ const {
   connectDevice, disconnectDevice, rebootRecovery, rebootBootloader, rootDevice: adbRoot,
   remountDevice: adbRemount, getProperties, inputKeyevent, inputText: adbInputText,
   listPackages, startApp: adbStartApp, stopApp: adbStopApp, clearAppData,
-  logcatClear, logcat, getAppInfo, logcatBufferResize, bugreport, dmesg,
+  logcatClear, logcat, getAppInfo, logcatBufferResize, bugreport,
   startScreenrecord, killServer, startServer, createZip, listDirectory,
 } = useAdb();
 
@@ -2510,15 +2510,6 @@ async function stopDiagnosticCapture() {
       addFile("logcat.txt", "Logcat (all)", logcatContent);
       appendCmdExec("  ✓ logcat.txt");
     } catch { addFile("logcat.txt", "Logcat (all)", `(${t("device.collectFailed")})`); appendCmdExec("  ✗ logcat.txt"); }
-    await yieldToUI();
-
-    // dmesg
-    appendCmdExec(`  ${t("device.collectingDmesg")}`);
-    try {
-      const dmesgContent = await dmesg(serial);
-      addFile("dmesg.txt", "dmesg", dmesgContent);
-      appendCmdExec("  ✓ dmesg.txt");
-    } catch { addFile("dmesg.txt", "dmesg", `(${t("device.collectFailed")})`); appendCmdExec("  ✗ dmesg.txt"); }
     await yieldToUI();
 
     // System info - each into its own file

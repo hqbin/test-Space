@@ -367,10 +367,6 @@ pub fn bugreport(serial: &str, save_path: &str) -> Result<String, String> {
     }
 }
 
-pub fn dmesg(serial: &str) -> Result<String, String> {
-    run_adb(serial, &["shell", "dmesg"])
-}
-
 pub fn kill_server() -> Result<String, String> {
     let output = adb_cmd()
         .args(["kill-server"])

@@ -9,6 +9,7 @@ export interface SnapshotPoint {
   memTotalKb: number
   memAvailKb: number
   zramKb: number
+  swapFreeKb: number
   storageUsedKb: number
   storageTotalKb: number
 }
@@ -43,6 +44,7 @@ export const usePerfMonitorStore = defineStore('perfMonitor', () => {
       memTotalKb: snapshot.mem_total_kb,
       memAvailKb: snapshot.mem_avail_kb,
       zramKb: snapshot.zram_total_kb,
+      swapFreeKb: snapshot.swap_free_kb,
       storageUsedKb: snapshot.storage_used_kb,
       storageTotalKb: snapshot.storage_total_kb,
     }
