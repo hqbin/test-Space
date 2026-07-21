@@ -8,7 +8,7 @@
       <div class="h-5 w-[1px] bg-glass-border-dark"></div>
       <button class="glass-button px-3 py-1.5 rounded-lg font-label-md text-label-md flex items-center gap-1" @click="toggleCollect" :disabled="!deviceSerial">
         <span class="material-symbols-outlined text-[16px]">{{ store.isCollecting ? 'pause' : 'play_arrow' }}</span>
-        {{ store.isCollecting ? '暂停' : '开始' }}
+        {{ store.isCollecting ? '停止' : '开始' }}
       </button>
       <div class="flex items-center gap-2">
         <div class="w-2 h-2 rounded-full" :class="store.isCollecting ? 'bg-success-indicator animate-pulse' : 'bg-outline-variant'" :title="store.isCollecting ? t('perf.collecting') : t('perf.idle')"></div>
@@ -961,12 +961,28 @@ function formatDuration(seconds: number): string {
 }
 
 async function exportReport() {
-  const pts = store.history
-  if (pts.length === 0) { showToast('暂无数据可导出', true); return }
   isExporting.value = true
   try {
     const dir = await open({ directory: true, multiple: false, title: '选择导出目录' })
     if (!dir) return
+
+    // Load full data from CSV if available (supports long-running sessions > 48h)
+    let pts: { time: number; cpu: number; memUsedKb: number; memTotalKb: number; memAvailKb: number; swapFreeKb: number }[]
+    let pssHist: Map<string, { time: number; pssKb: number }[]>
+    let cpuHist: Map<string, { time: number; cpuPercent: number }[]>
+
+    if (csvBaseDir) {
+      const perfData = await parsePerfCsv(csvBaseDir + 'perf_data.csv')
+      pts = perfData.map(p => ({ ...p, swapFreeKb: 0 }))
+      pssHist = await parseTopAppsCsv(csvBaseDir + 'perf_top_apps.csv')
+      cpuHist = await parseTopCpuCsv(csvBaseDir + 'perf_top_cpu.csv')
+    } else {
+      pts = store.history.map(p => ({ ...p, memTotalKb: 0 }))
+      pssHist = store.processPssHistory
+      cpuHist = store.processCpuHistory
+    }
+
+    if (pts.length === 0) { showToast('暂无数据可导出', true); return }
 
     const cpus = pts.map(p => p.cpu)
     const memUsed = pts.map(p => p.memUsedKb)
@@ -977,9 +993,7 @@ async function exportReport() {
     const maxMemUsed = safeMax(memUsed)
     const avgMemAvail = memAvail.reduce((a, b) => a + b, 0) / memAvail.length
 
-    const hist = store.processPssHistory
-    const cpuHist = store.processCpuHistory
-    const topN = Array.from(hist.entries())
+    const topMem = Array.from(pssHist.entries())
       .map(([name, data]) => ({ name, lastPss: data[data.length - 1]?.pssKb ?? 0, data }))
       .sort((a, b) => b.lastPss - a.lastPss)
       .slice(0, store.topAppCount)
@@ -987,33 +1001,52 @@ async function exportReport() {
       .map(([name, data]) => ({ name, lastCpu: data[data.length - 1]?.cpuPercent ?? 0, data }))
       .sort((a, b) => b.lastCpu - a.lastCpu)
       .slice(0, store.cpuTopNCount)
-    const topNames = topN.map(p => p.name)
 
-    // Save perf_top_apps.csv
-    if (topN.length > 0) {
-      const topHeader = 'Time,Free_RAM(KB),Swap_Free(KB),' + topNames.map(n => `"${n}(KB)"`).join(',')
-      const maxLen = pts.length
-      const topRows: string[] = []
-      for (let i = 0; i < maxLen; i++) {
-        const t = formatLocalTime(new Date(pts[i].time))
-        const freeRam = pts[i].memAvailKb.toString()
-        const swapFree = pts[i].swapFreeKb.toString()
-        const vals = topN.map(p => i < p.data.length ? p.data[i].pssKb.toString() : '')
-        topRows.push(t + ',' + freeRam + ',' + swapFree + ',' + vals.join(','))
-      }
-      await writeTextFile(dir + '/perf_top_apps.csv', topHeader + '\n' + topRows.join('\n'))
-    }
-
-    // Save perf_top_cpu.csv
-    if (topCpu.length > 0) {
-      const maxLen = safeMax(topCpu.map(p => p.data.length))
+    // Generate column-format CSV files for Excel compatibility
+    // Convert row-format streaming data to column-format
+    if (topMem.length > 0) {
+      const topNames = topMem.map(p => p.name)
+      const header = 'Time,Free_RAM(KB),Swap_Free(KB),' + topNames.map(n => `"${escapeCsvField(n)}(KB)"`).join(',')
+      const timeMap = new Map<number, Map<string, number>>()
+      pssHist.forEach((arr, name) => {
+        arr.forEach(d => {
+          if (!timeMap.has(d.time)) timeMap.set(d.time, new Map())
+          timeMap.get(d.time)!.set(name, d.pssKb)
+        })
+      })
+      const memMap = new Map<number, { memAvail: number; swapFree: number }>()
+      pts.forEach(p => memMap.set(p.time, { memAvail: p.memAvailKb, swapFree: p.swapFreeKb }))
       const rows: string[] = []
-      for (let i = 0; i < maxLen; i++) {
-        const t = i < topCpu[0].data.length ? formatLocalTime(new Date(topCpu[0].data[i].time)) : ''
-        const vals = topCpu.map(p => i < p.data.length ? p.data[i].cpuPercent.toFixed(1) : '')
-        rows.push(t + ',' + vals.join(','))
+      const sortedTimes = Array.from(timeMap.keys()).sort((a, b) => a - b)
+      for (const t of sortedTimes) {
+        const mem = memMap.get(t) || { memAvail: 0, swapFree: 0 }
+        const procMap = timeMap.get(t)!
+        const vals = topNames.map(name => procMap.get(name) ?? '')
+        rows.push(`${formatLocalTime(new Date(t))},${mem.memAvail},${mem.swapFree},${vals.join(',')}`)
       }
-      await writeTextFile(dir + '/perf_top_cpu.csv', 'Time,' + topCpu.map(p => `"${p.name}(%)"`).join(',') + '\n' + rows.join('\n'))
+      await writeTextFile(dir + '/perf_top_apps.csv', header + '\n' + rows.join('\n'))
+    }
+    if (topCpu.length > 0) {
+      const topNames = topCpu.map(p => p.name)
+      const header = 'Time,' + topNames.map(n => `"${escapeCsvField(n)}(%)"`).join(',')
+      const timeMap = new Map<number, Map<string, number>>()
+      cpuHist.forEach((arr, name) => {
+        arr.forEach(d => {
+          if (!timeMap.has(d.time)) timeMap.set(d.time, new Map())
+          timeMap.get(d.time)!.set(name, d.cpuPercent)
+        })
+      })
+      const rows: string[] = []
+      const sortedTimes = Array.from(timeMap.keys()).sort((a, b) => a - b)
+      for (const t of sortedTimes) {
+        const procMap = timeMap.get(t)!
+        const vals = topNames.map(name => {
+          const v = procMap.get(name)
+          return v !== undefined ? v.toFixed(1) : ''
+        })
+        rows.push(`${formatLocalTime(new Date(t))},${vals.join(',')}`)
+      }
+      await writeTextFile(dir + '/perf_top_cpu.csv', header + '\n' + rows.join('\n'))
     }
 
     // Save perf_report.html — downsample data for interactive charts to keep
@@ -1021,7 +1054,7 @@ async function exportReport() {
     // 使用bucketing下采样保留极值，支持一周数据的有效分析
     const DOWNSAMPLE_MAX = 4000
     const dsPts = bucketingDownsample(pts, p => p.cpu, DOWNSAMPLE_MAX)
-    const dsTopN = topN.map(p => ({ ...p, data: bucketingDownsample(p.data, d => d.pssKb, DOWNSAMPLE_MAX) }))
+    const dsTopN = topMem.map(p => ({ ...p, data: bucketingDownsample(p.data, d => d.pssKb, DOWNSAMPLE_MAX) }))
     const dsTopCpu = topCpu.map(p => ({ ...p, data: bucketingDownsample(p.data, d => d.cpuPercent, DOWNSAMPLE_MAX) }))
     const interactiveHtml = buildInteractiveChartsHtml(dsPts, dsTopN, dsTopCpu)
     const freeRamVals = pts.map(p => p.memAvailKb)
@@ -1060,7 +1093,7 @@ img.chart{max-width:100%;border:1px solid #ddd;border-radius:8px;margin:.5rem 0}
   <p><strong>时间范围:</strong> ${formatLocalTime(new Date(pts[0].time))} ~ ${formatLocalTime(new Date(pts[pts.length-1].time))}</p>
   <p><strong>采集间隔:</strong> ${(store.intervalMs / 1000).toFixed(0)}s</p>
 </div>
-${buildOverallAssessment(pts, topN, topCpu, '', [])}
+${buildOverallAssessment(pts, topMem, topCpu, '', [])}
 <div class="card">
   <h2>汇总统计</h2>
   <div class="stat-grid">
@@ -1074,7 +1107,7 @@ ${buildOverallAssessment(pts, topN, topCpu, '', [])}
 <div class="card">
   <h2>Top${store.topAppCount} 应用内存使用情况</h2>
   <table><thead><tr><th>#</th><th>应用包名</th><th>最小 PSS</th><th>最大 PSS</th><th>平均 PSS</th></tr></thead>
-  <tbody>${memFreeRows}${topN.map((p, i) => {
+  <tbody>${memFreeRows}${topMem.map((p, i) => {
     const vals = p.data.map(d => d.pssKb)
     const mn = vals.length ? safeMin(vals) : 0
     const mx = vals.length ? safeMax(vals) : 0
@@ -1364,10 +1397,26 @@ function buildInteractiveChartsHtml(
 async function captureOneTimeLogs(serial: string) {
   if (!sessionLogDir.value) return
 
-  // versionInfo (only captured once — skip on subsequent calls)
+  // getprop (only captured once at start — skip on subsequent calls if file already exists)
   try {
-    const versionInfo = await shell(serial, 'getprop 2>/dev/null') + '\n---\n' + await shell(serial, 'cat /proc/version 2>/dev/null')
-    await writeTextFile(sessionLogDir.value + 'versionInfo.txt', versionInfo)
+    const exists = await (async () => {
+      try { await readTextFile(sessionLogDir.value + 'getprop.txt'); return true } catch { return false }
+    })()
+    if (!exists) {
+      const getprop = await shell(serial, 'getprop 2>/dev/null') + '\n---\n' + await shell(serial, 'cat /proc/version 2>/dev/null')
+      await writeTextFile(sessionLogDir.value + 'getprop.txt', getprop)
+    }
+  } catch {}
+
+  // versionInfo — only ro.vendor.product.version (skip if already exists)
+  try {
+    const exists = await (async () => {
+      try { await readTextFile(sessionLogDir.value + 'versionInfo.txt'); return true } catch { return false }
+    })()
+    if (!exists) {
+      const versionInfo = await shell(serial, 'getprop ro.vendor.product.version 2>/dev/null')
+      await writeTextFile(sessionLogDir.value + 'versionInfo.txt', versionInfo.trim())
+    }
   } catch {}
 
   // anr — single merged directory
@@ -1391,11 +1440,6 @@ async function captureOneTimeLogs(serial: string) {
       try { await pullFile(serial, '/data/tombstones/' + file, tombDir + file) } catch {}
     }
   } catch {}
-
-  // Extra one-time logs
-  try { await writeTextFile(sessionLogDir.value + 'ps.txt', await shell(serial, 'ps -A 2>/dev/null')) } catch {}
-  try { await writeTextFile(sessionLogDir.value + 'df.txt', await shell(serial, 'df 2>/dev/null')) } catch {}
-  try { await writeTextFile(sessionLogDir.value + 'proc_stat.txt', await shell(serial, 'cat /proc/stat 2>/dev/null')) } catch {}
 }
 
 // Periodic meminfo collection
@@ -1668,9 +1712,9 @@ async function pollOnce() {
     const snap = await getSnapshot(deviceSerial.value)
     pollErrorCount = 0
     store.addPoint(snap)
+    // Stream data to CSV files for long-term persistence (survives crashes)
+    bufferCsvPoint(snap)
     // Schedule chart rendering with debounce to avoid jank with large datasets.
-    // Charts are updated at most once every 300ms, and only when the page is active.
-    // Data still collects in the store; charts update when user returns.
     scheduleRender()
   } catch (e: any) {
     pollErrorCount++
@@ -1689,31 +1733,71 @@ function toggleCollect() {
 }
 
 // --- Streaming CSV buffer ---
-// During long-running monitoring (hours/days), we stream data to CSV files on
+// During long-running monitoring (hours/days/months), we stream data to CSV files on
 // disk incrementally instead of building the entire CSV in memory at export time.
 // This prevents memory bloat and ensures data survives even if the app crashes.
-let csvBuffer: string[] = []
+let perfCsvBuffer: string[] = []
+let procCsvBuffer: string[] = []
+let cpuCsvBuffer: string[] = []
 const CSV_FLUSH_THRESHOLD = 30 // flush after every 30 data points
 let csvBaseDir = ''
-let csvHasProcs = false
 
-function initCsvFiles(dir: string, hasProcs: boolean) {
+function initCsvFiles(dir: string) {
   csvBaseDir = dir
-  csvHasProcs = hasProcs
-  csvBuffer = []
+  perfCsvBuffer = []
+  procCsvBuffer = []
+  cpuCsvBuffer = []
+  writeTextFile(dir + 'perf_data.csv', 'Time,CPU(%),MemUsed(KB),MemTotal(KB),MemAvail(KB),ZRAM(KB),SwapFree(KB),StorageUsed(KB),StorageTotal(KB)\n').catch(() => {})
+  writeTextFile(dir + 'perf_top_apps.csv', 'Time,ProcessName,PSS(KB)\n').catch(() => {})
+  writeTextFile(dir + 'perf_top_cpu.csv', 'Time,ProcessName,CPU(%)\n').catch(() => {})
 }
 
 function bufferCsvPoint(snap: PerfSnapshot) {
+  if (!csvBaseDir) return
   const now = new Date()
-  const row = `${formatLocalTime(now)},${snap.cpu_total.toFixed(1)},${snap.mem_total_kb - snap.mem_free_kb},${snap.mem_total_kb},${snap.mem_avail_kb},${snap.zram_total_kb},${snap.storage_used_kb},${snap.storage_total_kb}`
-  csvBuffer.push(row)
-  if (csvBuffer.length >= CSV_FLUSH_THRESHOLD) {
-    flushCsvBuffer()
+  const ts = formatLocalTime(now)
+
+  perfCsvBuffer.push(`${ts},${snap.cpu_total.toFixed(1)},${snap.mem_total_kb - snap.mem_free_kb},${snap.mem_total_kb},${snap.mem_avail_kb},${snap.zram_total_kb},${snap.swap_free_kb},${snap.storage_used_kb},${snap.storage_total_kb}`)
+
+  if (snap.procs && snap.procs.length > 0) {
+    const topProcs = snap.procs.slice(0, store.topAppCount)
+    for (const p of topProcs) {
+      procCsvBuffer.push(`${ts},${escapeCsvField(p.name)},${p.pss_kb}`)
+      cpuCsvBuffer.push(`${ts},${escapeCsvField(p.name)},${p.cpu_percent.toFixed(1)}`)
+    }
+  }
+
+  if (perfCsvBuffer.length >= CSV_FLUSH_THRESHOLD) {
+    flushCsvBuffers()
   }
 }
 
-async function flushCsvBuffer() {
-  csvBuffer = []
+function escapeCsvField(field: string): string {
+  if (field.includes(',') || field.includes('"') || field.includes('\n')) {
+    return '"' + field.replace(/"/g, '""') + '"'
+  }
+  return field
+}
+
+async function flushCsvBuffers() {
+  if (!csvBaseDir) return
+  const dir = csvBaseDir
+
+  if (perfCsvBuffer.length > 0) {
+    const lines = perfCsvBuffer.join('\n') + '\n'
+    perfCsvBuffer = []
+    try { await writeTextFile(dir + 'perf_data.csv', lines, { append: true }) } catch (e) { console.error('Failed to write perf_data.csv:', e) }
+  }
+  if (procCsvBuffer.length > 0) {
+    const lines = procCsvBuffer.join('\n') + '\n'
+    procCsvBuffer = []
+    try { await writeTextFile(dir + 'perf_top_apps.csv', lines, { append: true }) } catch (e) { console.error('Failed to write perf_top_apps.csv:', e) }
+  }
+  if (cpuCsvBuffer.length > 0) {
+    const lines = cpuCsvBuffer.join('\n') + '\n'
+    cpuCsvBuffer = []
+    try { await writeTextFile(dir + 'perf_top_cpu.csv', lines, { append: true }) } catch (e) { console.error('Failed to write perf_top_cpu.csv:', e) }
+  }
 }
 
 async function startPolling() {
@@ -1740,7 +1824,7 @@ async function startPolling() {
   try { await mkdir(sessionLogDir.value, { recursive: true }) } catch {}
 
   // 3.5. Initialize streaming CSV files with headers
-  initCsvFiles(sessionLogDir.value, true)
+  initCsvFiles(sessionLogDir.value)
 
   // 4. Clear logcat buffer and start streaming logcat to file
   try { await shell(serial, 'logcat -c 2>/dev/null') } catch {}
@@ -1789,6 +1873,9 @@ async function stopPolling() {
       try { await invoke('adb_logcat_stop', { serial: deviceSerial.value }) } catch {}
     }
 
+    // Flush remaining CSV data to disk
+    await flushCsvBuffers()
+
     // Final logs
     if (deviceSerial.value && sessionLogDir.value) {
       try {
@@ -1809,10 +1896,90 @@ async function stopPolling() {
   }
 }
 
-async function autoExportReport(dir: string) {
-  const pts = store.history
-  if (pts.length === 0) return
+async function parsePerfCsv(filePath: string): Promise<{ time: number; cpu: number; memUsedKb: number; memTotalKb: number; memAvailKb: number; swapFreeKb: number }[]> {
   try {
+    const content = await readTextFile(filePath)
+    const lines = content.trim().split('\n')
+    const result: { time: number; cpu: number; memUsedKb: number; memTotalKb: number; memAvailKb: number; swapFreeKb: number }[] = []
+    for (let i = 1; i < lines.length; i++) {
+      const parts = lines[i].split(',')
+      if (parts.length >= 6) {
+        const t = new Date(parts[0]).getTime()
+        if (!isNaN(t)) {
+          result.push({
+            time: t,
+            cpu: parseFloat(parts[1]) || 0,
+            memUsedKb: parseInt(parts[2]) || 0,
+            memTotalKb: parseInt(parts[3]) || 0,
+            memAvailKb: parseInt(parts[4]) || 0,
+            swapFreeKb: parseInt(parts[6]) || 0,
+          })
+        }
+      }
+    }
+    return result
+  } catch {
+    return []
+  }
+}
+
+async function parseTopAppsCsv(filePath: string): Promise<Map<string, { time: number; pssKb: number }[]>> {
+  const result = new Map<string, { time: number; pssKb: number }[]>()
+  try {
+    const content = await readTextFile(filePath)
+    const lines = content.trim().split('\n')
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim()
+      if (!line) continue
+      const parts = line.split(',')
+      if (parts.length < 3) continue
+      const t = new Date(parts[0]).getTime()
+      if (isNaN(t)) continue
+      const name = parts[1].replace(/^"|"$/g, '').replace(/""/g, '"')
+      const pss = parseInt(parts[2])
+      if (!isNaN(pss)) {
+        if (!result.has(name)) result.set(name, [])
+        result.get(name)!.push({ time: t, pssKb: pss })
+      }
+    }
+  } catch {}
+  return result
+}
+
+async function parseTopCpuCsv(filePath: string): Promise<Map<string, { time: number; cpuPercent: number }[]>> {
+  const result = new Map<string, { time: number; cpuPercent: number }[]>()
+  try {
+    const content = await readTextFile(filePath)
+    const lines = content.trim().split('\n')
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim()
+      if (!line) continue
+      const parts = line.split(',')
+      if (parts.length < 3) continue
+      const t = new Date(parts[0]).getTime()
+      if (isNaN(t)) continue
+      const name = parts[1].replace(/^"|"$/g, '').replace(/""/g, '"')
+      const cpu = parseFloat(parts[2])
+      if (!isNaN(cpu)) {
+        if (!result.has(name)) result.set(name, [])
+        result.get(name)!.push({ time: t, cpuPercent: cpu })
+      }
+    }
+  } catch {}
+  return result
+}
+
+async function autoExportReport(dir: string) {
+  try {
+    const pts = await parsePerfCsv(dir + 'perf_data.csv')
+    if (pts.length === 0) {
+      showToast('无数据可生成报告', true)
+      return
+    }
+
+    const pssHist = await parseTopAppsCsv(dir + 'perf_top_apps.csv')
+    const cpuHist = await parseTopCpuCsv(dir + 'perf_top_cpu.csv')
+
     const cpus = pts.map(p => p.cpu)
     const memUsed = pts.map(p => p.memUsedKb)
     const memAvail = pts.map(p => p.memAvailKb)
@@ -1821,9 +1988,6 @@ async function autoExportReport(dir: string) {
     const avgMemUsed = memUsed.reduce((a, b) => a + b, 0) / memUsed.length
     const maxMemUsed = safeMax(memUsed)
     const avgMemAvail = memAvail.reduce((a, b) => a + b, 0) / memAvail.length
-
-    const pssHist = store.processPssHistory
-    const cpuHist = store.processCpuHistory
 
     const topMem = Array.from(pssHist.entries())
       .map(([name, data]) => ({ name, lastPss: data[data.length - 1]?.pssKb ?? 0, data }))
@@ -1834,34 +1998,6 @@ async function autoExportReport(dir: string) {
       .sort((a, b) => b.lastCpu - a.lastCpu)
       .slice(0, store.cpuTopNCount)
 
-    const topNames = topMem.map(p => p.name)
-
-    if (topMem.length > 0) {
-      const maxLen = pts.length
-      const rows = []
-      for (let i = 0; i < maxLen; i++) {
-        const t = formatLocalTime(new Date(pts[i].time))
-        const freeRam = pts[i].memAvailKb.toString()
-        const swapFree = pts[i].swapFreeKb.toString()
-        const vals = topMem.map(p => i < p.data.length ? p.data[i].pssKb.toString() : '')
-        rows.push(t + ',' + freeRam + ',' + swapFree + ',' + vals.join(','))
-      }
-      await writeTextFile(dir + 'perf_top_apps.csv', 'Time,Free_RAM(KB),Swap_Free(KB),' + topNames.map(n => `"${n}(KB)"`).join(',') + '\n' + rows.join('\n'))
-    }
-
-    if (topCpu.length > 0) {
-      const maxLen = safeMax(topCpu.map(p => p.data.length))
-      const rows = []
-      for (let i = 0; i < maxLen; i++) {
-        const t = i < topCpu[0].data.length ? formatLocalTime(new Date(topCpu[0].data[i].time)) : ''
-        const vals = topCpu.map(p => i < p.data.length ? p.data[i].cpuPercent.toFixed(1) : '')
-        rows.push(t + ',' + vals.join(','))
-      }
-      await writeTextFile(dir + 'perf_top_cpu.csv', 'Time,' + topCpu.map(p => `"${p.name}(%)"`).join(',') + '\n' + rows.join('\n'))
-    }
-
-    // Downsample for interactive HTML charts to keep file size manageable
-    // 使用bucketing下采样保留极值，确保一周数据也能有效分析
     const DOWNSAMPLE_MAX = 4000
     const dsPts = bucketingDownsample(pts, p => p.cpu, DOWNSAMPLE_MAX)
     const dsTopMem = topMem.map(p => ({ ...p, data: bucketingDownsample(p.data, d => d.pssKb, DOWNSAMPLE_MAX) }))

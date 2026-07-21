@@ -18,9 +18,11 @@ export const usePerfMonitorStore = defineStore('perfMonitor', () => {
   const isCollecting = ref(false)
   const intervalMs = ref(2000)
   const history = ref<SnapshotPoint[]>([])
-  // 86400 points = 24h at 1s, 48h at 2s, 5 days at 5s, 10 days at 10s, 30 days at 30s.
-  // Process maps use the same cap to bound memory (~50 procs × 86400 × 32 bytes ≈ 138MB worst case).
+  // 86400 points = 24h at 1s, 48h at 2s, 5 days at 5s, 10 days at 10s.
+  // In-memory buffer is only for real-time chart display.
+  // ALL data is streamed to CSV files for long-term persistence (supports months of runtime).
   const maxPoints = 86400
+  const trimThreshold = Math.floor(maxPoints * 1.1)
   const latestSnapshot = ref<PerfSnapshot | null>(null)
   const processPssHistory = ref<Map<string, { time: number; pssKb: number }[]>>(new Map())
   const processCpuHistory = ref<Map<string, { time: number; cpuPercent: number }[]>>(new Map())
@@ -49,26 +51,29 @@ export const usePerfMonitorStore = defineStore('perfMonitor', () => {
       storageTotalKb: snapshot.storage_total_kb,
     }
     history.value.push(point)
-    if (history.value.length > maxPoints) {
-      history.value.shift()
+    if (history.value.length > trimThreshold) {
+      history.value = history.value.slice(-maxPoints)
     }
     latestSnapshot.value = snapshot
 
-    // Track ALL processes from snapshot (Rust already returns top 20-30)
     for (const p of snapshot.procs) {
       if (!processPssHistory.value.has(p.name)) {
         processPssHistory.value.set(p.name, [])
       }
       const pssArr = processPssHistory.value.get(p.name)!
       pssArr.push({ time: Date.now(), pssKb: p.pss_kb })
-      if (pssArr.length > maxPoints) pssArr.shift()
+      if (pssArr.length > trimThreshold) {
+        pssArr.splice(0, pssArr.length - maxPoints)
+      }
 
       if (!processCpuHistory.value.has(p.name)) {
         processCpuHistory.value.set(p.name, [])
       }
       const cpuArr = processCpuHistory.value.get(p.name)!
       cpuArr.push({ time: Date.now(), cpuPercent: p.cpu_percent })
-      if (cpuArr.length > maxPoints) cpuArr.shift()
+      if (cpuArr.length > trimThreshold) {
+        cpuArr.splice(0, cpuArr.length - maxPoints)
+      }
     }
 
     // Ensure singleAppName is tracked: try exact match, then prefix match

@@ -21,12 +21,18 @@ use std::os::windows::process::CommandExt;
 use tauri::Emitter;
 use tauri::Manager;
 use tauri_plugin_single_instance::init as single_instance_init;
+use chrono::TimeZone;
 
 type MirrorKey = (String, String); // (serial, window_label)
 struct MirrorState(Mutex<HashMap<MirrorKey, (Arc<AtomicBool>, u16)>>);
 
+struct LogcatChild {
+    child: std::process::Child,
+    stop_flag: Arc<std::sync::atomic::AtomicBool>,
+}
+
 #[derive(Default)]
-struct LogcatState(Mutex<HashMap<String, std::process::Child>>);
+struct LogcatState(Mutex<HashMap<String, LogcatChild>>);
 
 static NEXT_MIRROR_PORT: AtomicU16 = AtomicU16::new(27183);
 
@@ -348,57 +354,131 @@ async fn adb_get_current_app(serial: String) -> Result<String, String> {
     }).await.map_err(|e| e.to_string())?
 }
 
+fn format_log_time(timestamp: std::time::SystemTime) -> String {
+    let dur = timestamp.duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+    let seconds = dur.as_secs();
+    let tm = match chrono::Local.timestamp_opt(seconds as i64, 0) {
+        chrono::LocalResult::Single(t) => t,
+        _ => chrono::Local::now(),
+    };
+    tm.format("%Y%m%d_%H%M%S").to_string()
+}
+
+fn get_log_path(base_path: &str, start_time_str: &str) -> std::path::PathBuf {
+    let dir = std::path::Path::new(base_path).parent().unwrap_or(std::path::Path::new("."));
+    dir.join(format!("logcat_{}.txt", start_time_str))
+}
+
+fn rename_log_file(base_path: &str, start_time_str: &str, end_time_str: &str) {
+    let dir = std::path::Path::new(base_path).parent().unwrap_or(std::path::Path::new("."));
+    let old_path = dir.join(format!("logcat_{}.txt", start_time_str));
+    let new_path = dir.join(format!("logcat_{}_{}.txt", start_time_str, end_time_str));
+    if old_path.exists() {
+        let _ = std::fs::rename(old_path, new_path);
+    }
+}
+
 #[tauri::command]
 async fn adb_logcat_start(serial: String, file_path: String, state: tauri::State<'_, LogcatState>) -> Result<String, String> {
-    if let Some(mut child) = state.0.lock().unwrap().remove(&serial) {
-        let _ = child.kill();
+    if let Some(mut entry) = state.0.lock().unwrap().remove(&serial) {
+        entry.stop_flag.store(true, std::sync::atomic::Ordering::Relaxed);
+        let _ = entry.child.kill();
     }
 
-    let mut file = std::fs::File::create(&file_path).map_err(|e| e.to_string())?;
+    let start_time_str = format_log_time(std::time::SystemTime::now());
+    let mut file = Some(std::fs::File::create(get_log_path(&file_path, &start_time_str))
+        .map_err(|e| format!("Failed to create log file: {}", e))?);
+    
+    let mut current_start_time_str = start_time_str.clone();
+    let mut current_size: u64 = 0;
+    const MAX_FILE_SIZE: u64 = 200 * 1024 * 1024;
+
     let mut cmd = std::process::Command::new("adb");
     #[cfg(target_os = "windows")]
-    { cmd.creation_flags(0x08000000); } // CREATE_NO_WINDOW - prevent black console window on packaged exe
+    { cmd.creation_flags(0x08000000); }
     let mut child = cmd
-        .args(["-s", &serial, "logcat", "-v", "time"])
+        .args(["-s", &serial, "logcat", "-v", "time", "-b", "all"])
         .stdout(std::process::Stdio::piped())
         .spawn()
         .map_err(|e| e.to_string())?;
 
     let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+    let stop_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let stop_flag_clone = stop_flag.clone();
+    let file_path_clone = file_path.clone();
+
     std::thread::spawn(move || {
         let reader = std::io::BufReader::new(stdout);
         let mut buf = String::with_capacity(1024);
         let mut lines_since_flush = 0;
         for line in reader.lines() {
+            if stop_flag_clone.load(std::sync::atomic::Ordering::Relaxed) {
+                break;
+            }
             match line {
                 Ok(ref s) => {
                     buf.clear();
                     buf.push_str(s);
                     buf.push('\n');
-                    if file.write_all(buf.as_bytes()).is_err() {
-                        break;
+                    let line_size = buf.len() as u64;
+                    
+                    if current_size + line_size > MAX_FILE_SIZE && current_size > 0 {
+                        let end_time_str = format_log_time(std::time::SystemTime::now());
+                        let new_start_time_str = format_log_time(std::time::SystemTime::now());
+                        
+                        if let Ok(mut new_file) = std::fs::File::create(get_log_path(&file_path_clone, &new_start_time_str)) {
+                            if let Some(f) = file.as_mut() {
+                                let _ = f.flush();
+                            }
+                            file.take();
+                            rename_log_file(&file_path_clone, &current_start_time_str, &end_time_str);
+                            
+                            current_start_time_str = new_start_time_str;
+                            current_size = line_size;
+                            lines_since_flush = 1;
+                            
+                            if new_file.write_all(buf.as_bytes()).is_err() {
+                                break;
+                            }
+                            let _ = new_file.flush();
+                            file = Some(new_file);
+                            continue;
+                        } else {
+                            break;
+                        }
                     }
-                    lines_since_flush += 1;
-                    // Flush every 10 lines or when buffer is large
-                    if lines_since_flush >= 10 {
-                        let _ = file.flush();
-                        lines_since_flush = 0;
+                    
+                    if let Some(f) = file.as_mut() {
+                        if f.write_all(buf.as_bytes()).is_err() {
+                            break;
+                        }
+                        current_size += line_size;
+                        lines_since_flush += 1;
+                        if lines_since_flush >= 10 {
+                            let _ = f.flush();
+                            lines_since_flush = 0;
+                        }
                     }
                 }
                 Err(_) => break,
             }
         }
-        let _ = file.flush();
+        let end_time_str = format_log_time(std::time::SystemTime::now());
+        if let Some(f) = file.as_mut() {
+            let _ = f.flush();
+        }
+        rename_log_file(&file_path_clone, &current_start_time_str, &end_time_str);
     });
 
-    state.0.lock().unwrap().insert(serial, child);
+    state.0.lock().unwrap().insert(serial, LogcatChild { child, stop_flag });
     Ok("Logcat started".to_string())
 }
 
 #[tauri::command]
 async fn adb_logcat_stop(serial: String, state: tauri::State<'_, LogcatState>) -> Result<String, String> {
-    if let Some(mut child) = state.0.lock().unwrap().remove(&serial) {
-        child.kill().map_err(|e| e.to_string())?;
+    if let Some(mut entry) = state.0.lock().unwrap().remove(&serial) {
+        entry.stop_flag.store(true, std::sync::atomic::Ordering::Relaxed);
+        let _ = entry.child.kill();
         Ok("Logcat stopped".to_string())
     } else {
         Ok("No active logcat".to_string())
