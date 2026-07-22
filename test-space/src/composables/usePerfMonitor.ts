@@ -12,6 +12,38 @@ export interface PerfSnapshot {
   storage_used_kb: number
   storage_avail_kb: number
   procs: PerfProcess[]
+  // Extended memory distribution
+  mem_cached_kb: number
+  mem_buffers_kb: number
+  mem_slab_kb: number
+  mem_kernel_stack_kb: number
+  mem_page_tables_kb: number
+  // PSI pressure metrics (0 if kernel doesn't support PSI)
+  pressure_mem_some_avg10: number
+  pressure_mem_some_avg60: number
+  pressure_mem_some_avg300: number
+  pressure_mem_full_avg10: number
+  pressure_mem_full_avg60: number
+  pressure_mem_full_avg300: number
+  pressure_io_some_avg10: number
+  pressure_io_some_avg60: number
+  pressure_io_some_avg300: number
+  pressure_io_full_avg10: number
+  pressure_io_full_avg60: number
+  pressure_io_full_avg300: number
+  pressure_cpu_some_avg10: number
+  pressure_cpu_some_avg60: number
+  pressure_cpu_some_avg300: number
+  pressure_cpu_full_avg10: number
+  pressure_cpu_full_avg60: number
+  pressure_cpu_full_avg300: number
+  // Network IO (cumulative bytes from /proc/net/dev)
+  net_rx_bytes: number
+  net_tx_bytes: number
+  // Device info
+  device_uptime_secs: number
+  device_date: string
+  kernel_version: string
 }
 
 export interface PerfProcess {
@@ -21,13 +53,65 @@ export interface PerfProcess {
   cpu_percent: number
 }
 
+export interface WatermarkZone {
+  name: string
+  free_kb: number
+  min_kb: number
+  low_kb: number
+  high_kb: number
+  managed_kb: number
+}
+export interface WatermarkInfo {
+  zones: WatermarkZone[]
+  total_free_pages_kb: number
+}
+
+// dumpsys meminfo -S
+export interface DumpsysMemInfo {
+  total_ram_kb: number
+  free_ram_kb: number
+  used_ram_pss_kb: number
+  used_ram_kernel_kb: number
+  processes: PssProcess[]
+}
+export interface PssProcess {
+  name: string
+  pid: number
+  pss_kb: number
+}
+
+// Incremental dmesg
+export interface DmesgPollResult {
+  new_lines: string[]
+  total_lines: number
+}
+
+// ANR / Tombstone
+export interface AnrTombstoneResult {
+  new_anr_files: string[]
+  new_tombstone_files: string[]
+}
+
 export function usePerfMonitor() {
   async function getSnapshot(serial: string, watchApp?: string): Promise<PerfSnapshot> {
-    // Tauri v2 auto-converts camelCase (JS) → snake_case (Rust), so the key MUST be
-    // `watchApp` here to match Rust's `watch_app` parameter. Using `watch_app` (snake_case)
-    // in JS does NOT work — Tauri won't convert it and Rust receives None.
     return invoke<PerfSnapshot>("perf_get_snapshot", { serial, watchApp: watchApp ?? null })
   }
 
-  return { getSnapshot }
+  async function getWatermark(serial: string): Promise<WatermarkInfo> {
+    return invoke<WatermarkInfo>("adb_get_watermark", { serial })
+  }
+
+  async function getDumpsysMeminfo(serial: string): Promise<DumpsysMemInfo> {
+    return invoke<DumpsysMemInfo>("adb_get_dumpsys_meminfo", { serial })
+  }
+
+  async function pollDmesg(serial: string, knownLines: number): Promise<DmesgPollResult> {
+    return invoke<DmesgPollResult>("adb_poll_dmesg", { serial, knownLines })
+  }
+
+  async function checkAnrTombstones(serial: string, knownAnr: string[], knownTombstone: string[]): Promise<AnrTombstoneResult> {
+    return invoke<AnrTombstoneResult>("adb_check_anr_tombstones", { serial, knownAnr, knownTombstone })
+  }
+
+  return { getSnapshot, getWatermark, getDumpsysMeminfo, pollDmesg, checkAnrTombstones }
 }

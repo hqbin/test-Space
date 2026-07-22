@@ -12,6 +12,44 @@ export interface SnapshotPoint {
   swapFreeKb: number
   storageUsedKb: number
   storageTotalKb: number
+  // Extended memory distribution
+  memCachedKb: number
+  memBuffersKb: number
+  memSlabKb: number
+  memKernelStackKb: number
+  memPageTablesKb: number
+  // Network IO (cumulative bytes)
+  netRxBytes: number
+  netTxBytes: number
+  // PSI pressure (avg10 only, sufficient for trend analysis)
+  pressureMemSomeAvg10: number
+  pressureMemFullAvg10: number
+  pressureIoSomeAvg10: number
+  pressureIoFullAvg10: number
+  pressureCpuSomeAvg10: number
+  pressureCpuFullAvg10: number
+  // Device info
+  deviceUptimeSecs: number
+}
+
+export interface DumpsysPssPoint {
+  time: number
+  usedRamPssKb: number
+  usedRamKernelKb: number
+  processes: { name: string; pssKb: number }[]
+}
+
+export interface WatermarkPoint {
+  time: number
+  nrFreePagesKb: number
+  minKb: number
+  lowKb: number
+  highKb: number
+}
+
+export interface DmesgSegment {
+  time: number
+  text: string
 }
 
 export const usePerfMonitorStore = defineStore('perfMonitor', () => {
@@ -31,6 +69,19 @@ export const usePerfMonitorStore = defineStore('perfMonitor', () => {
   const cpuTopNCount = ref(20)
   const singleAppName = ref('')
 
+  // dumpsys meminfo PSS tracking (separate from ps-based PSS)
+  const dumpsysPssHistory = ref<DumpsysPssPoint[]>([])
+  // Watermark history for chart
+  const watermarkHistory = ref<WatermarkPoint[]>([])
+  // Dmesg streaming buffer (last ~200 lines)
+  const dmesgBuffer = ref<DmesgSegment[]>([])
+  const dmesgTotalLines = ref(0)
+  // ANR / Tombstone tracking
+  const knownAnrFiles = ref<string[]>([])
+  const knownTombstoneFiles = ref<string[]>([])
+  const newAnrFiles = ref<string[]>([])
+  const newTombstoneFiles = ref<string[]>([])
+
   const currentCpu = computed(() => latestSnapshot.value?.cpu_total ?? 0)
   const currentMemUsedKb = computed(() => latestSnapshot.value ? (latestSnapshot.value.mem_total_kb - latestSnapshot.value.mem_free_kb) : 0)
   const currentMemTotalKb = computed(() => latestSnapshot.value?.mem_total_kb ?? 0)
@@ -49,6 +100,20 @@ export const usePerfMonitorStore = defineStore('perfMonitor', () => {
       swapFreeKb: snapshot.swap_free_kb,
       storageUsedKb: snapshot.storage_used_kb,
       storageTotalKb: snapshot.storage_total_kb,
+      memCachedKb: snapshot.mem_cached_kb,
+      memBuffersKb: snapshot.mem_buffers_kb,
+      memSlabKb: snapshot.mem_slab_kb,
+      memKernelStackKb: snapshot.mem_kernel_stack_kb,
+      memPageTablesKb: snapshot.mem_page_tables_kb,
+      pressureMemSomeAvg10: snapshot.pressure_mem_some_avg10,
+      pressureMemFullAvg10: snapshot.pressure_mem_full_avg10,
+      pressureIoSomeAvg10: snapshot.pressure_io_some_avg10,
+      pressureIoFullAvg10: snapshot.pressure_io_full_avg10,
+      netRxBytes: snapshot.net_rx_bytes,
+      netTxBytes: snapshot.net_tx_bytes,
+      pressureCpuSomeAvg10: snapshot.pressure_cpu_some_avg10,
+      pressureCpuFullAvg10: snapshot.pressure_cpu_full_avg10,
+      deviceUptimeSecs: snapshot.device_uptime_secs,
     }
     history.value.push(point)
     if (history.value.length > trimThreshold) {
@@ -124,6 +189,14 @@ export const usePerfMonitorStore = defineStore('perfMonitor', () => {
     latestSnapshot.value = null
     processPssHistory.value.clear()
     processCpuHistory.value.clear()
+    dumpsysPssHistory.value = []
+    watermarkHistory.value = []
+    dmesgBuffer.value = []
+    dmesgTotalLines.value = 0
+    knownAnrFiles.value = []
+    knownTombstoneFiles.value = []
+    newAnrFiles.value = []
+    newTombstoneFiles.value = []
   }
 
   function setCollecting(v: boolean) {
@@ -139,6 +212,54 @@ export const usePerfMonitorStore = defineStore('perfMonitor', () => {
   }
 
   // Restore full session: history points + per-process history + single app name
+  function addDumpsysPssPoint(data: { usedRamPssKb: number; usedRamKernelKb: number; processes: { name: string; pssKb: number }[] }) {
+    const top20 = [...data.processes].sort((a, b) => b.pssKb - a.pssKb).slice(0, 20)
+    dumpsysPssHistory.value.push({
+      time: Date.now(),
+      usedRamPssKb: data.usedRamPssKb,
+      usedRamKernelKb: data.usedRamKernelKb,
+      processes: top20,
+    })
+    if (dumpsysPssHistory.value.length > maxPoints) {
+      dumpsysPssHistory.value = dumpsysPssHistory.value.slice(-maxPoints)
+    }
+  }
+
+  function addWatermarkPoint(data: { nrFreePagesKb: number; minKb: number; lowKb: number; highKb: number }) {
+    watermarkHistory.value.push({
+      time: Date.now(),
+      nrFreePagesKb: data.nrFreePagesKb,
+      minKb: data.minKb,
+      lowKb: data.lowKb,
+      highKb: data.highKb,
+    })
+    if (watermarkHistory.value.length > maxPoints / 30) {
+      watermarkHistory.value = watermarkHistory.value.slice(-maxPoints / 30)
+    }
+  }
+
+  function addDmesgLines(lines: string[]) {
+    const now = Date.now()
+    for (const text of lines) {
+      dmesgBuffer.value.push({ time: now, text })
+    }
+    // Keep only last 500 lines for display
+    if (dmesgBuffer.value.length > 500) {
+      dmesgBuffer.value = dmesgBuffer.value.slice(-500)
+    }
+  }
+
+  function setAnrTombstoneFound(anr: string[], ts: string[]) {
+    if (anr.length > 0) {
+      newAnrFiles.value = [...newAnrFiles.value, ...anr.filter(f => !newAnrFiles.value.includes(f))]
+      knownAnrFiles.value = [...knownAnrFiles.value, ...anr]
+    }
+    if (ts.length > 0) {
+      newTombstoneFiles.value = [...newTombstoneFiles.value, ...ts.filter(f => !newTombstoneFiles.value.includes(f))]
+      knownTombstoneFiles.value = [...knownTombstoneFiles.value, ...ts]
+    }
+  }
+
   function restoreFullSession(data: {
     history: SnapshotPoint[]
     processPssHistory?: [string, { time: number; pssKb: number }[]][]
@@ -160,7 +281,10 @@ export const usePerfMonitorStore = defineStore('perfMonitor', () => {
     processPssHistory, processCpuHistory, topAppCount, cpuTopNCount, singleAppName,
     currentCpu, currentMemUsedKb, currentMemTotalKb,
     currentZramKb, currentStorageUsedKb, currentStorageTotalKb,
-    addPoint, clearHistory, setCollecting, setInterval,
+    dumpsysPssHistory, watermarkHistory, dmesgBuffer, dmesgTotalLines,
+    knownAnrFiles, knownTombstoneFiles, newAnrFiles, newTombstoneFiles,
+    addPoint, addDumpsysPssPoint, addWatermarkPoint, addDmesgLines, setAnrTombstoneFound,
+    clearHistory, setCollecting, setInterval,
     restoreHistory, restoreFullSession,
   }
 })

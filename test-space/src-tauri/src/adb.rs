@@ -4,6 +4,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
+
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 
@@ -417,6 +418,38 @@ pub struct PerfSnapshot {
     pub storage_used_kb: u64,
     pub storage_avail_kb: u64,
     pub procs: Vec<PerfProcess>,
+    // Extended memory distribution
+    pub mem_cached_kb: u64,
+    pub mem_buffers_kb: u64,
+    pub mem_slab_kb: u64,
+    pub mem_kernel_stack_kb: u64,
+    pub mem_page_tables_kb: u64,
+    // PSI pressure metrics (0.0 if kernel doesn't support PSI)
+    pub pressure_mem_some_avg10: f64,
+    pub pressure_mem_some_avg60: f64,
+    pub pressure_mem_some_avg300: f64,
+    pub pressure_mem_full_avg10: f64,
+    pub pressure_mem_full_avg60: f64,
+    pub pressure_mem_full_avg300: f64,
+    pub pressure_io_some_avg10: f64,
+    pub pressure_io_some_avg60: f64,
+    pub pressure_io_some_avg300: f64,
+    pub pressure_io_full_avg10: f64,
+    pub pressure_io_full_avg60: f64,
+    pub pressure_io_full_avg300: f64,
+    pub pressure_cpu_some_avg10: f64,
+    pub pressure_cpu_some_avg60: f64,
+    pub pressure_cpu_some_avg300: f64,
+    pub pressure_cpu_full_avg10: f64,
+    pub pressure_cpu_full_avg60: f64,
+    pub pressure_cpu_full_avg300: f64,
+    // Network IO (cumulative bytes, parsed from /proc/net/dev)
+    pub net_rx_bytes: u64,
+    pub net_tx_bytes: u64,
+    // Device info
+    pub device_uptime_secs: f64,
+    pub device_date: String,
+    pub kernel_version: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -437,9 +470,9 @@ fn parse_kb_val(line: &str) -> u64 {
 }
 
 pub fn get_perf_snapshot(serial: &str, watch_app: Option<&str>) -> Result<PerfSnapshot, String> {
-    // Collect meminfo, top, df, and ps in a single shell call.
-    // Use `ps -A` (not `-o PID,PSS,NAME` which is unsupported on many Android devices).
-    let combined = shell_command(serial, "cat /proc/meminfo 2>/dev/null; echo '---TOP---'; top -n 1 -b 2>/dev/null; echo '---DF---'; df /data 2>/dev/null; echo '---PROC---'; ps -A 2>/dev/null")?;
+    // Collect meminfo, top, df, ps, pressure, uptime, and version in a single shell call.
+    // Using a single ADB shell invocation to minimize latency on every poll cycle.
+    let combined = shell_command(serial, "cat /proc/meminfo 2>/dev/null; echo '---TOP---'; top -n 1 -d 1 -b 2>/dev/null; echo '---DF---'; df /data 2>/dev/null; echo '---PROC---'; ps -A 2>/dev/null; echo '---PRESSURE---'; cat /proc/pressure/memory 2>/dev/null; echo '---IOPRESSURE---'; cat /proc/pressure/io 2>/dev/null; echo '---CPURESSURE---'; cat /proc/pressure/cpu 2>/dev/null; echo '---NET---'; cat /proc/net/dev 2>/dev/null; echo '---UPTIME---'; cat /proc/uptime 2>/dev/null; echo '---DATE---'; date +%s 2>/dev/null; echo '---VERSION---'; cat /proc/version 2>/dev/null")?;
 
     let mut mem_total_kb: u64 = 0;
     let mut mem_free_kb: u64 = 0;
@@ -448,11 +481,47 @@ pub fn get_perf_snapshot(serial: &str, watch_app: Option<&str>) -> Result<PerfSn
     let mut swap_free_kb: u64 = 0;
 
     let mut cpu_total: f64 = 0.0;
-    let mut core_count: f64 = 1.0; // number of CPU cores, derived from %cpu line
+    let mut core_count: f64 = 1.0;
     let mut storage_total_kb: u64 = 0;
     let mut storage_used_kb: u64 = 0;
     let mut storage_avail_kb: u64 = 0;
     let mut zram_total_kb: u64 = 0;
+
+    // Extended memory distribution fields
+    let mut mem_cached_kb: u64 = 0;
+    let mut mem_buffers_kb: u64 = 0;
+    let mut mem_slab_kb: u64 = 0;
+    let mut mem_kernel_stack_kb: u64 = 0;
+    let mut mem_page_tables_kb: u64 = 0;
+
+    // PSI pressure default to 0.0 (will stay 0 on kernels without PSI support)
+    let mut pressure_mem_some_avg10: f64 = 0.0;
+    let mut pressure_mem_some_avg60: f64 = 0.0;
+    let mut pressure_mem_some_avg300: f64 = 0.0;
+    let mut pressure_mem_full_avg10: f64 = 0.0;
+    let mut pressure_mem_full_avg60: f64 = 0.0;
+    let mut pressure_mem_full_avg300: f64 = 0.0;
+    let mut pressure_io_some_avg10: f64 = 0.0;
+    let mut pressure_io_some_avg60: f64 = 0.0;
+    let mut pressure_io_some_avg300: f64 = 0.0;
+    let mut pressure_io_full_avg10: f64 = 0.0;
+    let mut pressure_io_full_avg60: f64 = 0.0;
+    let mut pressure_io_full_avg300: f64 = 0.0;
+    let mut pressure_cpu_some_avg10: f64 = 0.0;
+    let mut pressure_cpu_some_avg60: f64 = 0.0;
+    let mut pressure_cpu_some_avg300: f64 = 0.0;
+    let mut pressure_cpu_full_avg10: f64 = 0.0;
+    let mut pressure_cpu_full_avg60: f64 = 0.0;
+    let mut pressure_cpu_full_avg300: f64 = 0.0;
+
+    // Network IO
+    let mut net_rx_bytes: u64 = 0;
+    let mut net_tx_bytes: u64 = 0;
+
+    // Device info
+    let mut device_uptime_secs: f64 = 0.0;
+    let mut device_date: String = String::new();
+    let mut kernel_version: String = String::new();
 
     // PID -> (name, pss_kb) — primary source is dumpsys meminfo (accurate PSS)
     let mut pid_to_pss: std::collections::HashMap<u32, (String, u64)> = std::collections::HashMap::new();
@@ -468,6 +537,13 @@ pub fn get_perf_snapshot(serial: &str, watch_app: Option<&str>) -> Result<PerfSn
             "---TOP---" => { section = "top"; continue; }
             "---DF---" => { section = "df"; continue; }
             "---PROC---" => { section = "proc"; continue; }
+            "---PRESSURE---" => { section = "pressure"; continue; }
+            "---IOPRESSURE---" => { section = "iopressure"; continue; }
+            "---CPURESSURE---" => { section = "cpupressure"; continue; }
+            "---NET---" => { section = "net"; continue; }
+            "---UPTIME---" => { section = "uptime"; continue; }
+            "---DATE---" => { section = "date"; continue; }
+            "---VERSION---" => { section = "version"; continue; }
             _ => {}
         }
 
@@ -478,6 +554,11 @@ pub fn get_perf_snapshot(serial: &str, watch_app: Option<&str>) -> Result<PerfSn
                 else if line.starts_with("MemAvailable:") { mem_avail_kb = parse_kb_val(line); }
                 else if line.starts_with("SwapTotal:") { swap_total_kb = parse_kb_val(line); }
                 else if line.starts_with("SwapFree:") { swap_free_kb = parse_kb_val(line); }
+                else if line.starts_with("Cached:") { mem_cached_kb = parse_kb_val(line); }
+                else if line.starts_with("Buffers:") { mem_buffers_kb = parse_kb_val(line); }
+                else if line.starts_with("Slab:") { mem_slab_kb = parse_kb_val(line); }
+                else if line.starts_with("KernelStack:") { mem_kernel_stack_kb = parse_kb_val(line); }
+                else if line.starts_with("PageTables:") { mem_page_tables_kb = parse_kb_val(line); }
             }
             "top" => {
                 let trimmed = line.trim();
@@ -566,6 +647,115 @@ pub fn get_perf_snapshot(serial: &str, watch_app: Option<&str>) -> Result<PerfSn
                     }
                 }
             }
+            "pressure" => {
+                // /proc/pressure/memory format:
+                //   some avg10=0.00 avg60=0.00 avg300=0.00 total=0
+                //   full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+                let trimmed = line.trim();
+                if trimmed.starts_with("some") {
+                    for word in trimmed.split_whitespace() {
+                        if let Some(val) = word.strip_prefix("avg10=") {
+                            pressure_mem_some_avg10 = val.parse::<f64>().unwrap_or(0.0);
+                        } else if let Some(val) = word.strip_prefix("avg60=") {
+                            pressure_mem_some_avg60 = val.parse::<f64>().unwrap_or(0.0);
+                        } else if let Some(val) = word.strip_prefix("avg300=") {
+                            pressure_mem_some_avg300 = val.parse::<f64>().unwrap_or(0.0);
+                        }
+                    }
+                } else if trimmed.starts_with("full") {
+                    for word in trimmed.split_whitespace() {
+                        if let Some(val) = word.strip_prefix("avg10=") {
+                            pressure_mem_full_avg10 = val.parse::<f64>().unwrap_or(0.0);
+                        } else if let Some(val) = word.strip_prefix("avg60=") {
+                            pressure_mem_full_avg60 = val.parse::<f64>().unwrap_or(0.0);
+                        } else if let Some(val) = word.strip_prefix("avg300=") {
+                            pressure_mem_full_avg300 = val.parse::<f64>().unwrap_or(0.0);
+                        }
+                    }
+                }
+            }
+            "iopressure" => {
+                let trimmed = line.trim();
+                if trimmed.starts_with("some") {
+                    for word in trimmed.split_whitespace() {
+                        if let Some(val) = word.strip_prefix("avg10=") {
+                            pressure_io_some_avg10 = val.parse::<f64>().unwrap_or(0.0);
+                        } else if let Some(val) = word.strip_prefix("avg60=") {
+                            pressure_io_some_avg60 = val.parse::<f64>().unwrap_or(0.0);
+                        } else if let Some(val) = word.strip_prefix("avg300=") {
+                            pressure_io_some_avg300 = val.parse::<f64>().unwrap_or(0.0);
+                        }
+                    }
+                } else if trimmed.starts_with("full") {
+                    for word in trimmed.split_whitespace() {
+                        if let Some(val) = word.strip_prefix("avg10=") {
+                            pressure_io_full_avg10 = val.parse::<f64>().unwrap_or(0.0);
+                        } else if let Some(val) = word.strip_prefix("avg60=") {
+                            pressure_io_full_avg60 = val.parse::<f64>().unwrap_or(0.0);
+                        } else if let Some(val) = word.strip_prefix("avg300=") {
+                            pressure_io_full_avg300 = val.parse::<f64>().unwrap_or(0.0);
+                        }
+                    }
+                }
+            }
+            "cpupressure" => {
+                let trimmed = line.trim();
+                if trimmed.starts_with("some") {
+                    for word in trimmed.split_whitespace() {
+                        if let Some(val) = word.strip_prefix("avg10=") {
+                            pressure_cpu_some_avg10 = val.parse::<f64>().unwrap_or(0.0);
+                        } else if let Some(val) = word.strip_prefix("avg60=") {
+                            pressure_cpu_some_avg60 = val.parse::<f64>().unwrap_or(0.0);
+                        } else if let Some(val) = word.strip_prefix("avg300=") {
+                            pressure_cpu_some_avg300 = val.parse::<f64>().unwrap_or(0.0);
+                        }
+                    }
+                } else if trimmed.starts_with("full") {
+                    for word in trimmed.split_whitespace() {
+                        if let Some(val) = word.strip_prefix("avg10=") {
+                            pressure_cpu_full_avg10 = val.parse::<f64>().unwrap_or(0.0);
+                        } else if let Some(val) = word.strip_prefix("avg60=") {
+                            pressure_cpu_full_avg60 = val.parse::<f64>().unwrap_or(0.0);
+                        } else if let Some(val) = word.strip_prefix("avg300=") {
+                            pressure_cpu_full_avg300 = val.parse::<f64>().unwrap_or(0.0);
+                        }
+                    }
+                }
+            }
+            "uptime" => {
+                // /proc/uptime: "uptime_seconds idle_seconds"
+                let trimmed = line.trim();
+                if let Some(first) = trimmed.split_whitespace().next() {
+                    device_uptime_secs = first.parse::<f64>().unwrap_or(0.0);
+                }
+            }
+            "net" => {
+                // /proc/net/dev: "  wlan0: 12345678 12345 ... 87654321 54321 ..."
+                // Sum RX/TX bytes from all non-loopback interfaces for total device IO
+                let trimmed = line.trim();
+                if let Some(pos) = trimmed.find(':') {
+                    let iface = trimmed[..pos].trim();
+                    if iface != "lo" && !iface.is_empty() {
+                        let rest = trimmed[pos+1..].trim();
+                        let parts: Vec<&str> = rest.split_whitespace().collect();
+                        if parts.len() >= 9 {
+                            if let Ok(rx) = parts[0].parse::<u64>() { net_rx_bytes += rx; }
+                            if let Ok(tx) = parts[8].parse::<u64>() { net_tx_bytes += tx; }
+                        }
+                    }
+                }
+            }
+            "date" => {
+                // date +%s: epoch seconds from device
+                device_date = line.trim().to_string();
+            }
+            "version" => {
+                // /proc/version: "Linux version 5.10.149-android12-9-...
+                let trimmed = line.trim();
+                if !trimmed.is_empty() {
+                    kernel_version = trimmed.to_string();
+                }
+            }
             _ => {}
         }
     }
@@ -616,9 +806,10 @@ pub fn get_perf_snapshot(serial: &str, watch_app: Option<&str>) -> Result<PerfSn
                                 .collect();
                             let name = name_parts.join(" ");
                             if !name.is_empty() {
-                                let pid = tokens.iter().find(|t| t.starts_with("(pid"))
-                                    .and_then(|t| t.strip_prefix("(pid"))
-                                    .and_then(|s| s.trim_end_matches(')').trim().parse::<u32>().ok())
+                                let pid = tokens.iter()
+                                    .position(|t| t.starts_with("(pid"))
+                                    .and_then(|pos| tokens.get(pos + 1))
+                                    .and_then(|s| s.trim_end_matches(')').parse::<u32>().ok())
                                     .unwrap_or(0);
                                 if pid > 0 {
                                     pid_to_pss.insert(pid, (name, size_kb));
@@ -736,5 +927,304 @@ pub fn get_perf_snapshot(serial: &str, watch_app: Option<&str>) -> Result<PerfSn
         storage_used_kb,
         storage_avail_kb,
         procs,
+        mem_cached_kb,
+        mem_buffers_kb,
+        mem_slab_kb,
+        mem_kernel_stack_kb,
+        mem_page_tables_kb,
+        pressure_mem_some_avg10,
+        pressure_mem_some_avg60,
+        pressure_mem_some_avg300,
+        pressure_mem_full_avg10,
+        pressure_mem_full_avg60,
+        pressure_mem_full_avg300,
+        pressure_io_some_avg10,
+        pressure_io_some_avg60,
+        pressure_io_some_avg300,
+        pressure_io_full_avg10,
+        pressure_io_full_avg60,
+        pressure_io_full_avg300,
+        pressure_cpu_some_avg10,
+        pressure_cpu_some_avg60,
+        pressure_cpu_some_avg300,
+        pressure_cpu_full_avg10,
+        pressure_cpu_full_avg60,
+        pressure_cpu_full_avg300,
+        net_rx_bytes,
+        net_tx_bytes,
+        device_uptime_secs,
+        device_date,
+        kernel_version,
     })
+}
+
+// Watermark analysis: parse /proc/zoneinfo for min/low/high watermark levels per zone.
+// Returns a JSON-friendly struct. This is collected separately (every 60s) because
+// /proc/zoneinfo can be very large on some devices.
+#[derive(Serialize)]
+pub struct WatermarkInfo {
+    pub zones: Vec<ZoneWatermark>,
+    pub total_free_pages_kb: u64,
+}
+
+#[derive(Serialize)]
+pub struct ZoneWatermark {
+    pub name: String,
+    pub free_kb: u64,
+    pub min_kb: u64,
+    pub low_kb: u64,
+    pub high_kb: u64,
+    pub managed_kb: u64,
+}
+
+// ── dumpsys meminfo -S: per-process PSS tracking ──
+
+#[derive(Serialize)]
+pub struct DumpsysMemInfo {
+    pub total_ram_kb: u64,
+    pub free_ram_kb: u64,
+    pub used_ram_pss_kb: u64,
+    pub used_ram_kernel_kb: u64,
+    pub processes: Vec<PssProcess>,
+}
+
+#[derive(Serialize)]
+pub struct PssProcess {
+    pub name: String,
+    pub pid: u32,
+    pub pss_kb: u64,
+}
+
+pub fn get_dumpsys_meminfo(serial: &str) -> Result<DumpsysMemInfo, String> {
+    let output = shell_command(serial, "dumpsys meminfo -S 2>/dev/null")?;
+    let mut total_ram_kb: u64 = 0;
+    let mut free_ram_kb: u64 = 0;
+    let mut used_ram_pss_kb: u64 = 0;
+    let mut used_ram_kernel_kb: u64 = 0;
+    let mut processes: Vec<PssProcess> = Vec::new();
+
+    let mut in_process_list = false;
+
+    for line in output.lines() {
+        let trimmed = line.trim();
+
+        if !in_process_list {
+            // Parse summary header
+            if trimmed.starts_with("Total RAM:") {
+                // "Total RAM: 3,456,789 KB (Free: 1,234,567 KB)"
+                if let Some(rest) = trimmed.strip_prefix("Total RAM:") {
+                    for part in rest.split_whitespace() {
+                        let clean = part.replace(',', "");
+                        if let Ok(v) = clean.parse::<u64>() {
+                            if total_ram_kb == 0 { total_ram_kb = v; }
+                        }
+                    }
+                }
+                // Also parse Free from within parentheses
+                if let Some(free_start) = trimmed.find("Free:") {
+                    let free_str = &trimmed[free_start + 5..];
+                    for part in free_str.split_whitespace() {
+                        let clean = part.replace(',', "").replace("KB", "").replace("kB", "");
+                        if let Ok(v) = clean.parse::<u64>() {
+                            free_ram_kb = v;
+                            break;
+                        }
+                    }
+                }
+            } else if trimmed.starts_with("Used RAM:") {
+                // "Used RAM: 2,222,222 KB (Used RAM PSS: 1,500,000 KB Used RAM Kernel: 222,222 KB)"
+                if let Some(pss_start) = trimmed.find("Used RAM PSS:") {
+                    let pss_str = &trimmed[pss_start + 13..];
+                    for part in pss_str.split_whitespace() {
+                        let clean = part.replace(',', "");
+                        if let Ok(v) = clean.parse::<u64>() {
+                            used_ram_pss_kb = v;
+                            break;
+                        }
+                    }
+                }
+                if let Some(kernel_start) = trimmed.find("Used RAM Kernel:") {
+                    let kernel_str = &trimmed[kernel_start + 16..];
+                    for part in kernel_str.split_whitespace() {
+                        let clean = part.replace(',', "");
+                        if let Ok(v) = clean.parse::<u64>() {
+                            used_ram_kernel_kb = v;
+                            break;
+                        }
+                    }
+                }
+            } else if trimmed == "Process list:" {
+                in_process_list = true;
+            }
+        } else {
+            // In process list section
+            if trimmed.is_empty() || trimmed == "Process list:" {
+                continue;
+            }
+            // Detect process header: "  com.example.app (PID 1234):"
+            if trimmed.contains("(PID") && trimmed.ends_with(':') {
+                let pid_start = match trimmed.rfind("(PID") {
+                    Some(p) => p + 4,
+                    None => continue,
+                };
+                let pid_end = match trimmed[pid_start..].find(')') {
+                    Some(p) => pid_start + p,
+                    None => continue,
+                };
+                let pid_str = trimmed[pid_start..pid_end].trim();
+                let pid = pid_str.parse::<u32>().unwrap_or(0);
+                let name = trimmed[..trimmed.rfind("(PID").unwrap_or(0)].trim().to_string();
+
+                // Read next lines for PSS
+                // We'll store the current process and fill in PSS from subsequent lines
+                processes.push(PssProcess {
+                    name,
+                    pid,
+                    pss_kb: 0,
+                });
+            } else if trimmed.starts_with("PSS:") && !processes.is_empty() {
+                // "PSS: 12345 KB"
+                let val_str = trimmed
+                    .strip_prefix("PSS:")
+                    .unwrap_or("")
+                    .replace("KB", "")
+                    .replace("kB", "")
+                    .trim()
+                    .replace(',', "");
+                if let Ok(v) = val_str.parse::<u64>() {
+                    if let Some(last) = processes.last_mut() {
+                        last.pss_kb = v;
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(DumpsysMemInfo {
+        total_ram_kb,
+        free_ram_kb,
+        used_ram_pss_kb,
+        used_ram_kernel_kb,
+        processes,
+    })
+}
+
+// ── Incremental dmesg polling ──
+
+#[derive(Serialize)]
+pub struct DmesgPollResult {
+    pub new_lines: Vec<String>,
+    pub total_lines: usize,
+}
+
+pub fn poll_dmesg(serial: &str, known_lines: usize) -> Result<DmesgPollResult, String> {
+    let output = shell_command(serial, "dmesg 2>/dev/null")?;
+    let lines: Vec<&str> = output.lines().collect();
+    let total = lines.len();
+    if total <= known_lines {
+        return Ok(DmesgPollResult { new_lines: vec![], total_lines: total });
+    }
+    let new_lines: Vec<String> = lines[known_lines..].iter().map(|s| s.to_string()).collect();
+    Ok(DmesgPollResult { new_lines, total_lines: total })
+}
+
+// ── ANR / Tombstone detection ──
+
+#[derive(Serialize)]
+pub struct AnrTombstoneResult {
+    pub new_anr_files: Vec<String>,
+    pub new_tombstone_files: Vec<String>,
+}
+
+pub fn check_anr_tombstones(serial: &str, known_anr: &[String], known_tombstone: &[String]) -> Result<AnrTombstoneResult, String> {
+    let anr_list = shell_command(serial, "ls /data/anr/ 2>/dev/null").unwrap_or_default();
+    let ts_list = shell_command(serial, "ls /data/tombstones/ 2>/dev/null").unwrap_or_default();
+
+    let new_anr: Vec<String> = anr_list
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|f| !f.is_empty() && f != "ls:" && !f.contains("No such file") && f != "/data/anr/:" && !known_anr.contains(f))
+        .collect();
+    let new_ts: Vec<String> = ts_list
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|f| !f.is_empty() && f != "ls:" && !f.contains("No such file") && f != "/data/tombstones/:" && !known_tombstone.contains(f))
+        .collect();
+
+    Ok(AnrTombstoneResult { new_anr_files: new_anr, new_tombstone_files: new_ts })
+}
+
+pub fn get_watermark_info(serial: &str) -> Result<WatermarkInfo, String> {
+    let output = shell_command(serial, "cat /proc/zoneinfo 2>/dev/null")?;
+    let mut zones: Vec<ZoneWatermark> = Vec::new();
+    let mut total_free_pages_kb: u64 = 0;
+    let mut current_name = String::new();
+    let mut current_free: u64 = 0;
+    let mut current_min: u64 = 0;
+    let mut current_low: u64 = 0;
+    let mut current_high: u64 = 0;
+    let mut current_managed: u64 = 0;
+
+    for line in output.lines() {
+        let trimmed = line.trim();
+        // "Node 0, zone      DMA" or "Node 0, zone    DMA32" or "Node 0, zone   Normal"
+        if trimmed.contains("zone") && trimmed.starts_with("Node") {
+            if !current_name.is_empty() {
+                zones.push(ZoneWatermark {
+                    name: current_name.clone(),
+                    free_kb: current_free,
+                    min_kb: current_min,
+                    low_kb: current_low,
+                    high_kb: current_high,
+                    managed_kb: current_managed,
+                });
+            }
+            // Extract zone name after "zone"
+            let parts: Vec<&str> = trimmed.split_whitespace().collect();
+            if let Some(pos) = parts.iter().position(|&p| p == "zone") {
+                if pos + 1 < parts.len() {
+                    current_name = parts[pos + 1].to_string();
+                }
+            }
+            current_free = 0; current_min = 0; current_low = 0; current_high = 0; current_managed = 0;
+        } else if trimmed.starts_with("pages free") {
+            if let Some(v) = trimmed.split_whitespace().nth(2) {
+                current_free = v.parse::<u64>().unwrap_or(0);
+            }
+        } else if trimmed.starts_with("min") && !trimmed.starts_with("min_unmapped") {
+            if let Some(v) = trimmed.split_whitespace().nth(1) {
+                current_min = v.parse::<u64>().unwrap_or(0);
+            }
+        } else if trimmed.starts_with("low") && !trimmed.starts_with("lowmem") {
+            if let Some(v) = trimmed.split_whitespace().nth(1) {
+                current_low = v.parse::<u64>().unwrap_or(0);
+            }
+        } else if trimmed.starts_with("high") {
+            if let Some(v) = trimmed.split_whitespace().nth(1) {
+                current_high = v.parse::<u64>().unwrap_or(0);
+            }
+        } else if trimmed.starts_with("managed") {
+            if let Some(v) = trimmed.split_whitespace().nth(1) {
+                current_managed = v.parse::<u64>().unwrap_or(0);
+            }
+        }
+    }
+    // Push last zone
+    if !current_name.is_empty() {
+        zones.push(ZoneWatermark {
+            name: current_name.clone(),
+            free_kb: current_free,
+            min_kb: current_min,
+            low_kb: current_low,
+            high_kb: current_high,
+            managed_kb: current_managed,
+        });
+    }
+
+    // Calculate total free pages (in KB: zoneinfo uses 4KB pages)
+    for z in &zones {
+        total_free_pages_kb += z.free_kb * 4;
+    }
+
+    Ok(WatermarkInfo { zones, total_free_pages_kb })
 }

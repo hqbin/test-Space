@@ -91,9 +91,9 @@
       </button>
     </div>
 
-    <!-- Top N app memory (top) + CPU (bottom) -->
-    <div class="flex flex-col gap-4 flex-1 min-h-0">
-      <div v-show="chartVisibility.topApp" class="glass-panel rounded-xl p-4 shadow-md flex flex-col min-h-0 flex-1">
+    <!-- Chart panels (scrollable) -->
+    <div class="flex flex-col gap-2 flex-1 min-h-0 overflow-y-auto custom-scrollbar pb-1">
+      <div v-show="chartVisibility.topApp" class="glass-panel rounded-xl p-4 shadow-md flex flex-col flex-1 min-h-0" style="min-height:220px">
         <h3 class="font-label-md text-label-md text-on-surface mb-2 shrink-0 flex items-center gap-2 flex-wrap">
           <span class="material-symbols-outlined text-[16px] text-secondary">lan</span>Top{{ store.topAppCount }} 应用内存
             <span class="flex items-center gap-1 ml-auto">
@@ -113,7 +113,7 @@
         <div ref="topAppChartRef" class="flex-1 min-h-0"></div>
       </div>
 
-      <div v-show="chartVisibility.cpu" class="glass-panel rounded-xl p-4 shadow-md flex flex-col min-h-0 flex-1">
+      <div v-show="chartVisibility.cpu" class="glass-panel rounded-xl p-4 shadow-md flex flex-col flex-1 min-h-0" style="min-height:220px">
         <h3 class="font-label-md text-label-md text-on-surface mb-2 shrink-0 flex items-center gap-2 flex-wrap">
           <span class="material-symbols-outlined text-[16px] text-secondary">memory</span>Top{{ store.cpuTopNCount }} 应用CPU使用率
           <span class="flex items-center gap-1 ml-auto">
@@ -132,10 +132,52 @@
         </h3>
         <div ref="cpuChartRef" class="flex-1 min-h-0"></div>
       </div>
+
+      <!-- Device Info Panel -->
+      <div v-show="chartVisibility.deviceInfo" class="glass-panel rounded-xl p-3 px-4 shadow-md flex items-center gap-3 flex-wrap shrink-0">
+        <span class="material-symbols-outlined text-[16px] text-secondary">devices</span>
+        <span class="font-body-sm text-body-sm text-on-surface">设备开机运行: <strong>{{ formatUptime(uptimeSecs) }}</strong></span>
+        <span class="h-4 w-[1px] bg-glass-border-dark"></span>
+        <span class="font-body-sm text-body-sm text-on-surface" style="max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">内核: <strong>{{ kernelVersion }}</strong></span>
+        <span class="h-4 w-[1px] bg-glass-border-dark"></span>
+        <span class="font-body-sm text-body-sm text-on-surface">设备时间: <strong>{{ deviceDateFormatted }}</strong></span>
+        <span v-if="watermarkSummary" class="h-4 w-[1px] bg-glass-border-dark"></span>
+        <span v-if="watermarkSummary" class="font-caption text-caption text-on-surface-variant" style="max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" :title="watermarkSummary">水位线: <strong>{{ watermarkSummary }}</strong></span>
+        <button class="glass-hover rounded-lg p-1 ml-auto" @click="toggleChartVisibility('deviceInfo')">
+          <span class="material-symbols-outlined text-[14px]">visibility_off</span>
+        </button>
+      </div>
+
+      <!-- Dmesg Streaming -->
+      <div v-show="chartVisibility.deviceInfo" class="glass-panel rounded-xl p-3 px-4 shadow-md flex flex-col shrink-0">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-[14px] text-secondary">terminal</span>
+          <span class="font-caption text-caption text-on-surface-variant">dmesg 流</span>
+          <span class="font-caption text-caption text-on-surface-variant">({{ store.dmesgBuffer.length }} 条 / {{ store.dmesgTotalLines }} 总)</span>
+          <!-- ANR / Tombstone notification -->
+          <div v-if="store.newAnrFiles.length > 0 || store.newTombstoneFiles.length > 0" class="flex items-center gap-1 ml-2">
+            <span class="material-symbols-outlined text-[14px] text-error">warning</span>
+            <span v-if="store.newAnrFiles.length > 0" class="font-caption text-caption text-error">{{ store.newAnrFiles.length }} ANR</span>
+            <span v-if="store.newTombstoneFiles.length > 0" class="font-caption text-caption text-error">{{ store.newTombstoneFiles.length }} Tombstone</span>
+            <button class="glass-hover rounded-lg px-1.5 py-0.5 text-caption" @click="store.newAnrFiles = []; store.newTombstoneFiles = []">清除</button>
+          </div>
+          <button v-if="showDmesg" class="glass-hover rounded-lg p-1 ml-auto" @click="showDmesg = false">
+            <span class="material-symbols-outlined text-[14px]">expand_less</span>
+          </button>
+          <button v-else class="glass-hover rounded-lg p-1 ml-auto" @click="showDmesg = true">
+            <span class="material-symbols-outlined text-[14px]">expand_more</span>
+          </button>
+        </div>
+        <div v-if="showDmesg" class="mt-1 bg-black/5 rounded-lg p-2 max-h-[200px] overflow-y-auto font-mono text-caption leading-tight custom-scrollbar select-text" style="font-size:10px">
+          <div v-for="seg in store.dmesgBuffer.slice(-200)" :key="seg.time + seg.text.slice(0,20)" class="text-on-surface-variant">
+            {{ seg.text }}
+          </div>
+          <div v-if="store.dmesgBuffer.length === 0" class="text-on-surface-variant/50 italic">等待 dmesg 数据...</div>
+        </div>
+      </div>
     </div>
 
     
-
     <!-- Save Session Dialog -->
     <Teleport to="body">
       <Transition name="fade">
@@ -242,7 +284,7 @@
 import { ref, computed, watch, onMounted, onUnmounted, onActivated, onDeactivated, nextTick, type Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from '@/composables/useI18n'
-import { usePerfMonitor, type PerfSnapshot } from '@/composables/usePerfMonitor'
+import { usePerfMonitor, type PerfSnapshot, type WatermarkInfo, type DumpsysMemInfo, type DmesgPollResult, type AnrTombstoneResult } from '@/composables/usePerfMonitor'
 import { useAdb } from '@/composables/useAdb'
 import { usePerfMonitorStore } from '@/stores/usePerfMonitorStore'
 import { savePerfSession, listPerfSessions, deletePerfSession, type PerfSessionRow } from '@/services/database'
@@ -257,7 +299,7 @@ defineOptions({ name: 'PerfMonitorPage' })
 
 const router = useRouter()
 const { t } = useI18n()
-const { getSnapshot } = usePerfMonitor()
+const { getSnapshot, getWatermark, getDumpsysMeminfo, pollDmesg, checkAnrTombstones } = usePerfMonitor()
 const { shell, rootDevice, pullFile } = useAdb()
 const store = usePerfMonitorStore()
 
@@ -269,18 +311,18 @@ const intervalMs = ref(String(store.intervalMs))
 const isPageActive = ref(true)
 
 // Chart visibility state with localStorage persistence
-const chartVisibility = ref(JSON.parse(localStorage.getItem('perfChartVisibility') || '{"cpu": true, "topApp": true}'))
+const chartVisibility = ref<Record<string, boolean>>(JSON.parse(localStorage.getItem('perfChartVisibility') || '{"cpu":true,"topApp":true,"deviceInfo":true}'))
 watch(chartVisibility, (val, oldVal) => {
   localStorage.setItem('perfChartVisibility', JSON.stringify(val))
-  // Resize charts when they become visible
   nextTick(() => {
     if (val.cpu && !oldVal.cpu) cpuChart?.resize()
     if (val.topApp && !oldVal.topApp) topAppChart?.resize()
   })
 }, { deep: true })
 
-function toggleChartVisibility(chart: 'cpu' | 'topApp') {
+function toggleChartVisibility(chart: string) {
   chartVisibility.value[chart] = !chartVisibility.value[chart]
+  localStorage.setItem('perfChartVisibility', JSON.stringify(chartVisibility.value))
 }
 
 // Track highlighted series for tooltip filtering
@@ -492,6 +534,112 @@ let topAppChart: echarts.ECharts | null = null
 let chartResizeObserver: ResizeObserver | null = null
 const cpuChartRef = ref<HTMLElement | null>(null)
 const topAppChartRef = ref<HTMLElement | null>(null)
+
+// Watermark state (collected every 60s)
+const watermarkInfo = ref<WatermarkInfo | null>(null)
+let watermarkTimer: ReturnType<typeof setInterval> | null = null
+const watermarkSummary = computed(() => {
+  const w = watermarkInfo.value
+  if (!w || !w.zones || w.zones.length === 0) return ''
+  return w.zones.map(z => `${z.name}: free=${(z.free_kb*4/1024).toFixed(0)}M min=${(z.min_kb*4/1024).toFixed(0)}M low=${(z.low_kb*4/1024).toFixed(0)}M high=${(z.high_kb*4/1024).toFixed(0)}M`).join(' | ')
+})
+async function collectWatermark(serial: string) {
+  if (!serial) return
+  try {
+    const w = await getWatermark(serial)
+    watermarkInfo.value = w
+    // Store history for chart
+    const allMin = w.zones.reduce((s, z) => s + z.min_kb, 0)
+    const allLow = w.zones.reduce((s, z) => s + z.low_kb, 0)
+    const allHigh = w.zones.reduce((s, z) => s + z.high_kb, 0)
+    store.addWatermarkPoint({
+      nrFreePagesKb: w.total_free_pages_kb,
+      minKb: allMin * 4,
+      lowKb: allLow * 4,
+      highKb: allHigh * 4,
+    })
+  } catch {}
+}
+
+// Dumpsys PSS tracking (every 30s)
+let dumpsysTimer: ReturnType<typeof setInterval> | null = null
+const dumpsysInfo = ref<DumpsysMemInfo | null>(null)
+async function pollDumpsys(serial: string) {
+  if (!serial) return
+  try {
+    const info = await getDumpsysMeminfo(serial)
+    dumpsysInfo.value = info
+    store.addDumpsysPssPoint({
+      usedRamPssKb: info.used_ram_pss_kb,
+      usedRamKernelKb: info.used_ram_kernel_kb,
+      processes: info.processes.map(p => ({ name: p.name, pssKb: p.pss_kb })),
+    })
+  } catch {}
+}
+
+// Dmesg streaming (every 30s)
+let dmesgTimer: ReturnType<typeof setInterval> | null = null
+async function pollDmesgStream(serial: string) {
+  if (!serial) return
+  try {
+    const result = await pollDmesg(serial, store.dmesgTotalLines)
+    store.dmesgTotalLines = result.total_lines
+    if (result.new_lines.length > 0) {
+      store.addDmesgLines(result.new_lines)
+    }
+  } catch {}
+}
+
+// ANR / Tombstone detection (every 60s)
+let anrTimer: ReturnType<typeof setInterval> | null = null
+async function pollAnrTombstones(serial: string, logDir: string) {
+  if (!serial) return
+  try {
+    const result = await checkAnrTombstones(serial, store.knownAnrFiles, store.knownTombstoneFiles)
+    if (result.new_anr_files.length > 0 || result.new_tombstone_files.length > 0) {
+      store.setAnrTombstoneFound(result.new_anr_files, result.new_tombstone_files)
+      // Pull new files into anr/ and tombstone/ subdirectories (same as captureOneTimeLogs)
+      const anrDir = logDir + 'anr/'
+      const tombDir = logDir + 'tombstone/'
+      try { await mkdir(anrDir, { recursive: true }) } catch {}
+      try { await mkdir(tombDir, { recursive: true }) } catch {}
+      for (const f of result.new_anr_files) {
+        try {
+          await invoke("adb_pull", { serial, remote: '/data/anr/' + f, local: anrDir + f })
+        } catch {}
+      }
+      for (const f of result.new_tombstone_files) {
+        try {
+          await invoke("adb_pull", { serial, remote: '/data/tombstones/' + f, local: tombDir + f })
+        } catch {}
+      }
+    }
+  } catch {}
+}
+
+const showDmesg = ref(false)
+
+// Reactive device info (updated every snapshot)
+const uptimeSecs = ref(0)
+const kernelVersion = ref('')
+const deviceDate = ref('')
+const deviceDateFormatted = computed(() => {
+  if (!deviceDate.value) return '--'
+  const d = new Date(parseInt(deviceDate.value) * 1000)
+  if (isNaN(d.getTime())) return deviceDate.value
+  return d.toLocaleString()
+})
+function formatUptime(secs: number): string {
+  if (secs <= 0) return '--'
+  const d = Math.floor(secs / 86400)
+  const h = Math.floor((secs % 86400) / 3600)
+  const m = Math.floor((secs % 3600) / 60)
+  const s = Math.floor(secs % 60)
+  if (d > 0) return `${d}d ${h}h ${m}m`
+  if (h > 0) return `${h}h ${m}m ${s}s`
+  if (m > 0) return `${m}m ${s}s`
+  return `${s}s`
+}
 
 // Toast
 const toastMsg = ref('')
@@ -967,17 +1115,17 @@ async function exportReport() {
     if (!dir) return
 
     // Load full data from CSV if available (supports long-running sessions > 48h)
-    let pts: { time: number; cpu: number; memUsedKb: number; memTotalKb: number; memAvailKb: number; swapFreeKb: number }[]
+    let pts: any[]
     let pssHist: Map<string, { time: number; pssKb: number }[]>
     let cpuHist: Map<string, { time: number; cpuPercent: number }[]>
 
     if (csvBaseDir) {
       const perfData = await parsePerfCsv(csvBaseDir + 'perf_data.csv')
-      pts = perfData.map(p => ({ ...p, swapFreeKb: 0 }))
+      pts = perfData
       pssHist = await parseTopAppsCsv(csvBaseDir + 'perf_top_apps.csv')
       cpuHist = await parseTopCpuCsv(csvBaseDir + 'perf_top_cpu.csv')
     } else {
-      pts = store.history.map(p => ({ ...p, memTotalKb: 0 }))
+      pts = store.history
       pssHist = store.processPssHistory
       cpuHist = store.processCpuHistory
     }
@@ -1062,6 +1210,26 @@ async function exportReport() {
     const memFreeRows = `<tr><td></td><td><strong>Free RAM</strong></td><td>${formatKb(safeMin(freeRamVals))} ${formatKbUnit(safeMin(freeRamVals))}</td><td>${formatKb(safeMax(freeRamVals))} ${formatKbUnit(safeMax(freeRamVals))}</td><td>${formatKb(safeAvg(freeRamVals))} ${formatKbUnit(safeAvg(freeRamVals))}</td></tr>
 <tr><td></td><td><strong>Swap Free</strong></td><td>${formatKb(safeMin(swapFreeVals))} ${formatKbUnit(safeMin(swapFreeVals))}</td><td>${formatKb(safeMax(swapFreeVals))} ${formatKbUnit(safeMax(swapFreeVals))}</td><td>${formatKb(safeAvg(swapFreeVals))} ${formatKbUnit(safeAvg(swapFreeVals))}</td></tr>
 `
+    // Network IO summary (from cumulative bytes delta)
+    const netRows = (() => {
+      if (pts.length < 2) return '<p>采样点不足，无法计算网络 IO</p>'
+      const firstRx = pts[0].netRxBytes ?? 0, lastRx = pts[pts.length-1].netRxBytes ?? 0
+      const firstTx = pts[0].netTxBytes ?? 0, lastTx = pts[pts.length-1].netTxBytes ?? 0
+      const elapsedSecs = (pts[pts.length-1].time - pts[0].time) / 1000
+      const rxBytes = Math.max(0, lastRx - firstRx)
+      const txBytes = Math.max(0, lastTx - firstTx)
+      const rxRate = elapsedSecs > 0 ? rxBytes / elapsedSecs : 0
+      const txRate = elapsedSecs > 0 ? txBytes / elapsedSecs : 0
+      const fmt = (b: number) => b >= 1073741824 ? (b/1073741824).toFixed(1)+' GB' : b >= 1048576 ? (b/1048576).toFixed(1)+' MB' : b >= 1024 ? (b/1024).toFixed(0)+' KB' : b+' B'
+      const fmtRate = (b: number) => b >= 1073741824 ? (b/1073741824).toFixed(2)+' GB/s' : b >= 1048576 ? (b/1048576).toFixed(1)+' MB/s' : b >= 1024 ? (b/1024).toFixed(0)+' KB/s' : b.toFixed(0)+' B/s'
+      return `<table><thead><tr><th>方向</th><th>总量</th><th>平均速率</th></tr></thead>
+<tbody>
+<tr><td><strong>下行 (RX)</strong></td><td>${fmt(rxBytes)}</td><td>${fmtRate(rxRate)}</td></tr>
+<tr><td><strong>上行 (TX)</strong></td><td>${fmt(txBytes)}</td><td>${fmtRate(txRate)}</td></tr>
+</tbody></table>`
+    })()
+    const pressureRows = buildReportPressureRows()
+    const distRows = buildReportDistRows()
     const html = `<!DOCTYPE html>
 <html lang="zh">
 <head><meta charset="utf-8"><title>性能报告</title>
@@ -1092,6 +1260,8 @@ img.chart{max-width:100%;border:1px solid #ddd;border-radius:8px;margin:.5rem 0}
   <p><strong>采样数:</strong> ${pts.length}</p>
   <p><strong>时间范围:</strong> ${formatLocalTime(new Date(pts[0].time))} ~ ${formatLocalTime(new Date(pts[pts.length-1].time))}</p>
   <p><strong>采集间隔:</strong> ${(store.intervalMs / 1000).toFixed(0)}s</p>
+  <p><strong>设备开机运行:</strong> ${formatUptime(uptimeSecs.value)}</p>
+  <p><strong>内核:</strong> ${kernelVersion.value || 'N/A'}</p>
 </div>
 ${buildOverallAssessment(pts, topMem, topCpu, '', [])}
 <div class="card">
@@ -1103,6 +1273,20 @@ ${buildOverallAssessment(pts, topMem, topCpu, '', [])}
     <div class="stat"><div class="stat-label">内存已用峰值</div><div class="stat-value">${formatKb(maxMemUsed)} ${formatKbUnit(maxMemUsed)}</div></div>
     <div class="stat"><div class="stat-label">内存平均剩余</div><div class="stat-value">${formatKb(avgMemAvail)} ${formatKbUnit(avgMemAvail)}</div></div>
   </div>
+</div>
+<div class="card">
+  <h2>系统压力分析 (PSI)</h2>
+  <table><thead><tr><th>指标</th><th>最小</th><th>最大</th><th>平均</th></tr></thead>
+  <tbody>${pressureRows}</tbody></table>
+</div>
+<div class="card">
+  <h2>内存分布详情</h2>
+  <table><thead><tr><th>指标</th><th>最小</th><th>最大</th><th>平均</th></tr></thead>
+  <tbody>${distRows}</tbody></table>
+</div>
+<div class="card">
+  <h2>网络 IO</h2>
+  ${netRows}
 </div>
 <div class="card">
   <h2>Top${store.topAppCount} 应用内存使用情况</h2>
@@ -1138,14 +1322,72 @@ ${interactiveHtml}
   }
 }
 
+// Generate pressure analysis HTML rows for report (uses store.history)
+function buildReportPressureRows(): string {
+  const h = store.history
+  if (h.length === 0) return '<p>无数据</p>'
+  const metrics = [
+    { label: 'Mem Some', key: 'pressureMemSomeAvg10' as const },
+    { label: 'Mem Full', key: 'pressureMemFullAvg10' as const },
+    { label: 'IO Some', key: 'pressureIoSomeAvg10' as const },
+    { label: 'IO Full', key: 'pressureIoFullAvg10' as const },
+    { label: 'CPU Some', key: 'pressureCpuSomeAvg10' as const },
+    { label: 'CPU Full', key: 'pressureCpuFullAvg10' as const },
+  ]
+  const allZero = metrics.every(m => h.every(p => (p[m.key] ?? 0) <= 0))
+  if (allZero) return '<tr><td colspan="4" style="text-align:center;color:#999">当前设备不支持 PSI 压力统计</td></tr>'
+  return metrics.map(m => {
+    const vals = h.map(p => p[m.key])
+    const mn = safeMin(vals), mx = safeMax(vals), avg = vals.reduce((a,b)=>a+b,0)/vals.length
+    return `<tr><td><strong>${m.label}</strong></td><td>${mn.toFixed(1)}%</td><td>${mx.toFixed(1)}%</td><td>${avg.toFixed(1)}%</td></tr>`
+  }).join('\n    ')
+}
+// Generate memory distribution HTML rows for report
+function buildReportDistRows(): string {
+  const h = store.history
+  if (h.length === 0) return '<p>无数据</p>'
+  const metrics: { label: string; key: keyof (typeof h)[number] }[] = [
+    { label: 'Cached', key: 'memCachedKb' },
+    { label: 'Buffers', key: 'memBuffersKb' },
+    { label: 'Slab', key: 'memSlabKb' },
+    { label: 'KernelStack', key: 'memKernelStackKb' },
+    { label: 'PageTables', key: 'memPageTablesKb' },
+  ]
+  return metrics.map(m => {
+    const vals = h.map(p => p[m.key] as number)
+    const mn = safeMin(vals), mx = safeMax(vals), avg = vals.reduce((a,b)=>a+b,0)/vals.length
+    return `<tr><td><strong>${m.label}</strong></td><td>${formatKb(mn)} ${formatKbUnit(mn)}</td><td>${formatKb(mx)} ${formatKbUnit(mx)}</td><td>${formatKb(avg)} ${formatKbUnit(avg)}</td></tr>`
+  }).join('\n    ')
+}
+
 // Build interactive chart HTML section that embeds chart data as JSON and
-// renders 4 ECharts charts (loaded from CDN) with clickable legend to
+// renders ECharts charts (loaded from CDN) with clickable legend to
 // toggle individual series on/off. Falls back gracefully if offline.
+// Now includes Top N memory, Top N CPU, PSI pressure (combined), and memory
+// distribution (stacked area) interactive charts.
 function buildInteractiveChartsHtml(
   pts: any[],
   topMem: { name: string; data: { time: number; pssKb: number }[] }[],
   topCpu: { name: string; data: { time: number; cpuPercent: number }[] }[],
 ): string {
+  // Normalize field naming: store uses pressureMemSomeAvg10, CSVParser uses pressureMemSome10
+  const norm = pts.map((p: any) => ({
+    ...p,
+    pressureMemSome10: p.pressureMemSome10 ?? p.pressureMemSomeAvg10 ?? 0,
+    pressureMemFull10: p.pressureMemFull10 ?? p.pressureMemFullAvg10 ?? 0,
+    pressureIoSome10: p.pressureIoSome10 ?? p.pressureIoSomeAvg10 ?? 0,
+    pressureIoFull10: p.pressureIoFull10 ?? p.pressureIoFullAvg10 ?? 0,
+    pressureCpuSome10: p.pressureCpuSome10 ?? p.pressureCpuSomeAvg10 ?? 0,
+    pressureCpuFull10: p.pressureCpuFull10 ?? p.pressureCpuFullAvg10 ?? 0,
+    memCachedKb: p.memCachedKb ?? 0,
+    memBuffersKb: p.memBuffersKb ?? 0,
+    memSlabKb: p.memSlabKb ?? 0,
+    memKernelStackKb: p.memKernelStackKb ?? 0,
+    memPageTablesKb: p.memPageTablesKb ?? 0,
+    netRxBytes: p.netRxBytes ?? 0,
+    netTxBytes: p.netTxBytes ?? 0,
+  }))
+
   // Stable color assignment: same package name always gets same color
   const allColors = ['#7c5cfc', '#22c55e', '#f59e0b', '#ef4444', '#3b82f6', '#ec4899', '#14b8a6', '#f97316', '#8b5cf6', '#06b6d4', '#84cc16', '#a855f7', '#f43f5e', '#0ea5e9', '#10b981', '#eab308', '#d946ef', '#6366f1', '#fb923c', '#14b8a6']
   const colorMap: Record<string, string> = {}
@@ -1163,15 +1405,15 @@ function buildInteractiveChartsHtml(
     color: getColor(p.name),
   }))
   const topSeries: { name: string; data: [number, number][]; color: string }[] = []
-  if (pts.length > 0) {
+  if (norm.length > 0) {
     topSeries.push({
       name: 'Free RAM',
-      data: pts.map(p => [p.time, p.memAvailKb] as [number, number]),
+      data: norm.map(p => [p.time, p.memAvailKb] as [number, number]),
       color: '#22c55e',
     })
     topSeries.push({
       name: 'Swap Free',
-      data: pts.map(p => [p.time, p.swapFreeKb] as [number, number]),
+      data: norm.map(p => [p.time, p.swapFreeKb] as [number, number]),
       color: '#3b82f6',
     })
   }
@@ -1181,19 +1423,68 @@ function buildInteractiveChartsHtml(
     color: getColor(p.name),
   })))
 
+  // Pressure series: each category as "Mem Some", "Mem Full", "IO Some", "IO Full", "CPU Some", "CPU Full"
+  const pressureColors: Record<string, string> = { 'Mem Some': '#3b82f6', 'Mem Full': '#ef4444', 'IO Some': '#10b981', 'IO Full': '#f59e0b', 'CPU Some': '#8b5cf6', 'CPU Full': '#f97316' }
+  const pressureSeries = norm.length > 0 ? [
+    { name: 'Mem Some', data: norm.map(p => [p.time, p.pressureMemSome10] as [number, number]), color: pressureColors['Mem Some'] },
+    { name: 'Mem Full', data: norm.map(p => [p.time, p.pressureMemFull10] as [number, number]), color: pressureColors['Mem Full'] },
+    { name: 'IO Some', data: norm.map(p => [p.time, p.pressureIoSome10] as [number, number]), color: pressureColors['IO Some'] },
+    { name: 'IO Full', data: norm.map(p => [p.time, p.pressureIoFull10] as [number, number]), color: pressureColors['IO Full'] },
+    { name: 'CPU Some', data: norm.map(p => [p.time, p.pressureCpuSome10] as [number, number]), color: pressureColors['CPU Some'] },
+    { name: 'CPU Full', data: norm.map(p => [p.time, p.pressureCpuFull10] as [number, number]), color: pressureColors['CPU Full'] },
+  ] : []
+
+  // Memory distribution series (stacked area)
+  const memDistColors: Record<string, string> = { 'Free RAM': '#22c55e', 'Cached': '#3b82f6', 'Buffers': '#f59e0b', 'Slab': '#ec4899', 'KernelStack': '#14b8a6', 'PageTables': '#8b5cf6', 'Other Used': '#f43f5e' }
+  const memDistSeries = norm.length > 0 ? [
+    { name: 'Free RAM', data: norm.map(p => [p.time, p.memAvailKb] as [number, number]), color: memDistColors['Free RAM'] },
+    { name: 'Cached', data: norm.map(p => [p.time, p.memCachedKb] as [number, number]), color: memDistColors['Cached'] },
+    { name: 'Buffers', data: norm.map(p => [p.time, p.memBuffersKb] as [number, number]), color: memDistColors['Buffers'] },
+    { name: 'Slab', data: norm.map(p => [p.time, p.memSlabKb] as [number, number]), color: memDistColors['Slab'] },
+    { name: 'KernelStack', data: norm.map(p => [p.time, p.memKernelStackKb] as [number, number]), color: memDistColors['KernelStack'] },
+    { name: 'PageTables', data: norm.map(p => [p.time, p.memPageTablesKb] as [number, number]), color: memDistColors['PageTables'] },
+    { name: 'Other Used', data: norm.map(p => [p.time, Math.max(0, p.memUsedKb - p.memAvailKb - p.memCachedKb - p.memBuffersKb - p.memSlabKb - p.memKernelStackKb - p.memPageTablesKb)] as [number, number]), color: memDistColors['Other Used'] },
+  ] : []
+
+  // Network rate series (bytes/sec from cumulative byte deltas)
+  const netSeries: { name: string; data: [number, number][]; color: string }[] = []
+  if (norm.length >= 2) {
+    const rxData: [number, number][] = []
+    const txData: [number, number][] = []
+    for (let i = 1; i < norm.length; i++) {
+      const dt = (norm[i].time - norm[i-1].time) / 1000
+      if (dt > 0) {
+        const drx = (norm[i].netRxBytes - norm[i-1].netRxBytes) / dt
+        const dtx = (norm[i].netTxBytes - norm[i-1].netTxBytes) / dt
+        rxData.push([norm[i].time, Math.max(0, drx)])
+        txData.push([norm[i].time, Math.max(0, dtx)])
+      }
+    }
+    if (rxData.length > 0) netSeries.push({ name: 'Down', data: rxData, color: '#3b82f6' })
+    if (txData.length > 0) netSeries.push({ name: 'Up', data: txData, color: '#f59e0b' })
+  }
+  const hasNet = netSeries.length > 1 || (netSeries.length === 1 && netSeries[0].data.some(d => (d[1] ?? 0) > 0))
+
+  const hasPressure = pressureSeries.some(s => s.data.some(d => (d[1] ?? 0) > 0))
+  const hasMemDist = memDistSeries.some(s => s.data.some(d => (d[1] ?? 0) > 0))
   const jsonStr = (v: any) => JSON.stringify(v).replace(/</g, '\\u003c')
 
   return `
 <div class="card">
-  <h2>交互式图表</h2>
+  <h2 style="margin-bottom:.2rem">交互式图表</h2>
   <p style="font-size:.85rem;color:#666;margin-bottom:.5rem">点击折线或包名选中单个应用，再次点击显示全部。需要联网加载图表库。</p>
   <div id="chart-loading" style="padding:2rem;text-align:center;color:#888;font-size:.9rem">正在加载图表库...</div>
   <div id="charts-container" style="display:none">
     <div class="interactive-chart"><h3>Top ${topMem.length} 应用内存</h3><div id="ic-top" style="width:100%;height:360px"></div></div>
     <div class="interactive-chart"><h3>Top ${topCpu.length} 应用 CPU 使用率</h3><div id="ic-cpu" style="width:100%;height:360px"></div></div>
+    <div class="interactive-chart"><h3>系统压力分析 (PSI)</h3><div id="ic-pressure" style="width:100%;height:300px"></div></div>
+    <div class="interactive-chart"><h3>内存分布详情</h3><div id="ic-memdist" style="width:100%;height:300px"></div></div>
+    <div class="interactive-chart"><h3>网络 IO</h3><div id="ic-net" style="width:100%;height:300px"></div></div>
   </div>
   <script type="application/json" id="ic-data">${jsonStr({
     cpu: cpuSeries, top: topSeries,
+    pressure: pressureSeries, memDist: memDistSeries,
+    net: netSeries,
   })}<\/script>
   <script>
   (function() {
@@ -1222,35 +1513,47 @@ function buildInteractiveChartsHtml(
           latestTopValues[s.name] = last[1];
         }
       });
+      var latestPressureValues = {};
+      (data.pressure || []).forEach(function(s) {
+        if (s.data && s.data.length > 0) {
+          var last = s.data[s.data.length - 1];
+          latestPressureValues[s.name] = last[1];
+        }
+      });
+      var latestMemDistValues = {};
+      (data.memDist || []).forEach(function(s) {
+        if (s.data && s.data.length > 0) {
+          var last = s.data[s.data.length - 1];
+          latestMemDistValues[s.name] = last[1];
+        }
+      });
       var cpuSelected = null;
       var topSelected = null;
+      var pressureSelected = null;
+      var memDistSelected = null;
+      var netSelected = null;
       function getAllNames(chart) {
         return (chart.getOption().series || []).map(function(s) { return s.name; });
       }
       function selectSeries(chart, seriesName, selectedRef) {
         var allNames = getAllNames(chart);
-        if (selectedRef === 'cpu') {
-          if (cpuSelected === seriesName) {
-            cpuSelected = null;
-            allNames.forEach(function(n) { chart.dispatchAction({ type: 'legendSelect', name: n }); });
-          } else {
-            cpuSelected = seriesName;
-            allNames.forEach(function(n) {
-              if (n === seriesName) chart.dispatchAction({ type: 'legendSelect', name: n });
-              else chart.dispatchAction({ type: 'legendUnSelect', name: n });
-            });
-          }
+        var ref = selectedRef === 'cpu' ? cpuSelected : selectedRef === 'top' ? topSelected : selectedRef === 'pressure' ? pressureSelected : selectedRef === 'memDist' ? memDistSelected : netSelected;
+        var setRef = function(v) {
+          if (selectedRef === 'cpu') cpuSelected = v;
+          else if (selectedRef === 'top') topSelected = v;
+          else if (selectedRef === 'pressure') pressureSelected = v;
+          else if (selectedRef === 'memDist') memDistSelected = v;
+          else netSelected = v;
+        };
+        if (ref === seriesName) {
+          setRef(null);
+          allNames.forEach(function(n) { chart.dispatchAction({ type: 'legendSelect', name: n }); });
         } else {
-          if (topSelected === seriesName) {
-            topSelected = null;
-            allNames.forEach(function(n) { chart.dispatchAction({ type: 'legendSelect', name: n }); });
-          } else {
-            topSelected = seriesName;
-            allNames.forEach(function(n) {
-              if (n === seriesName) chart.dispatchAction({ type: 'legendSelect', name: n });
-              else chart.dispatchAction({ type: 'legendUnSelect', name: n });
-            });
-          }
+          setRef(seriesName);
+          allNames.forEach(function(n) {
+            if (n === seriesName) chart.dispatchAction({ type: 'legendSelect', name: n });
+            else chart.dispatchAction({ type: 'legendUnSelect', name: n });
+          });
         }
       }
       var opts = {
@@ -1343,6 +1646,18 @@ function buildInteractiveChartsHtml(
           }),
         });
       }
+      function makeTimeAxisLabel() {
+        return {
+          fontSize: 11,
+          hideOverlap: true,
+          formatter: function(value) {
+            var d = new Date(value);
+            if (isNaN(d.getTime())) return '';
+            var pad = function(n) { return n < 10 ? '0' + n : '' + n; };
+            return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+          }
+        };
+      }
       var cpuChart = echarts.init(document.getElementById('ic-cpu'));
       cpuChart.setOption(mk(data.cpu,
         function(v) { return v + '%'; },
@@ -1365,8 +1680,135 @@ function buildInteractiveChartsHtml(
       topChart.on('legendselectchanged', function(params) {
         selectSeries(topChart, params.name, 'top');
       });
+      // Pressure chart
+      if (document.getElementById('ic-pressure')) {
+        var pressureChart = echarts.init(document.getElementById('ic-pressure'));
+        pressureChart.setOption({
+          tooltip: Object.assign({}, opts.tooltip, {
+            formatter: function(params) {
+              if (!params || !params.length) return '';
+              var time = new Date(params[0].axisValue).toLocaleTimeString('zh-CN', { hour12: false });
+              var html = '<div style="font-weight:600;margin-bottom:4px">' + time + '</div>';
+              params.forEach(function(p) { html += p.marker + ' ' + p.seriesName + ': <b>' + p.value[1].toFixed(1) + '%</b><br>'; });
+              return html;
+            }
+          }),
+          legend: Object.assign({}, opts.legend, {
+            formatter: function(name) {
+              var v = latestPressureValues[name];
+              if (v !== undefined) return name + ' (' + v.toFixed(1) + '%)';
+              return name;
+            }
+          }),
+          grid: Object.assign({}, opts.grid),
+          xAxis: opts.xAxis,
+          yAxis: { type: 'value', min: 0, max: 100, axisLabel: { fontSize: 11, formatter: '{value}%' } },
+          dataZoom: [{ type: 'inside', start: 0, end: 100 }],
+          animationDuration: 300,
+          series: (data.pressure || []).map(function(s) {
+            return { type: 'line', name: s.name, data: s.data, smooth: true, symbol: 'none', lineStyle: { width: 2, color: s.color }, itemStyle: { color: s.color } };
+          }),
+        });
+        pressureChart.on('click', function(params) {
+          if (params.componentType !== 'series') return;
+          selectSeries(pressureChart, params.seriesName, 'pressure');
+        });
+        pressureChart.on('legendselectchanged', function(params) {
+          selectSeries(pressureChart, params.name, 'pressure');
+        });
+      }
+      // Memory distribution chart (same style as CPU/Top)
+      if (document.getElementById('ic-memdist')) {
+        var memChart = echarts.init(document.getElementById('ic-memdist'));
+        function formatKbVal(v) {
+          return v >= 1048576 ? (v / 1048576).toFixed(1) + 'G' : v >= 1024 ? (v / 1024).toFixed(0) + 'M' : v + 'K';
+        }
+        memChart.setOption({
+          tooltip: Object.assign({}, opts.tooltip, {
+            formatter: function(params) {
+              if (!params || !params.length) return '';
+              var time = new Date(params[0].axisValue).toLocaleTimeString('zh-CN', { hour12: false });
+              var html = '<div style="font-weight:600;margin-bottom:4px">' + time + '</div>';
+              params.forEach(function(p) { html += p.marker + ' ' + p.seriesName + ': <b>' + formatKbVal(p.value[1]) + '</b><br>'; });
+              return html;
+            }
+          }),
+          legend: Object.assign({}, opts.legend, {
+            formatter: function(name) {
+              var v = latestMemDistValues[name];
+              if (v !== undefined) return name + ' (' + formatKbVal(v) + ')';
+              return name;
+            }
+          }),
+          grid: Object.assign({}, opts.grid),
+          xAxis: opts.xAxis,
+          yAxis: { type: 'value', axisLabel: { fontSize: 11, formatter: function(v) { return formatKbVal(v); } } },
+          dataZoom: [{ type: 'inside', start: 0, end: 100 }],
+          animationDuration: 300,
+          series: (data.memDist || []).map(function(s) {
+            return { type: 'line', name: s.name, data: s.data, smooth: true, symbol: 'none', lineStyle: { width: 2, color: s.color }, itemStyle: { color: s.color } };
+          }),
+        });
+        memChart.on('click', function(params) {
+          if (params.componentType !== 'series') return;
+          selectSeries(memChart, params.seriesName, 'memDist');
+        });
+        memChart.on('legendselectchanged', function(params) {
+          selectSeries(memChart, params.name, 'memDist');
+        });
+      }
+      // Network chart (same style as CPU/Top)
+      if (document.getElementById('ic-net')) {
+        var netChart = echarts.init(document.getElementById('ic-net'));
+        netChart.setOption({
+          tooltip: Object.assign({}, opts.tooltip, {
+            formatter: function(params) {
+              if (!params || !params.length) return '';
+              var time = new Date(params[0].axisValue).toLocaleTimeString('zh-CN', { hour12: false });
+              var html = '<div style="font-weight:600;margin-bottom:4px">' + time + '</div>';
+              params.forEach(function(p) {
+                var v = p.value[1];
+                var formatted = v >= 1048576 ? (v / 1048576).toFixed(1) + ' MB/s' : v >= 1024 ? (v / 1024).toFixed(0) + ' KB/s' : v.toFixed(0) + ' B/s';
+                html += p.marker + ' ' + p.seriesName + ': <b>' + formatted + '</b><br>';
+              });
+              return html;
+            }
+          }),
+          legend: Object.assign({}, opts.legend, {
+            formatter: function(name) {
+              var series = (data.net || []).find(function(s) { return s.name === name; });
+              if (series && series.data && series.data.length > 0) {
+                var last = series.data[series.data.length - 1][1];
+                var formatted = last >= 1048576 ? (last / 1048576).toFixed(1) + ' MB/s' : last >= 1024 ? (last / 1024).toFixed(0) + ' KB/s' : last.toFixed(0) + ' B/s';
+                return name + ' (' + formatted + ')';
+              }
+              return name;
+            }
+          }),
+          grid: Object.assign({}, opts.grid),
+          xAxis: opts.xAxis,
+          yAxis: { type: 'value', axisLabel: { fontSize: 11, formatter: function(v) { return v >= 1048576 ? (v / 1048576).toFixed(1) + 'M' : v >= 1024 ? (v / 1024).toFixed(0) + 'K' : v.toFixed(0); } } },
+          dataZoom: [{ type: 'inside', start: 0, end: 100 }],
+          animationDuration: 300,
+          series: (data.net || []).map(function(s) {
+            return { type: 'line', name: s.name, data: s.data, smooth: true, symbol: 'none', lineStyle: { width: 2, color: s.color }, itemStyle: { color: s.color } };
+          }),
+        });
+        netChart.on('click', function(params) {
+          if (params.componentType !== 'series') return;
+          selectSeries(netChart, params.seriesName, 'net');
+        });
+        netChart.on('legendselectchanged', function(params) {
+          selectSeries(netChart, params.name, 'net');
+        });
+      }
+
+      var chartIds = ['ic-cpu','ic-top'];
+      if (document.getElementById('ic-pressure')) chartIds.push('ic-pressure');
+      if (document.getElementById('ic-memdist')) chartIds.push('ic-memdist');
+      if (document.getElementById('ic-net')) chartIds.push('ic-net');
       window.addEventListener('resize', function() {
-        ['ic-cpu','ic-top'].forEach(function(id) {
+        chartIds.forEach(function(id) {
           var inst = echarts.getInstanceByDom(document.getElementById(id));
           if (inst) inst.resize();
         });
@@ -1383,7 +1825,7 @@ function buildInteractiveChartsHtml(
         document.getElementById('charts-container').style.display = 'block';
         render();
       }, function() {
-        document.getElementById('chart-loading').innerHTML = '<div style="color:#c00">⚠️ 图表库加载失败，请联网后重新打开本报告查看交互式图表。静态 PNG 图片在上方折线图区块。</div>';
+        document.getElementById('chart-loading').innerHTML = '<div style="color:#c00">⚠️ 图表库加载失败，请联网后重新打开本报告查看交互式图表。</div>';
       });
     });
   })();
@@ -1438,6 +1880,18 @@ async function captureOneTimeLogs(serial: string) {
     const files = listing.split('\n').map(f => f.trim()).filter(f => f && !f.includes(' '))
     for (const file of files) {
       try { await pullFile(serial, '/data/tombstones/' + file, tombDir + file) } catch {}
+    }
+  } catch {}
+
+  // dmesg — snapshot at start only (can be large, only capture once)
+  try {
+    const dmesgPath = sessionLogDir.value + 'dmesg.txt'
+    const exists = await (async () => {
+      try { await readTextFile(dmesgPath); return true } catch { return false }
+    })()
+    if (!exists) {
+      const dmesgOut = await shell(serial, 'dmesg 2>/dev/null')
+      await writeTextFile(dmesgPath, dmesgOut)
     }
   } catch {}
 }
@@ -1706,12 +2160,45 @@ function updateTopAppChartDebounced() {
   })
 }
 
+let lastUptimeSecs = 0
 async function pollOnce() {
   if (!deviceSerial.value) return
   try {
     const snap = await getSnapshot(deviceSerial.value)
     pollErrorCount = 0
+
+    // Reboot detection: if uptime decreased by >60s, device was rebooted.
+    // Auto-create new session log directory and restart logcat.
+    if (lastUptimeSecs > 60 && snap.device_uptime_secs > 0 && snap.device_uptime_secs < lastUptimeSecs - 60) {
+      showToast('检测到设备重启，自动重建日志目录', false)
+      // Stop current logcat
+      try { await invoke('adb_logcat_stop', { serial: deviceSerial.value }) } catch {}
+      // Flush CSV
+      await flushCsvBuffers()
+      // Create new session dir with reboot marker
+      const ts = formatLocalTime(new Date()).replace(/[:.]/g, '-')
+      const oldDir = sessionLogDir.value
+      const newDir = oldDir.replace(/\/$/, '') + '_reboot_' + ts + '/'
+      sessionLogDir.value = newDir
+      await mkdir(newDir, { recursive: true }).catch(() => {})
+      initCsvFiles(newDir)
+      // Restart logcat
+      try { await invoke('adb_logcat_start', { serial: deviceSerial.value, filePath: newDir + 'logcat.txt' }) } catch {}
+      // Capture one-time logs in new dir
+      captureOneTimeLogs(deviceSerial.value)
+    }
+    lastUptimeSecs = snap.device_uptime_secs
+
     store.addPoint(snap)
+    // Prune colorMap of stale process names (only keep current ones)
+    const currentProcNames = new Set(snap.procs.map(p => p.name))
+    for (const key of colorMap.keys()) {
+      if (!currentProcNames.has(key)) colorMap.delete(key)
+    }
+    // Update device info reactives
+    uptimeSecs.value = snap.device_uptime_secs
+    kernelVersion.value = snap.kernel_version || ''
+    if (snap.device_date) deviceDate.value = snap.device_date
     // Stream data to CSV files for long-term persistence (survives crashes)
     bufferCsvPoint(snap)
     // Schedule chart rendering with debounce to avoid jank with large datasets.
@@ -1747,7 +2234,7 @@ function initCsvFiles(dir: string) {
   perfCsvBuffer = []
   procCsvBuffer = []
   cpuCsvBuffer = []
-  writeTextFile(dir + 'perf_data.csv', 'Time,CPU(%),MemUsed(KB),MemTotal(KB),MemAvail(KB),ZRAM(KB),SwapFree(KB),StorageUsed(KB),StorageTotal(KB)\n').catch(() => {})
+  writeTextFile(dir + 'perf_data.csv', 'Time,CPU(%),MemUsed(KB),MemTotal(KB),MemAvail(KB),ZRAM(KB),SwapFree(KB),StorageUsed(KB),StorageTotal(KB),Cached(KB),Buffers(KB),Slab(KB),KernelStack(KB),PageTables(KB),MemPressSome10,MemPressFull10,IoPressSome10,IoPressFull10,CpuPressSome10,CpuPressFull10,Uptime(Sec),NetRxBytes,NetTxBytes\n').catch(() => {})
   writeTextFile(dir + 'perf_top_apps.csv', 'Time,ProcessName,PSS(KB)\n').catch(() => {})
   writeTextFile(dir + 'perf_top_cpu.csv', 'Time,ProcessName,CPU(%)\n').catch(() => {})
 }
@@ -1757,7 +2244,7 @@ function bufferCsvPoint(snap: PerfSnapshot) {
   const now = new Date()
   const ts = formatLocalTime(now)
 
-  perfCsvBuffer.push(`${ts},${snap.cpu_total.toFixed(1)},${snap.mem_total_kb - snap.mem_free_kb},${snap.mem_total_kb},${snap.mem_avail_kb},${snap.zram_total_kb},${snap.swap_free_kb},${snap.storage_used_kb},${snap.storage_total_kb}`)
+  perfCsvBuffer.push(`${ts},${snap.cpu_total.toFixed(1)},${snap.mem_total_kb - snap.mem_free_kb},${snap.mem_total_kb},${snap.mem_avail_kb},${snap.zram_total_kb},${snap.swap_free_kb},${snap.storage_used_kb},${snap.storage_total_kb},${snap.mem_cached_kb},${snap.mem_buffers_kb},${snap.mem_slab_kb},${snap.mem_kernel_stack_kb},${snap.mem_page_tables_kb},${snap.pressure_mem_some_avg10.toFixed(1)},${snap.pressure_mem_full_avg10.toFixed(1)},${snap.pressure_io_some_avg10.toFixed(1)},${snap.pressure_io_full_avg10.toFixed(1)},${snap.pressure_cpu_some_avg10.toFixed(1)},${snap.pressure_cpu_full_avg10.toFixed(1)},${snap.device_uptime_secs.toFixed(1)},${snap.net_rx_bytes},${snap.net_tx_bytes}`)
 
   if (snap.procs && snap.procs.length > 0) {
     const topProcs = snap.procs.slice(0, store.topAppCount)
@@ -1845,12 +2332,32 @@ async function startPolling() {
   // 7. Start periodic meminfo collection (first after 5s, then every 30s)
   setTimeout(() => collectLogs(serial), 5000)
   logTimer = setInterval(() => collectLogs(serial), 30000)
+
+  // 8. Start watermark collection (every 60s)
+  collectWatermark(serial)
+  watermarkTimer = setInterval(() => collectWatermark(serial), 60000)
+
+  // 9. Start dumpsys PSS tracking (every 30s, after 15s delay to not overload initial connection)
+  setTimeout(() => pollDumpsys(serial), 15000)
+  dumpsysTimer = setInterval(() => pollDumpsys(serial), 30000)
+
+  // 10. Start dmesg streaming (every 30s)
+  pollDmesgStream(serial)
+  dmesgTimer = setInterval(() => pollDmesgStream(serial), 30000)
+
+  // 11. Start ANR / Tombstone detection (every 60s, after 30s delay)
+  setTimeout(() => pollAnrTombstones(serial, sessionLogDir.value), 30000)
+  anrTimer = setInterval(() => pollAnrTombstones(serial, sessionLogDir.value), 60000)
 }
 async function stopPolling() {
   // Show loading overlay immediately on pause — before any async work
   store.setCollecting(false)
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
   if (logTimer) { clearInterval(logTimer); logTimer = null }
+  if (watermarkTimer) { clearInterval(watermarkTimer); watermarkTimer = null }
+  if (dumpsysTimer) { clearInterval(dumpsysTimer); dumpsysTimer = null }
+  if (dmesgTimer) { clearInterval(dmesgTimer); dmesgTimer = null }
+  if (anrTimer) { clearInterval(anrTimer); anrTimer = null }
 
   // Skip everything if no data collected
   if (store.history.length === 0) {
@@ -1896,11 +2403,22 @@ async function stopPolling() {
   }
 }
 
-async function parsePerfCsv(filePath: string): Promise<{ time: number; cpu: number; memUsedKb: number; memTotalKb: number; memAvailKb: number; swapFreeKb: number }[]> {
+interface PerfCsvPoint {
+  time: number; cpu: number; memUsedKb: number; memTotalKb: number; memAvailKb: number
+  zramKb: number; swapFreeKb: number; storageUsedKb: number; storageTotalKb: number
+  memCachedKb: number; memBuffersKb: number; memSlabKb: number; memKernelStackKb: number; memPageTablesKb: number
+  pressureMemSome10: number; pressureMemFull10: number
+  pressureIoSome10: number; pressureIoFull10: number
+  pressureCpuSome10: number; pressureCpuFull10: number
+  deviceUptimeSecs: number
+  netRxBytes: number; netTxBytes: number
+}
+
+async function parsePerfCsv(filePath: string): Promise<PerfCsvPoint[]> {
   try {
     const content = await readTextFile(filePath)
     const lines = content.trim().split('\n')
-    const result: { time: number; cpu: number; memUsedKb: number; memTotalKb: number; memAvailKb: number; swapFreeKb: number }[] = []
+    const result: PerfCsvPoint[] = []
     for (let i = 1; i < lines.length; i++) {
       const parts = lines[i].split(',')
       if (parts.length >= 6) {
@@ -1912,7 +2430,24 @@ async function parsePerfCsv(filePath: string): Promise<{ time: number; cpu: numb
             memUsedKb: parseInt(parts[2]) || 0,
             memTotalKb: parseInt(parts[3]) || 0,
             memAvailKb: parseInt(parts[4]) || 0,
+            zramKb: parseInt(parts[5]) || 0,
             swapFreeKb: parseInt(parts[6]) || 0,
+            storageUsedKb: parseInt(parts[7]) || 0,
+            storageTotalKb: parseInt(parts[8]) || 0,
+            memCachedKb: parseInt(parts[9]) || 0,
+            memBuffersKb: parseInt(parts[10]) || 0,
+            memSlabKb: parseInt(parts[11]) || 0,
+            memKernelStackKb: parseInt(parts[12]) || 0,
+            memPageTablesKb: parseInt(parts[13]) || 0,
+            pressureMemSome10: parseFloat(parts[14]) || 0,
+            pressureMemFull10: parseFloat(parts[15]) || 0,
+            pressureIoSome10: parseFloat(parts[16]) || 0,
+            pressureIoFull10: parseFloat(parts[17]) || 0,
+            pressureCpuSome10: parseFloat(parts[18]) || 0,
+            pressureCpuFull10: parseFloat(parts[19]) || 0,
+            deviceUptimeSecs: parseFloat(parts[20]) || 0,
+            netRxBytes: parseInt(parts[21]) || 0,
+            netTxBytes: parseInt(parts[22]) || 0,
           })
         }
       }
@@ -2008,6 +2543,26 @@ async function autoExportReport(dir: string) {
     const memFreeRows2 = `<tr><td></td><td><strong>Free RAM</strong></td><td>${formatKb(safeMin(freeRamVals2))} ${formatKbUnit(safeMin(freeRamVals2))}</td><td>${formatKb(safeMax(freeRamVals2))} ${formatKbUnit(safeMax(freeRamVals2))}</td><td>${formatKb(safeAvg(freeRamVals2))} ${formatKbUnit(safeAvg(freeRamVals2))}</td></tr>
 <tr><td></td><td><strong>Swap Free</strong></td><td>${formatKb(safeMin(swapFreeVals2))} ${formatKbUnit(safeMin(swapFreeVals2))}</td><td>${formatKb(safeMax(swapFreeVals2))} ${formatKbUnit(safeMax(swapFreeVals2))}</td><td>${formatKb(safeAvg(swapFreeVals2))} ${formatKbUnit(safeAvg(swapFreeVals2))}</td></tr>
 `
+    // Network IO summary
+    const netRows2 = (() => {
+      if (pts.length < 2) return '<p>采样点不足，无法计算网络 IO</p>'
+      const firstRx = pts[0].netRxBytes ?? 0, lastRx = pts[pts.length-1].netRxBytes ?? 0
+      const firstTx = pts[0].netTxBytes ?? 0, lastTx = pts[pts.length-1].netTxBytes ?? 0
+      const elapsedSecs = (pts[pts.length-1].time - pts[0].time) / 1000
+      const rxBytes = Math.max(0, lastRx - firstRx)
+      const txBytes = Math.max(0, lastTx - firstTx)
+      const rxRate = elapsedSecs > 0 ? rxBytes / elapsedSecs : 0
+      const txRate = elapsedSecs > 0 ? txBytes / elapsedSecs : 0
+      const fmt = (b: number) => b >= 1073741824 ? (b/1073741824).toFixed(1)+' GB' : b >= 1048576 ? (b/1048576).toFixed(1)+' MB' : b >= 1024 ? (b/1024).toFixed(0)+' KB' : b+' B'
+      const fmtRate = (b: number) => b >= 1073741824 ? (b/1073741824).toFixed(2)+' GB/s' : b >= 1048576 ? (b/1048576).toFixed(1)+' MB/s' : b >= 1024 ? (b/1024).toFixed(0)+' KB/s' : b.toFixed(0)+' B/s'
+      return `<table><thead><tr><th>方向</th><th>总量</th><th>平均速率</th></tr></thead>
+<tbody>
+<tr><td><strong>下行 (RX)</strong></td><td>${fmt(rxBytes)}</td><td>${fmtRate(rxRate)}</td></tr>
+<tr><td><strong>上行 (TX)</strong></td><td>${fmt(txBytes)}</td><td>${fmtRate(txRate)}</td></tr>
+</tbody></table>`
+    })()
+    const pressureRows2 = buildReportPressureRows()
+    const distRows2 = buildReportDistRows()
     await writeTextFile(dir + 'perf_report.html', `<!DOCTYPE html>
 <html lang="zh">
 <head><meta charset="utf-8"><title>性能报告</title>
@@ -2038,6 +2593,8 @@ img.chart{max-width:100%;border:1px solid #ddd;border-radius:8px;margin:.5rem 0}
   <p><strong>采样数:</strong> ${pts.length}</p>
   <p><strong>时间范围:</strong> ${formatLocalTime(new Date(pts[0].time))} ~ ${formatLocalTime(new Date(pts[pts.length-1].time))}</p>
   <p><strong>采集间隔:</strong> ${(store.intervalMs / 1000).toFixed(0)}s</p>
+  <p><strong>设备开机运行:</strong> ${formatUptime(uptimeSecs.value)}</p>
+  <p><strong>内核:</strong> ${kernelVersion.value || 'N/A'}</p>
 </div>
 ${buildOverallAssessment(pts, topMem, topCpu, '', [])}
 <div class="card">
@@ -2049,6 +2606,20 @@ ${buildOverallAssessment(pts, topMem, topCpu, '', [])}
     <div class="stat"><div class="stat-label">内存已用峰值</div><div class="stat-value">${formatKb(maxMemUsed)} ${formatKbUnit(maxMemUsed)}</div></div>
     <div class="stat"><div class="stat-label">内存平均剩余</div><div class="stat-value">${formatKb(avgMemAvail)} ${formatKbUnit(avgMemAvail)}</div></div>
   </div>
+</div>
+<div class="card">
+  <h2>系统压力分析 (PSI)</h2>
+  <table><thead><tr><th>指标</th><th>最小</th><th>最大</th><th>平均</th></tr></thead>
+  <tbody>${pressureRows2}</tbody></table>
+</div>
+<div class="card">
+  <h2>内存分布详情</h2>
+  <table><thead><tr><th>指标</th><th>最小</th><th>最大</th><th>平均</th></tr></thead>
+  <tbody>${distRows2}</tbody></table>
+</div>
+<div class="card">
+  <h2>网络 IO</h2>
+  ${netRows2}
 </div>
 <div class="card">
   <h2>Top${store.topAppCount} 应用内存使用情况</h2>
@@ -2108,9 +2679,6 @@ function getColor(name: string): string {
 }
 
 function initCharts() {
-  // xAxis time formatter: shows date when data spans multiple days, otherwise just HH:MM:SS.
-  // ECharts axisLabel.formatter receives (value, index) — value is the timestamp (number) for time axis.
-  // hideOverlap prevents labels from crowding/overlapping when there are many ticks.
   const timeAxisLabel = {
     fontSize: 10,
     hideOverlap: true,
@@ -2370,20 +2938,27 @@ function initCharts() {
 }
 
 function resizeCharts() {
-  if (chartVisibility.value.cpu) cpuChart?.resize()
-  if (chartVisibility.value.topApp) topAppChart?.resize()
+  cpuChart?.resize()
+  topAppChart?.resize()
 }
 
 function setupResizeObserver() {
-  if (chartResizeObserver) return
-  const containers = [cpuChartRef.value, topAppChartRef.value].filter(Boolean)
+  if (!chartResizeObserver) {
+    chartResizeObserver = new ResizeObserver(() => resizeCharts())
+  }
+  const containers = ([cpuChartRef.value, topAppChartRef.value] as (HTMLElement | null)[]).filter((el): el is HTMLElement => el !== null)
   if (containers.length === 0) return
-  chartResizeObserver = new ResizeObserver(() => resizeCharts())
-  containers.forEach(el => chartResizeObserver!.observe(el!))
+  containers.forEach(el => {
+    try { chartResizeObserver!.unobserve(el) } catch {}
+    chartResizeObserver!.observe(el)
+  })
 }
+
+function onWindowResize() { resizeCharts() }
 
 onMounted(() => {
   document.addEventListener('click', handleDropdownClick)
+  window.addEventListener('resize', onWindowResize)
   nextTick(() => {
     initCharts()
     setupResizeObserver()
@@ -2407,6 +2982,7 @@ onDeactivated(() => {
   isPageActive.value = false
 })
 onUnmounted(() => {
+  window.removeEventListener('resize', onWindowResize)
   document.removeEventListener('click', handleDropdownClick)
   stopPolling()
   if (chartResizeObserver) { chartResizeObserver.disconnect(); chartResizeObserver = null }

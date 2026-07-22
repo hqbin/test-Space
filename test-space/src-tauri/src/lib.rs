@@ -535,6 +535,34 @@ async fn adb_get_memory(serial: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+async fn adb_get_watermark(serial: String) -> Result<adb::WatermarkInfo, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::get_watermark_info(&serial)
+    }).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn adb_get_dumpsys_meminfo(serial: String) -> Result<adb::DumpsysMemInfo, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::get_dumpsys_meminfo(&serial)
+    }).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn adb_poll_dmesg(serial: String, known_lines: usize) -> Result<adb::DmesgPollResult, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::poll_dmesg(&serial, known_lines)
+    }).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn adb_check_anr_tombstones(serial: String, known_anr: Vec<String>, known_tombstone: Vec<String>) -> Result<adb::AnrTombstoneResult, String> {
+    tokio::task::spawn_blocking(move || {
+        adb::check_anr_tombstones(&serial, &known_anr, &known_tombstone)
+    }).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 async fn perf_get_snapshot(serial: String, watch_app: Option<String>) -> Result<adb::PerfSnapshot, String> {
     tokio::task::spawn_blocking(move || {
         adb::get_perf_snapshot(&serial, watch_app.as_deref())
@@ -777,6 +805,10 @@ pub fn run() {
             adb_get_battery,
             adb_get_cpu,
             adb_get_memory,
+            adb_get_watermark,
+            adb_get_dumpsys_meminfo,
+            adb_poll_dmesg,
+            adb_check_anr_tombstones,
             perf_get_snapshot,
             adb_logcat_buffer_resize,
             adb_bugreport,
