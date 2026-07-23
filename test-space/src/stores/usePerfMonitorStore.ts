@@ -76,6 +76,7 @@ export const usePerfMonitorStore = defineStore('perfMonitor', () => {
   // Dmesg streaming buffer (last ~200 lines)
   const dmesgBuffer = ref<DmesgSegment[]>([])
   const dmesgTotalLines = ref(0)
+  const dmesgLastLine = ref('')
   // ANR / Tombstone tracking
   const knownAnrFiles = ref<string[]>([])
   const knownTombstoneFiles = ref<string[]>([])
@@ -193,6 +194,7 @@ export const usePerfMonitorStore = defineStore('perfMonitor', () => {
     watermarkHistory.value = []
     dmesgBuffer.value = []
     dmesgTotalLines.value = 0
+    dmesgLastLine.value = ''
     knownAnrFiles.value = []
     knownTombstoneFiles.value = []
     newAnrFiles.value = []
@@ -281,7 +283,7 @@ export const usePerfMonitorStore = defineStore('perfMonitor', () => {
     processPssHistory, processCpuHistory, topAppCount, cpuTopNCount, singleAppName,
     currentCpu, currentMemUsedKb, currentMemTotalKb,
     currentZramKb, currentStorageUsedKb, currentStorageTotalKb,
-    dumpsysPssHistory, watermarkHistory, dmesgBuffer, dmesgTotalLines,
+    dumpsysPssHistory, watermarkHistory, dmesgBuffer, dmesgTotalLines, dmesgLastLine,
     knownAnrFiles, knownTombstoneFiles, newAnrFiles, newTombstoneFiles,
     addPoint, addDumpsysPssPoint, addWatermarkPoint, addDmesgLines, setAnrTombstoneFound,
     clearHistory, setCollecting, setInterval,

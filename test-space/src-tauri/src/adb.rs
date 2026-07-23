@@ -1115,17 +1115,33 @@ pub fn get_dumpsys_meminfo(serial: &str) -> Result<DumpsysMemInfo, String> {
 pub struct DmesgPollResult {
     pub new_lines: Vec<String>,
     pub total_lines: usize,
+    pub last_line: String,
 }
 
-pub fn poll_dmesg(serial: &str, known_lines: usize) -> Result<DmesgPollResult, String> {
+pub fn poll_dmesg(serial: &str, known_lines: usize, known_last_line: &str) -> Result<DmesgPollResult, String> {
     let output = shell_command(serial, "dmesg 2>/dev/null")?;
     let lines: Vec<&str> = output.lines().collect();
     let total = lines.len();
-    if total <= known_lines {
-        return Ok(DmesgPollResult { new_lines: vec![], total_lines: total });
+    let current_last = if total > 0 { lines[total - 1].to_string() } else { String::new() };
+
+    if total == 0 {
+        return Ok(DmesgPollResult { new_lines: vec![], total_lines: 0, last_line: String::new() });
     }
-    let new_lines: Vec<String> = lines[known_lines..].iter().map(|s| s.to_string()).collect();
-    Ok(DmesgPollResult { new_lines, total_lines: total })
+
+    // If line count grew, we can use known_lines as before
+    if total > known_lines {
+        let new_lines: Vec<String> = lines[known_lines..].iter().map(|s| s.to_string()).collect();
+        return Ok(DmesgPollResult { new_lines, total_lines: total, last_line: current_last });
+    }
+
+    // If line count <= known_lines but content changed (buffer wrapped),
+    // collect everything as new
+    if current_last != known_last_line && total > 0 {
+        let new_lines: Vec<String> = lines.iter().map(|s| s.to_string()).collect();
+        return Ok(DmesgPollResult { new_lines, total_lines: total, last_line: current_last });
+    }
+
+    Ok(DmesgPollResult { new_lines: vec![], total_lines: total, last_line: current_last })
 }
 
 // ── ANR / Tombstone detection ──

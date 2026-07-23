@@ -176,7 +176,7 @@
               </button>
             </div>
           </div>
-          <div ref="outputContainer" class="flex-1 overflow-y-auto font-mono text-[13px] leading-relaxed px-4 py-3 custom-scrollbar rounded-b-2xl" style="background: #0d0d1a;">
+          <div ref="outputContainer" class="flex-1 overflow-y-auto font-mono text-[13px] leading-relaxed px-4 py-3 custom-scrollbar rounded-b-2xl select-text" style="background: #0d0d1a;">
             <div v-if="!activeTab || activeTabOutput.length === 0" class="text-[#6b7280]">
               <span class="text-green-400/60">$</span> {{ t("scripts.outputHint") }}
             </div>

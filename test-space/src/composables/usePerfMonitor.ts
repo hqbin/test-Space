@@ -84,12 +84,20 @@ export interface PssProcess {
 export interface DmesgPollResult {
   new_lines: string[]
   total_lines: number
+  last_line: string
 }
 
 // ANR / Tombstone
 export interface AnrTombstoneResult {
   new_anr_files: string[]
   new_tombstone_files: string[]
+}
+
+export interface LogcatDiag {
+  is_alive: boolean
+  child_exit_code: number | null
+  thread_alive: boolean
+  exit_reason: string
 }
 
 export function usePerfMonitor() {
@@ -105,13 +113,21 @@ export function usePerfMonitor() {
     return invoke<DumpsysMemInfo>("adb_get_dumpsys_meminfo", { serial })
   }
 
-  async function pollDmesg(serial: string, knownLines: number): Promise<DmesgPollResult> {
-    return invoke<DmesgPollResult>("adb_poll_dmesg", { serial, knownLines })
+  async function pollDmesg(serial: string, knownLines: number, knownLastLine: string): Promise<DmesgPollResult> {
+    return invoke<DmesgPollResult>("adb_poll_dmesg", { serial, knownLines, knownLastLine })
+  }
+
+  async function logcatIsAlive(serial: string): Promise<boolean> {
+    return invoke<boolean>("adb_logcat_is_alive", { serial })
+  }
+
+  async function logcatDiag(serial: string): Promise<LogcatDiag> {
+    return invoke<LogcatDiag>("adb_logcat_diag", { serial })
   }
 
   async function checkAnrTombstones(serial: string, knownAnr: string[], knownTombstone: string[]): Promise<AnrTombstoneResult> {
     return invoke<AnrTombstoneResult>("adb_check_anr_tombstones", { serial, knownAnr, knownTombstone })
   }
 
-  return { getSnapshot, getWatermark, getDumpsysMeminfo, pollDmesg, checkAnrTombstones }
+  return { getSnapshot, getWatermark, getDumpsysMeminfo, pollDmesg, checkAnrTombstones, logcatIsAlive, logcatDiag }
 }

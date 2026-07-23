@@ -97,7 +97,7 @@
         <h3 class="font-label-md text-label-md text-on-surface mb-2 shrink-0 flex items-center gap-2 flex-wrap">
           <span class="material-symbols-outlined text-[16px] text-secondary">lan</span>Top{{ store.topAppCount }} 应用内存
             <span class="flex items-center gap-1 ml-auto">
-              <span class="font-caption text-caption text-on-surface-variant text-nowrap">显示</span>
+              <span class="font-caption text-caption text-on-surface-variant text-nowrap">Top</span>
               <div class="relative" ref="topNDropdownRef">
                 <button class="glass-hover rounded-xl px-3 py-1.5 text-body-md flex items-center gap-2 select-none min-w-[56px]"
                   @click="toggleTopNDropdown">
@@ -284,12 +284,12 @@
 import { ref, computed, watch, onMounted, onUnmounted, onActivated, onDeactivated, nextTick, type Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from '@/composables/useI18n'
-import { usePerfMonitor, type PerfSnapshot, type WatermarkInfo, type DumpsysMemInfo, type DmesgPollResult, type AnrTombstoneResult } from '@/composables/usePerfMonitor'
+import { usePerfMonitor, type PerfSnapshot, type WatermarkInfo, type DumpsysMemInfo, type DmesgPollResult, type AnrTombstoneResult, type LogcatDiag } from '@/composables/usePerfMonitor'
 import { useAdb } from '@/composables/useAdb'
 import { usePerfMonitorStore } from '@/stores/usePerfMonitorStore'
 import { savePerfSession, listPerfSessions, deletePerfSession, type PerfSessionRow } from '@/services/database'
 
-import { mkdir, writeTextFile, readTextFile, readDir } from '@tauri-apps/plugin-fs'
+import { mkdir, writeTextFile, readTextFile } from '@tauri-apps/plugin-fs'
 import { appDataDir } from '@tauri-apps/api/path'
 import { open } from '@tauri-apps/plugin-dialog'
 import { invoke } from '@tauri-apps/api/core'
@@ -299,7 +299,7 @@ defineOptions({ name: 'PerfMonitorPage' })
 
 const router = useRouter()
 const { t } = useI18n()
-const { getSnapshot, getWatermark, getDumpsysMeminfo, pollDmesg, checkAnrTombstones } = usePerfMonitor()
+const { getSnapshot, getWatermark, getDumpsysMeminfo, pollDmesg, checkAnrTombstones, logcatIsAlive, logcatDiag } = usePerfMonitor()
 const { shell, rootDevice, pullFile } = useAdb()
 const store = usePerfMonitorStore()
 
@@ -582,8 +582,9 @@ let dmesgTimer: ReturnType<typeof setInterval> | null = null
 async function pollDmesgStream(serial: string) {
   if (!serial) return
   try {
-    const result = await pollDmesg(serial, store.dmesgTotalLines)
+    const result = await pollDmesg(serial, store.dmesgTotalLines, store.dmesgLastLine)
     store.dmesgTotalLines = result.total_lines
+    store.dmesgLastLine = result.last_line
     if (result.new_lines.length > 0) {
       store.addDmesgLines(result.new_lines)
     }
@@ -1114,23 +1115,30 @@ async function exportReport() {
     const dir = await open({ directory: true, multiple: false, title: '选择导出目录' })
     if (!dir) return
 
+    // Flush in-memory CSV buffers so parsePerfCsv sees the latest data
+    await flushCsvBuffers()
+
     // Load full data from CSV if available (supports long-running sessions > 48h)
-    let pts: any[]
-    let pssHist: Map<string, { time: number; pssKb: number }[]>
-    let cpuHist: Map<string, { time: number; cpuPercent: number }[]>
+    let pts: any[] = []
+    let pssHist: Map<string, { time: number; pssKb: number }[]> = new Map()
+    let cpuHist: Map<string, { time: number; cpuPercent: number }[]> = new Map()
 
     if (csvBaseDir) {
-      const perfData = await parsePerfCsv(csvBaseDir + 'perf_data.csv')
-      pts = perfData
+      pts = await parsePerfCsv(csvBaseDir + 'perf_data.csv')
       pssHist = await parseTopAppsCsv(csvBaseDir + 'perf_top_apps.csv')
       cpuHist = await parseTopCpuCsv(csvBaseDir + 'perf_top_cpu.csv')
-    } else {
-      pts = store.history
-      pssHist = store.processPssHistory
-      cpuHist = store.processCpuHistory
     }
 
-    if (pts.length === 0) { showToast('暂无数据可导出', true); return }
+    // Fallback to in-memory store data if CSV is unavailable or empty
+    if (pts.length === 0) {
+      if (store.history.length > 0) {
+        pts = store.history
+        pssHist = store.processPssHistory
+        cpuHist = store.processCpuHistory
+      } else {
+        showToast('暂无数据可导出', true); return
+      }
+    }
 
     const cpus = pts.map(p => p.cpu)
     const memUsed = pts.map(p => p.memUsedKb)
@@ -1532,47 +1540,73 @@ function buildInteractiveChartsHtml(
       var pressureSelected = null;
       var memDistSelected = null;
       var netSelected = null;
+      var legendGuard = false;
       function getAllNames(chart) {
         return (chart.getOption().series || []).map(function(s) { return s.name; });
       }
       function selectSeries(chart, seriesName, selectedRef) {
-        var allNames = getAllNames(chart);
-        var ref = selectedRef === 'cpu' ? cpuSelected : selectedRef === 'top' ? topSelected : selectedRef === 'pressure' ? pressureSelected : selectedRef === 'memDist' ? memDistSelected : netSelected;
-        var setRef = function(v) {
-          if (selectedRef === 'cpu') cpuSelected = v;
-          else if (selectedRef === 'top') topSelected = v;
-          else if (selectedRef === 'pressure') pressureSelected = v;
-          else if (selectedRef === 'memDist') memDistSelected = v;
-          else netSelected = v;
-        };
-        if (ref === seriesName) {
-          setRef(null);
-          allNames.forEach(function(n) { chart.dispatchAction({ type: 'legendSelect', name: n }); });
-        } else {
-          setRef(seriesName);
-          allNames.forEach(function(n) {
-            if (n === seriesName) chart.dispatchAction({ type: 'legendSelect', name: n });
-            else chart.dispatchAction({ type: 'legendUnSelect', name: n });
-          });
+        if (legendGuard) return;
+        legendGuard = true;
+        try {
+          var allNames = getAllNames(chart);
+          var ref = selectedRef === 'cpu' ? cpuSelected : selectedRef === 'top' ? topSelected : selectedRef === 'pressure' ? pressureSelected : selectedRef === 'memDist' ? memDistSelected : netSelected;
+          var setRef = function(v) {
+            if (selectedRef === 'cpu') cpuSelected = v;
+            else if (selectedRef === 'top') topSelected = v;
+            else if (selectedRef === 'pressure') pressureSelected = v;
+            else if (selectedRef === 'memDist') memDistSelected = v;
+            else netSelected = v;
+          };
+          if (ref === seriesName) {
+            setRef(null);
+            allNames.forEach(function(n) { chart.dispatchAction({ type: 'legendSelect', name: n }); });
+          } else {
+            setRef(seriesName);
+            allNames.forEach(function(n) {
+              if (n === seriesName) chart.dispatchAction({ type: 'legendSelect', name: n });
+              else chart.dispatchAction({ type: 'legendUnSelect', name: n });
+            });
+          }
+        } finally {
+          legendGuard = false;
         }
       }
-      var opts = {
-        tooltip: {
-          trigger: 'axis',
-          confine: true,
-          axisPointer: {
-            type: 'cross',
-            label: {
-              show: true,
-              backgroundColor: 'rgba(50,50,50,0.85)',
-              borderColor: 'rgba(50,50,50,0.85)',
-              borderWidth: 0,
-              color: '#fff',
-              fontSize: 10,
-              padding: [4, 6],
-            }
+      function mkAxisLabel(valFmt) {
+        return {
+          show: true,
+          backgroundColor: 'rgba(50,50,50,0.85)',
+          borderColor: 'rgba(50,50,50,0.85)',
+          borderWidth: 0,
+          color: '#fff',
+          fontSize: 10,
+          padding: [4, 6],
+          formatter: function(p) {
+            return p.axisDimension === 'x'
+              ? new Date(p.value).toLocaleTimeString('zh-CN', { hour12: false })
+              : valFmt(p.value);
           },
-        },
+        };
+      }
+      function mkTip(selRef, valFmt) {
+        return {
+          trigger: 'axis',
+          axisPointer: { type: 'cross', label: mkAxisLabel(valFmt) },
+          formatter: function(params) {
+            var ref = selRef === 'cpu' ? cpuSelected : selRef === 'top' ? topSelected : selRef === 'pressure' ? pressureSelected : selRef === 'memDist' ? memDistSelected : netSelected;
+            if (!ref || !params || !Array.isArray(params) || params.length === 0) return '';
+            var t = new Date(params[0].axisValue);
+            if (isNaN(t.getTime())) return '';
+            var ts = t.toLocaleTimeString('zh-CN', { hour12: false });
+            var item = null;
+            for (var i = 0; i < params.length; i++) { if (params[i].seriesName === ref) { item = params[i]; break; } }
+            if (!item) return '';
+            var v = Array.isArray(item.value) ? item.value[1] : item.value;
+            if (v == null || v < 0) return '';
+            return '<div><div style="font-weight:600;margin-bottom:4px">' + ts + '</div>' + item.marker + ' ' + item.seriesName + ': <b>' + valFmt(v) + '</b></div>';
+          },
+        };
+      }
+      var opts = {
         legend: {
           type: 'scroll', orient: 'vertical', right: 10, top: 'middle',
           icon: 'circle', itemWidth: 12, itemHeight: 10,
@@ -1611,31 +1645,19 @@ function buildInteractiveChartsHtml(
         dataZoom: [{ type: 'inside', start: 0, end: 100 }],
         animationDuration: 300,
       };
-      function mk(series, yFmt, valFmt, isCpu, isTop) {
-        var tooltipOpt = Object.assign({}, opts.tooltip);
-        if (isCpu || isTop) {
-          tooltipOpt.formatter = function(params) {
-            var selected = isCpu ? cpuSelected : topSelected;
-            if (!selected) return '';
-            if (!params || !params.length) return '';
-            var time = new Date(params[0].axisValue).toLocaleTimeString('zh-CN', { hour12: false });
-            var item = params.find(function(p) { return p.seriesName === selected; });
-            if (!item) return '';
-            return '<div><div style="font-weight:600;margin-bottom:4px">' + time + '</div>' + item.marker + ' ' + item.seriesName + ': <b>' + valFmt(item.value[1]) + '</b></div>';
-          };
-        }
+      function mk(series, yFmt, valFmt, selRef) {
         return Object.assign({}, opts, {
+          tooltip: mkTip(selRef, valFmt),
           yAxis: Object.assign({}, opts.yAxis, { axisLabel: Object.assign({}, opts.yAxis.axisLabel, { formatter: yFmt }) }),
-          tooltip: tooltipOpt,
           legend: Object.assign({}, opts.legend, {
             formatter: function(name) {
-              var map = isCpu ? latestCpuValues : latestTopValues;
+              var map = selRef === 'cpu' ? latestCpuValues : latestTopValues;
               var v = map[name];
               if (v !== undefined) {
-                if (isCpu) {
+                if (selRef === 'cpu') {
                   return name + ' (' + v.toFixed(1) + '%)';
                 } else {
-                  return name + ' (' + (v >= 1024 ? (v / 1024).toFixed(0) + 'M' : v + 'K') + ')';
+                  return name + ' (' + (v >= 1048576 ? (v / 1048576).toFixed(1) + 'G' : v >= 1024 ? (v / 1024).toFixed(0) + 'M' : v + 'K') + ')';
                 }
               }
               return name;
@@ -1661,7 +1683,7 @@ function buildInteractiveChartsHtml(
       var cpuChart = echarts.init(document.getElementById('ic-cpu'));
       cpuChart.setOption(mk(data.cpu,
         function(v) { return v + '%'; },
-        function(v) { return v.toFixed(1) + '%'; }, true));
+        function(v) { return v.toFixed(1) + '%'; }, 'cpu'));
       cpuChart.on('click', function(params) {
         if (params.componentType !== 'series') return;
         selectSeries(cpuChart, params.seriesName, 'cpu');
@@ -1671,8 +1693,8 @@ function buildInteractiveChartsHtml(
       });
       var topChart = echarts.init(document.getElementById('ic-top'));
       topChart.setOption(mk(data.top,
-        function(v) { return v >= 1024 ? (v / 1024).toFixed(0) + 'M' : v + 'K'; },
-        function(v) { return v >= 1024 ? (v / 1024).toFixed(0) + 'M' : v + 'K'; }, false, true));
+        function(v) { return v >= 1024 ? (v / 1024).toFixed(1) + 'MB' : v + 'KB'; },
+        function(v) { return v >= 1024 ? (v / 1024).toFixed(1) + 'MB' : v + 'KB'; }, 'top'));
       topChart.on('click', function(params) {
         if (params.componentType !== 'series') return;
         selectSeries(topChart, params.seriesName, 'top');
@@ -1684,15 +1706,7 @@ function buildInteractiveChartsHtml(
       if (document.getElementById('ic-pressure')) {
         var pressureChart = echarts.init(document.getElementById('ic-pressure'));
         pressureChart.setOption({
-          tooltip: Object.assign({}, opts.tooltip, {
-            formatter: function(params) {
-              if (!params || !params.length) return '';
-              var time = new Date(params[0].axisValue).toLocaleTimeString('zh-CN', { hour12: false });
-              var html = '<div style="font-weight:600;margin-bottom:4px">' + time + '</div>';
-              params.forEach(function(p) { html += p.marker + ' ' + p.seriesName + ': <b>' + p.value[1].toFixed(1) + '%</b><br>'; });
-              return html;
-            }
-          }),
+          tooltip: mkTip('pressure', function(v) { return v.toFixed(1) + '%'; }),
           legend: Object.assign({}, opts.legend, {
             formatter: function(name) {
               var v = latestPressureValues[name];
@@ -1720,29 +1734,19 @@ function buildInteractiveChartsHtml(
       // Memory distribution chart (same style as CPU/Top)
       if (document.getElementById('ic-memdist')) {
         var memChart = echarts.init(document.getElementById('ic-memdist'));
-        function formatKbVal(v) {
-          return v >= 1048576 ? (v / 1048576).toFixed(1) + 'G' : v >= 1024 ? (v / 1024).toFixed(0) + 'M' : v + 'K';
-        }
+        function fmtKb(v) { return v >= 1048576 ? (v / 1048576).toFixed(1) + 'G' : v >= 1024 ? (v / 1024).toFixed(0) + 'M' : v + 'K'; }
         memChart.setOption({
-          tooltip: Object.assign({}, opts.tooltip, {
-            formatter: function(params) {
-              if (!params || !params.length) return '';
-              var time = new Date(params[0].axisValue).toLocaleTimeString('zh-CN', { hour12: false });
-              var html = '<div style="font-weight:600;margin-bottom:4px">' + time + '</div>';
-              params.forEach(function(p) { html += p.marker + ' ' + p.seriesName + ': <b>' + formatKbVal(p.value[1]) + '</b><br>'; });
-              return html;
-            }
-          }),
+          tooltip: mkTip('memDist', fmtKb),
           legend: Object.assign({}, opts.legend, {
             formatter: function(name) {
               var v = latestMemDistValues[name];
-              if (v !== undefined) return name + ' (' + formatKbVal(v) + ')';
+              if (v !== undefined) return name + ' (' + fmtKb(v) + ')';
               return name;
             }
           }),
           grid: Object.assign({}, opts.grid),
           xAxis: opts.xAxis,
-          yAxis: { type: 'value', axisLabel: { fontSize: 11, formatter: function(v) { return formatKbVal(v); } } },
+          yAxis: { type: 'value', axisLabel: { fontSize: 11, formatter: function(v) { return fmtKb(v); } } },
           dataZoom: [{ type: 'inside', start: 0, end: 100 }],
           animationDuration: 300,
           series: (data.memDist || []).map(function(s) {
@@ -1760,27 +1764,15 @@ function buildInteractiveChartsHtml(
       // Network chart (same style as CPU/Top)
       if (document.getElementById('ic-net')) {
         var netChart = echarts.init(document.getElementById('ic-net'));
+        function fmtNet(v) { return v >= 1048576 ? (v / 1048576).toFixed(1) + ' MB/s' : v >= 1024 ? (v / 1024).toFixed(0) + ' KB/s' : v.toFixed(0) + ' B/s'; }
         netChart.setOption({
-          tooltip: Object.assign({}, opts.tooltip, {
-            formatter: function(params) {
-              if (!params || !params.length) return '';
-              var time = new Date(params[0].axisValue).toLocaleTimeString('zh-CN', { hour12: false });
-              var html = '<div style="font-weight:600;margin-bottom:4px">' + time + '</div>';
-              params.forEach(function(p) {
-                var v = p.value[1];
-                var formatted = v >= 1048576 ? (v / 1048576).toFixed(1) + ' MB/s' : v >= 1024 ? (v / 1024).toFixed(0) + ' KB/s' : v.toFixed(0) + ' B/s';
-                html += p.marker + ' ' + p.seriesName + ': <b>' + formatted + '</b><br>';
-              });
-              return html;
-            }
-          }),
+          tooltip: mkTip('net', fmtNet),
           legend: Object.assign({}, opts.legend, {
             formatter: function(name) {
               var series = (data.net || []).find(function(s) { return s.name === name; });
               if (series && series.data && series.data.length > 0) {
                 var last = series.data[series.data.length - 1][1];
-                var formatted = last >= 1048576 ? (last / 1048576).toFixed(1) + ' MB/s' : last >= 1024 ? (last / 1024).toFixed(0) + ' KB/s' : last.toFixed(0) + ' B/s';
-                return name + ' (' + formatted + ')';
+                return name + ' (' + fmtNet(last) + ')';
               }
               return name;
             }
@@ -1818,12 +1810,12 @@ function buildInteractiveChartsHtml(
     loadScript('https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js', function() {
       document.getElementById('chart-loading').style.display = 'none';
       document.getElementById('charts-container').style.display = 'block';
-      render();
+      setTimeout(function() { render(); }, 50);
     }, function() {
       loadScript('https://cdn.bootcdn.net/ajax/libs/echarts/5.4.3/echarts.min.js', function() {
         document.getElementById('chart-loading').style.display = 'none';
         document.getElementById('charts-container').style.display = 'block';
-        render();
+        setTimeout(function() { render(); }, 50);
       }, function() {
         document.getElementById('chart-loading').innerHTML = '<div style="color:#c00">⚠️ 图表库加载失败，请联网后重新打开本报告查看交互式图表。</div>';
       });
@@ -1916,6 +1908,7 @@ function formatLocalTime(date: Date): string {
 }
 
 let pollErrorCount = 0
+let logcatRestartCount = 0
 let renderTimer: ReturnType<typeof setTimeout> | null = null
 let renderPending = false
 // 实时图表最大点数：提升到600以支持更长时间运行时的精度
@@ -2161,11 +2154,41 @@ function updateTopAppChartDebounced() {
 }
 
 let lastUptimeSecs = 0
+let pollCount = 0
 async function pollOnce() {
   if (!deviceSerial.value) return
   try {
     const snap = await getSnapshot(deviceSerial.value)
+    if (pollErrorCount >= 3 && pollTimer) {
+      clearInterval(pollTimer)
+      pollTimer = setInterval(pollOnce, store.intervalMs)
+    }
     pollErrorCount = 0
+    pollCount++
+
+    // Periodic logcat health check: every ~50 successful polls (~100s at 2s interval)
+    // Simplified after Phase 69 fixed the UTF-8 root cause (from_utf8_lossy), which
+    // eliminated silent thread death. Previously had stale-mtime + skipCycles backoff
+    // as layers 2-3; now only checks is_alive (ADB process + reader thread alive).
+    if (pollCount % 50 === 0 && deviceSerial.value && sessionLogDir.value) {
+      try {
+        const alive = await logcatIsAlive(deviceSerial.value)
+        if (!alive) {
+          if (logcatRestartCount >= 10) {
+            showToast('logcat 连续启动失败，请检查设备连接或重启 ADB', false)
+            logcatRestartCount = 0
+          } else {
+            try { const diag = await logcatDiag(deviceSerial.value); console.warn('[logcat] restarting. diag:', JSON.stringify(diag)) } catch {}
+            logcatRestartCount++
+            showToast('logcat 异常，正在重启...')
+            try { await invoke('adb_logcat_stop', { serial: deviceSerial.value }) } catch {}
+            try { await invoke('adb_logcat_start', { serial: deviceSerial.value, filePath: sessionLogDir.value + 'logcat.txt' }) } catch {}
+          }
+        } else if (logcatRestartCount > 0) {
+          logcatRestartCount = 0
+        }
+      } catch {}
+    }
 
     // Reboot detection: if uptime decreased by >60s, device was rebooted.
     // Auto-create new session log directory and restart logcat.
@@ -2205,12 +2228,17 @@ async function pollOnce() {
     scheduleRender()
   } catch (e: any) {
     pollErrorCount++
-    if (pollErrorCount >= 3) {
-      showToast('ADB 连接异常，已连续失败 ' + pollErrorCount + ' 次，请检查设备连接', true)
+    if (pollErrorCount === 3) {
+      showToast('ADB 连接异常，已连续失败，采集将继续但间隔将增大', true)
+    } else if (pollErrorCount > 3 && pollErrorCount % 5 === 0) {
+      showToast('ADB 连接异常，已连续失败 ' + pollErrorCount + ' 次，仍在重试中', true)
     }
-    if (pollErrorCount >= 10) {
-      showToast('ADB 连接持续失败，自动停止监控', true)
-      stopPolling()
+    // Adaptive backoff: increase poll interval on consecutive errors
+    // but NEVER stop logcat/dmesg capture.
+    if (pollErrorCount >= 3 && pollTimer) {
+      clearInterval(pollTimer)
+      const backoffMs = Math.min(store.intervalMs * (1 + (pollErrorCount - 3) * 0.5), 30000)
+      pollTimer = setInterval(pollOnce, backoffMs)
     }
   }
 }

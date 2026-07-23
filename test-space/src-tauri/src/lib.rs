@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use base64::Engine;
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::Arc;
+use serde::Serialize;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use std::sync::Mutex;
@@ -26,13 +27,30 @@ use chrono::TimeZone;
 type MirrorKey = (String, String); // (serial, window_label)
 struct MirrorState(Mutex<HashMap<MirrorKey, (Arc<AtomicBool>, u16)>>);
 
+// LogcatChild tracks both the ADB process and reader thread.
+// thread_alive + exit_reason were added pre-Phase-69 (before the UTF-8
+// root cause was found) as a second layer of defense. With the
+// from_utf8_lossy fix in place, the reader thread no longer dies from
+// non-UTF-8 bytes, so exit_reason is now primarily useful for diagnosing
+// ADB process crashes or external failures. thread_alive remains as a
+// safety net for Rust panics inside the reader thread.
 struct LogcatChild {
     child: std::process::Child,
     stop_flag: Arc<std::sync::atomic::AtomicBool>,
+    thread_alive: Arc<std::sync::atomic::AtomicBool>,
+    exit_reason: Arc<std::sync::Mutex<String>>,
 }
 
 #[derive(Default)]
 struct LogcatState(Mutex<HashMap<String, LogcatChild>>);
+
+#[derive(Serialize)]
+struct LogcatDiag {
+    is_alive: bool,
+    child_exit_code: Option<i32>,
+    thread_alive: bool,
+    exit_reason: String,
+}
 
 static NEXT_MIRROR_PORT: AtomicU16 = AtomicU16::new(27183);
 
@@ -405,64 +423,89 @@ async fn adb_logcat_start(serial: String, file_path: String, state: tauri::State
     let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
     let stop_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let stop_flag_clone = stop_flag.clone();
+    let thread_alive = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let thread_alive_clone = thread_alive.clone();
+    let exit_reason = Arc::new(std::sync::Mutex::new(String::new()));
+    let exit_reason_clone = exit_reason.clone();
     let file_path_clone = file_path.clone();
 
     std::thread::spawn(move || {
-        let reader = std::io::BufReader::new(stdout);
+        let mut reader = std::io::BufReader::new(stdout);
+        let mut raw = Vec::<u8>::with_capacity(1024);
         let mut buf = String::with_capacity(1024);
         let mut lines_since_flush = 0;
-        for line in reader.lines() {
+        let mut write_failures: u32 = 0;
+        let set_reason = |r: &str| {
+            if let Ok(mut reason) = exit_reason_clone.lock() {
+                if reason.is_empty() { *reason = r.to_string(); }
+            }
+        };
+        loop {
+            raw.clear();
+            match reader.read_until(b'\n', &mut raw) {
+                Ok(0) => break,
+                Ok(_) => {}
+                Err(e) => {
+                    set_reason(&format!("read_error:{}", e));
+                    break;
+                }
+            }
             if stop_flag_clone.load(std::sync::atomic::Ordering::Relaxed) {
+                set_reason("stop_flag");
                 break;
             }
-            match line {
-                Ok(ref s) => {
-                    buf.clear();
-                    buf.push_str(s);
-                    buf.push('\n');
-                    let line_size = buf.len() as u64;
-                    
-                    if current_size + line_size > MAX_FILE_SIZE && current_size > 0 {
-                        let end_time_str = format_log_time(std::time::SystemTime::now());
-                        let new_start_time_str = format_log_time(std::time::SystemTime::now());
-                        
-                        if let Ok(mut new_file) = std::fs::File::create(get_log_path(&file_path_clone, &new_start_time_str)) {
-                            if let Some(f) = file.as_mut() {
-                                let _ = f.flush();
-                            }
-                            file.take();
-                            rename_log_file(&file_path_clone, &current_start_time_str, &end_time_str);
-                            
-                            current_start_time_str = new_start_time_str;
-                            current_size = line_size;
-                            lines_since_flush = 1;
-                            
-                            if new_file.write_all(buf.as_bytes()).is_err() {
-                                break;
-                            }
-                            let _ = new_file.flush();
-                            file = Some(new_file);
-                            continue;
-                        } else {
-                            break;
-                        }
-                    }
-                    
+            buf.clear();
+            buf.push_str(&String::from_utf8_lossy(&raw));
+            if !buf.ends_with('\n') {
+                buf.push('\n');
+            }
+            let line_size = buf.len() as u64;
+
+            if current_size + line_size > MAX_FILE_SIZE && current_size > 0 {
+                let end_time_str = format_log_time(std::time::SystemTime::now());
+                let new_start_time_str = format_log_time(std::time::SystemTime::now());
+
+                if let Ok(mut new_file) = std::fs::File::create(get_log_path(&file_path_clone, &new_start_time_str)) {
                     if let Some(f) = file.as_mut() {
-                        if f.write_all(buf.as_bytes()).is_err() {
-                            break;
-                        }
-                        current_size += line_size;
-                        lines_since_flush += 1;
-                        if lines_since_flush >= 10 {
-                            let _ = f.flush();
-                            lines_since_flush = 0;
-                        }
+                        let _ = f.flush();
                     }
+                    file.take();
+                    rename_log_file(&file_path_clone, &current_start_time_str, &end_time_str);
+
+                    current_start_time_str = new_start_time_str;
+                    current_size = line_size;
+                    lines_since_flush = 1;
+
+                    if new_file.write_all(buf.as_bytes()).is_err() {
+                        write_failures += 1;
+                        if write_failures >= 10 { set_reason("write_failure_rotation"); break; }
+                        file = Some(new_file);
+                        continue;
+                    }
+                    let _ = new_file.flush();
+                    file = Some(new_file);
+                    continue;
+                } else {
+                    continue;
                 }
-                Err(_) => break,
+            }
+
+            if let Some(f) = file.as_mut() {
+                if f.write_all(buf.as_bytes()).is_err() {
+                    write_failures += 1;
+                    if write_failures >= 10 { set_reason("write_failure_10x"); break; }
+                    continue;
+                }
+                write_failures = 0;
+                current_size += line_size;
+                lines_since_flush += 1;
+                if lines_since_flush >= 10 {
+                    let _ = f.flush();
+                    lines_since_flush = 0;
+                }
             }
         }
+        thread_alive_clone.store(false, std::sync::atomic::Ordering::Relaxed);
         let end_time_str = format_log_time(std::time::SystemTime::now());
         if let Some(f) = file.as_mut() {
             let _ = f.flush();
@@ -470,7 +513,7 @@ async fn adb_logcat_start(serial: String, file_path: String, state: tauri::State
         rename_log_file(&file_path_clone, &current_start_time_str, &end_time_str);
     });
 
-    state.0.lock().unwrap().insert(serial, LogcatChild { child, stop_flag });
+    state.0.lock().unwrap().insert(serial, LogcatChild { child, stop_flag, thread_alive, exit_reason });
     Ok("Logcat started".to_string())
 }
 
@@ -549,10 +592,38 @@ async fn adb_get_dumpsys_meminfo(serial: String) -> Result<adb::DumpsysMemInfo, 
 }
 
 #[tauri::command]
-async fn adb_poll_dmesg(serial: String, known_lines: usize) -> Result<adb::DmesgPollResult, String> {
+async fn adb_poll_dmesg(serial: String, known_lines: usize, known_last_line: String) -> Result<adb::DmesgPollResult, String> {
     tokio::task::spawn_blocking(move || {
-        adb::poll_dmesg(&serial, known_lines)
+        adb::poll_dmesg(&serial, known_lines, &known_last_line)
     }).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn adb_logcat_is_alive(serial: String, state: tauri::State<'_, LogcatState>) -> Result<bool, String> {
+    let mut guard = state.0.lock().map_err(|e| e.to_string())?;
+    if let Some(entry) = guard.get_mut(&serial) {
+        let child_alive = entry.child.try_wait().map(|r| r.is_none()).unwrap_or(false);
+        let thread_alive = entry.thread_alive.load(std::sync::atomic::Ordering::Relaxed);
+        Ok(child_alive && thread_alive)
+    } else {
+        Ok(false)
+    }
+}
+
+#[tauri::command]
+async fn adb_logcat_diag(serial: String, state: tauri::State<'_, LogcatState>) -> Result<LogcatDiag, String> {
+    let mut guard = state.0.lock().map_err(|e| e.to_string())?;
+    if let Some(entry) = guard.get_mut(&serial) {
+        let child_status = entry.child.try_wait().map_err(|e| e.to_string())?;
+        Ok(LogcatDiag {
+            is_alive: child_status.is_none() && entry.thread_alive.load(std::sync::atomic::Ordering::Relaxed),
+            child_exit_code: child_status.and_then(|s| s.code()),
+            thread_alive: entry.thread_alive.load(std::sync::atomic::Ordering::Relaxed),
+            exit_reason: entry.exit_reason.lock().map_err(|e| e.to_string())?.clone(),
+        })
+    } else {
+        Ok(LogcatDiag { is_alive: false, child_exit_code: None, thread_alive: false, exit_reason: String::new() })
+    }
 }
 
 #[tauri::command]
@@ -808,6 +879,8 @@ pub fn run() {
             adb_get_watermark,
             adb_get_dumpsys_meminfo,
             adb_poll_dmesg,
+            adb_logcat_is_alive,
+            adb_logcat_diag,
             adb_check_anr_tombstones,
             perf_get_snapshot,
             adb_logcat_buffer_resize,
