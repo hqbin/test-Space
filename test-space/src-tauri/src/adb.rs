@@ -1,8 +1,19 @@
 use std::process::Command;
 use serde::Serialize;
 use std::sync::mpsc;
+use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
+
+// CPU delta cache for /proc/stat + /proc/[pid]/stat approach.
+// Stores the previous snapshot's cumulative jiffies so we can compute
+// per-process CPU percentage across the 10s polling interval.
+struct CpuSnapshot {
+    total_jiffies: u64,
+    idle_jiffies: u64,
+    proc_ticks: std::collections::HashMap<u32, u64>, // pid -> utime + stime
+}
+static PREV_CPU: Mutex<Option<CpuSnapshot>> = Mutex::new(None);
 
 
 #[cfg(target_os = "windows")]
@@ -472,7 +483,7 @@ fn parse_kb_val(line: &str) -> u64 {
 pub fn get_perf_snapshot(serial: &str, watch_app: Option<&str>) -> Result<PerfSnapshot, String> {
     // Collect meminfo, top, df, ps, pressure, uptime, and version in a single shell call.
     // Using a single ADB shell invocation to minimize latency on every poll cycle.
-    let combined = shell_command(serial, "cat /proc/meminfo 2>/dev/null; echo '---TOP---'; top -n 1 -d 1 -b 2>/dev/null; echo '---DF---'; df /data 2>/dev/null; echo '---PROC---'; ps -A 2>/dev/null; echo '---PRESSURE---'; cat /proc/pressure/memory 2>/dev/null; echo '---IOPRESSURE---'; cat /proc/pressure/io 2>/dev/null; echo '---CPURESSURE---'; cat /proc/pressure/cpu 2>/dev/null; echo '---NET---'; cat /proc/net/dev 2>/dev/null; echo '---UPTIME---'; cat /proc/uptime 2>/dev/null; echo '---DATE---'; date +%s 2>/dev/null; echo '---VERSION---'; cat /proc/version 2>/dev/null")?;
+    let combined = shell_command(serial, "cat /proc/meminfo 2>/dev/null; echo '---CPU---'; cat /proc/stat; echo '---PIDS---'; cat /proc/[0-9]*/stat 2>/dev/null; echo '---DF---'; df /data 2>/dev/null; echo '---PROC---'; ps -A 2>/dev/null; echo '---PRESSURE---'; cat /proc/pressure/memory 2>/dev/null; echo '---IOPRESSURE---'; cat /proc/pressure/io 2>/dev/null; echo '---CPURESSURE---'; cat /proc/pressure/cpu 2>/dev/null; echo '---NET---'; cat /proc/net/dev 2>/dev/null; echo '---UPTIME---'; cat /proc/uptime 2>/dev/null; echo '---DATE---'; date +%s 2>/dev/null; echo '---VERSION---'; cat /proc/version 2>/dev/null")?;
 
     let mut mem_total_kb: u64 = 0;
     let mut mem_free_kb: u64 = 0;
@@ -481,7 +492,6 @@ pub fn get_perf_snapshot(serial: &str, watch_app: Option<&str>) -> Result<PerfSn
     let mut swap_free_kb: u64 = 0;
 
     let mut cpu_total: f64 = 0.0;
-    let mut core_count: f64 = 1.0;
     let mut storage_total_kb: u64 = 0;
     let mut storage_used_kb: u64 = 0;
     let mut storage_avail_kb: u64 = 0;
@@ -522,19 +532,23 @@ pub fn get_perf_snapshot(serial: &str, watch_app: Option<&str>) -> Result<PerfSn
     let mut device_uptime_secs: f64 = 0.0;
     let mut device_date: String = String::new();
     let mut kernel_version: String = String::new();
+    let mut current_cpu_jiffies: u64 = 0;
+    let mut current_idle_jiffies: u64 = 0;
+    let mut current_proc_ticks: std::collections::HashMap<u32, u64> = std::collections::HashMap::new();
+    // PID -> command name (from ps -A output, used for CPU-only processes)
+    let mut pid_to_name: std::collections::HashMap<u32, String> = std::collections::HashMap::new();
 
     // PID -> (name, pss_kb) — primary source is dumpsys meminfo (accurate PSS)
     let mut pid_to_pss: std::collections::HashMap<u32, (String, u64)> = std::collections::HashMap::new();
-    // PID -> cpu_percent — from top output
+    // PID -> cpu_percent — from /proc/[pid]/stat delta cache
     let mut pid_to_cpu: std::collections::HashMap<u32, f64> = std::collections::HashMap::new();
-    // Names seen in top output (for processes not in dumpsys meminfo)
-    let mut top_names: std::collections::HashMap<u32, String> = std::collections::HashMap::new();
 
     let mut section = "meminfo";
 
     for line in combined.lines() {
         match line.trim() {
-            "---TOP---" => { section = "top"; continue; }
+            "---CPU---" => { section = "cpu"; continue; }
+            "---PIDS---" => { section = "pids"; continue; }
             "---DF---" => { section = "df"; continue; }
             "---PROC---" => { section = "proc"; continue; }
             "---PRESSURE---" => { section = "pressure"; continue; }
@@ -560,53 +574,47 @@ pub fn get_perf_snapshot(serial: &str, watch_app: Option<&str>) -> Result<PerfSn
                 else if line.starts_with("KernelStack:") { mem_kernel_stack_kb = parse_kb_val(line); }
                 else if line.starts_with("PageTables:") { mem_page_tables_kb = parse_kb_val(line); }
             }
-            "top" => {
+            "cpu" => {
+                // /proc/stat first line: "cpu  user nice sys idle iowait irq softirq steal ..."
                 let trimmed = line.trim();
-
-                // Parse total CPU from line like:
-                //   "400%cpu 103%user 0%nice 19%sys 274%idle 0%iow 3%irq 0%sirq 0%host"
-                // cpu_total = (total_capacity - idle) / total_capacity * 100
-                if trimmed.contains("%cpu") && trimmed.contains("%idle") {
-                    let mut total_capacity = 0.0f64;
-                    let mut idle_val = 0.0f64;
-                    for word in trimmed.split_whitespace() {
-                        if word.ends_with("%cpu") {
-                            let cleaned = word.trim_end_matches("cpu").trim_end_matches('%');
-                            if let Ok(v) = cleaned.parse::<f64>() { total_capacity = v; }
-                        } else if word.ends_with("%idle") {
-                            let cleaned = word.trim_end_matches("idle").trim_end_matches('%');
-                            if let Ok(v) = cleaned.parse::<f64>() { idle_val = v; }
+                if trimmed.starts_with("cpu ") {
+                    let parts: Vec<&str> = trimmed.split_whitespace().collect();
+                    if parts.len() >= 5 {
+                        let vals: Vec<u64> = parts[1..].iter()
+                            .filter_map(|s| s.parse::<u64>().ok())
+                            .collect();
+                        if vals.len() >= 4 {
+                            let total: u64 = vals.iter().sum();
+                            let idle = vals[3]; // idle is 4th field (0-indexed 3)
+                            cpu_total = ((total - idle) as f64 / total as f64 * 100.0).clamp(0.0, 100.0);
+                            // Store current stats for per-process delta computation
+                            current_cpu_jiffies = total;
+                            current_idle_jiffies = idle;
                         }
                     }
-                    if total_capacity > 0.0 {
-                        cpu_total = ((total_capacity - idle_val) / total_capacity * 100.0).clamp(0.0, 100.0);
-                        // Derive core count: "400%cpu" means 4 cores (400/100)
-                        core_count = (total_capacity / 100.0).max(1.0);
-                    }
                 }
-
-                // Skip header line: "  PID USER  PR  NI VIRT  RES  SHR S[%CPU] %MEM  TIME+ ARGS"
-                if trimmed.starts_with("PID") && trimmed.contains("USER") { continue; }
-
-                // Parse per-process: "  2033 system  20  0  1.3G  98M  63M  S  96.7  5.0  79:54.56  com.app"
-                // Column positions (0-indexed): 0=PID, 1=USER, 2=PR, 3=NI, 4=VIRT, 5=RES, 6=SHR,
-                //   7=S(state), 8=%CPU, 9=%MEM, 10=TIME+, 11+=ARGS
-                let parts: Vec<&str> = trimmed.split_whitespace().collect();
-                if parts.len() >= 11 {
-                    if let Ok(pid) = parts[0].parse::<u32>() {
-                        if pid > 0 {
-                            if let Ok(cpu_val) = parts[8].parse::<f64>() {
-                                if cpu_val >= 0.0 && cpu_val <= 800.0 {
-                                    // Normalize per-process CPU to 0-100% by dividing by core count.
-                                    // Android `top` reports per-process CPU relative to a single core,
-                                    // so a process using 2 full cores on a 4-core device shows 200%.
-                                    // Dividing by core_count gives the percentage of total device CPU.
-                                    let normalized_cpu = (cpu_val / core_count).clamp(0.0, 100.0);
-                                    // Command name is the last token (Android package names have no spaces)
-                                    let cmd = parts[parts.len() - 1].trim();
-                                    if !cmd.is_empty() && !cmd.starts_with('[') {
-                                        pid_to_cpu.insert(pid, normalized_cpu);
-                                        top_names.insert(pid, cmd.to_string());
+            }
+            "pids" => {
+                // Parse /proc/[pid]/stat for per-process CPU ticks.
+                // Format: "pid (comm) state ppid ... utime stime ..."
+                let trimmed = line.trim();
+                if trimmed.is_empty() { continue; }
+                // Find the closing paren of comm field
+                if let Some(paren_close) = trimmed.rfind(')') {
+                    let before_paren = trimmed[..paren_close].trim();
+                    // Extract pid from start (before first space before '(')
+                    if let Some(pid_str) = before_paren.split_whitespace().next() {
+                        if let Ok(pid) = pid_str.parse::<u32>() {
+                            if pid > 0 {
+                                // Fields after ')': state ppid pgrp session tty ... utime stime
+                                let after = trimmed[paren_close + 1..].trim();
+                                let fields: Vec<&str> = after.split_whitespace().collect();
+                                // utime = fields[11], stime = fields[12] (0-indexed after state)
+                                if fields.len() >= 13 {
+                                    if let Ok(utime) = fields[11].parse::<u64>() {
+                                        if let Ok(stime) = fields[12].parse::<u64>() {
+                                            current_proc_ticks.insert(pid, utime + stime);
+                                        }
                                     }
                                 }
                             }
@@ -639,6 +647,7 @@ pub fn get_perf_snapshot(serial: &str, watch_app: Option<&str>) -> Result<PerfSn
                         if pid > 0 {
                             let name = parts[parts.len() - 1].trim().to_string();
                             if !name.is_empty() && !name.starts_with('[') {
+                                pid_to_name.entry(pid).or_insert_with(|| name.clone());
                                 // Use RSS as approximate PSS if dumpsys doesn't have it
                                 let rss_kb = parts[4].parse::<u64>().unwrap_or(0);
                                 pid_to_pss.entry(pid).or_insert((name, rss_kb));
@@ -760,18 +769,34 @@ pub fn get_perf_snapshot(serial: &str, watch_app: Option<&str>) -> Result<PerfSn
         }
     }
 
-    // Fallback for total CPU: use dumpsys cpuinfo if top parsing failed
-    if cpu_total == 0.0 {
-        if let Ok(cpuinfo_out) = shell_command(serial, "dumpsys cpuinfo 2>/dev/null") {
-            for line in cpuinfo_out.lines() {
-                let trimmed = line.trim();
-                if trimmed.contains("% TOTAL:") || trimmed.contains("% total:") {
-                    if let Some(pct) = trimmed.split('%').next() {
-                        cpu_total = pct.trim().parse::<f64>().unwrap_or(0.0).clamp(0.0, 100.0);
+    // Compute CPU percentages from /proc/stat delta (across ~10s polling interval).
+    // Using a static cache avoids the 1s sampling delay of `top -n 1 -d 1 -b`.
+    if let Ok(mut prev_guard) = PREV_CPU.lock() {
+        if let Some(ref prev) = *prev_guard {
+            let total_delta = current_cpu_jiffies.saturating_sub(prev.total_jiffies);
+            if total_delta > 0 {
+                let idle_delta = current_idle_jiffies.saturating_sub(prev.idle_jiffies);
+                cpu_total = ((total_delta - idle_delta) as f64 / total_delta as f64 * 100.0).clamp(0.0, 100.0);
+
+                // Per-process CPU: (utime+stime delta) / total_jiffies_delta * 100
+                for (&pid, &ticks) in &current_proc_ticks {
+                    if let Some(&prev_ticks) = prev.proc_ticks.get(&pid) {
+                        let delta = ticks.saturating_sub(prev_ticks);
+                        let cpu = (delta as f64 / total_delta as f64 * 100.0).clamp(0.0, 100.0);
+                        if cpu > 0.0 {
+                            pid_to_cpu.insert(pid, cpu);
+                        }
                     }
+                    // PIDs with no previous entry show 0% (first appearance)
                 }
             }
         }
+        // Store current stats as previous for next poll
+        *prev_guard = Some(CpuSnapshot {
+            total_jiffies: current_cpu_jiffies,
+            idle_jiffies: current_idle_jiffies,
+            proc_ticks: current_proc_ticks,
+        });
     }
 
     // Get accurate PSS from dumpsys meminfo (overrides ps RSS values)
@@ -812,6 +837,7 @@ pub fn get_perf_snapshot(serial: &str, watch_app: Option<&str>) -> Result<PerfSn
                                     .and_then(|s| s.trim_end_matches(')').parse::<u32>().ok())
                                     .unwrap_or(0);
                                 if pid > 0 {
+                                    pid_to_name.entry(pid).or_insert_with(|| name.clone());
                                     pid_to_pss.insert(pid, (name, size_kb));
                                 }
                             }
@@ -822,7 +848,7 @@ pub fn get_perf_snapshot(serial: &str, watch_app: Option<&str>) -> Result<PerfSn
         }
     }
 
-    // Build final procs list: merge PSS (from dumpsys) with CPU (from top)
+    // Build final procs list: merge PSS (from dumpsys) with CPU (from proc stat delta)
     let mut procs: Vec<PerfProcess> = Vec::new();
 
     // First, add all processes that have PSS data
@@ -836,16 +862,16 @@ pub fn get_perf_snapshot(serial: &str, watch_app: Option<&str>) -> Result<PerfSn
         });
     }
 
-    // Also add processes from top that have CPU but no PSS (e.g., short-lived processes)
-    for (pid, name) in &top_names {
-        if !pid_to_pss.contains_key(pid) {
-            let cpu_percent = pid_to_cpu.get(pid).copied().unwrap_or(0.0);
-            if cpu_percent > 0.0 {
+    // Also add processes from pid_to_cpu that have CPU but no PSS (e.g., short-lived processes)
+    for (pid, cpu_percent) in &pid_to_cpu {
+        if !pid_to_pss.contains_key(pid) && *cpu_percent > 0.0 {
+            let name = pid_to_name.get(pid).cloned().unwrap_or_default();
+            if !name.is_empty() {
                 procs.push(PerfProcess {
                     pid: *pid,
-                    name: name.clone(),
+                    name,
                     pss_kb: 0,
-                    cpu_percent,
+                    cpu_percent: *cpu_percent,
                 });
             }
         }

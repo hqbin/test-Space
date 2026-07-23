@@ -13,16 +13,6 @@
       <div class="flex items-center gap-2">
         <div class="w-2 h-2 rounded-full" :class="store.isCollecting ? 'bg-success-indicator animate-pulse' : 'bg-outline-variant'" :title="store.isCollecting ? t('perf.collecting') : t('perf.idle')"></div>
       </div>
-      <div class="flex items-center gap-2">
-        <span class="font-caption text-caption text-on-surface-variant">{{ t('perf.interval') }}:</span>
-        <div class="relative" ref="intervalDropdownRef">
-          <button class="glass-hover rounded-xl px-3 py-1.5 text-body-md flex items-center gap-2 select-none min-w-[72px]"
-            @click="toggleIntervalDropdown">
-            <span class="flex-1 text-left">{{ intervalOptions.find(o => String(o.value) === intervalMs)?.label || intervalMs + 'ms' }}</span>
-            <span class="material-symbols-outlined text-[16px] transition-transform" :class="intervalDropdownOpen ? 'rotate-180' : ''">expand_more</span>
-          </button>
-        </div>
-      </div>
       <!-- Hidden chart toggle buttons -->
       <div v-if="Object.values(chartVisibility).some(v => !v)" class="flex items-center gap-1 ml-2 pl-2 border-l border-glass-border-dark">
         <button v-if="!chartVisibility.topApp" class="glass-button p-1.5 rounded-lg" title="显示TopN应用内存" @click="toggleChartVisibility('topApp')">
@@ -32,21 +22,6 @@
           <span class="material-symbols-outlined text-[14px]">memory</span>
         </button>
       </div>
-      <Teleport to="body">
-        <Transition name="fade-scale">
-          <div v-if="intervalDropdownOpen" class="fixed z-[9999]" :style="intervalDropdownStyle" @click.stop>
-            <div class="glass-panel rounded-2xl py-1 shadow-xl" style="min-width:120px">
-              <div v-for="opt in intervalOptions" :key="opt.value"
-                class="flex items-center gap-2 rounded-xl px-3 py-1.5 cursor-pointer select-none mx-1"
-                :class="intervalMs === String(opt.value) ? 'bg-white/20 font-medium' : 'hover:bg-white/10'"
-                @click.stop="selectInterval(opt.value)">
-                <span class="material-symbols-outlined text-[14px] text-on-surface-variant shrink-0" :class="intervalMs === String(opt.value) ? 'visible' : 'invisible'">check</span>
-                <span class="text-body-md">{{ opt.label }}</span>
-              </div>
-            </div>
-          </div>
-        </Transition>
-      </Teleport>
       <Teleport to="body">
         <Transition name="fade-scale">
           <div v-if="topNDropdownOpen" class="fixed z-[9999]" :style="topNDropdownStyle" @click.stop>
@@ -284,7 +259,7 @@
 import { ref, computed, watch, onMounted, onUnmounted, onActivated, onDeactivated, nextTick, type Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from '@/composables/useI18n'
-import { usePerfMonitor, type PerfSnapshot, type WatermarkInfo, type DumpsysMemInfo, type DmesgPollResult, type AnrTombstoneResult, type LogcatDiag } from '@/composables/usePerfMonitor'
+import { usePerfMonitor, type PerfSnapshot, type WatermarkInfo, type DmesgPollResult, type AnrTombstoneResult, type LogcatDiag } from '@/composables/usePerfMonitor'
 import { useAdb } from '@/composables/useAdb'
 import { usePerfMonitorStore } from '@/stores/usePerfMonitorStore'
 import { savePerfSession, listPerfSessions, deletePerfSession, type PerfSessionRow } from '@/services/database'
@@ -299,12 +274,11 @@ defineOptions({ name: 'PerfMonitorPage' })
 
 const router = useRouter()
 const { t } = useI18n()
-const { getSnapshot, getWatermark, getDumpsysMeminfo, pollDmesg, checkAnrTombstones, logcatIsAlive, logcatDiag } = usePerfMonitor()
+const { getSnapshot, getWatermark, pollDmesg, checkAnrTombstones, logcatIsAlive, logcatDiag } = usePerfMonitor()
 const { shell, rootDevice, pullFile } = useAdb()
 const store = usePerfMonitorStore()
 
 const deviceSerial = ref(localStorage.getItem('last_device_serial') || '')
-const intervalMs = ref(String(store.intervalMs))
 // Track whether the page is currently active (visible). When deactivated by
 // keep-alive (user switched to another page), we skip ECharts rendering to
 // avoid blocking the main thread, but data collection continues uninterrupted.
@@ -356,34 +330,7 @@ function selectSeries(
   }
 }
 
-// Interval dropdown
-const intervalDropdownOpen = ref(false)
-const intervalDropdownRef = ref<HTMLElement | null>(null)
-const intervalDropdownStyle = ref({ top: '0px', left: '0px' })
-const intervalOptions = [
-  { value: 1000, label: '1s' },
-  { value: 2000, label: '2s' },
-  { value: 5000, label: '5s' },
-  { value: 10000, label: '10s' },
-]
-function toggleIntervalDropdown() {
-  if (intervalDropdownOpen.value) { intervalDropdownOpen.value = false; return }
-  if (intervalDropdownRef.value) {
-    const r = intervalDropdownRef.value.getBoundingClientRect()
-    intervalDropdownStyle.value = { top: `${r.bottom + 4}px`, left: `${r.left}px` }
-  }
-  intervalDropdownOpen.value = true
-}
-function selectInterval(v: number) {
-  store.setInterval(v)
-  intervalMs.value = String(v)
-  intervalDropdownOpen.value = false
-  // Restart polling timer with new interval if currently collecting
-  if (store.isCollecting && pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = setInterval(pollOnce, v)
-  }
-}
+
 
 // Top N dropdown
 const topNDropdownOpen = ref(false)
@@ -506,9 +453,6 @@ function topAppSelectNone() {
 // Click outside to close dropdowns
 function handleDropdownClick(e: MouseEvent) {
   const t = e.target as Node
-  if (intervalDropdownOpen.value && intervalDropdownRef.value && !intervalDropdownRef.value.contains(t)) {
-    intervalDropdownOpen.value = false
-  }
   if (topNDropdownOpen.value && topNDropdownRef.value && !topNDropdownRef.value.contains(t)) {
     topNDropdownOpen.value = false
   }
@@ -557,22 +501,6 @@ async function collectWatermark(serial: string) {
       minKb: allMin * 4,
       lowKb: allLow * 4,
       highKb: allHigh * 4,
-    })
-  } catch {}
-}
-
-// Dumpsys PSS tracking (every 30s)
-let dumpsysTimer: ReturnType<typeof setInterval> | null = null
-const dumpsysInfo = ref<DumpsysMemInfo | null>(null)
-async function pollDumpsys(serial: string) {
-  if (!serial) return
-  try {
-    const info = await getDumpsysMeminfo(serial)
-    dumpsysInfo.value = info
-    store.addDumpsysPssPoint({
-      usedRamPssKb: info.used_ram_pss_kb,
-      usedRamKernelKb: info.used_ram_kernel_kb,
-      processes: info.processes.map(p => ({ name: p.name, pssKb: p.pss_kb })),
     })
   } catch {}
 }
@@ -712,8 +640,6 @@ async function doLoadSession(s: PerfSessionRow) {
       await new Promise(resolve => requestAnimationFrame(resolve))
       store.restoreFullSession(parsed)
     }
-    store.setInterval(s.interval_ms)
-    intervalMs.value = String(s.interval_ms)
     showLoadDialog.value = false
     // 大数据量加载时，分批异步渲染避免阻塞UI线程
     const dataSize = store.history.length
@@ -842,22 +768,33 @@ function buildOverallAssessment(
   return buildBuiltinAssessment(pts, topMem, topCpu, singleName, singleData)
 }
 
+function detectSustained(values: number[], threshold: number, minCount: number): { sustained: boolean; count: number; maxRun: number } {
+  let run = 0, maxRun = 0
+  for (const v of values) {
+    if (v > threshold) { run++; if (run > maxRun) maxRun = run }
+    else run = 0
+  }
+  return { sustained: maxRun >= minCount, count: maxRun, maxRun }
+}
+
 function buildBuiltinAssessment(
-  pts: { time: number; cpu: number; memUsedKb: number; memTotalKb: number; memAvailKb: number }[],
+  pts: { time: number; cpu: number; memUsedKb: number; memTotalKb: number; memAvailKb: number; zramKb?: number; swapFreeKb?: number; netRxBytes?: number; netTxBytes?: number; pressureMemSomeAvg10?: number; pressureMemFullAvg10?: number; pressureIoSomeAvg10?: number; pressureIoFullAvg10?: number }[],
   topMem: { name: string; data: { time: number; pssKb: number }[] }[],
   topCpu: { name: string; data: { time: number; cpuPercent: number }[] }[],
   singleName: string,
   singleData: { time: number; pssKb: number }[],
 ): string {
-  const issues: string[] = []
-  const leaks: string[] = []
-  const rising: string[] = []
+  const cpuFindings: string[] = []
+  const memFindings: string[] = []
+  const pressureFindings: string[] = []
+  const netFindings: string[] = []
 
   if (pts.length >= 4) {
-    // 1. Abnormal CPU peak — list top CPU-consuming apps
+    // ── CPU analysis ──
     const cpus = pts.map(p => p.cpu)
     const maxCpu = safeMax(cpus)
-    if (maxCpu > 80) {
+    const sustainedCpu = detectSustained(cpus, 80, 3)
+    if (sustainedCpu.sustained) {
       const peakApps = topCpu
         .map(p => ({ name: p.name, max: safeMax(p.data.map(d => d.cpuPercent)) }))
         .filter(p => p.max > 5)
@@ -865,101 +802,187 @@ function buildBuiltinAssessment(
         .slice(0, 5)
       const appList = peakApps.map(p => `${p.name} ${p.max.toFixed(1)}%`).join('、')
       if (maxCpu > 90) {
-        issues.push(`CPU 峰值达到 ${maxCpu.toFixed(1)}%，接近满载，可能影响系统流畅度。主要占用应用：${appList}`)
+        cpuFindings.push(`CPU 持续满载（连续 ${sustainedCpu.count} 个采样点 >80%），峰值 ${maxCpu.toFixed(1)}%，严重影响流畅度。主要占用：${appList}`)
       } else {
-        issues.push(`CPU 峰值达到 ${maxCpu.toFixed(1)}%，处于较高水平。主要占用应用：${appList}`)
+        cpuFindings.push(`CPU 持续高负载（连续 ${sustainedCpu.count} 个采样点 >80%），峰值 ${maxCpu.toFixed(1)}%。主要占用：${appList}`)
       }
+    } else if (maxCpu > 80) {
+      const peakApps = topCpu
+        .map(p => ({ name: p.name, max: safeMax(p.data.map(d => d.cpuPercent)) }))
+        .filter(p => p.max > 5)
+        .sort((a, b) => b.max - a.max)
+        .slice(0, 3)
+      const appList = peakApps.map(p => `${p.name} ${p.max.toFixed(1)}%`).join('、')
+      cpuFindings.push(`CPU 瞬时峰值 ${maxCpu.toFixed(1)}%（未持续），建议观察触发场景。主要占用：${appList}`)
     }
 
-    // 2. Low available memory
-    const minAvail = safeMin(pts.map(p => p.memAvailKb))
-    const totalMem = pts[0].memTotalKb
-    if (totalMem > 0 && minAvail / totalMem < 0.1) {
-      issues.push(`设备可用内存最低仅 ${formatKb(minAvail)} ${formatKbUnit(minAvail)}，低于总内存 10%，存在 OOM 风险`)
-    } else if (totalMem > 0 && minAvail / totalMem < 0.2) {
-      issues.push(`设备可用内存最低 ${formatKb(minAvail)} ${formatKbUnit(minAvail)}，低于总内存 20%，内存紧张`)
-    }
-
-    // 3. Per-app CPU anomalies
+    // Per-app CPU burst
     for (const p of topCpu) {
       if (p.data.length < 4) continue
       const vals = p.data.map(d => d.cpuPercent)
       const mx = safeMax(vals)
       const avg = safeAvg(vals)
       if (mx > 50 && mx > avg * 3) {
-        issues.push(`应用 ${p.name} CPU 峰值 ${mx.toFixed(1)}% 远超均值 ${avg.toFixed(1)}%，存在 CPU 突发占用`)
+        cpuFindings.push(`应用 ${p.name} CPU 峰值 ${mx.toFixed(1)}% 远超均值 ${avg.toFixed(1)}%，存在 CPU 突发占用`)
       }
     }
 
-    // 4. Device memory trend analysis
-    const deviceMemData = pts.map(p => ({ time: p.time, pssKb: p.memUsedKb }))
-    const deviceMemAnalysis = analyzeMemoryTrend(deviceMemData)
-    if (deviceMemAnalysis.isLeak) {
-      leaks.push(deviceMemAnalysis.description.replace('内存', '设备内存使用量'))
-    } else if (deviceMemAnalysis.isRising) {
-      rising.push(deviceMemAnalysis.description.replace('内存', '设备内存使用量'))
-    }
-
-    // 5. CPU overall trend analysis
-    const cpuData = pts.map(p => ({ time: p.time, pssKb: p.cpu }))
-    const cpuAnalysis = analyzeMemoryTrend(cpuData)
-    if (cpuAnalysis.isLeak) {
-      issues.push(cpuAnalysis.description.replace('内存', 'CPU 使用率').replace('MB', '%'))
-    } else if (cpuAnalysis.isRising) {
-      rising.push(cpuAnalysis.description.replace('内存', 'CPU 使用率').replace('MB', '%'))
-    }
-
-    // 6. Memory leak detection using linear regression + segmented trend analysis
-    for (const p of topMem) {
-      const analysis = analyzeMemoryTrend(p.data)
-      if (analysis.isLeak) {
-        leaks.push(analysis.description.replace('内存', `应用 ${p.name} PSS`))
-      } else if (analysis.isRising) {
-        rising.push(analysis.description.replace('内存', `应用 ${p.name} PSS`))
+    // CPU trend (simple end-to-end, no KB/MB confusion)
+    const cpuVals = pts.map(p => p.cpu)
+    if (cpuVals.length >= 10) {
+      const segSize = Math.min(10, Math.floor(cpuVals.length / 4))
+      const firstAvg = safeAvg(cpuVals.slice(0, segSize))
+      const lastAvg = safeAvg(cpuVals.slice(-segSize))
+      if (firstAvg > 0 && lastAvg > firstAvg * 1.2 && lastAvg > 10) {
+        const growthPct = ((lastAvg - firstAvg) / firstAvg * 100).toFixed(1)
+        cpuFindings.push(`CPU 使用率呈上升趋势 ${growthPct}%（${firstAvg.toFixed(1)}% → ${lastAvg.toFixed(1)}%），建议持续观察`)
       }
     }
 
-    // 7. Single app memory leak
-    if (singleData.length >= 10) {
-      const analysis = analyzeMemoryTrend(singleData)
-      if (analysis.isLeak) {
-        leaks.push(analysis.description.replace('内存', `单应用 ${singleName} PSS`))
-      } else if (analysis.isRising) {
-        rising.push(analysis.description.replace('内存', `单应用 ${singleName} PSS`))
-      }
-    }
-
-    // 8. CPU sustained high
+    // CPU sustained high (last 10)
     for (const p of topCpu) {
       if (p.data.length < 10) continue
       const lastAvg = safeAvg(p.data.slice(-10).map(d => d.cpuPercent))
       if (lastAvg > 30) {
-        rising.push(`应用 ${p.name} 近期 CPU 均值 ${lastAvg.toFixed(1)}%，持续高占用`)
+        cpuFindings.push(`应用 ${p.name} 近期 CPU 均值 ${lastAvg.toFixed(1)}%，持续高占用`)
+      }
+    }
+
+    // ── Memory analysis (absolute MB thresholds, not percentage) ──
+    const availMb = pts.map(p => p.memAvailKb / 1024)
+    const minAvail = safeMin(pts.map(p => p.memAvailKb))
+    const minAvailMb = minAvail / 1024
+    let sustainedLowMemRun = 0, maxLowMemRun = 0
+    for (const mb of availMb) {
+      if (mb < 200) { sustainedLowMemRun++; if (sustainedLowMemRun > maxLowMemRun) maxLowMemRun = sustainedLowMemRun }
+      else sustainedLowMemRun = 0
+    }
+    const sustainedLowMem = maxLowMemRun >= 3
+    const sustainedLowMemCount = maxLowMemRun
+    if (sustainedLowMem) {
+      memFindings.push(`设备可用内存持续低于 200MB（连续 ${sustainedLowMemCount} 个采样点），最低 ${formatKb(minAvail)} ${formatKbUnit(minAvail)}，存在 OOM 风险`)
+    } else if (minAvailMb < 200) {
+      memFindings.push(`设备可用内存瞬时低至 ${formatKb(minAvail)} ${formatKbUnit(minAvail)}（低于 200MB），但未持续，建议观察触发场景`)
+    } else if (minAvailMb < 400) {
+      memFindings.push(`设备可用内存最低 ${formatKb(minAvail)} ${formatKbUnit(minAvail)}，低于 400MB，内存偏紧`)
+    }
+
+    // Device memory trend
+    const deviceMemData = pts.map(p => ({ time: p.time, pssKb: p.memUsedKb }))
+    const deviceMemTrend = analyzeMemoryTrend(deviceMemData)
+    if (deviceMemTrend.isLeak) {
+      memFindings.push(deviceMemTrend.description.replace('内存', '设备内存使用量'))
+    } else if (deviceMemTrend.isRising) {
+      memFindings.push(deviceMemTrend.description.replace('内存', '设备内存使用量'))
+    }
+
+    // Per-app PSS trend
+    for (const p of topMem) {
+      const analysis = analyzeMemoryTrend(p.data)
+      if (analysis.isLeak) {
+        memFindings.push(analysis.description.replace('内存', `应用 ${p.name} PSS`))
+      } else if (analysis.isRising) {
+        memFindings.push(analysis.description.replace('内存', `应用 ${p.name} PSS`))
+      }
+    }
+
+    // Single app PSS trend
+    if (singleData.length >= 10) {
+      const analysis = analyzeMemoryTrend(singleData)
+      if (analysis.isLeak) {
+        memFindings.push(analysis.description.replace('内存', `单应用 ${singleName} PSS`))
+      } else if (analysis.isRising) {
+        memFindings.push(analysis.description.replace('内存', `单应用 ${singleName} PSS`))
+      }
+    }
+
+    // ── System pressure (PSI + correlation) ──
+    const psiMemSome = pts.map(p => p.pressureMemSomeAvg10 ?? 0)
+    const psiMemFull = pts.map(p => p.pressureMemFullAvg10 ?? 0)
+    const psiIoSome = pts.map(p => p.pressureIoSomeAvg10 ?? 0)
+    const psiIoFull = pts.map(p => p.pressureIoFullAvg10 ?? 0)
+    const maxPsiMemFull = safeMax(psiMemFull)
+    const avgPsiMemFull = safeAvg(psiMemFull)
+    const maxPsiIoFull = safeMax(psiIoFull)
+    const avgPsiIoFull = safeAvg(psiIoFull)
+    const maxPsiMemSome = safeMax(psiMemSome)
+    const avgPsiMemSome = safeAvg(psiMemSome)
+    const maxPsiIoSome = safeMax(psiIoSome)
+    const avgPsiIoSome = safeAvg(psiIoSome)
+
+    if (maxPsiMemFull > 1 || avgPsiMemFull > 1) {
+      const sustainedMemFull = detectSustained(psiMemFull, 1, 3)
+      if (sustainedMemFull.sustained) {
+        pressureFindings.push(`内存压力严重（PSI Mem Full 持续 >1%，峰值 ${maxPsiMemFull.toFixed(1)}%，均值 ${avgPsiMemFull.toFixed(1)}%），任务被阻塞等待内存，系统流畅度显著下降`)
+      } else {
+        pressureFindings.push(`内存压力偏高（PSI Mem Full 峰值 ${maxPsiMemFull.toFixed(1)}%，均值 ${avgPsiMemFull.toFixed(1)}%），存在间歇性内存阻塞`)
+      }
+    } else if (maxPsiMemSome > 10) {
+      pressureFindings.push(`内存存在竞争压力（PSI Mem Some 峰值 ${maxPsiMemSome.toFixed(1)}%，均值 ${avgPsiMemSome.toFixed(1)}%），部分线程等待内存分配`)
+    }
+
+    if (maxPsiIoFull > 1 || avgPsiIoFull > 1) {
+      const sustainedIoFull = detectSustained(psiIoFull, 1, 3)
+      if (sustainedIoFull.sustained) {
+        pressureFindings.push(`IO 压力严重（PSI IO Full 持续 >1%，峰值 ${maxPsiIoFull.toFixed(1)}%，均值 ${avgPsiIoFull.toFixed(1)}%），IO 成为系统瓶颈`)
+      } else {
+        pressureFindings.push(`IO 压力偏高（PSI IO Full 峰值 ${maxPsiIoFull.toFixed(1)}%，均值 ${avgPsiIoFull.toFixed(1)}%），存在 IO 阻塞`)
+      }
+    } else if (maxPsiIoSome > 10) {
+      pressureFindings.push(`IO 存在竞争（PSI IO Some 峰值 ${maxPsiIoSome.toFixed(1)}%，均值 ${avgPsiIoSome.toFixed(1)}%）`)
+    }
+
+    // Swap thrashing
+    const zramVals = pts.map(p => p.zramKb ?? 0)
+    if (zramVals.length >= 4) {
+      const firstZram = zramVals[0], lastZram = zramVals[zramVals.length - 1]
+      const zramGrowthKb = lastZram - firstZram
+      const zramGrowthPct = firstZram > 0 ? (zramGrowthKb / firstZram * 100) : 0
+      if (avgPsiMemFull > 1 && zramGrowthPct > 20) {
+        pressureFindings.push(`内存压力持续（PSI Mem Full 均值 ${avgPsiMemFull.toFixed(1)}%）且 ZRAM 增长 ${zramGrowthPct.toFixed(0)}%，疑似 swap 颠簸，频繁换页导致 IO 性能下降`)
+      }
+    }
+
+    // ── Network IO ──
+    if (pts.length >= 2) {
+      const firstRx = pts[0].netRxBytes ?? 0, lastRx = pts[pts.length - 1].netRxBytes ?? 0
+      const firstTx = pts[0].netTxBytes ?? 0, lastTx = pts[pts.length - 1].netTxBytes ?? 0
+      const elapsedSecs = (pts[pts.length - 1].time - pts[0].time) / 1000
+      // Cumulative counters may wrap (reset to 0); treat wraparound as "no data"
+      const rxBytes = lastRx >= firstRx ? lastRx - firstRx : 0
+      const txBytes = lastTx >= firstTx ? lastTx - firstTx : 0
+      const rxRate = elapsedSecs > 0 ? rxBytes / elapsedSecs : 0
+      const txRate = elapsedSecs > 0 ? txBytes / elapsedSecs : 0
+      const fmtRate = (b: number) => b >= 1073741824 ? (b/1073741824).toFixed(2)+' GB/s' : b >= 1048576 ? (b/1048576).toFixed(1)+' MB/s' : b >= 1024 ? (b/1024).toFixed(0)+' KB/s' : b.toFixed(0)+' B/s'
+      if (rxRate > 0 || txRate > 0) {
+        if (rxRate > 10485760) {
+          netFindings.push(`下行速率较高（${fmtRate(rxRate)}），可能存在大流量下载`)
+        }
+        if (txRate > 1048576) {
+          netFindings.push(`上行速率较高（${fmtRate(txRate)}），可能存在大量数据上传`)
+        }
       }
     }
   }
 
-  const issueHtml = issues.length
-    ? issues.map(i => `<li>${i}</li>`).join('')
-    : '<li style="color:#22c55e">未检测到明显异常</li>'
-  const leakHtml = leaks.length
-    ? leaks.map(i => `<li>${i}</li>`).join('')
-    : '<li style="color:#22c55e">未检测到明显内存泄露特征</li>'
-  const risingHtml = rising.length
-    ? rising.map(i => `<li>${i}</li>`).join('')
-    : '<li style="color:#22c55e">未检测到持续上涨趋势</li>'
+  function sectionHtml(title: string, findings: string[]): string {
+    if (findings.length === 0) {
+      return `<h3 style="color:#444;font-size:.95rem;margin:1rem 0 .4rem 0">${title}</h3>
+  <ul><li style="color:#22c55e">正常</li></ul>`
+    }
+    return `<h3 style="color:#444;font-size:.95rem;margin:1rem 0 .4rem 0">${title}</h3>
+  <ul>${findings.map(i => `<li>${i}</li>`).join('')}</ul>`
+  }
 
   return `<div class="card">
   <h2>整体评估</h2>
   <div style="background:#fef9e7;border:1px solid #f0e0a0;border-radius:8px;padding:.6rem .8rem;margin-bottom:1rem;font-size:.85rem;color:#8a6d3b">
-    <strong>⚠️ 仅供参考：</strong>以下评估基于采集期间的统计数据和趋势分析（线性回归 + 分段趋势检测），不构成确定性诊断。实际表现可能受设备状态、系统调度、测试场景等多种因素影响，请结合具体场景综合判断。
+    <strong>⚠️ 仅供参考：</strong>以下评估基于采集期间的统计数据和趋势分析（线性回归 + 分段趋势检测 + PSI 压力分析），不构成确定性诊断。实际表现可能受设备状态、系统调度、测试场景等多种因素影响，请结合具体场景综合判断。
   </div>
-  <h3 style="color:#e74c3c;font-size:.95rem;margin:1rem 0 .4rem 0">异常情况</h3>
-  <ul>${issueHtml}</ul>
-  <h3 style="color:#9b59b6;font-size:.95rem;margin:1rem 0 .4rem 0">内存泄露情况</h3>
-  <ul>${leakHtml}</ul>
-  <h3 style="color:#f39c12;font-size:.95rem;margin:1rem 0 .4rem 0">持续上涨情况</h3>
-  <ul>${risingHtml}</ul>
+  ${sectionHtml('应用 CPU 使用情况', cpuFindings)}
+  ${sectionHtml('应用内存使用情况', memFindings)}
+  ${sectionHtml('系统压力分析', pressureFindings)}
+  ${sectionHtml('网络 IO 情况', netFindings)}
 </div>`
 }
 
@@ -1283,21 +1306,21 @@ ${buildOverallAssessment(pts, topMem, topCpu, '', [])}
   </div>
 </div>
 <div class="card">
-  <h2>系统压力分析 (PSI)</h2>
+  <h2>系统压力分析</h2>
   <table><thead><tr><th>指标</th><th>最小</th><th>最大</th><th>平均</th></tr></thead>
   <tbody>${pressureRows}</tbody></table>
 </div>
 <div class="card">
-  <h2>内存分布详情</h2>
+  <h2>内存分布情况</h2>
   <table><thead><tr><th>指标</th><th>最小</th><th>最大</th><th>平均</th></tr></thead>
   <tbody>${distRows}</tbody></table>
 </div>
 <div class="card">
-  <h2>网络 IO</h2>
+  <h2>网络 IO情况</h2>
   ${netRows}
 </div>
 <div class="card">
-  <h2>Top${store.topAppCount} 应用内存使用情况</h2>
+  <h2>应用内存使用情况</h2>
   <table><thead><tr><th>#</th><th>应用包名</th><th>最小 PSS</th><th>最大 PSS</th><th>平均 PSS</th></tr></thead>
   <tbody>${memFreeRows}${topMem.map((p, i) => {
     const vals = p.data.map(d => d.pssKb)
@@ -1308,7 +1331,7 @@ ${buildOverallAssessment(pts, topMem, topCpu, '', [])}
   }).join('')}</tbody></table>
 </div>
 <div class="card">
-  <h2>Top${store.cpuTopNCount} 应用 CPU 使用情况</h2>
+  <h2>应用 CPU 使用情况</h2>
   <table><thead><tr><th>#</th><th>应用包名</th><th>最小 CPU%</th><th>最大 CPU%</th><th>平均 CPU%</th></tr></thead>
   <tbody>${topCpu.map((p, i) => {
     const vals = p.data.map(d => d.cpuPercent)
@@ -1483,11 +1506,11 @@ function buildInteractiveChartsHtml(
   <p style="font-size:.85rem;color:#666;margin-bottom:.5rem">点击折线或包名选中单个应用，再次点击显示全部。需要联网加载图表库。</p>
   <div id="chart-loading" style="padding:2rem;text-align:center;color:#888;font-size:.9rem">正在加载图表库...</div>
   <div id="charts-container" style="display:none">
-    <div class="interactive-chart"><h3>Top ${topMem.length} 应用内存</h3><div id="ic-top" style="width:100%;height:360px"></div></div>
-    <div class="interactive-chart"><h3>Top ${topCpu.length} 应用 CPU 使用率</h3><div id="ic-cpu" style="width:100%;height:360px"></div></div>
-    <div class="interactive-chart"><h3>系统压力分析 (PSI)</h3><div id="ic-pressure" style="width:100%;height:300px"></div></div>
-    <div class="interactive-chart"><h3>内存分布详情</h3><div id="ic-memdist" style="width:100%;height:300px"></div></div>
-    <div class="interactive-chart"><h3>网络 IO</h3><div id="ic-net" style="width:100%;height:300px"></div></div>
+    <div class="interactive-chart"><h3>应用内存使用情况</h3><div id="ic-top" style="width:100%;height:360px"></div></div>
+    <div class="interactive-chart"><h3>应用 CPU 使用情况</h3><div id="ic-cpu" style="width:100%;height:360px"></div></div>
+    <div class="interactive-chart"><h3>系统压力分析</h3><div id="ic-pressure" style="width:100%;height:300px"></div></div>
+    <div class="interactive-chart"><h3>内存分布情况</h3><div id="ic-memdist" style="width:100%;height:300px"></div></div>
+    <div class="interactive-chart"><h3>网络 IO情况</h3><div id="ic-net" style="width:100%;height:300px"></div></div>
   </div>
   <script type="application/json" id="ic-data">${jsonStr({
     cpu: cpuSeries, top: topSeries,
@@ -2365,15 +2388,11 @@ async function startPolling() {
   collectWatermark(serial)
   watermarkTimer = setInterval(() => collectWatermark(serial), 60000)
 
-  // 9. Start dumpsys PSS tracking (every 30s, after 15s delay to not overload initial connection)
-  setTimeout(() => pollDumpsys(serial), 15000)
-  dumpsysTimer = setInterval(() => pollDumpsys(serial), 30000)
-
-  // 10. Start dmesg streaming (every 30s)
+  // 9. Start dmesg streaming (every 30s)
   pollDmesgStream(serial)
   dmesgTimer = setInterval(() => pollDmesgStream(serial), 30000)
 
-  // 11. Start ANR / Tombstone detection (every 60s, after 30s delay)
+  // 10. Start ANR / Tombstone detection (every 60s, after 30s delay)
   setTimeout(() => pollAnrTombstones(serial, sessionLogDir.value), 30000)
   anrTimer = setInterval(() => pollAnrTombstones(serial, sessionLogDir.value), 60000)
 }
@@ -2383,7 +2402,6 @@ async function stopPolling() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
   if (logTimer) { clearInterval(logTimer); logTimer = null }
   if (watermarkTimer) { clearInterval(watermarkTimer); watermarkTimer = null }
-  if (dumpsysTimer) { clearInterval(dumpsysTimer); dumpsysTimer = null }
   if (dmesgTimer) { clearInterval(dmesgTimer); dmesgTimer = null }
   if (anrTimer) { clearInterval(anrTimer); anrTimer = null }
 
@@ -2636,21 +2654,21 @@ ${buildOverallAssessment(pts, topMem, topCpu, '', [])}
   </div>
 </div>
 <div class="card">
-  <h2>系统压力分析 (PSI)</h2>
+  <h2>系统压力分析</h2>
   <table><thead><tr><th>指标</th><th>最小</th><th>最大</th><th>平均</th></tr></thead>
   <tbody>${pressureRows2}</tbody></table>
 </div>
 <div class="card">
-  <h2>内存分布详情</h2>
+  <h2>内存分布情况</h2>
   <table><thead><tr><th>指标</th><th>最小</th><th>最大</th><th>平均</th></tr></thead>
   <tbody>${distRows2}</tbody></table>
 </div>
 <div class="card">
-  <h2>网络 IO</h2>
+  <h2>网络 IO情况</h2>
   ${netRows2}
 </div>
 <div class="card">
-  <h2>Top${store.topAppCount} 应用内存使用情况</h2>
+  <h2>应用内存使用情况</h2>
   <table><thead><tr><th>#</th><th>应用包名</th><th>最小 PSS</th><th>最大 PSS</th><th>平均 PSS</th></tr></thead>
   <tbody>${memFreeRows2}${topMem.map((p, i) => {
     const vals = p.data.map(d => d.pssKb)
@@ -2661,7 +2679,7 @@ ${buildOverallAssessment(pts, topMem, topCpu, '', [])}
   }).join('')}</tbody></table>
 </div>
 <div class="card">
-  <h2>Top${store.cpuTopNCount} 应用 CPU 使用情况</h2>
+  <h2>应用 CPU 使用情况</h2>
   <table><thead><tr><th>#</th><th>应用包名</th><th>最小 CPU%</th><th>最大 CPU%</th><th>平均 CPU%</th></tr></thead>
   <tbody>${topCpu.map((p, i) => {
     const vals = p.data.map(d => d.cpuPercent)

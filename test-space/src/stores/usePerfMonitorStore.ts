@@ -32,13 +32,6 @@ export interface SnapshotPoint {
   deviceUptimeSecs: number
 }
 
-export interface DumpsysPssPoint {
-  time: number
-  usedRamPssKb: number
-  usedRamKernelKb: number
-  processes: { name: string; pssKb: number }[]
-}
-
 export interface WatermarkPoint {
   time: number
   nrFreePagesKb: number
@@ -54,9 +47,9 @@ export interface DmesgSegment {
 
 export const usePerfMonitorStore = defineStore('perfMonitor', () => {
   const isCollecting = ref(false)
-  const intervalMs = ref(2000)
+  const intervalMs = ref(10000)
   const history = ref<SnapshotPoint[]>([])
-  // 86400 points = 24h at 1s, 48h at 2s, 5 days at 5s, 10 days at 10s.
+  // 86400 points = 24h at 1s, 48h at 2s, 5 days at 5s, 10 days at 10s (default).
   // In-memory buffer is only for real-time chart display.
   // ALL data is streamed to CSV files for long-term persistence (supports months of runtime).
   const maxPoints = 86400
@@ -69,8 +62,6 @@ export const usePerfMonitorStore = defineStore('perfMonitor', () => {
   const cpuTopNCount = ref(20)
   const singleAppName = ref('')
 
-  // dumpsys meminfo PSS tracking (separate from ps-based PSS)
-  const dumpsysPssHistory = ref<DumpsysPssPoint[]>([])
   // Watermark history for chart
   const watermarkHistory = ref<WatermarkPoint[]>([])
   // Dmesg streaming buffer (last ~200 lines)
@@ -190,7 +181,6 @@ export const usePerfMonitorStore = defineStore('perfMonitor', () => {
     latestSnapshot.value = null
     processPssHistory.value.clear()
     processCpuHistory.value.clear()
-    dumpsysPssHistory.value = []
     watermarkHistory.value = []
     dmesgBuffer.value = []
     dmesgTotalLines.value = 0
@@ -211,20 +201,6 @@ export const usePerfMonitorStore = defineStore('perfMonitor', () => {
 
   function restoreHistory(pts: SnapshotPoint[]) {
     history.value = pts
-  }
-
-  // Restore full session: history points + per-process history + single app name
-  function addDumpsysPssPoint(data: { usedRamPssKb: number; usedRamKernelKb: number; processes: { name: string; pssKb: number }[] }) {
-    const top20 = [...data.processes].sort((a, b) => b.pssKb - a.pssKb).slice(0, 20)
-    dumpsysPssHistory.value.push({
-      time: Date.now(),
-      usedRamPssKb: data.usedRamPssKb,
-      usedRamKernelKb: data.usedRamKernelKb,
-      processes: top20,
-    })
-    if (dumpsysPssHistory.value.length > maxPoints) {
-      dumpsysPssHistory.value = dumpsysPssHistory.value.slice(-maxPoints)
-    }
   }
 
   function addWatermarkPoint(data: { nrFreePagesKb: number; minKb: number; lowKb: number; highKb: number }) {
@@ -283,9 +259,9 @@ export const usePerfMonitorStore = defineStore('perfMonitor', () => {
     processPssHistory, processCpuHistory, topAppCount, cpuTopNCount, singleAppName,
     currentCpu, currentMemUsedKb, currentMemTotalKb,
     currentZramKb, currentStorageUsedKb, currentStorageTotalKb,
-    dumpsysPssHistory, watermarkHistory, dmesgBuffer, dmesgTotalLines, dmesgLastLine,
+    watermarkHistory, dmesgBuffer, dmesgTotalLines, dmesgLastLine,
     knownAnrFiles, knownTombstoneFiles, newAnrFiles, newTombstoneFiles,
-    addPoint, addDumpsysPssPoint, addWatermarkPoint, addDmesgLines, setAnrTombstoneFound,
+    addPoint, addWatermarkPoint, addDmesgLines, setAnrTombstoneFound,
     clearHistory, setCollecting, setInterval,
     restoreHistory, restoreFullSession,
   }
