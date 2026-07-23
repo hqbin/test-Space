@@ -2251,6 +2251,7 @@ async function pollOnce() {
     scheduleRender()
   } catch (e: any) {
     pollErrorCount++
+    console.warn('[perf] getSnapshot failed:', e?.message ?? String(e))
     if (pollErrorCount === 3) {
       showToast('ADB 连接异常，已连续失败，采集将继续但间隔将增大', true)
     } else if (pollErrorCount > 3 && pollErrorCount % 5 === 0) {
@@ -2277,7 +2278,7 @@ function toggleCollect() {
 let perfCsvBuffer: string[] = []
 let procCsvBuffer: string[] = []
 let cpuCsvBuffer: string[] = []
-const CSV_FLUSH_THRESHOLD = 30 // flush after every 30 data points
+const CSV_FLUSH_THRESHOLD = 6
 let csvBaseDir = ''
 
 function initCsvFiles(dir: string) {
@@ -2285,9 +2286,10 @@ function initCsvFiles(dir: string) {
   perfCsvBuffer = []
   procCsvBuffer = []
   cpuCsvBuffer = []
-  writeTextFile(dir + 'perf_data.csv', 'Time,CPU(%),MemUsed(KB),MemTotal(KB),MemAvail(KB),ZRAM(KB),SwapFree(KB),StorageUsed(KB),StorageTotal(KB),Cached(KB),Buffers(KB),Slab(KB),KernelStack(KB),PageTables(KB),MemPressSome10,MemPressFull10,IoPressSome10,IoPressFull10,CpuPressSome10,CpuPressFull10,Uptime(Sec),NetRxBytes,NetTxBytes\n').catch(() => {})
-  writeTextFile(dir + 'perf_top_apps.csv', 'Time,ProcessName,PSS(KB)\n').catch(() => {})
-  writeTextFile(dir + 'perf_top_cpu.csv', 'Time,ProcessName,CPU(%)\n').catch(() => {})
+  const header = 'Time,CPU(%),MemUsed(KB),MemTotal(KB),MemAvail(KB),ZRAM(KB),SwapFree(KB),StorageUsed(KB),StorageTotal(KB),Cached(KB),Buffers(KB),Slab(KB),KernelStack(KB),PageTables(KB),MemPressSome10,MemPressFull10,IoPressSome10,IoPressFull10,CpuPressSome10,CpuPressFull10,Uptime(Sec),NetRxBytes,NetTxBytes\n'
+  writeTextFile(dir + 'perf_data.csv', header).catch(e => console.warn('init CSV perf_data.csv failed:', e))
+  writeTextFile(dir + 'perf_top_apps.csv', 'Time,ProcessName,PSS(KB)\n').catch(e => console.warn('init CSV perf_top_apps.csv failed:', e))
+  writeTextFile(dir + 'perf_top_cpu.csv', 'Time,ProcessName,CPU(%)\n').catch(e => console.warn('init CSV perf_top_cpu.csv failed:', e))
 }
 
 function bufferCsvPoint(snap: PerfSnapshot) {
@@ -2347,8 +2349,9 @@ async function startPolling() {
   pollErrorCount = 0
 
   // 1. Let user choose save directory
-  const chosenDir = await open({ directory: true, multiple: false, title: '选择日志保存目录' })
+  const chosenDir = await open({ directory: true, multiple: false, recursive: true, title: '选择日志保存目录' })
   if (!chosenDir) return
+  const normDir = chosenDir.replace(/\\/g, '/')
 
   // 2. adb root first to get full data access
   try {
@@ -2358,8 +2361,8 @@ async function startPolling() {
 
   // 3. Create session log dir
   const ts = formatLocalTime(new Date()).replace(/[:.]/g, '-')
-  sessionLogDir.value = chosenDir + '/TestSpace_Perf_' + ts + '/'
-  try { await mkdir(sessionLogDir.value, { recursive: true }) } catch {}
+  sessionLogDir.value = normDir.replace(/\/?$/, '/') + 'TestSpace_Perf_' + ts + '/'
+  try { await mkdir(sessionLogDir.value, { recursive: true }) } catch (e) { console.warn('mkdir failed:', e) }
 
   // 3.5. Initialize streaming CSV files with headers
   initCsvFiles(sessionLogDir.value)
