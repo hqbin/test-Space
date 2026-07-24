@@ -8,8 +8,10 @@ $b  = "$E[34m"
 $m  = "$E[38;5;208m"
 $y  = "$E[33m"
 
-# 读取 stdin
-$j = @($input) -join ''
+# 读取 stdin - 多策略兼容
+$j = ""
+try { $j = [Console]::In.ReadToEnd() } catch {}
+if (-not $j) { try { $j = @($input) -join '' } catch {} }
 $j = $j.Trim()
 if (-not $j) { "$g" + "Bing No.1" + "$R"; exit 0 }
 
