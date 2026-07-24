@@ -1,0 +1,208 @@
+##########################################################
+# Aider 配置文件 — Test Space 项目
+# 基于 Aider 官方文档最佳实践
+# https://aider.chat/docs/config/aider_conf.html
+##########################################################
+
+# ====================
+# 模型配置
+# ====================
+
+# 主模型：使用支持 function calling 的模型以获得最佳编辑体验
+# 推荐选项：
+#   - claude-3-7-sonnet-20250219  (Anthropic, 编辑能力强)
+#   - gpt-4o                      (OpenAI, 速度快)
+#   - deepseek/deepseek-chat      (DeepSeek, 性价比高)
+#   - o3-mini                     (OpenAI, 推理能力强)
+model: deepseek/deepseek-v4-flash
+
+# 弱模型：用于提交信息生成和历史摘要（默认与主模型相同）
+# 可指定 cheaper/faster 的模型以节省成本
+weak-model: claude-3-5-haiku-20241022
+
+# 编辑器模型：专门用于代码编辑任务（默认与主模型相同）
+# editor-model: claude-3-7-sonnet-20250219
+
+# 启用 architect 模式：让模型先规划再编辑，适合复杂重构
+architect: false
+
+# 自动接受 architect 模式的变更（默认 true）
+auto-accept-architect: true
+
+# 推理强度（支持 reasoning 的模型）
+# reasoning-effort: medium
+
+# 思考 token 预算（支持 thinking 的模型）
+# thinking-tokens: 16000
+
+# API 超时（秒）
+timeout: 120
+
+# ====================
+# 项目规范文件
+# ====================
+
+# 自动加载项目规范文件（只读，不纳入编辑范围）
+read:
+  - CONVENTIONS.md
+  - DEVELOPMENT.md
+
+# ====================
+# Git 配置
+# ====================
+
+# 启用 Git 集成
+git: true
+
+# 自动将 .aider* 文件加入 .gitignore
+gitignore: true
+
+# 自动提交 LLM 的变更（建议 false，由用户审查后手动提交）
+auto-commits: false
+
+# 仓库存在未提交更改时自动提交（建议 false）
+dirty-commits: false
+
+# 在提交信息中标注 Aider 的修改
+attribute-author: true
+attribute-committer: true
+attribute-co-authored-by: true
+
+# 提交信息前缀
+attribute-commit-message-author: false
+attribute-commit-message-committer: false
+
+# 使用 --no-verify 跳过 pre-commit hooks
+git-commit-verify: false
+
+# ====================
+# 代码质量
+# ====================
+
+# 自动 lint（修改后运行）
+auto-lint: true
+
+# Lint 命令（按语言配置）
+lint-cmd:
+  - "typescript: npm run build"
+  - "vue: npm run build"
+  - "rust: cd src-tauri && cargo check"
+
+# 自动测试（修改后运行）
+auto-test: true
+
+# 测试命令
+# test-cmd: npm test
+
+# ====================
+# 输出与交互
+# ====================
+
+# 暗色模式（适合深色终端背景）
+dark-mode: true
+
+# 美化输出
+code-theme: monokai
+
+# 流式响应
+stream: true
+
+# 显示差异（提交时）
+show-diffs: true
+
+# 建议 shell 命令
+suggest-shell-commands: true
+
+# 多行输入模式（Meta-Enter 提交）
+multiline: false
+
+# 通知（响应就绪时）
+notifications: false
+
+# ====================
+# 缓存与性能
+# ====================
+
+# 启用 prompt 缓存（如果模型支持）
+cache-prompts: true
+
+# 保持缓存活跃的 ping 次数（每 5 分钟）
+cache-keepalive-pings: 3
+
+# Repo map 令牌数（0 禁用，默认自动）
+# map-tokens: 1024
+
+# Repo map 刷新策略：auto / always / files / manual
+map-refresh: auto
+
+# ====================
+# 历史记录
+# ====================
+
+# 恢复之前的聊天历史
+restore-chat-history: true
+
+# 聊天历史文件
+chat-history-file: .aider.chat.history.md
+
+# 输入历史文件
+input-history-file: .aider.input.history
+
+# ====================
+# 文件处理
+# ====================
+
+# 编码
+encoding: utf-8
+
+# 行尾符（platform / crlf / lf）
+line-endings: platform
+
+# Aider ignore 文件
+aiderignore: .aiderignore
+
+# 不将 .gitignore 中的文件纳入编辑范围
+add-gitignore-files: false
+
+# ====================
+# 其他
+# ====================
+
+# 聊天语言（默认跟随系统）
+chat-language: zh
+
+# 提交信息语言
+commit-language: zh
+
+# 启用 VI 编辑模式
+vim: false
+
+# 检测并提示添加 URL 到聊天
+detect-urls: true
+
+# 禁用 Playwright（不需要网页抓取时）
+disable-playwright: true
+
+# 不检查更新（手动控制）
+check-update: false
+
+# ====================
+# 全自动工作流模式
+# ====================
+# 运行方式:
+#   python aider_workflow.py "你的需求描述"
+#   .\run_workflow.ps1 "你的需求描述"
+#
+# 工作流阶段:
+#   1. analyze   → 需求分析与 Prompt 优化
+#   2. plan      → 制定实现计划
+#   3. implement → 编码实现（自动 commit）
+#   4. review    → 代码审查
+#   5. fix       → 修复审查问题（自动 commit）
+#   6. test      → 回归测试
+#   7. commit    → 最终提交
+#
+# 快捷操作:
+#   跳过审查:  python aider_workflow.py --skip review,fix "需求"
+#   预演模式:  python aider_workflow.py --dry-run "需求"
+#   从某阶段开始: python aider_workflow.py --from-stage implement "需求"

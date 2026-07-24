@@ -1,0 +1,137 @@
+##########################################################
+# Aider 配置文件模板
+# 复制到项目根目录并重命名为 .aider.conf.yml
+# 根据项目实际情况修改标注为 [CUSTOMIZE] 的部分
+# 完整选项参考：https://aider.chat/docs/config/aider_conf.html
+##########################################################
+
+# ====================
+# 模型配置 [CUSTOMIZE]
+# ====================
+
+# 主模型选择
+# 推荐：
+#   - claude-3-7-sonnet-20250219  (编辑能力强)
+#   - gpt-4o                      (速度快)
+#   - deepseek/deepseek-chat      (性价比高)
+#   - o3-mini                     (推理能力强)
+model: claude-3-7-sonnet-20250219
+
+# 弱模型（提交信息、历史摘要）
+weak-model: claude-3-5-haiku-20241022
+
+# 编辑器模型（代码编辑专用，默认与主模型相同）
+# editor-model: claude-3-7-sonnet-20250219
+
+# 启用 architect 模式（先规划再编辑，适合复杂重构）
+architect: false
+
+# API 超时（秒）
+timeout: 120
+
+# ====================
+# 项目规范文件 [CUSTOMIZE]
+# ====================
+
+# 自动加载的只读规范文件
+# 这些文件会被加载到上下文中，但不会被 Aider 修改
+read:
+  - CONVENTIONS.md
+  # - README.md
+  # - docs/architecture.md
+
+# ====================
+# Git 配置
+# ====================
+
+git: true
+gitignore: true
+
+# 自动提交（建议 false，手动审查后提交）
+auto-commits: false
+dirty-commits: false
+
+# 提交者信息标注
+attribute-author: true
+attribute-committer: true
+attribute-co-authored-by: true
+
+# 跳过 pre-commit hooks
+git-commit-verify: false
+
+# ====================
+# 代码质量 [CUSTOMIZE]
+# ====================
+
+# 修改后自动运行 lint
+auto-lint: true
+
+# Lint 命令（根据技术栈配置）
+lint-cmd:
+  # JavaScript/TypeScript/Vue
+  - "typescript: npm run build"
+  - "vue: npm run build"
+  # Python
+  # - "python: python -m py_compile"
+  # - "python: flake8"
+  # Rust
+  # - "rust: cargo check"
+  # - "rust: cargo clippy"
+  # Go
+  # - "go: go build ./..."
+  # Java
+  # - "java: ./mvnw compile"
+
+# 修改后自动运行测试
+auto-test: false
+
+# 测试命令
+# test-cmd: npm test
+
+# ====================
+# 输出与交互
+# ====================
+
+dark-mode: true
+code-theme: monokai
+stream: true
+show-diffs: true
+suggest-shell-commands: true
+multiline: false
+notifications: false
+
+# ====================
+# 缓存与性能
+# ====================
+
+cache-prompts: true
+cache-keepalive-pings: 3
+map-refresh: auto
+
+# ====================
+# 历史记录
+# ====================
+
+restore-chat-history: true
+chat-history-file: .aider.chat.history.md
+input-history-file: .aider.input.history
+
+# ====================
+# 文件处理
+# ====================
+
+encoding: utf-8
+line-endings: platform
+aiderignore: .aiderignore
+add-gitignore-files: false
+
+# ====================
+# 其他
+# ====================
+
+chat-language: zh
+commit-language: zh
+vim: false
+detect-urls: true
+disable-playwright: true
+check-update: false
