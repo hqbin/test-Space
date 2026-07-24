@@ -1,72 +1,72 @@
 ##########################################################
-# Aider 配置文件模板
-# 复制到项目根目录并重命名为 .aider.conf.yml
-# 根据项目实际情况修改标注为 [CUSTOMIZE] 的部分
-# 完整选项参考：https://aider.chat/docs/config/aider_conf.html
+# Aider Config Template
+# Copy to project root and rename to .aider.conf.yml
+# Modify sections marked with [CUSTOMIZE] based on your project
+# Full options: https://aider.chat/docs/config/aider_conf.html
 ##########################################################
 
 # ====================
-# 模型配置 [CUSTOMIZE]
+# Model Config [CUSTOMIZE]
 # ====================
 
-# 主模型选择
-# 推荐：
-#   - claude-3-7-sonnet-20250219  (编辑能力强)
-#   - gpt-4o                      (速度快)
-#   - deepseek/deepseek-chat      (性价比高)
-#   - o3-mini                     (推理能力强)
+# Main model selection
+# Recommendations:
+#   - claude-3-7-sonnet-20250219  (strong editing)
+#   - gpt-4o                      (fast)
+#   - deepseek/deepseek-chat      (cost-effective)
+#   - o3-mini                     (strong reasoning)
 model: claude-3-7-sonnet-20250219
 
-# 弱模型（提交信息、历史摘要）
+# Weak model (for commit messages and history summary)
 weak-model: claude-3-5-haiku-20241022
 
-# 编辑器模型（代码编辑专用，默认与主模型相同）
+# Editor model (dedicated for code editing, default same as main)
 # editor-model: claude-3-7-sonnet-20250219
 
-# 启用 architect 模式（先规划再编辑，适合复杂重构）
+# Enable architect mode (plan before editing, good for complex refactoring)
 architect: false
 
-# API 超时（秒）
+# API timeout (seconds)
 timeout: 120
 
 # ====================
-# 项目规范文件 [CUSTOMIZE]
+# Project Convention Files [CUSTOMIZE]
 # ====================
 
-# 自动加载的只读规范文件
-# 这些文件会被加载到上下文中，但不会被 Aider 修改
+# Auto loaded read-only convention files
+# These files are loaded into context but not modified by Aider
 read:
   - CONVENTIONS.md
   # - README.md
   # - docs/architecture.md
 
 # ====================
-# Git 配置
+# Git Config
 # ====================
 
 git: true
 gitignore: true
 
-# 自动提交（建议 false，手动审查后提交）
+# Auto commit (suggest false, manually commit after review)
 auto-commits: false
 dirty-commits: false
 
-# 提交者信息标注
+# Committer info annotation
 attribute-author: true
 attribute-committer: true
 attribute-co-authored-by: true
 
-# 跳过 pre-commit hooks
+# Skip pre-commit hooks
 git-commit-verify: false
 
 # ====================
-# 代码质量 [CUSTOMIZE]
+# Code Quality [CUSTOMIZE]
 # ====================
 
-# 修改后自动运行 lint
+# Auto lint after changes
 auto-lint: true
 
-# Lint 命令（根据技术栈配置）
+# Lint commands (configure based on tech stack)
 lint-cmd:
   # JavaScript/TypeScript/Vue
   - "typescript: npm run build"
@@ -82,14 +82,14 @@ lint-cmd:
   # Java
   # - "java: ./mvnw compile"
 
-# 修改后自动运行测试
+# Auto test after changes
 auto-test: false
 
-# 测试命令
+# Test command
 # test-cmd: npm test
 
 # ====================
-# 输出与交互
+# Output and Interaction
 # ====================
 
 dark-mode: true
@@ -101,7 +101,7 @@ multiline: false
 notifications: false
 
 # ====================
-# 缓存与性能
+# Cache and Performance
 # ====================
 
 cache-prompts: true
@@ -109,7 +109,7 @@ cache-keepalive-pings: 3
 map-refresh: auto
 
 # ====================
-# 历史记录
+# History
 # ====================
 
 restore-chat-history: true
@@ -117,7 +117,7 @@ chat-history-file: .aider.chat.history.md
 input-history-file: .aider.input.history
 
 # ====================
-# 文件处理
+# File Handling
 # ====================
 
 encoding: utf-8
@@ -126,7 +126,7 @@ aiderignore: .aiderignore
 add-gitignore-files: false
 
 # ====================
-# 其他
+# Others
 # ====================
 
 chat-language: zh
