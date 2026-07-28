@@ -37,10 +37,12 @@
       "identifier": "http:default",
       "allow": [
         { "url": "https://tms.zeasn.com/api/TestSpace/*" },
+        { "url": "https://tms.zeasn.com/mcp/**" },
         { "url": "https://*.openai.azure.com/**" },
         { "url": "https://api.deepseek.com/**" },
         { "url": "https://api.xiaomimimo.com/**" },
-        { "url": "https://api.openai.com/**" }
+        { "url": "https://api.openai.com/**" },
+        { "url": "https://**" }
       ]
     }
   ]

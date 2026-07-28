@@ -27,6 +27,9 @@ tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-http = "2"
+reqwest = { version = "0.13", features = ["stream", "json"] }
+futures-util = "0.3"
+sse-reqwest-client = "0.3"
 serialport = "4.3"
 tokio = { version = "1", features = ["full"] }
 uuid = { version = "1", features = ["v4"] }

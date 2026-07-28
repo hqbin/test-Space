@@ -71,6 +71,7 @@ const navItems: NavItem[] = [
   { path: "/notes-space", labelKey: "nav.notes", icon: "description" },
   { path: "/api-space", labelKey: "nav.api", icon: "api" },
   { path: "/script-space", labelKey: "nav.scripts", icon: "code" },
+  { path: "/ai-space", labelKey: "nav.ai", icon: "smart_toy" },
 ];
 
 const syncBusy = ref(false);
@@ -109,7 +110,7 @@ function clearTimer() {
 onUnmounted(() => clearTimer());
 
 function isActive(path: string) {
-  if (path === "/api-space") return route.path.startsWith(path);
+  if (path === "/api-space" || path === "/ai-space") return route.path.startsWith(path);
   return route.path === path;
 }
 

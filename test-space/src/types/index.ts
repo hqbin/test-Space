@@ -93,6 +93,49 @@ export interface NoteLink {
   createdAt: string
 }
 
+// ── AI Session Types ────────────────────────────────────────
+
+export type ChatMode = 'chat' | 'notes' | 'mcp'
+
+export interface ChatMsg {
+  role: 'user' | 'assistant'
+  content: string
+  image?: string
+  fileName?: string
+  fileContent?: string
+  toolCalls?: { toolName: string; serverName: string }[]
+}
+
+export interface AiSession {
+  id: string
+  title: string
+  mode: ChatMode
+  messages: ChatMsg[]
+  createdAt: string
+  updatedAt: string
+}
+
+// ── MCP Types ──────────────────────────────────────────────
+
+export type McpAuthType = 'none' | 'bearer' | 'api-key' | 'custom'
+
+export interface McpServerConfig {
+  id: string
+  name: string
+  endpoint: string
+  authType: McpAuthType
+  authValue?: string
+  authHeader?: string
+  enabled: boolean
+  createdAt: string
+}
+
+export interface McpTool {
+  name: string
+  description?: string
+  inputSchema?: Record<string, unknown>
+}
+
 // ── API Proxy ──────────────────────────────────────────────
 
 export interface ApiCapturedRequest {
