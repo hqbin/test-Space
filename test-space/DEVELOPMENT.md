@@ -111,6 +111,9 @@ D:\TestSpace\test-space/
 ├── index.html                          # 入口 HTML（Inter 字体 + Material Symbols）
 ├── package.json                        # NPM 依赖和脚本
 ├── vite.config.ts                      # Vite 配置（含 /api 代理到后端）
+├── scripts/                            # 构建辅助脚本
+│   ├── bump-version.mjs                # 版本号递增（patch/minor/major）
+│   └── clean.mjs                       # Rust 编译缓存清理（cargo clean）
 ├── tailwind.config.ts                  # TailwindCSS 设计 Token 配置
 ├── postcss.config.js                   # PostCSS 配置
 ├── tsconfig.json                       # TypeScript 配置
@@ -622,6 +625,62 @@ Workspace 页面已在 Phase 9 中移除，路由 redirect 改为 `/case-space`�
   - 断点编辑器中二进制 body 显示 `[Binary body — cannot edit in text mode]` 禁用编辑
 - **Composable**：`src/composables/useApiProxy.ts` 封装代理控制、事件监听、断点管理、规则 CRUD
 - **i18n**：所有按钮/标签/提示支持中英双语（`api.*` 翻译 key）
+
+### 4.13 AI Space (`src/views/ai-space/AiSpacePage.vue`)
+
+**实现**：AI 助手对话页面，支持三种交互模式，通过顶部下拉切换。
+
+- **三模式切换**：`ChatMode = 'chat' | 'notes' | 'mcp'`，通过模式下拉框切换，自动创建/切换对应模式的会话
+- **三区布局**：左侧会话列表（按模式筛选）+ 中间消息区 + 底部输入区
+- **会话持久化**：所有会话消息（`AiSession`）序列化为 JSON 存储到 SQLite `app_settings` 表（key: `ai_chat_sessions`），按 `mode` 字段区分，切换模式时自动保持独立会话
+- **AI 配置**：从 SQLite 加载（`loadAiConfig`），支持 Azure / OpenAI 兼容 API，支持 `api-key` 和 `Bearer` 两种认证方式
+
+#### 4.13.1 普通对话（Chat）
+
+纯 AI 对话，发送消息 → 调用 `callAiChat` → 展示回答。支持图片上传（base64）和 `.txt` 文件附加。
+
+#### 4.13.2 笔记问答（Notes Q&A）
+
+**流程**（`sendNotes`）：
+1. 加载全部笔记（`loadNotes()`）
+2. 调用 `chatWithNotes(aiConfig, question, notes, history)`
+3. 底层执行语义检索：从笔记库中匹配最相关的笔记片段作为上下文
+4. AI 基于检索到的笔记内容回答
+5. 返回结果中附带 `contextNoteCount`（参考笔记数）
+
+已配置图片时回退为普通 Chat（笔记问答不支持图片）。
+
+#### 4.13.3 MCP 工具（MCP Tools）
+
+MCP（Model Context Protocol）集成，支持注册 SSE/Streamable HTTP 协议的 MCP 服务器，调用服务器暴露的工具来回答问题。
+
+**MCP 服务层**（`src/services/mcpService.ts`）：
+- `McpServerConfig`：服务器配置（名称、端点、认证类型/值）
+- CRUD 操作：`loadMcpServers` / `addMcpServer` / `deleteMcpServer` / `updateMcpServer`
+- 工具发现：`listTools(server)` / `getAllToolsFlat()` 获取所有启用服务器的全部工具
+- 工具调用：`callTool(server, toolName, args)` 通过 Rust 原生 `mcp_sse_call` 命令调用（SSE 传输）
+
+**Rust 原生 MCP 客户端**（`src-tauri/src/mcp_sse.rs`）：
+- 基于 `reqwest` + `sse-reqwest-client` crate 实现 SSE 流式连接
+- 注册 3 个 Tauri 命令：`mcp_sse_init`（初始化连接） / `mcp_sse_call`（调用工具） / `mcp_sse_close`（关闭连接）
+- 自动执行 MCP `initialize` 握手后执行 `tools/call`
+- 参数为空时不会发送空 `arguments` 字段（兼容服务端校验）
+
+**问答流程**（`sendMcp`）：
+1. 获取所有启用的 MCP 工具列表
+2. 无可用工具 → 回退到 `sendChat`（普通 AI 对话）
+3. 有工具 → 构建系统提示词告知 AI 可用工具及调用格式
+4. AI 回答中解析 `TOOL_CALL: tool_name | {"args"}` 指令
+5. 匹配到的工具 → 调用 `callTool` 执行 → 收集结果
+6. 有工具调用 → 将结果喂给 AI 做二次回答；无工具调用 → 直接使用 AI 的回答（工具优先，AI 兜底的 Q&A 模式）
+
+**系统提示词行为**：
+- 提示词引导 AI「优先使用 MCP 工具回答，无合适工具时直接用自己的知识回答」—— 与笔记问答的"优先检索笔记，无结果时 AI 直接回答"的 fallback 模式一致
+- 工具调用格式：`TOOL_CALL: 工具名 | {"参数名": "参数值"}`（独占一行）
+
+#### 4.13.4 会话切换模式同步
+
+**修复要点**：会话列表展示所有模式的会话条目。通过 `switchSession(id)` 切换到其他模式的会话时，`mode.value` 会同步更新为目标会话的 `mode`，同时自动清理附件状态（`clearAttachments()`），确保 UI 状态与当前会话一致。
 
 ---
 
@@ -1583,8 +1642,7 @@ node scripts/bump-version.mjs major    # 0.1.1 → 1.0.0
 
 ### 清理脚本 (`scripts/clean.mjs`)
 
-删除 `dist/` 前端缓存目录，确保打包时前端代码是最新的。
-Rust 编译缓存（`src-tauri/target/`）通常无需清理，只在 Rust 代码缓存异常时执行 `node scripts/clean.mjs --full`。
+执行 `cargo clean` 清理 Rust 编译缓存（`src-tauri/target/`），一般在 Rust 依赖变更或构建异常时执行。前端构建产物由 Vite 自动增量处理，无需手动清理。
 
 ### NPM Scripts
 

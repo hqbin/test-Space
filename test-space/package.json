@@ -1,7 +1,7 @@
 {
   "name": "test-space",
   "private": true,
-  "version": "1.6.10",
+  "version": "1.6.12",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,9 +11,9 @@
     "version:patch": "node scripts/bump-version.mjs patch",
     "version:minor": "node scripts/bump-version.mjs minor",
     "version:major": "node scripts/bump-version.mjs major",
-    "release:patch": "node scripts/bump-version.mjs patch && node scripts/clean.mjs && npm run tauri build",
-    "release:minor": "node scripts/bump-version.mjs minor && node scripts/clean.mjs && npm run tauri build",
-    "release:major": "node scripts/bump-version.mjs major && node scripts/clean.mjs && npm run tauri build"
+    "release:patch": "node scripts/bump-version.mjs patch && npm run tauri build",
+    "release:minor": "node scripts/bump-version.mjs minor && npm run tauri build",
+    "release:major": "node scripts/bump-version.mjs major && npm run tauri build"
   },
   "dependencies": {
     "@tauri-apps/plugin-dialog": "^2.7.1",

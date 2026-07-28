@@ -4,14 +4,14 @@
     <div class="flex-shrink-0 flex flex-col w-64 ml-3 overflow-hidden rounded-xl bg-white/10 backdrop-blur-[60px] border border-white/50 shadow-lg">
       <div class="p-3 border-b border-glass-border-light/50">
         <div class="glass-input flex items-center gap-2 px-3 py-2 rounded-lg">
-          <span class="material-symbols-outlined text-[14px] text-on-surface-variant">search</span>
+          <span class="material-symbols-outlined text-[14px] text-on-surface-variant" :class="searching ? 'animate-spin' : ''">{{ searching ? 'progress_activity' : 'search' }}</span>
           <input             v-model="searchQuery"
             type="text"
             :placeholder="t('notes.search')"
             class="bg-transparent border-none outline-none text-[12px] text-on-surface w-full select-text"
             @input="onSearch"
           />
-          <button v-if="searchQuery" class="glass-button p-0.5 select-none" @click="clearSearch">
+          <button v-if="searchQuery" class="glass-button !border-0 p-0.5 select-none" @click="clearSearch">
             <span class="material-symbols-outlined text-[12px]">close</span>
           </button>
         </div>
@@ -104,7 +104,7 @@
               @dragend="onDragEnd"
             >
               <span class="material-symbols-outlined text-[13px] text-secondary">description</span>
-              <span class="font-body-md text-body-md text-[12px] flex-1 truncate">{{ note.title || t('notes.untitled') }}</span>
+              <span class="font-body-md text-body-md text-[12px] flex-1 truncate" v-html="highlightText(note.title || t('notes.untitled'))"></span>
               <span class="material-symbols-outlined text-[12px] text-secondary">star</span>
               <button class="glass-button !border-0 px-1.5 py-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.delete')" @mousedown.stop @click.stop="confirmDeleteNote(note)">
                 <span class="material-symbols-outlined text-[11px]">delete</span>
@@ -155,7 +155,7 @@
               @dragend="onDragEnd"
                 >
                   <span class="material-symbols-outlined text-[13px] text-secondary">description</span>
-                  <span class="font-body-md text-body-md text-[12px] flex-1 truncate">{{ note.title || t('notes.untitled') }}</span>
+                  <span class="font-body-md text-body-md text-[12px] flex-1 truncate" v-html="highlightText(note.title || t('notes.untitled'))"></span>
                   <span v-if="note.isFavorite" class="material-symbols-outlined text-[12px] text-secondary">star</span>
                   <button class="glass-button !border-0 px-1.5 py-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.delete')" @mousedown.stop @click.stop="confirmDeleteNote(note)">
                     <span class="material-symbols-outlined text-[11px]">delete</span>
@@ -182,7 +182,7 @@
               @dragend="onDragEnd"
             >
               <span class="material-symbols-outlined text-[13px] text-secondary">description</span>
-              <span class="font-body-md text-body-md text-[12px] flex-1 truncate">{{ note.title || t('notes.untitled') }}</span>
+              <span class="font-body-md text-body-md text-[12px] flex-1 truncate" v-html="highlightText(note.title || t('notes.untitled'))"></span>
               <button class="glass-button !border-0 px-1.5 py-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.delete')" @mousedown.stop @click.stop="confirmDeleteNote(note)">
                 <span class="material-symbols-outlined text-[11px]">delete</span>
               </button>
@@ -710,7 +710,7 @@
 defineOptions({ name: 'NotesSpacePage' })
 import { ref, computed, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from "vue";
 import { useRouter } from "vue-router";
-import { useEditor, EditorContent } from "@tiptap/vue-3";
+import { useEditor, EditorContent, Extension } from "@tiptap/vue-3";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Image from "@tiptap/extension-image";
@@ -729,6 +729,8 @@ import { jsPDF } from "jspdf";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, ExternalHyperlink } from "docx";
 import type { NoteSpace, NoteFolder, NoteItem, NoteVersion } from "@/types";
 
+import { Plugin, PluginKey } from "prosemirror-state";
+import { Decoration, DecorationSet } from "prosemirror-view";
 import { useI18n } from "@/composables/useI18n";
 const { t } = useI18n();
 const router = useRouter();
@@ -789,6 +791,7 @@ const expandedFolders = ref<Record<string, boolean>>({})
 const showFavorites = ref(false)
 const searchQuery = ref("")
 const searchResults = ref<NoteItem[]>([])
+const searching = ref(false)
 const saved = ref(true)
 const lastEditorContent = ref<string>("")
 const noteTitle = ref("")
@@ -907,11 +910,13 @@ function getNotesByFolder(folderId: string): NoteItem[] {
 }
 
 const uncategorizedNotes = computed(() => {
-  if (searchQuery.value) return []
   if (!selectedSpaceId.value) return []
-  // 根笔记（folderId=null）本身无 spaceId 字段，无法按 Space 精确过滤；
-  // 展示所有无文件夹的笔记，由用户通过 Space 的文件夹树感知归属
-  return notes.value.filter(n => !n.folderId)
+  let list = notes.value.filter(n => !n.folderId)
+  if (searchQuery.value && searchResults.value.length > 0) {
+    const resultIds = new Set(searchResults.value.map(n => n.id))
+    list = list.filter(n => resultIds.has(n.id))
+  }
+  return list
 })
 
 const highlightedNoteIds = computed(() => {
@@ -972,6 +977,27 @@ function buildTocTree(items: { level: number; text: string }[]): TocNode[] {
 
 function escapeHtml(str: string): string {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+}
+
+function highlightText(text: string): string {
+  const q = searchQuery.value.trim()
+  if (!q) return escapeHtml(text)
+  const escaped = escapeHtml(text)
+  const lower = escaped.toLowerCase()
+  const searchLower = q.toLowerCase()
+  let result = ''
+  let i = 0
+  while (i < escaped.length) {
+    const idx = lower.indexOf(searchLower, i)
+    if (idx === -1) {
+      result += escaped.slice(i)
+      break
+    }
+    result += escaped.slice(i, idx)
+    result += '<mark class="bg-yellow-200/70 text-on-surface rounded-sm px-0.5">' + escaped.slice(idx, idx + q.length) + '</mark>'
+    i = idx + q.length
+  }
+  return result
 }
 
 // ── Data Loading ─────────────────────────────────────────────
@@ -1484,6 +1510,97 @@ function flashHeadingInline(el: HTMLElement) {
   }, 1620))
 }
 
+// ── Search highlight plugin (registered once) ────────────────
+const searchHighlightKey = new PluginKey('search-highlight')
+let _searchDecos: Decoration[] = []
+let _searchFirstMatchFrom = -1
+let _searchFirstMatchLen = 0
+
+const searchHighlightPlugin = new Plugin({
+  key: searchHighlightKey,
+  state: {
+    init() { return DecorationSet.empty },
+    apply(tr, set) {
+      if (tr.getMeta('search-updated') !== undefined) {
+        if (_searchDecos.length === 0) return DecorationSet.empty
+        return DecorationSet.create(tr.doc, _searchDecos)
+      }
+      return set.map(tr.mapping, tr.doc)
+    },
+  },
+  props: {
+    decorations(state) {
+      return this.getState(state)
+    },
+  },
+})
+
+const SearchHighlightExt = Extension.create({
+  name: 'searchHighlight',
+  addProseMirrorPlugins() {
+    return [searchHighlightPlugin]
+  },
+})
+
+function updateSearchHighlights() {
+  const ed: any = editor.value
+  if (!ed) return
+  const q = searchQuery.value.trim()
+
+  if (!q) {
+    _searchDecos = []
+    _searchFirstMatchFrom = -1
+    ed.view.dispatch(ed.state.tr.setMeta('search-updated', true))
+    return
+  }
+
+  // Build decorations
+  const lowerQ = q.toLowerCase()
+  const decos: Decoration[] = []
+  let firstFrom = -1
+  ed.state.doc.descendants((node: any, pos: number) => {
+    if (!node.isText) return true
+    const text = node.text || ''
+    const lower = text.toLowerCase()
+    let idx = 0
+    while ((idx = lower.indexOf(lowerQ, idx)) !== -1) {
+      if (firstFrom === -1) firstFrom = pos + idx
+      decos.push(
+        Decoration.inline(pos + idx, pos + idx + q.length, {
+          style: 'background-color: rgba(253, 224, 71, 0.55); border-radius: 2px; padding: 0 1px;',
+        })
+      )
+      idx += q.length
+    }
+    return true
+  })
+
+  _searchDecos = decos
+  _searchFirstMatchFrom = firstFrom
+  _searchFirstMatchLen = q.length
+
+  ed.view.dispatch(ed.state.tr.setMeta('search-updated', true))
+
+  // Scroll to first match via coordsAtPos for reliable positioning
+  if (firstFrom !== -1) {
+    const scrollToMatch = (attempt = 0) => {
+      if (attempt > 10) return
+      const e: any = editor.value
+      const scrollEl = editorScrollRef.value
+      if (!e || !scrollEl) return
+      e.commands.setTextSelection({ from: firstFrom, to: firstFrom + q.length })
+      requestAnimationFrame(() => {
+        const coords = e.view.coordsAtPos(firstFrom + 1)
+        if (!coords) { setTimeout(() => scrollToMatch(attempt + 1), 120); return }
+        const containerRect = scrollEl.getBoundingClientRect()
+        const targetTop = scrollEl.scrollTop + coords.top - containerRect.top - 120
+        scrollEl.scrollTop = Math.max(0, targetTop)
+      })
+    }
+    setTimeout(() => scrollToMatch(), 60)
+  }
+}
+
 function openInternalNoteLink(href: string) {
   const noteId = href.slice(NOTE_LINK_PREFIX.length)
   if (noteId) openNoteById(noteId)
@@ -1589,6 +1706,8 @@ async function selectNote(note: NoteItem) {
     const anchor = _pendingHeadingAnchor
     _pendingHeadingAnchor = null
     scrollToHeadingByText(anchor)
+  } else if (searchQuery.value.trim()) {
+    setTimeout(() => updateSearchHighlights(), 80)
   }
 
   // Defer non-critical work
@@ -1650,11 +1769,12 @@ let searchDebounce: ReturnType<typeof setTimeout> | null = null
 
 function onSearch() {
   if (searchDebounce) clearTimeout(searchDebounce)
+  searching.value = true
   searchDebounce = setTimeout(async () => {
     const q = searchQuery.value.trim()
     if (!q) {
       searchResults.value = []
-      // Restore folder expanded states (don't auto-collapse, just leave as-is)
+      searching.value = false
       return
     }
     const lowerQ = q.toLowerCase()
@@ -1676,12 +1796,19 @@ function onSearch() {
       const hasMatch = searchResults.value.some(n => n.folderId === f.id)
       if (hasMatch) expandedFolders.value[f.id] = true
     }
+    // Update highlights in the editor if a note is open
+    if (selectedNoteId.value) {
+      requestAnimationFrame(() => updateSearchHighlights())
+    }
+    searching.value = false
   }, 300)
 }
 
 function clearSearch() {
   searchQuery.value = ""
   searchResults.value = []
+  searching.value = false
+  updateSearchHighlights()
 }
 
 // ── Delete Note ──────────────────────────────────────────────
@@ -2248,6 +2375,7 @@ const editor = useEditor({
     Typography,
     TextStyle,
     Color,
+    SearchHighlightExt,
   ],
   onUpdate: () => {
     const html = editor.value?.getHTML() ?? ""
@@ -2438,6 +2566,11 @@ onBeforeUnmount(() => {
 :deep(.ProseMirror) {
   outline: none;
   min-height: 300px;
+}
+:deep(.ProseMirror .search-highlight) {
+  background-color: rgba(253, 224, 71, 0.55);
+  border-radius: 2px;
+  padding: 0 1px;
 }
 :deep(.ProseMirror p.is-editor-empty:first-child::before) {
   content: attr(data-placeholder);

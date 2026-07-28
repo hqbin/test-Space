@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "TestSpace",
-  "version": "1.6.9",
+  "version": "1.6.12",
   "identifier": "com.testspace.app",
   "build": {
     "frontendDist": "../dist",
@@ -31,7 +31,10 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
+    "targets": [
+      "nsis",
+      "msi"
+    ],
     "resources": [
       "bin/scrcpy-server"
     ],

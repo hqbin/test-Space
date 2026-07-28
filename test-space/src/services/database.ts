@@ -101,6 +101,8 @@ async function migrateInternal(d: Database) {
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_notes_folder ON notes(folder_id)`)
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_notes_fav ON notes(is_favorite)`)
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes(updated_at)`)
+  await d.execute(`CREATE INDEX IF NOT EXISTS idx_notes_title ON notes(title)`)
+  await d.execute(`CREATE INDEX IF NOT EXISTS idx_notes_content ON notes(content)`)
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_note_folders_space ON note_folders(space_id)`)
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_note_folders_parent ON note_folders(parent_id)`)
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_note_versions_note ON note_versions(note_id)`)
@@ -131,9 +133,10 @@ async function migrateInternal(d: Database) {
   // FTS5 full-text search for notes
   try {
     await d.execute(`CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
-      note_id, title, plain_text, tags,
+      note_id, title, content, plain_text, tags,
       tokenize='unicode61'
     )`)
+    try { await d.execute("ALTER TABLE notes_fts ADD COLUMN content TEXT") } catch {}
   } catch (e) {
     console.warn('[DB] FTS5 not available, falling back to LIKE search')
   }
@@ -530,7 +533,7 @@ async function repairEmptyPlainText(d: Database) {
         try {
           await d.execute('DELETE FROM notes_fts WHERE note_id = ?', [row.id])
           await d.execute(
-            'INSERT INTO notes_fts (note_id, title, plain_text, tags) SELECT id, title, ?, tags FROM notes WHERE id = ?',
+            "INSERT INTO notes_fts (note_id, title, content, plain_text, tags) SELECT id, title, content, ?, tags FROM notes WHERE id = ?",
             [plainText, row.id]
           )
         } catch {}
@@ -567,13 +570,10 @@ export async function saveNote(note: { id: string; folderId?: string | null; tit
   )
   // Sync FTS5 index
   try {
+    await d.execute("DELETE FROM notes_fts WHERE note_id = ?", [note.id])
     await d.execute(
-"DELETE FROM notes_fts WHERE note_id = ?"
-, [note.id])
-    await d.execute(
-"INSERT INTO notes_fts (note_id, title, plain_text, tags) VALUES (?, ?, ?, ?)"
-,
-      [note.id, note.title, plainText, JSON.stringify(note.tags || [])])
+      "INSERT INTO notes_fts (note_id, title, content, plain_text, tags) VALUES (?, ?, ?, ?, ?)",
+      [note.id, note.title, safeContent, plainText, JSON.stringify(note.tags || [])])
   } catch {}
 }
 
@@ -608,12 +608,12 @@ export async function rebuildFtsIndex(externalDb?: Database) {
   try {
     const d = externalDb ?? await getDb()
     await d.execute("DELETE FROM notes_fts")
-    const notes = await d.select<any[]>("SELECT id, title, plain_text, tags FROM notes")
+    const notes = await d.select<any[]>("SELECT id, title, content, plain_text, tags FROM notes")
     for (const note of notes) {
       try {
         await d.execute(
-          "INSERT INTO notes_fts (note_id, title, plain_text, tags) VALUES (?, ?, ?, ?)",
-          [note.id, note.title, note.plain_text || "", note.tags || "[]"]
+          "INSERT INTO notes_fts (note_id, title, content, plain_text, tags) VALUES (?, ?, ?, ?, ?)",
+          [note.id, note.title, note.content || "", note.plain_text || "", note.tags || "[]"]
         )
       } catch {}
     }
