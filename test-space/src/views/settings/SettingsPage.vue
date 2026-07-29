@@ -209,6 +209,32 @@
         <p v-if="aiStatusMessage" class="mt-3 font-body-md text-body-md text-[13px] break-words" :class="aiStatusIsError ? 'text-error' : 'text-success-indicator'">{{ aiStatusMessage }}</p>
       </div>
 
+      <!-- Token Consumption -->
+      <div class="border-t border-glass-border-light/30 my-5"></div>
+      <div class="min-w-0">
+        <div class="flex items-center justify-between gap-3 mb-3">
+          <span class="font-body-md text-body-md text-on-surface font-medium shrink-0">{{ t("settings.tokenUsage") }}</span>
+          <button class="glass-button px-3 py-1.5 rounded-full text-[12px] select-none" @click="resetTokenUsage">
+            <span class="material-symbols-outlined text-[14px] align-middle mr-1">refresh</span>
+            {{ t("settings.tokenReset") }}
+          </button>
+        </div>
+        <div class="grid grid-cols-3 gap-3">
+          <div class="bg-white/40 rounded-xl px-4 py-3 border border-outline-variant/30">
+            <div class="text-[11px] text-on-surface-variant/60 mb-1">{{ t("settings.tokenInput") }}</div>
+            <div class="text-[18px] font-semibold text-on-surface font-mono">{{ promptTokens.toLocaleString() }}</div>
+          </div>
+          <div class="bg-white/40 rounded-xl px-4 py-3 border border-outline-variant/30">
+            <div class="text-[11px] text-on-surface-variant/60 mb-1">{{ t("settings.tokenOutput") }}</div>
+            <div class="text-[18px] font-semibold text-on-surface font-mono">{{ completionTokens.toLocaleString() }}</div>
+          </div>
+          <div class="bg-white/40 rounded-xl px-4 py-3 border border-outline-variant/30">
+            <div class="text-[11px] text-on-surface-variant/60 mb-1">{{ t("settings.tokenTotal") }}</div>
+            <div class="text-[18px] font-semibold text-secondary font-mono">{{ totalTokens.toLocaleString() }}</div>
+          </div>
+        </div>
+      </div>
+
       <!-- AI Memory Management -->
       <div class="border-t border-glass-border-light/30 my-5"></div>
       <div class="min-w-0">
@@ -380,8 +406,16 @@ import {
   type AiProvider,
 } from "@/services/aiSettings";
 import { testAiConnection } from "@/services/noteAi";
+import { useTokenUsage } from "@/stores/useTokenUsage";
 
 const { lang, t, setLanguage, initLanguage } = useI18n();
+
+const { promptTokens, completionTokens, totalTokens, resetUsage, loadUsage } = useTokenUsage();
+function resetTokenUsage() {
+  resetUsage();
+  setStatus(t("settings.tokenResetDone"));
+  setTimeout(() => { if (statusMessage.value === t("settings.tokenResetDone")) setStatus(""); }, 2000);
+}
 
 const theme = ref("light");
 const statusMessage = ref("");
@@ -904,6 +938,7 @@ onMounted(async () => {
   }
   await ensureDeviceId();
   await loadMemories();
+  await loadUsage();
 });
 
 onActivated(() => {

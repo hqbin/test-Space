@@ -266,9 +266,14 @@ export interface McpToolDescriptor {
 
 export async function getAllToolsFlat(): Promise<McpToolDescriptor[]> {
   const results = await getAllEnabledTools()
-  return results.flatMap(r => r.tools.map(t => ({
-    serverId: r.server.id,
-    serverName: r.server.name,
-    tool: t,
-  })))
+  return results.flatMap(r => {
+    const disabled = r.server.disabledTools || []
+    return r.tools
+      .filter(t => !disabled.includes(t.name))
+      .map(t => ({
+        serverId: r.server.id,
+        serverName: r.server.name,
+        tool: t,
+      }))
+  })
 }

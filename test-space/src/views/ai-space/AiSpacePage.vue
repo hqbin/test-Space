@@ -75,7 +75,7 @@
 
       <template v-if="activeSession">
         <!-- Messages -->
-        <div ref="messagesRef"
+        <div ref="messagesRef" @click="onMessagesClick"
           class="flex-1 overflow-y-auto custom-scrollbar space-y-3 py-2 pr-1 min-h-0"
         >
           <div v-for="(msg, i) in activeSession.messages" :key="i"
@@ -97,7 +97,7 @@
                 {{ msg.content }}
               </template>
               <template v-else>
-                <div class="whitespace-pre-wrap">{{ msg.content }}</div>
+                <div class="whitespace-pre-wrap" v-html="renderNoteLinks(msg.content)"></div>
                 <div v-if="msg.toolCalls?.length" class="mt-2 pt-2 border-t border-glass-border-light/30">
                   <div v-for="tc in msg.toolCalls" :key="tc.toolName" class="text-[11px] text-on-surface-variant/60 flex items-center gap-1">
                     <span class="material-symbols-outlined text-[13px]">check_circle</span>
@@ -107,13 +107,13 @@
               </template>
             </div>
           </div>
-          <div v-if="sessionLoading[activeSessionId]" class="flex items-center gap-2 text-[12px] text-on-surface-variant px-2">
+          <div v-if="sessionLoading.get(activeSessionId)" class="flex items-center gap-2 text-[12px] text-on-surface-variant px-2">
             <span class="material-symbols-outlined text-[16px] animate-spin">sync</span>
             {{ loadingLabel }}
           </div>
         </div>
 
-        <div v-if="sessionError[activeSessionId]" class="mx-1 mb-1 px-3 py-1.5 text-[11px] text-red-500 shrink-0 break-words bg-white/60 rounded-lg border border-red-200/50">{{ sessionError[activeSessionId] }}</div>
+        <div v-if="sessionError.get(activeSessionId)" class="mx-1 mb-1 px-3 py-1.5 text-[11px] text-red-500 shrink-0 break-words bg-white/60 rounded-lg border border-red-200/50">{{ sessionError.get(activeSessionId) }}</div>
 
         <!-- Input -->
         <div class="flex gap-2 shrink-0 pb-2 pt-2 items-end">
@@ -137,7 +137,7 @@
               <input ref="inputRef" v-model="input" type="text"
                 :placeholder="inputPlaceholder"
                 class="w-full bg-transparent px-4 py-2.5 text-[13px] outline-none select-text"
-                :disabled="sessionLoading[activeSessionId]"
+                :disabled="sessionLoading.get(activeSessionId)"
                 @keydown.enter="send"
                 @paste="onInputPaste"
               />
@@ -151,7 +151,7 @@
               <span class="material-symbols-outlined text-[18px]">extension</span>
             </button>
             <button class="glass-button px-3.5 py-2.5 rounded-xl glass-active select-none shrink-0"
-              :disabled="sessionLoading[activeSessionId] || (!input.trim() && !uploadedImage && !attachedFile)"
+              :disabled="sessionLoading.get(activeSessionId) || (!input.trim() && !uploadedImage && !attachedFile)"
               @click="send"
             >
               <span class="material-symbols-outlined text-[18px]">send</span>
@@ -173,29 +173,40 @@
             </button>
           </div>
           <div class="max-h-[300px] overflow-y-auto custom-scrollbar space-y-2">
-            <div v-for="server in servers" :key="server.id"
-              class="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/40 border border-glass-border-light/40"
-            >
-              <button class="p-0.5 rounded hover:bg-white/10 transition-colors" :title="server.enabled ? t('ai.mcpDisable') : t('ai.mcpEnable')" @click="toggleServer(server.id)">
-                <span class="material-symbols-outlined text-[16px]" :class="server.enabled ? 'text-green-500' : 'text-on-surface-variant/30'">{{ server.enabled ? 'check_circle' : 'radio_button_unchecked' }}</span>
-              </button>
-              <div class="flex-1 min-w-0 cursor-pointer" @click="editServer(server)">
-                <div class="text-[12px] font-medium truncate flex items-center gap-1.5">
-                  {{ server.name }}
-                  <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-white/40 border border-glass-border-light/30 text-on-surface-variant/60">{{ authTypeLabel(server.authType) }}</span>
+            <div v-for="server in servers" :key="server.id">
+              <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/40 border border-glass-border-light/40">
+                <button class="p-0.5 rounded hover:bg-white/10 transition-colors shrink-0" :title="server.enabled ? t('ai.mcpDisable') : t('ai.mcpEnable')" @click="toggleServer(server.id)">
+                  <span class="material-symbols-outlined text-[16px]" :class="server.enabled ? 'text-green-500' : 'text-on-surface-variant/30'">{{ server.enabled ? 'check_circle' : 'radio_button_unchecked' }}</span>
+                </button>
+                <div class="flex-1 min-w-0 cursor-pointer" @click="editServer(server)">
+                  <div class="text-[12px] font-medium truncate flex items-center gap-1.5">
+                    {{ server.name }}
+                    <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-white/40 border border-glass-border-light/30 text-on-surface-variant/60">{{ authTypeLabel(server.authType) }}</span>
+                  </div>
+                  <div class="text-[10px] text-on-surface-variant/50 truncate">{{ server.endpoint }}</div>
                 </div>
-                <div class="text-[10px] text-on-surface-variant/50 truncate">{{ server.endpoint }}</div>
+                <button class="p-0.5 rounded hover:bg-white/10 text-on-surface-variant/40 hover:text-yellow-600 transition-colors shrink-0" :title="t('notes.rename')" @click="editServer(server)">
+                  <span class="material-symbols-outlined text-[14px]">edit</span>
+                </button>
+                <button class="p-0.5 rounded hover:bg-white/10 text-on-surface-variant/40 hover:text-blue-500 transition-colors shrink-0" :title="t('ai.mcpTest')" :disabled="testingServers.has(server.id)" @click="testServer(server)">
+                  <span v-if="!testingServers.has(server.id)" class="material-symbols-outlined text-[14px]">wifi_tethering</span>
+                  <svg v-else class="w-[14px] h-[14px] animate-spin" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                </button>
+                <button class="p-0.5 rounded hover:bg-white/10 text-on-surface-variant/40 hover:text-red-400 transition-colors shrink-0" :title="t('notes.delete')" @click="deleteServer(server.id)">
+                  <span class="material-symbols-outlined text-[14px]">delete</span>
+                </button>
               </div>
-              <button class="p-0.5 rounded hover:bg-white/10 text-on-surface-variant/40 hover:text-yellow-600 transition-colors shrink-0" :title="t('notes.rename')" @click="editServer(server)">
-                <span class="material-symbols-outlined text-[14px]">edit</span>
-              </button>
-              <button class="p-0.5 rounded hover:bg-white/10 text-on-surface-variant/40 hover:text-blue-500 transition-colors shrink-0" :title="t('ai.mcpTest')" :disabled="testingServers.has(server.id)" @click="testServer(server)">
-                <span v-if="!testingServers.has(server.id)" class="material-symbols-outlined text-[14px]">wifi_tethering</span>
-                <svg v-else class="w-[14px] h-[14px] animate-spin" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-              </button>
-              <button class="p-0.5 rounded hover:bg-white/10 text-on-surface-variant/40 hover:text-red-400 transition-colors shrink-0" :title="t('notes.delete')" @click="deleteServer(server.id)">
-                <span class="material-symbols-outlined text-[14px]">delete</span>
-              </button>
+              <div v-if="server.enabled && serverTools[server.id]?.length" class="ml-6 mt-1 mb-2 flex flex-wrap gap-1.5">
+                <button v-for="tool in serverTools[server.id]" :key="tool.name"
+                  class="text-[10px] px-2 py-0.5 rounded-full border transition-all select-none flex items-center gap-1"
+                  :class="isToolDisabled(server.id, tool.name)
+                    ? 'bg-gray-100 text-on-surface-variant/50 border-gray-200 line-through'
+                    : 'bg-white/60 text-secondary border-secondary/30 hover:bg-secondary/10'"
+                  @click="toggleTool(server.id, tool.name)"
+                >
+                  {{ tool.name }}
+                </button>
+              </div>
             </div>
             <div v-if="servers.length === 0" class="text-[12px] text-on-surface-variant/40 text-center py-4">{{ t('ai.mcpNoServers') }}</div>
           </div>
@@ -261,15 +272,17 @@
 
 <script setup lang="ts">
 defineOptions({ name: 'AiSpacePage' })
-import { ref, computed, watch, nextTick, onMounted, onActivated, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, nextTick, onMounted, onActivated, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from '@/composables/useI18n'
 import { isAiConfigured, loadAiConfig, type AiConfig } from '@/services/aiSettings'
 import { chatWithNotes, callAiChat, resolveSystemRole, type AiChatMessage } from '@/services/noteAi'
+import { useTokenUsage } from '@/stores/useTokenUsage'
 import { loadNotes } from '@/services/database'
-import type { AiSession, ChatMsg, ChatMode, NoteItem, McpServerConfig, McpAuthType } from '@/types'
+import type { AiSession, ChatMsg, ChatMode, NoteItem, McpServerConfig, McpAuthType, McpTool } from '@/types'
 import {
   loadMcpServers,
+  saveMcpServers,
   addMcpServer,
   deleteMcpServer,
   updateMcpServer,
@@ -282,6 +295,7 @@ import { getSetting, setSetting } from '@/services/database'
 
 const { t } = useI18n()
 const router = useRouter()
+const { addUsage, loadUsage } = useTokenUsage()
 
 const tabs = [
   { key: 'chat' as ChatMode, labelKey: 'ai.chatTab', icon: 'chat' },
@@ -311,20 +325,18 @@ const inputPlaceholder = computed(() => {
   return t('ai.inputMcpPlaceholder')
 })
 
-// ── Per-session loading/error state ──
-const sessionLoading = ref<Record<string, boolean>>({})
-const sessionError = ref<Record<string, string>>({})
+// ── Per-session loading/error state (using reactive Map to avoid spread overhead) ──
+const sessionLoading = reactive(new Map<string, boolean>())
+const sessionError = reactive(new Map<string, string>())
 
 function setLoading(sessionId: string, v: boolean) {
-  sessionLoading.value = { ...sessionLoading.value, [sessionId]: v }
+  sessionLoading.set(sessionId, v)
 }
 function setError(sessionId: string, msg: string) {
-  sessionError.value = { ...sessionError.value, [sessionId]: msg }
+  sessionError.set(sessionId, msg)
 }
 function clearError(sessionId: string) {
-  const copy = { ...sessionError.value }
-  delete copy[sessionId]
-  sessionError.value = copy
+  sessionError.delete(sessionId)
 }
 
 // ── Sessions ──
@@ -397,9 +409,10 @@ const aiConfig = ref<AiConfig>({
 })
 const configured = computed(() => isAiConfigured(aiConfig.value))
 
-// Notes
+// Notes (with cache to avoid re-fetching on keep-alive reactivation)
 const notes = ref<NoteItem[]>([])
 const contextNoteCount = ref(0)
+let _notesCache: NoteItem[] | null = null
 
 // MCP
 const servers = ref<McpServerConfig[]>([])
@@ -523,11 +536,15 @@ function saveSessions() {
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
-watch(sessions, () => {
-  if (!historyLoaded.value) return
-  if (saveTimer) clearTimeout(saveTimer)
-  saveTimer = setTimeout(saveSessions, 800)
-}, { deep: true })
+// Watch length + active session messages length to detect changes without deep watching full objects
+watch(
+  [() => sessions.value.length, () => activeSession.value?.messages.length],
+  () => {
+    if (!historyLoaded.value) return
+    if (saveTimer) clearTimeout(saveTimer)
+    saveTimer = setTimeout(saveSessions, 800)
+  },
+)
 
 // ── Mode dropdown ──
 function toggleModeDropdown() {
@@ -551,7 +568,7 @@ function switchMode(newMode: ChatMode) {
   showModeDropdown.value = false
   ensureSessionExists()
   clearAttachments()
-  if (newMode === 'mcp') refreshTools()
+  if (newMode === 'mcp') refreshTools().catch(() => {})
 }
 
 // ── API helpers ──
@@ -606,7 +623,7 @@ async function send() {
   const question = input.value.trim()
   const hasImage = !!uploadedImage.value
   const hasFile = !!attachedFile.value
-  if ((!question && !hasImage && !hasFile) || sessionLoading.value[sid] || !configured.value) return
+  if ((!question && !hasImage && !hasFile) || sessionLoading.get(sid) || !configured.value) return
 
   if (!activeSession.value) ensureSessionExists()
 
@@ -666,14 +683,20 @@ async function sendChat(question: string, imageData: string, session: AiSession)
     .slice(0, -1)
     .map(m => ({ role: m.role, content: m.content }))
 
-  const answer = imageData
-    ? await callChatApiWithImage(question, imageData, history)
-    : await callAiChat(aiConfig.value, [
-        { role: resolveSystemRole(aiConfig.value), content: 'You are a helpful assistant.' },
-        ...history,
-        { role: 'user', content: question },
-      ])
-
+  let answer: string
+  let usage: any
+  if (imageData) {
+    answer = await callChatApiWithImage(question, imageData, history)
+  } else {
+    const result = await callAiChat(aiConfig.value, [
+      { role: resolveSystemRole(aiConfig.value), content: 'You are a helpful assistant.' },
+      ...history,
+      { role: 'user', content: question },
+    ])
+    answer = result.answer
+    usage = result.usage
+  }
+  addUsage(usage)
   session.messages.push({ role: 'assistant', content: answer || '(empty)' })
 }
 
@@ -690,6 +713,7 @@ async function sendNotes(question: string, imageData: string, session: AiSession
 
   const result = await chatWithNotes(aiConfig.value, question, notes.value, history)
   contextNoteCount.value = result.contextNoteCount
+  addUsage(result.usage)
   session.messages.push({ role: 'assistant', content: result.answer })
 }
 
@@ -698,6 +722,7 @@ async function sendMcp(question: string, session: AiSession) {
     .filter(m => m.role === 'user' || m.role === 'assistant')
     .slice(-4)
 
+  // Always fetch fresh tool list — caching causes stale data after server toggles
   const tools = await getAllToolsFlat()
   if (tools.length === 0) {
     await sendChat(question, '', session)
@@ -705,7 +730,7 @@ async function sendMcp(question: string, session: AiSession) {
   }
 
   const toolsDesc = tools.map(t =>
-    `- ${t.tool.name} (${t.serverName})${t.tool.description ? ': ' + t.tool.description : ''}`
+    `- ${t.tool.name}${t.tool.description ? ': ' + t.tool.description : ''}`
   ).join('\n')
 
   const systemRole = resolveSystemRole(aiConfig.value)
@@ -716,9 +741,12 @@ async function sendMcp(question: string, session: AiSession) {
     ...history.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
     { role: 'user', content: question },
   ]
-  const firstResponse = await callAiChat(aiConfig.value, initMessages)
+  const firstResult = await callAiChat(aiConfig.value, initMessages)
+  const firstResponse = firstResult.answer
+  addUsage(firstResult.usage)
 
-  const toolCallRegex = /TOOL_CALL:\s*(\w+)\s*\|\s*(\{.*?\})/g
+  // Regex matches TOOL_CALL: tool_name | {...}  and tolerates extra annotation like (server) between name and |
+  const toolCallRegex = /TOOL_CALL:\s*(\w[\w.-]*)\s*(?:\([^)]*\))?\s*\|\s*(\{.*?\})/g
   const toolCalls: ToolCallInfo[] = []
   let toolResults = ''
   let cleanResponse = firstResponse
@@ -730,7 +758,7 @@ async function sendMcp(question: string, session: AiSession) {
     try { args = JSON.parse(match[2]) } catch {}
     const tool = tools.find(t => t.tool.name === toolName)
     if (tool) {
-      const server = servers.value.find(s => s.id === tool.serverId)
+      const server = servers.value.find(s => s.id === tool.serverId && s.enabled)
       if (server) {
         try {
           const result = await mcpCallTool(server, toolName, args)
@@ -752,7 +780,9 @@ async function sendMcp(question: string, session: AiSession) {
       { role: 'assistant', content: cleanResponse || 'Check results...' },
       { role: 'user', content: `Tool results:\n${toolResults}\n\nProvide a final answer based solely on these tool results.` },
     ]
-    const finalResponse = await callAiChat(aiConfig.value, finalMessages)
+    const finalResult = await callAiChat(aiConfig.value, finalMessages)
+    const finalResponse = finalResult.answer
+    addUsage(finalResult.usage)
     session.messages.push({ role: 'assistant', content: finalResponse || 'No response.', toolCalls })
   } else {
     session.messages.push({ role: 'assistant', content: firstResponse })
@@ -767,6 +797,31 @@ function scrollToBottom() {
 
 function goSettings() { router.push('/settings') }
 
+function onMessagesClick(e: MouseEvent) {
+  const target = e.target as HTMLElement
+  const link = target.closest('[data-note-link]') as HTMLElement | null
+  if (link) {
+    e.preventDefault()
+    const noteId = link.getAttribute('data-note-link')
+    const href = link.getAttribute('href') || ''
+    const headingMatch = href.match(/#([^#]+)$/)
+    if (noteId) {
+      router.push({ path: '/notes-space', query: { noteId, heading: headingMatch?.[1] ? decodeURIComponent(headingMatch[1]) : undefined } })
+    }
+  }
+}
+
+// ── Note link rendering ──
+const NOTE_LINK_RE = /\[([^\]]+)\]\(note:([a-f0-9-]+)(?:#([^)]*))?\)/g
+function renderNoteLinks(text: string): string {
+  return text.replace(NOTE_LINK_RE, (match, displayText, noteId, heading) => {
+    const href = heading
+      ? `/notes-space?noteId=${noteId}&heading=${encodeURIComponent(heading)}`
+      : `/notes-space?noteId=${noteId}`
+    return `<a href="${href}" class="text-secondary underline hover:text-secondary/80 cursor-pointer" data-note-link="${noteId}">${displayText}</a>`
+  })
+}
+
 // ── MCP ──
 const authTypeLabels: Record<McpAuthType, string> = {
   none: t('ai.mcpAuthNone'),
@@ -775,8 +830,50 @@ const authTypeLabels: Record<McpAuthType, string> = {
   custom: t('ai.mcpAuthCustom'),
 }
 function authTypeLabel(type: McpAuthType): string { return authTypeLabels[type] || type }
-async function loadAllNotes() { try { notes.value = await loadNotes() } catch { notes.value = [] } }
-async function loadServers() { servers.value = await loadMcpServers() }
+async function loadAllNotes(force = false) {
+  if (!force && _notesCache) { notes.value = _notesCache; return }
+  try {
+    notes.value = await loadNotes()
+    _notesCache = notes.value
+  } catch { notes.value = [] }
+}
+async function loadServers() {
+  servers.value = await loadMcpServers()
+  await loadServerTools()
+}
+const serverTools = ref<Record<string, McpTool[]>>({})
+async function loadServerTools() {
+  const enabledServers = servers.value.filter(s => s.enabled)
+  // Concurrently list tools for all servers — don't let one slow server block the rest
+  const results = await Promise.allSettled(
+    enabledServers.map(async s => {
+      const tools = await listTools(s)
+      return { serverId: s.id, tools }
+    })
+  )
+  const result: Record<string, McpTool[]> = {}
+  for (const r of results) {
+    if (r.status === 'fulfilled') {
+      result[r.value.serverId] = r.value.tools
+    }
+  }
+  serverTools.value = result
+}
+function isToolDisabled(serverId: string, toolName: string): boolean {
+  const s = servers.value.find(x => x.id === serverId)
+  return s ? (s.disabledTools || []).includes(toolName) : false
+}
+async function toggleTool(serverId: string, toolName: string) {
+  const s = servers.value.find(x => x.id === serverId)
+  if (!s) return
+  const disabled = s.disabledTools || []
+  s.disabledTools = disabled.includes(toolName)
+    ? disabled.filter(n => n !== toolName)
+    : [...disabled, toolName]
+  await updateMcpServer(serverId, { disabledTools: s.disabledTools })
+  // Refresh cached tools so MCP chat immediately reflects the change
+  refreshTools().catch(() => {})
+}
 async function refreshTools() {
   if (mode.value === 'mcp') { try { allTools.value = await getAllToolsFlat() } catch { allTools.value = [] } }
 }
@@ -784,7 +881,13 @@ async function toggleServer(id: string) {
   const server = servers.value.find(s => s.id === id)
   if (!server) return
   server.enabled = !server.enabled
-  await updateMcpServer(id, { enabled: server.enabled })
+  // Persist directly without closing SSE (updateMcpServer always closes it)
+  const all = await loadMcpServers()
+  const idx = all.findIndex(s => s.id === id)
+  if (idx >= 0) { all[idx].enabled = server.enabled; await saveMcpServers(all) }
+  // Refresh tools in background — don't block the UI toggle feedback
+  loadServerTools().catch(() => {})
+  refreshTools().catch(() => {})
 }
 async function testServer(server: McpServerConfig) {
   testingServers.value = new Set(testingServers.value).add(server.id)
@@ -875,8 +978,12 @@ onMounted(async () => {
     await loadSessions()
   } catch {}
   await loadAllNotes()
-  await loadServers()
-  if (mode.value === 'mcp') await refreshTools()
+  // Load servers + tools in the background — don't block UI on slow/unreachable MCP servers
+  loadServers().catch(() => {})
+  await loadUsage()
+  if (mode.value === 'mcp') {
+    try { allTools.value = await getAllToolsFlat() } catch { allTools.value = [] }
+  }
   document.addEventListener('paste', onGlobalPaste)
   document.addEventListener('click', onDocumentClick)
 })
@@ -885,8 +992,8 @@ onActivated(() => {
   if (!historyLoaded.value) {
     loadAiConfig().then(c => { aiConfig.value = c; historyLoaded.value = true }).catch(() => {})
   }
-  loadAllNotes()
-  loadServers()
+  loadAllNotes(false)
+  loadServers().catch(() => {})
 })
 
 onUnmounted(() => {

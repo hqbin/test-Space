@@ -555,9 +555,17 @@ export async function extractMemories(
   return [...new Set(lines)]
 }
 
-export async function callAiChat(config: AiConfig, messages: AiChatMessage[]): Promise<string> {
+export async function callAiChat(config: AiConfig, messages: AiChatMessage[]): Promise<{ answer: string; usage?: { promptTokens: number; completionTokens: number; totalTokens: number } }> {
   const json = await callChatApi(config, messages)
-  return json.choices?.[0]?.message?.content?.trim() || ''
+  const answer = json.choices?.[0]?.message?.content?.trim() || ''
+  const usage = json.usage
+    ? {
+        promptTokens: json.usage.prompt_tokens ?? 0,
+        completionTokens: json.usage.completion_tokens ?? 0,
+        totalTokens: json.usage.total_tokens ?? 0,
+      }
+    : undefined
+  return { answer, usage }
 }
 
 export async function testAiConnection(config: AiConfig): Promise<string> {

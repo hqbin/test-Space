@@ -127,6 +127,7 @@ export interface McpServerConfig {
   authValue?: string
   authHeader?: string
   enabled: boolean
+  disabledTools?: string[]
   createdAt: string
 }
 

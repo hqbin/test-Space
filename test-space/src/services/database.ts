@@ -101,8 +101,11 @@ async function migrateInternal(d: Database) {
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_notes_folder ON notes(folder_id)`)
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_notes_fav ON notes(is_favorite)`)
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes(updated_at)`)
-  await d.execute(`CREATE INDEX IF NOT EXISTS idx_notes_title ON notes(title)`)
+  await d.execute(`CREATE INDEX IF NOT EXISTS idx_notes_title_nocase ON notes(title COLLATE NOCASE)`)
+  try { await d.execute('DROP INDEX IF EXISTS idx_notes_title') } catch {}
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_notes_content ON notes(content)`)
+  await d.execute('ANALYZE')
+  await d.execute('PRAGMA optimize')
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_note_folders_space ON note_folders(space_id)`)
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_note_folders_parent ON note_folders(parent_id)`)
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_note_versions_note ON note_versions(note_id)`)
@@ -465,6 +468,8 @@ let _plainTextRepaired = false
 export async function loadNotes(): Promise<NoteItem[]> {
   const d = await getDb()
   if (!_plainTextRepaired) await repairEmptyPlainText(d)
+  // Yield before heavy query to avoid blocking UI
+  await new Promise(r => setTimeout(r, 0))
   const rows = await d.select<any[]>(
     `SELECT id, folder_id as folderId, title, content, content_json as contentJson, plain_text as plainText,
             tags, is_favorite as isFavorite, created_at as createdAt, updated_at as updatedAt
@@ -475,7 +480,7 @@ export async function loadNotes(): Promise<NoteItem[]> {
 
 export async function loadNoteList(): Promise<NoteItem[]> {
   const d = await getDb()
-  if (!_plainTextRepaired) await repairEmptyPlainText(d)
+  await new Promise(r => setTimeout(r, 0))
   const rows = await d.select<any[]>(
     `SELECT id, folder_id as folderId, title, '' as content, '' as contentJson, plain_text as plainText, tags,
             is_favorite as isFavorite, created_at as createdAt, updated_at as updatedAt

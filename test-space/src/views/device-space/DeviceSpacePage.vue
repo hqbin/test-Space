@@ -214,6 +214,10 @@
                       <span v-if="loadingForeground" class="inline-block w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
                       <span v-else class="material-symbols-outlined text-[14px]">center_focus_strong</span> {{ t('device.foregroundApp') }}
                     </button>
+                    <button class="bg-white/30 border border-outline-variant/30 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" :disabled="!selectedDevice || releaseAppsLoading" @click="showReleaseApps">
+                      <span v-if="releaseAppsLoading" class="inline-block w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                      <span v-else class="material-symbols-outlined text-[14px]">new_releases</span> {{ t('device.releaseApps') }}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -701,6 +705,84 @@
           </div>
         </div>
       </Transition>
+
+      <!-- Release Apps Dialog -->
+      <Transition name="fade">
+        <div v-if="releaseApps.show" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="closeReleaseApps">
+          <div class="absolute inset-0 bg-black/30 backdrop-blur-sm"></div>
+          <div class="glass-panel rounded-[2rem] p-6 w-full max-w-3xl relative z-10 bg-white/60 max-h-[85vh] flex flex-col">
+            <div class="flex justify-between items-center mb-4 shrink-0">
+              <h3 class="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-1.5 select-none">
+                <span class="material-symbols-outlined text-[16px]">new_releases</span>{{ t('device.releaseApps') }}
+              </h3>
+              <button class="glass-button p-1 rounded select-none" @click="closeReleaseApps">
+                <span class="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+            <div class="flex-1 overflow-y-auto min-h-0 custom-scrollbar">
+              <div v-if="releaseApps.loading" class="flex items-center justify-center py-12">
+                <span class="w-5 h-5 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
+              </div>
+              <template v-else>
+                <div class="flex gap-6 min-h-0">
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center justify-between mb-2">
+                      <h4 class="flex items-center gap-1.5 text-[12px] font-semibold text-on-surface-variant uppercase tracking-wider select-none">
+                        <span class="material-symbols-outlined text-[14px]">settings</span>{{ t('device.releaseSysApps') }}
+                      </h4>
+                      <button class="shrink-0 glass-button px-2 py-1 rounded text-[11px] flex items-center gap-1 select-none"
+                        :title="t('device.copyAll')" @click="copySectionApps('system')">
+                        <span class="material-symbols-outlined text-[12px]">content_copy</span>{{ t('device.copyAll') }}
+                      </button>
+                    </div>
+                    <div class="space-y-1">
+                      <div v-for="app in releaseApps.systemApps" :key="app.pkg"
+                        class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-white/40 transition-colors">
+                        <div class="flex-1 min-w-0 break-words pr-2">
+                          <div class="text-[13px] font-medium text-on-surface">{{ app.displayName }}</div>
+                          <div class="text-[11px] text-on-surface-variant/70 font-mono break-all">{{ app.version }}</div>
+                        </div>
+                        <button class="shrink-0 glass-button p-1 rounded select-none"
+                          :title="t('device.copy')" @click="copyAppVersion(app)">
+                          <span class="material-symbols-outlined text-[14px]">content_copy</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="w-[1px] bg-outline-variant/30 shrink-0"></div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center justify-between mb-2">
+                      <h4 class="flex items-center gap-1.5 text-[12px] font-semibold text-on-surface-variant uppercase tracking-wider select-none">
+                        <span class="material-symbols-outlined text-[14px]">smart_display</span>{{ t('device.releaseMajorApps') }}
+                      </h4>
+                      <button class="shrink-0 glass-button px-2 py-1 rounded text-[11px] flex items-center gap-1 select-none"
+                        :title="t('device.copyAll')" @click="copySectionApps('major')">
+                        <span class="material-symbols-outlined text-[12px]">content_copy</span>{{ t('device.copyAll') }}
+                      </button>
+                    </div>
+                    <div class="space-y-1">
+                      <div v-for="app in releaseApps.majorApps" :key="app.pkg"
+                        class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-white/40 transition-colors">
+                        <div class="flex-1 min-w-0 break-words pr-2">
+                          <div class="text-[13px] font-medium text-on-surface">{{ app.displayName }}</div>
+                          <div class="text-[11px] text-on-surface-variant/70 font-mono break-all">{{ app.version }}</div>
+                        </div>
+                        <button class="shrink-0 glass-button p-1 rounded select-none"
+                          :title="t('device.copy')" @click="copyAppVersion(app)">
+                          <span class="material-symbols-outlined text-[14px]">content_copy</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+            <div class="flex gap-2 justify-end pt-4 border-t border-outline-variant/30 mt-4 shrink-0">
+              <button class="glass-button px-4 py-2 rounded-lg font-label-md text-label-md select-none" @click="closeReleaseApps">{{ t('device.close') }}</button>
+            </div>
+          </div>
+        </div>
+      </Transition>
     </Teleport>
 
     <!-- APK Install Dialog -->
@@ -1077,6 +1159,7 @@ async function loadTextHistory() {
 // ── APK Install ──
 const reinstallApk = ref(false);
 const loadingForeground = ref(false);
+const releaseAppsLoading = ref(false);
 const apkDialogOpen = ref(false);
 const apkDragOver = ref(false);
 const apkFilePath = ref("");
@@ -2228,6 +2311,79 @@ async function downloadApk(pkg: string) {
 
 // ── App Path Query ──
 const resultDialog = ref({ show: false, title: "", content: "" });
+
+interface ReleaseAppEntry { pkg: string; displayName: string; version: string; }
+const releaseApps = ref({
+  show: false,
+  loading: false,
+  systemApps: [] as ReleaseAppEntry[],
+  majorApps: [] as ReleaseAppEntry[],
+});
+
+const RELEASE_APPS = [
+  { pkg: 'com.whaletv.launcher', displayName: 'Launcher' },
+  { pkg: 'com.zeasn.whaleos.settings', displayName: 'Setting' },
+  { pkg: 'com.zeasn.tokenapp', displayName: 'Token' },
+  { pkg: 'com.zeasn.tv.cast', displayName: 'TV_Casting' },
+  { pkg: 'com.whaletv.aivoice', displayName: 'Voice' },
+  { pkg: 'com.zeasn.deviceportal.asdprovider.certified', displayName: 'DPClient' },
+] as const;
+
+const MAJOR_APPS = [
+  { pkg: 'com.netflix.ninja', displayName: 'Netflix' },
+  { pkg: 'com.WhaleTV.whaleos.youtube.tv', displayName: 'Youtube' },
+  { pkg: 'com.amazon.amazonvideo.livingroom', displayName: 'PrimeVideo' },
+  { pkg: 'com.disney.disneyplus', displayName: 'Disney+' },
+] as const;
+
+async function showReleaseApps() {
+  if (!selectedDevice.value) return;
+  releaseApps.value = { show: true, loading: true, systemApps: [], majorApps: [] };
+  releaseAppsLoading.value = true;
+  try {
+    const serial = selectedDevice.value.serial;
+    const allApps = [...RELEASE_APPS, ...MAJOR_APPS];
+    const results = await Promise.all(allApps.map(async (app) => {
+      try {
+        const info = await getAppInfo(serial, app.pkg);
+        const vn = info.match(/versionName=([^\s\n]+)/)?.[1] || '';
+        const vc = info.match(/versionCode=(\d+)/)?.[1] || '';
+        const version = vn ? `${vn}${vc ? ` (${vc})` : ''}` : t('device.noVersion');
+        return { pkg: app.pkg, displayName: app.displayName, version };
+      } catch {
+        return { pkg: app.pkg, displayName: app.displayName, version: t('device.noVersion') };
+      }
+    }));
+    releaseApps.value = {
+      show: true,
+      loading: false,
+      systemApps: results.slice(0, RELEASE_APPS.length),
+      majorApps: results.slice(RELEASE_APPS.length),
+    };
+  } catch {
+    releaseApps.value = { ...releaseApps.value, loading: false };
+    showToast(t('device.getFailed'), "error");
+  } finally {
+    releaseAppsLoading.value = false;
+  }
+}
+
+function closeReleaseApps() {
+  releaseApps.value.show = false;
+}
+
+async function copyAppVersion(app: ReleaseAppEntry) {
+  const text = `${app.displayName}：${app.version}`;
+  await copyToClipboard(text);
+  showToast(t('device.copied'));
+}
+
+async function copySectionApps(section: 'system' | 'major') {
+  const apps = section === 'system' ? releaseApps.value.systemApps : releaseApps.value.majorApps;
+  const lines = apps.map(a => `${a.displayName}：${a.version}`);
+  await copyToClipboard(lines.join('\n'));
+  showToast(t('device.copied'));
+}
 async function queryAppPath() {
   if (!selectedDevice.value) return;
   if (!queryPackageName.value.trim()) {

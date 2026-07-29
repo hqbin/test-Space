@@ -709,7 +709,7 @@
 <script setup lang="ts">
 defineOptions({ name: 'NotesSpacePage' })
 import { ref, computed, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from "vue";
-import { useRouter } from "vue-router";
+import { useRouter, useRoute } from "vue-router";
 import { useEditor, EditorContent, Extension } from "@tiptap/vue-3";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
@@ -734,6 +734,7 @@ import { Decoration, DecorationSet } from "prosemirror-view";
 import { useI18n } from "@/composables/useI18n";
 const { t } = useI18n();
 const router = useRouter();
+const route = useRoute();
 
 import * as db from "@/services/database";
 import { mdToHtml, docxToHtml } from "@/utils/noteImport";
@@ -2461,6 +2462,18 @@ const visibleTocItems = computed(() => {
   return result
 })
 
+// Handle route query param changes (e.g., navigating from AI page with note link)
+watch(() => route.query, (q) => {
+  if (q.noteId) {
+    const noteId = q.noteId as string
+    const heading = q.heading as string | undefined
+    const note = notes.value.find(n => n.id === noteId)
+    if (note) {
+      openNoteById(noteId, heading)
+    }
+  }
+})
+
 watch(tocItems, (items) => {
   const tree = buildTocTree(items)
   const current = new Set(tocCollapsed.value)
@@ -2507,6 +2520,16 @@ onMounted(async () => {
   _isUnmounted = false
   await loadData()
   document.addEventListener('click', onDocumentClick, true)
+
+  // Handle route query params (e.g., note link click from AI page)
+  if (route.query.noteId) {
+    const noteId = route.query.noteId as string
+    const heading = route.query.heading as string | undefined
+    const note = notes.value.find(n => n.id === noteId)
+    if (note) {
+      openNoteById(noteId, heading)
+    }
+  }
 
   nextTick(() => {
     tocCollapsed.value = new Set()
