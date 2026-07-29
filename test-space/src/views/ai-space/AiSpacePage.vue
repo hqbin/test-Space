@@ -860,11 +860,11 @@ Then wait for the tool result before continuing.
     if (tool) {
       const server = servers.value.find(s => s.id === tool.serverId && s.enabled)
       if (server) {
+        toolCalls.push({ toolName, serverName: tool.serverName })
         try {
           const toolResult = await mcpCallTool(server, toolName, args)
           const resultText = JSON.stringify(toolResult?.content || toolResult)
           toolResults += `\n[${toolName}] result: ${resultText}`
-          toolCalls.push({ toolName, serverName: tool.serverName })
         } catch (e: any) {
           toolResults += `\n[${toolName}] error: ${e.message || e}`
         }
