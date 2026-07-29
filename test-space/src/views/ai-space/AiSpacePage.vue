@@ -133,7 +133,7 @@
                 <span class="material-symbols-outlined text-[14px]">close</span>
               </button>
             </div>
-            <div class="relative glass-panel rounded-xl border border-purple-200/50 shadow-sm bg-white/80 ring-1 ring-purple-300/40 focus-within:ring-purple-400/70 transition-all">
+            <div class="relative overflow-hidden glass-panel rounded-xl border border-purple-200/50 shadow-sm bg-white/80 ring-1 ring-purple-300/40 focus-within:ring-purple-400/70 transition-all">
               <textarea ref="inputRef" v-model="input"
                 :placeholder="inputPlaceholder"
                 class="ai-input-textarea w-full bg-transparent px-4 py-2.5 text-[13px] outline-none select-text resize-none rounded-xl"
@@ -166,7 +166,7 @@
 
     <!-- MCP Server Manager Modal -->
     <Teleport to="body">
-      <div v-if="showMcpManager" class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/20 backdrop-blur-sm" @click.self="showMcpManager = false">
+      <div v-if="showMcpManager" class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/20" @click.self="showMcpManager = false">
         <div class="glass-panel rounded-2xl p-5 w-[480px] border border-glass-border-light shadow-2xl flex flex-col gap-4 bg-white/90">
           <div class="flex items-center justify-between">
             <span class="text-[15px] font-semibold text-on-surface">{{ t('ai.mcpSettings') }}</span>
@@ -239,7 +239,7 @@
 
     <!-- Delete Session Confirm -->
     <Teleport to="body">
-      <div v-if="deleteTarget" class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/20 backdrop-blur-sm" @click.self="deleteTarget = null">
+      <div v-if="deleteTarget" class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/20" @click.self="deleteTarget = null">
         <div class="glass-panel rounded-2xl p-5 w-[340px] border border-glass-border-light shadow-2xl flex flex-col gap-4 bg-white/90">
           <div class="text-[15px] font-semibold text-on-surface">{{ t('notes.deleteNote') }}</div>
           <div class="text-[12px] text-on-surface-variant">{{ t('notes.deleteNoteDesc', { name: deleteTarget.title || 'New Chat' }) }}</div>
@@ -253,7 +253,7 @@
 
     <!-- Not configured overlay -->
     <Teleport to="body">
-      <div v-if="!configured" class="fixed inset-0 z-[999] flex items-center justify-center bg-white/60 backdrop-blur-sm" @click.self="goSettings">
+      <div v-if="!configured" class="fixed inset-0 z-[999] flex items-center justify-center bg-white/60" @click.self="goSettings">
         <div class="glass-panel rounded-2xl p-8 w-[360px] border border-glass-border-light shadow-2xl flex flex-col items-center gap-4 bg-white/95">
           <span class="material-symbols-outlined text-[48px] text-on-surface-variant/30">settings</span>
           <p class="text-[13px] text-on-surface-variant text-center">{{ t('ai.noConfig') }}</p>
@@ -309,6 +309,7 @@ const mode = ref<ChatMode>('chat')
 const input = ref('')
 const messagesRef = ref<HTMLDivElement>()
 const inputRef = ref<HTMLTextAreaElement>()
+const draftInputs = ref<Record<string, string>>({})
 const historyLoaded = ref(false)
 const showModeDropdown = ref(false)
 const modeDropdownRef = ref<HTMLDivElement>()
@@ -469,22 +470,40 @@ function createNewSession() {
   sessions.value.push(s)
   activeSessionId.value = id
   input.value = ''
+  draftInputs.value[id] = ''
   clearError(id)
-  nextTick(() => inputRef.value?.focus())
+  nextTick(() => {
+    resetInputHeight()
+    inputRef.value?.focus()
+  })
 }
 
+function resetInputHeight() {
+  const el = inputRef.value
+  if (!el) return
+  el.style.height = 'auto'
+}
 function switchSession(id: string) {
   if (id === activeSessionId.value) return
+  // Save draft for current session
+  if (activeSessionId.value) {
+    draftInputs.value[activeSessionId.value] = input.value
+  }
   activeSessionId.value = id
   const s = sessions.value.find(ses => ses.id === id)
   if (s && s.mode !== mode.value) {
     mode.value = s.mode
     if (mode.value === 'mcp') refreshTools()
   }
-  input.value = ''
+  // Restore draft for target session
+  input.value = draftInputs.value[id] || ''
   cancelRename()
   clearAttachments()
-  nextTick(() => inputRef.value?.focus())
+  nextTick(() => {
+    resetInputHeight()
+    autoResizeInput()
+    inputRef.value?.focus()
+  })
 }
 
 // ── Rename ──
@@ -534,7 +553,10 @@ function doDeleteSession() {
 }
 
 function saveSessions() {
-  setSetting(SESSIONS_KEY, JSON.stringify(sessions.value)).catch(() => {})
+  // Defer serialization to avoid blocking UI on large session data
+  setTimeout(() => {
+    setSetting(SESSIONS_KEY, JSON.stringify(sessions.value)).catch(() => {})
+  }, 0)
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
@@ -626,11 +648,15 @@ function getInputMaxHeight(): number {
 function autoResizeInput() {
   const el = inputRef.value
   if (!el) return
-  const maxH = getInputMaxHeight()
+  // Reset to measure scrollHeight; defer height calc to next frame so v-model
+  // has updated the DOM (critical for paste of large text)
   el.style.height = '0px'
-  const target = el.scrollHeight
-  el.style.height = Math.min(target, maxH) + 'px'
-  el.style.overflowY = target > maxH ? 'auto' : 'hidden'
+  requestAnimationFrame(() => {
+    const maxH = getInputMaxHeight()
+    const target = el.scrollHeight
+    el.style.height = Math.min(target, maxH) + 'px'
+    el.style.overflowY = target > maxH ? 'auto' : 'hidden'
+  })
 }
 
 function onInputKeydown(e: KeyboardEvent) {
@@ -654,7 +680,9 @@ async function send() {
   const imageData = uploadedImage.value
   const fileData = attachedFile.value
   input.value = ''
+  draftInputs.value[sid] = ''
   clearAttachments()
+  nextTick(() => resetInputHeight())
 
   let content = question
   if (fileData) {
