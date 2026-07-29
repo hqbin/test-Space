@@ -1,6 +1,7 @@
 <template>
   <div
-    class="w-screen h-screen rounded-2xl overflow-hidden flex flex-col font-body-md text-body-md text-on-surface antialiased selection:bg-secondary-fixed selection:text-on-secondary-fixed app-content select-none"
+    class="w-screen h-screen overflow-hidden flex flex-col font-body-md text-body-md text-on-surface antialiased selection:bg-secondary-fixed selection:text-on-secondary-fixed app-content select-none"
+    :class="[isMaximized ? 'rounded-none maximized-padding' : 'rounded-2xl']"
     :style="bgStyle"
   >
     <TitleBar />
@@ -29,8 +30,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import TitleBar from './TitleBar.vue'
 import NoteAiPanel from '@/components/notes/NoteAiPanel.vue'
 import type { AiPanelMode } from '@/components/notes/NoteAiPanel.vue'
@@ -40,6 +42,18 @@ import type { ScriptAiResult } from '@/services/scriptAi'
 
 const route = useRoute()
 const router = useRouter()
+
+// 最大化时去除圆角，避免视觉冲突和 resize 时的圆角闪烁
+const isMaximized = ref(false)
+let unlistenResize: (() => void) | null = null
+async function refreshMaximized() {
+  try { isMaximized.value = await getCurrentWindow().isMaximized() } catch {}
+}
+onMounted(async () => {
+  await refreshMaximized()
+  try { unlistenResize = await getCurrentWindow().onResized(refreshMaximized) } catch {}
+})
+onUnmounted(() => { if (unlistenResize) unlistenResize() })
 
 // 每个 space 用一枚极淡的色相点缀纸底，主体保持 paper (#F1EDE4)
 const bgStyle = computed(() => {
@@ -178,3 +192,17 @@ function onAiApplyScript(payload: ScriptAiResult) {
   pageRef.value?.applyAiScript?.(payload)
 }
 </script>
+
+<style scoped>
+/**
+ * Tauri Windows 无边框最大化补偿
+ * ─────────────────────────────────────────────────────
+ * decorations:false + resizable:true 时，Windows 会把
+ * 客户区扩展到屏幕外约 7px（隐藏 resize 边框区）。
+ * 最大化后视觉上"超框"、右侧窗口按钮被推到屏幕外。
+ * 加同等 padding 补偿。
+ */
+.maximized-padding {
+  padding: 7px;
+}
+</style>

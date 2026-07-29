@@ -50,14 +50,14 @@
       </div>
     </Teleport>
 
-    <div class="flex items-center h-full ml-2 select-none">
-      <button @click="minimize" class="window-btn h-full px-2.5 flex items-center justify-center transition-all rounded-lg group" :title="t('nav.minimize')">
+    <div class="flex items-center h-full ml-2 select-none shrink-0">
+      <button @click="minimize" class="window-btn h-full w-11 flex items-center justify-center rounded-lg group" :title="t('nav.minimize')">
         <span class="material-symbols-outlined text-[15px] text-on-surface-variant window-btn-icon">horizontal_rule</span>
       </button>
-      <button @click="toggleMaximize" class="window-btn h-full px-2.5 flex items-center justify-center transition-all rounded-lg group" :title="isMax ? t('nav.restore') : t('nav.maximize')">
+      <button @click="toggleMaximize" class="window-btn h-full w-11 flex items-center justify-center rounded-lg group" :title="isMax ? t('nav.restore') : t('nav.maximize')">
         <span class="material-symbols-outlined text-[15px] text-on-surface-variant window-btn-icon">{{ isMax ? 'fullscreen_exit' : 'crop_square' }}</span>
       </button>
-      <button @click="closeWindow" class="window-btn h-full px-2.5 flex items-center justify-center transition-all rounded-lg group" :title="t('nav.close')">
+      <button @click="closeWindow" class="window-btn h-full w-11 flex items-center justify-center rounded-lg group" :title="t('nav.close')">
         <span class="material-symbols-outlined text-[15px] text-on-surface-variant group-hover:text-red-500">close</span>
       </button>
     </div>
