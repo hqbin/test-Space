@@ -2,6 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ================================================================
+ * Test Space · Quarterly + Gazette
+ * -----------------------------------------------------------------
+ * 视觉体系：季刊排版为主骨架，发丝分隔取代阴影；hover 用底部朱砂
+ * 条 + 背景暗一档，不缩放。字体系统在 tailwind.config.ts 定义。
+ * ============================================================== */
+
 @layer base {
   html, body {
     -webkit-font-smoothing: antialiased;
@@ -9,480 +16,612 @@
     overflow: hidden;
     height: 100%;
     background: transparent !important;
+    font-feature-settings: "ss01", "cv11", "ss03";
+  }
+  body {
+    color: #1C1B1F;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
   ::selection {
-    background-color: #e2dfff;
-    color: #0b006b;
+    background-color: #1E3A5F;
+    color: #F1EDE4;
+  }
+
+  /* Fraunces 可变轴微调（大字瘦、小字圆） */
+  h1, h2, h3, .font-display, .font-headline-md, .font-headline-lg, .font-display-lg {
+    font-family: "Fraunces", Georgia, serif;
+    font-variation-settings: "SOFT" 30, "opsz" 96, "wght" 500;
   }
 }
 
+/* ================================================================
+ * 组件类：保留旧名 (.glass-*) 供 3000 行页面无缝生效，
+ * 视觉层全部按杂志感重写。
+ * ============================================================== */
 @layer components {
+
   .glass-panel {
-    background: rgba(255, 255, 255, 0.15);
-    backdrop-filter: blur(60px);
-    -webkit-backdrop-filter: blur(60px);
-    border: 1px solid rgba(255, 255, 255, 0.6);
-    border-bottom-color: rgba(255, 255, 255, 0.2);
-    border-right-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 253, 247, 0.72);
+    backdrop-filter: blur(20px) saturate(1.05);
+    -webkit-backdrop-filter: blur(20px) saturate(1.05);
+    border: 1px solid rgba(28, 27, 31, 0.10);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset,
+                0 1px 2px rgba(28, 27, 31, 0.04);
   }
 
   .glass-card {
-    background: rgba(255, 255, 255, 0.2);
-    backdrop-filter: blur(60px);
-    -webkit-backdrop-filter: blur(60px);
-    border: 1px solid rgba(255, 255, 255, 0.6);
-    border-bottom-color: rgba(255, 255, 255, 0.2);
-    border-right-color: rgba(255, 255, 255, 0.2);
-    transition: all 0.3s ease;
+    background: rgba(255, 253, 247, 0.60);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(28, 27, 31, 0.10);
+    transition: background-color .18s ease, border-color .18s ease;
   }
   .glass-card:hover {
-    background: rgba(255, 255, 255, 0.25);
-    transform: translateY(-2px);
-    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.05);
+    background: rgba(255, 253, 247, 0.85);
+    border-color: rgba(28, 27, 31, 0.22);
   }
 
   .glass-card-active {
-    background: rgba(226, 223, 255, 0.4);
-    border-color: rgba(76, 74, 202, 0.4);
-    box-shadow: 0 0 20px rgba(76, 74, 202, 0.15);
+    background: rgba(30, 58, 95, 0.06);
+    border-color: rgba(30, 58, 95, 0.35);
+    box-shadow: inset 3px 0 0 0 #C24E3A;
   }
 
+  /* 按钮：hairline + hover 底部朱砂条 */
   .glass-button {
-    background: rgba(255, 255, 255, 0.3);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(128, 128, 160, 0.3);
-    transition: all 0.2s ease;
-    color: rgba(0, 0, 0, 0.87);
+    position: relative;
+    background: rgba(255, 253, 247, 0.75);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(28, 27, 31, 0.14);
+    color: #1C1B1F;
+    transition: background-color .16s ease, border-color .16s ease, color .16s ease;
+  }
+  .glass-button::after {
+    content: "";
+    position: absolute;
+    left: 8%;
+    right: 8%;
+    bottom: -1px;
+    height: 2px;
+    background: #C24E3A;
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform .22s cubic-bezier(.2,.7,.2,1);
+    pointer-events: none;
+    border-radius: 1px;
   }
   .glass-button:hover {
-    background: rgba(218, 225, 255, 0.5);
-    border-color: rgba(128, 128, 160, 0.5);
-    transform: scale(1.08);
+    background: rgba(255, 253, 247, 0.95);
+    border-color: rgba(28, 27, 31, 0.28);
+    color: #1C1B1F;
   }
-  @keyframes glass-breath {
-    0%, 100% {
-      box-shadow:
-        0 2px 4px rgba(160, 170, 240, 0.08),
-        0 8px 16px rgba(160, 170, 240, 0.12),
-        0 24px 48px rgba(160, 170, 240, 0.10),
-        0 48px 80px rgba(160, 170, 240, 0.06);
-    }
-    50% {
-      box-shadow:
-        0 4px 8px rgba(160, 170, 240, 0.12),
-        0 12px 24px rgba(160, 170, 240, 0.18),
-        0 32px 64px rgba(160, 170, 240, 0.14),
-        0 64px 120px rgba(160, 170, 240, 0.08);
-    }
+  .glass-button:hover::after { transform: scaleX(1); }
+  .glass-button:active { background: rgba(232, 226, 211, 0.9); }
+  .glass-button:disabled,
+  .glass-button[disabled] {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
+  .glass-button:disabled::after,
+  .glass-button[disabled]::after { display: none; }
 
+  /* 通用 hover 表面：底部条 + 背景暗一档，不缩放 */
   .glass-hover {
+    position: relative;
     cursor: pointer;
-    transition: all 0.25s ease;
+    transition: background-color .16s ease, color .16s ease;
+  }
+  .glass-hover::after {
+    content: "";
+    position: absolute;
+    left: 10%;
+    right: 10%;
+    bottom: -1px;
+    height: 2px;
+    background: #C24E3A;
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform .22s cubic-bezier(.2,.7,.2,1);
+    pointer-events: none;
+    border-radius: 1px;
   }
   .glass-hover:hover {
-    background: linear-gradient(135deg, rgba(218, 225, 255, 0.5) 10%, rgba(200, 210, 255, 0.3) 100%) !important;
-    transform: scale(1.05);
-    box-shadow:
-      0 2px 4px rgba(160, 170, 240, 0.08),
-      0 8px 16px rgba(160, 170, 240, 0.12),
-      0 24px 48px rgba(160, 170, 240, 0.10),
-      0 48px 80px rgba(160, 170, 240, 0.06);
-    animation: glass-breath 1.5s ease-in-out infinite;
+    background: rgba(28, 27, 31, 0.05) !important;
+    color: #1C1B1F;
   }
-  .glass-hover:active {
-    transform: scale(0.97);
-  }
+  .glass-hover:hover::after { transform: scaleX(1); }
+  .glass-hover:active { background: rgba(28, 27, 31, 0.10) !important; }
 
+  /* 激活态：底部粗朱砂条 + 深文本 */
   .glass-active {
-    background: linear-gradient(135deg, rgba(218, 225, 255, 0.6) 10%, rgba(200, 210, 255, 0.4) 100%);
-    border-color: rgba(76, 74, 202, 0.3);
-    box-shadow:
-      0 2px 8px rgba(160, 170, 240, 0.12),
-      0 4px 16px rgba(160, 170, 240, 0.08);
-    color: rgba(11, 0, 107, 0.87);
+    background: rgba(30, 58, 95, 0.08) !important;
+    color: #1E3A5F !important;
+    box-shadow: inset 0 -2px 0 0 #C24E3A;
   }
+  .glass-active::after { display: none; }
 
+  /* 输入框 */
   .glass-input {
-    background: rgba(255, 255, 255, 0.4);
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.6);
+    background: rgba(255, 253, 247, 0.80);
+    border: 1px solid rgba(28, 27, 31, 0.16);
+    color: #1C1B1F;
+    transition: border-color .15s ease, box-shadow .15s ease;
   }
-  .glass-input:focus {
-    border-color: rgba(0, 80, 203, 0.3);
-    box-shadow: 0 0 0 2px rgba(0, 80, 203, 0.1), inset 0 2px 4px rgba(0, 0, 0, 0.02);
+  .glass-input::placeholder { color: rgba(28, 27, 31, 0.38); }
+  .glass-input:focus,
+  .glass-input:focus-within {
+    border-color: rgba(30, 58, 95, 0.65);
+    box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.12);
     outline: none;
   }
-
   .recessed-input {
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02);
-    transition: all 0.2s ease;
+    background: rgba(28, 27, 31, 0.03);
+    box-shadow: inset 0 1px 2px rgba(28, 27, 31, 0.05);
+    border: 1px solid rgba(28, 27, 31, 0.10);
+    transition: border-color .15s ease, box-shadow .15s ease;
   }
   .recessed-input:focus-within {
-    border-color: rgba(0, 80, 203, 0.3);
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02), 0 0 0 4px rgba(0, 80, 203, 0.1);
+    border-color: rgba(30, 58, 95, 0.55);
+    box-shadow: inset 0 1px 2px rgba(28, 27, 31, 0.03),
+                0 0 0 3px rgba(30, 58, 95, 0.12);
   }
 
-  .status-pulse {
-    animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+  /* 杂志专用辅助类 */
+  .eyebrow {
+    font-family: "Inter", sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #6B6660;
+  }
+  .folio {
+    font-family: "JetBrains Mono", SFMono-Regular, monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #6B6660;
+  }
+  .editorial {
+    font-family: "Instrument Serif", "Fraunces", Georgia, serif;
+    font-style: italic;
+    letter-spacing: -0.015em;
+  }
+  .rule {
+    height: 1px;
+    background: rgba(28, 27, 31, 0.12);
+    border: 0;
+  }
+  .rule-strong { background: rgba(28, 27, 31, 0.28); }
+  .section-num {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    font-weight: 600;
+    color: #6B6660;
+    letter-spacing: 0.08em;
+  }
+  .bracket-tag {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #1E3A5F;
+  }
+  .bracket-tag::before { content: "["; margin-right: 1px; }
+  .bracket-tag::after { content: "]"; margin-left: 1px; }
+
+  @keyframes glass-breath {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(30, 58, 95, 0.08); }
+    50%      { box-shadow: 0 0 0 6px rgba(30, 58, 95, 0.04); }
   }
 
+  .status-pulse { animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite; }
   @keyframes pulse-ring {
-    0% {
-      transform: scale(0.8);
-      opacity: 0.5;
-    }
-    100% {
-      transform: scale(2.4);
-      opacity: 0;
-    }
+    0%   { transform: scale(0.85); opacity: 0.55; }
+    100% { transform: scale(2.2);  opacity: 0; }
   }
 
-  .custom-scrollbar::-webkit-scrollbar {
+  .custom-scrollbar::-webkit-scrollbar,
+  .logcat-scroll::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
-  .custom-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-  }
+  .custom-scrollbar::-webkit-scrollbar-track,
+  .logcat-scroll::-webkit-scrollbar-track { background: transparent; }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: #c2c6d8;
+    background: rgba(28, 27, 31, 0.18);
     border-radius: 3px;
   }
-
-
-
-  .logcat-scroll::-webkit-scrollbar {
-    width: 6px;
-  }
-  .logcat-scroll::-webkit-scrollbar-track {
-    background: transparent;
-  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(28, 27, 31, 0.35); }
   .logcat-scroll::-webkit-scrollbar-thumb {
-    background: rgba(76, 74, 202, 0.2);
-    border-radius: 10px;
+    background: rgba(30, 58, 95, 0.28);
+    border-radius: 3px;
   }
 }
 
-/* ========== Dark Mode ========== */
-html.dark {
-  color-scheme: dark;
-}
+/* ================================================================
+ * Dark Mode
+ * ============================================================== */
+html.dark { color-scheme: dark; }
 html.dark body {
   background: transparent !important;
-  color: #e8e8f0;
+  color: #E8E3D6;
   transition: background-color 0.35s ease, color 0.35s ease;
 }
 
-/* Main app content area - overrides inline style from AppLayout */
 html.dark .app-content {
   background:
-    radial-gradient(ellipse at 20% 30%, rgba(76, 74, 202, 0.07) 0%, transparent 55%),
-    radial-gradient(ellipse at 80% 70%, rgba(0, 80, 203, 0.04) 0%, transparent 55%),
-    #0d0d1a !important;
+    radial-gradient(ellipse at 20% 30%, rgba(194, 78, 58, 0.06) 0%, transparent 55%),
+    radial-gradient(ellipse at 80% 70%, rgba(30, 58, 95, 0.06) 0%, transparent 55%),
+    #14120F !important;
 }
 
-/* Top navigation bar */
 html.dark .top-bar,
 html.dark .title-bar {
-  background: rgba(13, 13, 26, 0.92) !important;
-  backdrop-filter: blur(60px);
-  -webkit-backdrop-filter: blur(60px);
-  border-bottom-color: rgba(255, 255, 255, 0.05) !important;
-  box-shadow: 0 1px 20px rgba(0, 0, 0, 0.3);
+  background: rgba(20, 18, 15, 0.92) !important;
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  border-bottom-color: rgba(232, 227, 214, 0.10) !important;
+  box-shadow: 0 1px 0 rgba(232, 227, 214, 0.04);
 }
 
-/* Glass components */
 html.dark .glass-panel {
-  background: rgba(20, 20, 42, 0.85);
-  border-color: rgba(255, 255, 255, 0.05);
-  border-bottom-color: rgba(255, 255, 255, 0.02);
-  border-right-color: rgba(255, 255, 255, 0.02);
-  backdrop-filter: blur(60px);
-  -webkit-backdrop-filter: blur(60px);
-  transition: background-color 0.35s ease, border-color 0.35s ease;
+  background: rgba(28, 26, 22, 0.85);
+  border-color: rgba(232, 227, 214, 0.10);
+  box-shadow: 0 1px 0 rgba(232, 227, 214, 0.03) inset;
 }
 
 html.dark .glass-card {
-  background: rgba(20, 20, 42, 0.7);
-  border-color: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(60px);
-  -webkit-backdrop-filter: blur(60px);
-  transition: background-color 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
+  background: rgba(28, 26, 22, 0.70);
+  border-color: rgba(232, 227, 214, 0.10);
 }
-
 html.dark .glass-card:hover {
-  background: rgba(28, 28, 52, 0.8);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-  transform: translateY(-2px);
+  background: rgba(36, 33, 28, 0.85);
+  border-color: rgba(232, 227, 214, 0.20);
 }
-
 html.dark .glass-card-active {
-  background: rgba(76, 74, 202, 0.18);
-  border-color: rgba(76, 74, 202, 0.3);
-  box-shadow: 0 0 24px rgba(76, 74, 202, 0.12);
+  background: rgba(194, 78, 58, 0.12);
+  border-color: rgba(194, 78, 58, 0.35);
+  box-shadow: inset 3px 0 0 0 #C24E3A;
 }
 
 html.dark .glass-button {
-  background: rgba(35, 35, 70, 0.5);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-color: rgba(255, 255, 255, 0.07);
-  color: #d0d0e0;
-  transition: all 0.25s ease, background-color 0.35s ease;
+  background: rgba(36, 33, 28, 0.75);
+  border-color: rgba(232, 227, 214, 0.14);
+  color: #E8E3D6;
 }
-
 html.dark .glass-button:hover {
-  background: rgba(55, 55, 105, 0.6);
-  border-color: rgba(150, 150, 220, 0.3);
-  transform: scale(1.08);
+  background: rgba(48, 44, 38, 0.92);
+  border-color: rgba(232, 227, 214, 0.28);
+  color: #FFF8EA;
 }
 
 html.dark .glass-active {
-  background: linear-gradient(135deg, rgba(76, 74, 202, 0.3) 10%, rgba(60, 58, 180, 0.2) 100%);
-  border-color: rgba(76, 74, 202, 0.4);
-  color: #e8e8ff;
+  background: rgba(30, 58, 95, 0.25) !important;
+  color: #EDE1FF !important;
+  box-shadow: inset 0 -2px 0 0 #E8734F;
 }
 
-html.dark .glass-input {
-  background: rgba(16, 16, 34, 0.6);
-  border-color: rgba(255, 255, 255, 0.07);
-  color: #e0e0ec;
-  transition: background-color 0.35s ease, border-color 0.35s ease, box-shadow 0.2s ease;
-}
-
-html.dark .glass-input:focus {
-  border-color: rgba(130, 140, 255, 0.45);
-  box-shadow: 0 0 0 3px rgba(76, 74, 202, 0.12);
-}
-
-html.dark .glass-hover:hover {
-  background: rgba(255, 255, 255, 0.04) !important;
-  box-shadow: none;
-  transform: scale(1.03);
-}
-
-/* Text colors */
-html.dark .text-on-surface {
-  color: #e8e8f0;
-}
-html.dark .text-on-surface-variant {
-  color: #9898b0;
-}
-
-/* text-on-surface-variant opacity variants */
-html.dark .text-on-surface-variant\/15 { color: rgba(152, 152, 176, 0.15); }
-html.dark .text-on-surface-variant\/20 { color: rgba(152, 152, 176, 0.20); }
-html.dark .text-on-surface-variant\/30 { color: rgba(152, 152, 176, 0.30); }
-html.dark .text-on-surface-variant\/40 { color: rgba(152, 152, 176, 0.40); }
-html.dark .text-on-surface-variant\/50 { color: rgba(152, 152, 176, 0.50); }
-html.dark .text-on-surface-variant\/60 { color: rgba(152, 152, 176, 0.60); }
-html.dark .text-on-surface-variant\/70 { color: rgba(152, 152, 176, 0.70); }
-
-/* Gray/white text overrides for dark mode */
-html.dark .text-gray-500 { color: #9898b0; }
-html.dark .text-gray-700 { color: #c8c8d8; }
-html.dark .text-gray-400 { color: #7878a0; }
-html.dark .text-white { color: #e8e8f0; }
-html.dark .text-red-400 { color: #ff8a8a; }
-html.dark .text-orange-600 { color: #ffb366; }
-
-/* Placeholder text in dark mode */
-html.dark input::placeholder,
-html.dark textarea::placeholder,
-html.dark select::placeholder {
-  color: rgba(152, 152, 176, 0.45);
-}
-
-/* TipTap editor content - override hardcoded light colors */
-html.dark .ProseMirror p.is-editor-empty:first-child::before {
-  color: rgba(152, 152, 176, 0.45) !important;
-}
-html.dark .prose-editor h1,
-html.dark .prose-editor h2,
-html.dark .prose-editor h3 {
-  color: #e8e8f0;
-}
-html.dark .prose-editor p,
-html.dark .prose-editor ul,
-html.dark .prose-editor ol {
-  color: #c8c8d8;
-}
-html.dark .prose-editor blockquote {
-  color: #9898b0;
-}
-html.dark .prose-editor a {
-  color: #adabff;
-}
-html.dark .toolbar-btn {
-  color: #9898b0 !important;
-}
-html.dark .toolbar-btn.toolbar-active,
-html.dark .toolbar-btn.toolbar-active span {
-  color: #b794ff !important;
-}
-html.dark .text-on-primary-fixed {
-  color: #eeeef8;
-}
-html.dark .text-on-secondary-fixed,
-html.dark .text-on-secondary-fixed-variant {
-  color: #d8d8ee;
-}
-html.dark .text-secondary {
-  color: #adabff;
-}
-html.dark .text-error {
-  color: #ff7a7a;
-}
-html.dark .text-success,
-html.dark .text-success-indicator {
-  color: #6fcf97;
-}
-html.dark .text-primary {
-  color: #8b89ff;
-}
-
-/* Background utilities */
-html.dark .bg-glass-surface {
-  background: rgba(13, 13, 26, 0.88);
-}
-html.dark .bg-secondary-fixed {
-  background: rgba(76, 74, 202, 0.25);
-}
-html.dark .bg-surface-variant {
-  background: rgba(30, 30, 55, 0.6);
-}
-html.dark .bg-error {
-  background: rgba(255, 70, 70, 0.15);
-}
-html.dark .bg-white {
-  background: rgba(20, 20, 45, 0.6);
-}
-html.dark .bg-white\/10 {
-  background: rgba(255, 255, 255, 0.04);
-}
-html.dark .bg-white\/20 {
-  background: rgba(255, 255, 255, 0.03);
-}
-html.dark .bg-white\/30 {
-  background: rgba(255, 255, 255, 0.04);
-}
-html.dark .bg-white\/50 {
-  background: rgba(25, 25, 50, 0.5);
-}
-html.dark .bg-black\/10 {
-  background: rgba(0, 0, 0, 0.3);
-}
-html.dark .bg-black\/20 {
-  background: rgba(0, 0, 0, 0.4);
-}
-
-/* Border utilities */
-html.dark .border-glass-border-light {
-  border-color: rgba(255, 255, 255, 0.05) !important;
-}
-html.dark .border-glass-border-dark {
-  border-color: rgba(255, 255, 255, 0.06) !important;
-}
-html.dark .border-glass-border-dark\/30 {
-  border-color: rgba(255, 255, 255, 0.03) !important;
-}
-html.dark .border-glass-border-dark\/40 {
-  border-color: rgba(255, 255, 255, 0.04) !important;
-}
-html.dark .border-outline-variant {
-  border-color: rgba(255, 255, 255, 0.07) !important;
-}
-html.dark .border-outline-variant\/30 {
-  border-color: rgba(255, 255, 255, 0.04) !important;
-}
-html.dark .border-outline-variant\/40 {
-  border-color: rgba(255, 255, 255, 0.05) !important;
-}
-html.dark .border-outline-variant\/50 {
-  border-color: rgba(255, 255, 255, 0.06) !important;
-}
-html.dark .border-white\/30 {
-  border-color: rgba(255, 255, 255, 0.04);
-}
-html.dark .border-t {
-  border-top-color: rgba(255, 255, 255, 0.06);
-}
-html.dark .border-b {
-  border-bottom-color: rgba(255, 255, 255, 0.06);
-}
-html.dark .divide-glass-border-dark\/30 > * + * {
-  border-color: rgba(255, 255, 255, 0.03);
-}
-
-/* Selection */
-html.dark ::selection {
-  background-color: rgba(76, 74, 202, 0.4);
-  color: #eeeef8;
-}
-
-/* Scrollbars */
-html.dark ::-webkit-scrollbar-thumb {
-  background: rgba(100, 100, 150, 0.25);
-}
-html.dark .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(100, 100, 150, 0.25);
-}
-
-
-
-/* Form elements */
+html.dark .glass-input,
 html.dark input,
 html.dark textarea,
 html.dark select {
-  color: #e0e0ec;
-  background: rgba(16, 16, 34, 0.6);
-  border-color: rgba(255, 255, 255, 0.07);
-  transition: background-color 0.35s ease, border-color 0.35s ease;
+  background: rgba(20, 18, 15, 0.75);
+  border-color: rgba(232, 227, 214, 0.14);
+  color: #E8E3D6;
 }
+html.dark .glass-input:focus,
 html.dark input:focus,
 html.dark textarea:focus,
 html.dark select:focus {
-  border-color: rgba(130, 140, 255, 0.45);
+  border-color: rgba(232, 141, 108, 0.60);
+  box-shadow: 0 0 0 3px rgba(194, 78, 58, 0.18);
   outline: none;
 }
 html.dark select option {
-  background: #161630;
-  color: #e0e0ec;
+  background: #1C1A16;
+  color: #E8E3D6;
 }
 
-/* Table elements */
-html.dark th {
-  color: #9898b0;
+html.dark .glass-hover:hover {
+  background: rgba(232, 227, 214, 0.06) !important;
+  color: #FFF8EA;
 }
-html.dark td {
-  color: #d0d0e0;
-}
+html.dark .glass-hover:hover::after { background: #E8734F; }
+html.dark .glass-button::after     { background: #E8734F; }
 
-/* Dividers */
-html.dark hr {
-  border-color: rgba(255, 255, 255, 0.05);
-}
+/* 文本色重映射 */
+html.dark .text-on-surface { color: #E8E3D6; }
+html.dark .text-on-surface-variant { color: #A8A29A; }
+html.dark .text-on-surface-variant\/15 { color: rgba(168, 162, 154, 0.15); }
+html.dark .text-on-surface-variant\/20 { color: rgba(168, 162, 154, 0.20); }
+html.dark .text-on-surface-variant\/30 { color: rgba(168, 162, 154, 0.30); }
+html.dark .text-on-surface-variant\/40 { color: rgba(168, 162, 154, 0.42); }
+html.dark .text-on-surface-variant\/50 { color: rgba(168, 162, 154, 0.55); }
+html.dark .text-on-surface-variant\/60 { color: rgba(168, 162, 154, 0.65); }
+html.dark .text-on-surface-variant\/70 { color: rgba(168, 162, 154, 0.75); }
+html.dark .text-gray-500 { color: #A8A29A; }
+html.dark .text-gray-700 { color: #D5CCB6; }
+html.dark .text-gray-400 { color: #8C877F; }
+html.dark .text-white    { color: #E8E3D6; }
+html.dark .text-red-400  { color: #F0916F; }
+html.dark .text-orange-600 { color: #F0B080; }
+html.dark .text-primary    { color: #A9BFDA; }
+html.dark .text-secondary  { color: #A9BFDA; }
+html.dark .text-error      { color: #F07960; }
+html.dark .text-success,
+html.dark .text-success-indicator { color: #4FCF99; }
+html.dark .text-on-primary-fixed,
+html.dark .text-on-secondary-fixed,
+html.dark .text-on-secondary-fixed-variant { color: #EAE3D2; }
 
-/* Inline style overrides for common patterns */
+html.dark input::placeholder,
+html.dark textarea::placeholder,
+html.dark select::placeholder { color: rgba(168, 162, 154, 0.50); }
+
+/* TipTap 编辑器暗色 */
+html.dark .ProseMirror p.is-editor-empty:first-child::before {
+  color: rgba(168, 162, 154, 0.50) !important;
+}
+html.dark .prose-editor h1,
+html.dark .prose-editor h2,
+html.dark .prose-editor h3 { color: #EDE7D8; }
+html.dark .prose-editor p,
+html.dark .prose-editor ul,
+html.dark .prose-editor ol { color: #D5CCB6; }
+html.dark .prose-editor blockquote { color: #A8A29A; }
+html.dark .prose-editor a { color: #E8B08A; }
+html.dark .toolbar-btn { color: #A8A29A !important; }
+html.dark .toolbar-btn.toolbar-active,
+html.dark .toolbar-btn.toolbar-active span { color: #F0B080 !important; }
+
+/* 背景工具类 */
+html.dark .bg-glass-surface   { background: rgba(20, 18, 15, 0.88); }
+html.dark .bg-secondary-fixed { background: rgba(30, 58, 95, 0.28); }
+html.dark .bg-surface-variant { background: rgba(36, 33, 28, 0.6); }
+html.dark .bg-error           { background: rgba(194, 78, 58, 0.18); }
+html.dark .bg-white           { background: rgba(28, 26, 22, 0.72); }
+html.dark .bg-white\/5        { background: rgba(232, 227, 214, 0.03); }
+html.dark .bg-white\/10       { background: rgba(232, 227, 214, 0.05); }
+html.dark .bg-white\/20       { background: rgba(232, 227, 214, 0.04); }
+html.dark .bg-white\/30       { background: rgba(232, 227, 214, 0.05); }
+html.dark .bg-white\/50       { background: rgba(28, 26, 22, 0.55); }
+html.dark .bg-white\/60       { background: rgba(28, 26, 22, 0.65); }
+html.dark .bg-white\/\[2\%\]  { background: rgba(232, 227, 214, 0.02); }
+html.dark .bg-black\/10       { background: rgba(0, 0, 0, 0.35); }
+html.dark .bg-black\/20       { background: rgba(0, 0, 0, 0.42); }
+html.dark .bg-error\/10       { background: rgba(194, 78, 58, 0.12); }
+html.dark .bg-error\/15       { background: rgba(194, 78, 58, 0.16); }
+
+/* 边框工具类 */
+html.dark .border-glass-border-light   { border-color: rgba(232, 227, 214, 0.08) !important; }
+html.dark .border-glass-border-dark    { border-color: rgba(232, 227, 214, 0.12) !important; }
+html.dark .border-glass-border-dark\/30 { border-color: rgba(232, 227, 214, 0.06) !important; }
+html.dark .border-glass-border-dark\/40 { border-color: rgba(232, 227, 214, 0.08) !important; }
+html.dark .border-outline-variant       { border-color: rgba(232, 227, 214, 0.12) !important; }
+html.dark .border-outline-variant\/30   { border-color: rgba(232, 227, 214, 0.07) !important; }
+html.dark .border-outline-variant\/40   { border-color: rgba(232, 227, 214, 0.09) !important; }
+html.dark .border-outline-variant\/50   { border-color: rgba(232, 227, 214, 0.11) !important; }
+html.dark .border-outline-variant\/60   { border-color: rgba(232, 227, 214, 0.14) !important; }
+html.dark .border-white\/30             { border-color: rgba(232, 227, 214, 0.06); }
+html.dark .border-t                     { border-top-color: rgba(232, 227, 214, 0.10); }
+html.dark .border-b                     { border-bottom-color: rgba(232, 227, 214, 0.10); }
+html.dark .divide-glass-border-dark\/30 > * + * { border-color: rgba(232, 227, 214, 0.06); }
+
+/* 表格 */
+html.dark th { color: #A8A29A; }
+html.dark td { color: #D5CCB6; }
+html.dark hr { border-color: rgba(232, 227, 214, 0.08); }
+
+/* selection / scrollbar */
+html.dark ::selection {
+  background-color: rgba(194, 78, 58, 0.45);
+  color: #FFF8EA;
+}
+html.dark ::-webkit-scrollbar-thumb { background: rgba(232, 227, 214, 0.18); }
+html.dark .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(232, 227, 214, 0.18); }
+
+/* inline 覆盖 */
 html.dark [style*="background: #F9F9FB"],
-html.dark [style*="background:#F9F9FB"] {
+html.dark [style*="background:#F9F9FB"],
+html.dark [style*="#F9F9FB"] {
+  background: transparent !important;
+}
+html.dark [style*="background: #F3F3F5"],
+html.dark [style*="background:#F3F3F5"] {
   background: transparent !important;
 }
 
-html.dark .bg-white\/5 {
-  background: rgba(255, 255, 255, 0.02);
+/* 杂志辅助类：暗色变体 */
+html.dark .eyebrow { color: #A8A29A; }
+html.dark .folio   { color: #A8A29A; }
+html.dark .rule    { background: rgba(232, 227, 214, 0.12); }
+html.dark .rule-strong { background: rgba(232, 227, 214, 0.28); }
+html.dark .bracket-tag { color: #E8B08A; }
+
+/* ================================================================
+ * 页面级内联 hover 全局矫正
+ * ============================================================== */
+@layer utilities {
+  .hover\:scale-105:hover,
+  .hover\:scale-\[1\.02\]:hover { transform: scale(1.015); }
+  .hover\:scale-110:hover { transform: scale(1.03); }
+  .hover\:scale-125:hover { transform: scale(1.08); }
+
+  .hover\:bg-secondary\/10:hover {
+    background-color: rgba(30, 58, 95, 0.14) !important;
+  }
+  .hover\:border-secondary\/30:hover {
+    border-color: rgba(30, 58, 95, 0.45) !important;
+  }
+  .hover\:bg-white\/30:hover {
+    background-color: rgba(255, 253, 247, 0.90) !important;
+  }
+  .hover\:bg-gray-100:hover {
+    background-color: rgba(28, 27, 31, 0.06) !important;
+  }
+  .hover\:bg-red-50:hover {
+    background-color: rgba(194, 78, 58, 0.10) !important;
+  }
+  .hover\:bg-secondary\/5:hover {
+    background-color: rgba(30, 58, 95, 0.08) !important;
+  }
+  .hover\:bg-white\/40:hover {
+    background-color: rgba(255, 253, 247, 0.92) !important;
+  }
+
+  .transition-all { transition-duration: 160ms; transition-timing-function: cubic-bezier(.2,.7,.2,1); }
+  .transition-transform { transition-duration: 200ms; transition-timing-function: cubic-bezier(.2,.7,.2,1); }
+  .transition-colors { transition-duration: 140ms; }
+
+  .bg-\[\#F9F9FB\], .bg-\[\#f9f9fb\] { background-color: #F1EDE4 !important; }
+  .bg-\[\#F3F3F5\], .bg-\[\#f3f3f5\] { background-color: #EEE9DE !important; }
 }
-html.dark .bg-white\/\[2\%\] {
-  background: rgba(255, 255, 255, 0.02);
+
+/* ================================================================
+ * 全局遗留类映射：把老 Material 白底 + 灰边 + 紫态映射到杂志 token
+ * -----------------------------------------------------------------
+ * 大量页面用 bg-white / bg-white/60~90 / bg-gray-*  / bg-purple-*
+ * 描述"面板 / 弹窗 / 下拉 / 激活态"。这里统一改写，避免每页去改。
+ * ============================================================== */
+@layer utilities {
+  /* 白底面板 → 温羊皮玻璃 */
+  .bg-white         { background-color: rgba(255, 253, 247, 0.94) !important; }
+  .bg-white\/90     { background-color: rgba(255, 253, 247, 0.92) !important; }
+  .bg-white\/80     { background-color: rgba(255, 253, 247, 0.88) !important; }
+  .bg-white\/70     { background-color: rgba(255, 253, 247, 0.82) !important; }
+  .bg-white\/60     { background-color: rgba(255, 253, 247, 0.75) !important; }
+  .bg-white\/50     { background-color: rgba(255, 253, 247, 0.60) !important; }
+
+  /* 灰边框 → hairline */
+  .border-gray-100  { border-color: rgba(28, 27, 31, 0.08) !important; }
+  .border-gray-200  { border-color: rgba(28, 27, 31, 0.12) !important; }
+  .border-gray-200\/80  { border-color: rgba(28, 27, 31, 0.14) !important; }
+  .border-gray-300  { border-color: rgba(28, 27, 31, 0.18) !important; }
+
+  /* 灰底 hover → 可见的墨色 hover */
+  .hover\:bg-gray-50:hover   { background-color: rgba(28, 27, 31, 0.06) !important; }
+  .hover\:bg-gray-100:hover  { background-color: rgba(28, 27, 31, 0.08) !important; }
+
+  /* 紫色激活态 (bg-purple-100/xx) → 普鲁士蓝低透明 */
+  .bg-purple-100\/50  { background-color: rgba(30, 58, 95, 0.08) !important; }
+  .bg-purple-100\/60  { background-color: rgba(30, 58, 95, 0.10) !important; }
+  .bg-purple-100\/80  { background-color: rgba(30, 58, 95, 0.14) !important; }
+  .ring-purple-300\/50 { --tw-ring-color: rgba(30, 58, 95, 0.30) !important; }
+
+  /* 幽灵按钮：glass-button 加 !border-0 时移除白底，变透明 ghost */
+  button.glass-button.\!border-0,
+  .glass-button.\!border-0 {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  button.glass-button.\!border-0::after,
+  .glass-button.\!border-0::after { display: none !important; }
+  button.glass-button.\!border-0:hover,
+  .glass-button.\!border-0:hover {
+    background: rgba(28, 27, 31, 0.08) !important;
+  }
+  html.dark button.glass-button.\!border-0:hover,
+  html.dark .glass-button.\!border-0:hover {
+    background: rgba(232, 227, 214, 0.10) !important;
+  }
+
+  /* Notes 目录列表统一字号：项 12px，文件夹标题 13px */
+  .notes-tree-item { font-size: 12px !important; line-height: 1.4 !important; }
+  .notes-tree-header { font-size: 13px !important; font-weight: 600 !important; }
 }
-html.dark .bg-white\/60 {
-  background: rgba(22, 22, 48, 0.7);
+
+/* ================================================================
+ * Dark Mode 通用文本色兜底
+ * -----------------------------------------------------------------
+ * 页面模板里散布了大量 tailwind 语义色（blue-500/600/purple-600/emerald-600
+ * 之类），它们默认设计用于浅底。dark 模式下背景变深，这些饱和度较高的
+ * 颜色对比度会掉。这里把 600 系列文本统一抬到 400 系列（更亮）。
+ * ============================================================== */
+html.dark .text-blue-500 { color: #7CB2FF !important; }
+html.dark .text-blue-600 { color: #7CB2FF !important; }
+html.dark .text-purple-500 { color: #C4A1FF !important; }
+html.dark .text-purple-600 { color: #C4A1FF !important; }
+html.dark .text-red-500 { color: #FF8A80 !important; }
+html.dark .text-red-600 { color: #FF8A80 !important; }
+html.dark .text-green-500 { color: #7CE1A5 !important; }
+html.dark .text-green-600 { color: #7CE1A5 !important; }
+html.dark .text-emerald-500 { color: #7CE1A5 !important; }
+html.dark .text-emerald-600 { color: #7CE1A5 !important; }
+html.dark .text-orange-500 { color: #FFB47A !important; }
+html.dark .text-orange-600 { color: #FFB47A !important; }
+html.dark .text-yellow-500 { color: #FFD570 !important; }
+html.dark .text-yellow-600 { color: #FFD570 !important; }
+html.dark .text-amber-700 { color: #FFCF7A !important; }
+html.dark .text-gray-600 { color: #C8C3B6 !important; }
+html.dark .text-gray-800 { color: #E8E3D6 !important; }
+html.dark .text-gray-900 { color: #F5F0E4 !important; }
+html.dark .text-black { color: #E8E3D6 !important; }
+
+/* 保证深色下 utility-mapped 白底面板里的默认文字都能看见 */
+html.dark .bg-white, html.dark .bg-white\/50, html.dark .bg-white\/60,
+html.dark .bg-white\/70, html.dark .bg-white\/80, html.dark .bg-white\/90 {
+  color: #E8E3D6;
 }
-html.dark .bg-error\/10 {
-  background: rgba(255, 70, 70, 0.12);
+html.dark .bg-white *, html.dark .bg-white\/50 *, html.dark .bg-white\/60 *,
+html.dark .bg-white\/70 *, html.dark .bg-white\/80 *, html.dark .bg-white\/90 * {
+  /* 让子元素显式继承（除非它自己指定了颜色） */
 }
-html.dark .bg-error\/15 {
-  background: rgba(255, 70, 70, 0.15);
+
+/* 常见 badge 底色在 dark 下的可见性 */
+html.dark .bg-blue-500\/10 { background-color: rgba(124, 178, 255, 0.16) !important; }
+html.dark .bg-purple-500\/10 { background-color: rgba(196, 161, 255, 0.16) !important; }
+html.dark .bg-green-500\/10 { background-color: rgba(124, 225, 165, 0.16) !important; }
+html.dark .bg-red-500\/10 { background-color: rgba(255, 138, 128, 0.16) !important; }
+html.dark .bg-orange-500\/10 { background-color: rgba(255, 180, 122, 0.16) !important; }
+html.dark .bg-amber-100 { background-color: rgba(255, 207, 122, 0.16) !important; }
+html.dark .bg-yellow-100 { background-color: rgba(255, 213, 112, 0.14) !important; }
+html.dark .bg-yellow-100\/60 { background-color: rgba(255, 213, 112, 0.14) !important; }
+html.dark .border-amber-200 { border-color: rgba(255, 207, 122, 0.35) !important; }
+html.dark .ring-yellow-300\/50 { --tw-ring-color: rgba(255, 213, 112, 0.35) !important; }
+
+/* Skeleton shimmer 底色 */
+html.dark .skeleton-line { background-color: rgba(232, 227, 214, 0.10) !important; }
+
+/* Dark 变体 */
+html.dark .bg-white       { background-color: rgba(28, 26, 22, 0.85) !important; }
+html.dark .bg-white\/90   { background-color: rgba(28, 26, 22, 0.85) !important; }
+html.dark .bg-white\/80   { background-color: rgba(28, 26, 22, 0.75) !important; }
+html.dark .bg-white\/70   { background-color: rgba(28, 26, 22, 0.68) !important; }
+html.dark .bg-white\/60   { background-color: rgba(28, 26, 22, 0.60) !important; }
+html.dark .bg-white\/50   { background-color: rgba(28, 26, 22, 0.55) !important; }
+html.dark .border-gray-100 { border-color: rgba(232, 227, 214, 0.08) !important; }
+html.dark .border-gray-200 { border-color: rgba(232, 227, 214, 0.12) !important; }
+html.dark .border-gray-200\/80 { border-color: rgba(232, 227, 214, 0.14) !important; }
+html.dark .hover\:bg-gray-50:hover { background-color: rgba(232, 227, 214, 0.06) !important; }
+html.dark .hover\:bg-gray-100:hover { background-color: rgba(232, 227, 214, 0.10) !important; }
+html.dark .bg-purple-100\/50 { background-color: rgba(169, 191, 218, 0.14) !important; }
+html.dark .bg-purple-100\/60 { background-color: rgba(169, 191, 218, 0.18) !important; }
+html.dark .bg-purple-100\/80 { background-color: rgba(169, 191, 218, 0.24) !important; }
+
+/* Dark hover 覆盖 */
+html.dark .hover\:bg-secondary\/10:hover {
+  background-color: rgba(232, 141, 108, 0.20) !important;
+}
+html.dark .hover\:border-secondary\/30:hover {
+  border-color: rgba(232, 141, 108, 0.45) !important;
+}
+html.dark .hover\:bg-white\/30:hover {
+  background-color: rgba(232, 227, 214, 0.10) !important;
+}
+html.dark .hover\:bg-gray-100:hover {
+  background-color: rgba(232, 227, 214, 0.08) !important;
+}
+html.dark .hover\:bg-red-50:hover {
+  background-color: rgba(232, 141, 108, 0.14) !important;
+}
+html.dark .hover\:bg-secondary\/5:hover {
+  background-color: rgba(232, 141, 108, 0.10) !important;
+}
+html.dark .hover\:bg-white\/40:hover {
+  background-color: rgba(232, 227, 214, 0.10) !important;
 }

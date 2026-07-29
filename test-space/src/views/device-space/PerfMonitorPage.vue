@@ -25,7 +25,7 @@
       <Teleport to="body">
         <Transition name="fade-scale">
           <div v-if="topNDropdownOpen" class="fixed z-[9999]" :style="topNDropdownStyle" @click.stop>
-            <div class="glass-panel rounded-2xl py-1 shadow-xl" style="min-width:100px">
+            <div class="glass-panel rounded-2xl py-1" style="min-width:100px">
               <div v-for="n in topNOptions" :key="n"
                 class="flex items-center gap-2 rounded-xl px-3 py-1.5 cursor-pointer select-none mx-1"
                 :class="store.topAppCount === n ? 'bg-white/20 font-medium' : 'hover:bg-white/10'"
@@ -38,7 +38,7 @@
         </Transition>
         <Transition name="fade-scale">
           <div v-if="cpuDropdownOpen" class="fixed z-[9999]" :style="cpuDropdownStyle" @click.stop>
-            <div class="glass-panel rounded-2xl py-1 shadow-xl" style="min-width:100px">
+            <div class="glass-panel rounded-2xl py-1" style="min-width:100px">
               <div v-for="n in topNOptions" :key="n"
                 class="flex items-center gap-2 rounded-xl px-3 py-1.5 cursor-pointer select-none mx-1"
                 :class="store.cpuTopNCount === n ? 'bg-white/20 font-medium' : 'hover:bg-white/10'"
@@ -68,7 +68,7 @@
 
     <!-- Chart panels (scrollable) -->
     <div class="flex flex-col gap-2 flex-1 min-h-0 overflow-y-auto custom-scrollbar pb-1">
-      <div v-show="chartVisibility.topApp" class="glass-panel rounded-xl p-4 shadow-md flex flex-col flex-1 min-h-0" style="min-height:220px">
+      <div v-show="chartVisibility.topApp" class="glass-panel rounded-xl p-4 flex flex-col flex-1 min-h-0" style="min-height:220px">
         <h3 class="font-label-md text-label-md text-on-surface mb-2 shrink-0 flex items-center gap-2 flex-wrap">
           <span class="material-symbols-outlined text-[16px] text-secondary">lan</span>Top{{ store.topAppCount }} 应用内存
             <span class="flex items-center gap-1 ml-auto">
@@ -88,7 +88,7 @@
         <div ref="topAppChartRef" class="flex-1 min-h-0"></div>
       </div>
 
-      <div v-show="chartVisibility.cpu" class="glass-panel rounded-xl p-4 shadow-md flex flex-col flex-1 min-h-0" style="min-height:220px">
+      <div v-show="chartVisibility.cpu" class="glass-panel rounded-xl p-4 flex flex-col flex-1 min-h-0" style="min-height:220px">
         <h3 class="font-label-md text-label-md text-on-surface mb-2 shrink-0 flex items-center gap-2 flex-wrap">
           <span class="material-symbols-outlined text-[16px] text-secondary">memory</span>Top{{ store.cpuTopNCount }} 应用CPU使用率
           <span class="flex items-center gap-1 ml-auto">
@@ -109,7 +109,7 @@
       </div>
 
       <!-- Device Info Panel -->
-      <div v-show="chartVisibility.deviceInfo" class="glass-panel rounded-xl p-3 px-4 shadow-md flex items-center gap-3 flex-wrap shrink-0">
+      <div v-show="chartVisibility.deviceInfo" class="glass-panel rounded-xl p-3 px-4 flex items-center gap-3 flex-wrap shrink-0">
         <span class="material-symbols-outlined text-[16px] text-secondary">devices</span>
         <span class="font-body-sm text-body-sm text-on-surface">设备开机运行: <strong>{{ formatUptime(uptimeSecs) }}</strong></span>
         <span class="h-4 w-[1px] bg-glass-border-dark"></span>
@@ -124,7 +124,7 @@
       </div>
 
       <!-- Dmesg Streaming -->
-      <div v-show="chartVisibility.deviceInfo" class="glass-panel rounded-xl p-3 px-4 shadow-md flex flex-col shrink-0">
+      <div v-show="chartVisibility.deviceInfo" class="glass-panel rounded-xl p-3 px-4 flex flex-col shrink-0">
         <div class="flex items-center gap-2">
           <span class="material-symbols-outlined text-[14px] text-secondary">terminal</span>
           <span class="font-caption text-caption text-on-surface-variant">dmesg 流</span>
@@ -167,7 +167,7 @@
                 <span class="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
-            <input v-model="sessionName" class="w-full bg-white/60 backdrop-blur-sm border border-outline-variant/50 rounded-xl px-4 py-2 font-body-sm text-body-sm mb-4 outline-none focus:ring-2 focus:ring-secondary/40 shadow-sm select-text"
+            <input v-model="sessionName" class="w-full bg-white/60 backdrop-blur-sm border border-outline-variant/50 rounded-xl px-4 py-2 font-body-sm text-body-sm mb-4 outline-none focus:ring-2 focus:ring-secondary/40 select-text"
               :placeholder="t('perf.sessionName')" @keyup.enter="doSaveSession" />
             <div class="flex gap-2 justify-end">
               <button class="glass-button px-4 py-1.5 rounded-lg font-label-md text-label-md" @click="showSaveDialog = false">{{ t('device.cancel') }}</button>
@@ -220,7 +220,7 @@
     <!-- Toast -->
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="toastMsg" class="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] glass-panel rounded-xl px-5 py-3 bg-white/80 shadow-lg flex items-center gap-2"
+        <div v-if="toastMsg" class="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] glass-panel rounded-xl px-5 py-3 bg-white/80 flex items-center gap-2"
           :class="toastError ? 'text-error border border-error/20' : 'text-on-surface'">
           <span class="material-symbols-outlined text-[18px]">{{ toastError ? 'error' : 'check_circle' }}</span>
           <span class="font-body-sm text-body-sm">{{ toastMsg }}</span>

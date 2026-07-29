@@ -2,21 +2,6 @@
 name: frontend-design
 description: Guidance for distinctive, intentional visual design when building new UI or reshaping an existing one. Helps with aesthetic direction, typography, and making choices that don't read as templated defaults.
 license: Complete terms in LICENSE.txt
-hooks:
-  UserPromptSubmit:
-    - hooks:
-        - type: command
-          command: echo "[frontend-design] 新建或修改 UI 时，请先阅读 test-space\DEVELOPMENT.md 的 4.4 节设计系统，使用 .glass-button / .glass-hover / .glass-active 等规范类。"
-  PostToolUse:
-    - matcher: "Write|Edit"
-      hooks:
-        - type: command
-          command: echo "[frontend-design] 已修改 UI 文件。请检查：(1) 交互控件使用 .glass-button / .glass-hover / .glass-active 类？(2) 弹窗使用 Teleport + 规范结构？(3) 新增样式继承液态玻璃设计系统而非自创模式？"
-  PreCompact:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: echo "[frontend-design] UI 修改是否已完成？请检查与液态玻璃设计系统的一致性，并运行 npm run build 确保无类型/样式回归。"
 ---
 
 # Frontend Design

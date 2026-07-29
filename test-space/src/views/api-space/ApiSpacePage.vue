@@ -98,7 +98,7 @@
     <!-- Device Dropdown (Teleport to body) -->
     <Teleport to="body">
       <div v-if="showDeviceDropdown" class="fixed inset-0 z-50" @click="showDeviceDropdown = false" />
-      <div v-if="showDeviceDropdown" class="fixed z-50 bg-white rounded-lg p-1 max-h-48 overflow-y-auto custom-scrollbar shadow-lg min-w-[200px]"
+      <div v-if="showDeviceDropdown" class="fixed z-50 bg-white rounded-lg p-1 max-h-48 overflow-y-auto custom-scrollbar min-w-[200px]"
         :style="{ top: deviceDropdownPos.top + 'px', left: deviceDropdownPos.left + 'px', width: deviceDropdownPos.width + 'px' }">
         <button v-for="d in devices" :key="d.serial"
           class="w-full flex items-center gap-2 px-2 py-1.5 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none text-left no-border"
@@ -123,7 +123,7 @@
       <Teleport to="body">
         <div v-if="showSearchHistory && searchHistory.length > 0" class="fixed inset-0 z-40" @click="showSearchHistory = false"></div>
         <div v-if="showSearchHistory && searchHistory.length > 0"
-          class="fixed z-50 bg-white border shadow-lg rounded-lg max-h-48 overflow-y-auto"
+          class="fixed z-50 bg-white border rounded-lg max-h-48 overflow-y-auto"
           :style="{ top: searchDropdownPos.top + 'px', left: searchDropdownPos.left + 'px', width: searchDropdownPos.width + 'px' }">
           <button v-for="q in searchHistory" :key="q"
             class="w-full text-left px-3 py-1.5 text-caption text-on-surface hover:bg-gray-100 truncate whitespace-nowrap"
@@ -145,7 +145,7 @@
     <!-- Main Content: Request List + Detail Panel -->
     <div class="flex-1 flex gap-4 min-h-0">
       <!-- Request List -->
-      <div class="glass-panel rounded-xl flex-[0_0_40%] min-w-[360px] max-w-[50%] flex flex-col overflow-hidden shadow-md">
+      <div class="glass-panel rounded-xl flex-[0_0_40%] min-w-[360px] max-w-[50%] flex flex-col overflow-hidden">
         <div class="flex-1 overflow-y-auto custom-scrollbar p-2">
           <div v-if="filteredList.length === 0" class="flex flex-col items-center justify-center h-full text-on-surface-variant gap-2">
             <span class="material-symbols-outlined text-[48px] opacity-40">dns</span>
@@ -184,7 +184,7 @@
       </div>
 
       <!-- Detail Panel -->
-      <div class="glass-panel rounded-xl flex-1 flex flex-col overflow-hidden min-w-0 shadow-md">
+      <div class="glass-panel rounded-xl flex-1 flex flex-col overflow-hidden min-w-0">
         <div v-if="!selectedRequest" class="flex items-center justify-center h-full text-on-surface-variant gap-2 select-text">
           <span class="material-symbols-outlined text-[48px] opacity-40">touch_app</span>
           <span class="text-body-md">{{ t('api.detailPanel') }}</span>
@@ -461,7 +461,7 @@
     <!-- Toast -->
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="toastMsg" class="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 glass-panel rounded-full px-5 py-2.5 flex items-center gap-2 shadow-lg">
+        <div v-if="toastMsg" class="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 glass-panel rounded-full px-5 py-2.5 flex items-center gap-2">
           <span class="material-symbols-outlined text-[18px]" :class="toastType === 'error' ? 'text-error' : 'text-success-indicator'">{{ toastType === 'error' ? 'error' : 'check_circle' }}</span>
           <span class="font-body-md text-body-md text-on-surface">{{ toastMsg }}</span>
         </div>
@@ -481,6 +481,7 @@
 defineOptions({ name: 'ApiSpacePage' })
 import { ref, computed, watch, onMounted, onUnmounted, onActivated, onDeactivated, provide } from "vue"
 import { invoke } from "@tauri-apps/api/core"
+import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import { useI18n } from "@/composables/useI18n"
 import { useApiProxy } from "@/composables/useApiProxy"
 import type { ApiCapturedRequest, ApiRewriteRule } from "@/types"
@@ -576,22 +577,51 @@ function deviceName(serial: string) {
 }
 
 const refreshing = ref(false)
+let deviceEventUnlisten: UnlistenFn | null = null
 
+function applyDeviceList(list: Array<{ serial: string; model: string; status: string }>, showFeedback = false) {
+  // 只保留 online（Rust 端事件流已过滤 offline，兜底再过滤一次）
+  const online = list.filter(d => d.status === 'device' || d.status === 'online')
+  devices.value = online
+  if (online.length > 0 && !deviceSerial.value) {
+    deviceSerial.value = online[0].serial
+  } else if (deviceSerial.value && !online.some(d => d.serial === deviceSerial.value)) {
+    // 当前选中的设备已经断开
+    deviceSerial.value = online[0]?.serial || ""
+  }
+  if (showFeedback) {
+    showToast(`${t('api.deviceCount', { count: String(online.length) })}`)
+  }
+}
+
+// 手动刷新按钮：兜底扫一次（事件流为主，此处只在用户点刷新时反馈计数）
 async function refreshDevices() {
   if (refreshing.value) return
   refreshing.value = true
   try {
     const list = await invoke<{ serial: string; model: string; status: string }[]>("adb_list_devices")
-    devices.value = list
-    if (list.length > 0 && !deviceSerial.value) {
-      deviceSerial.value = list[0].serial
-    }
-    showToast(`${t('api.deviceCount', { count: String(list.length) })}`)
+    applyDeviceList(list, true)
   } catch (e: any) {
     showToast(`${t('api.scanFailed')}: ${e}`, "error")
   } finally {
     refreshing.value = false
   }
+}
+
+// 订阅 Rust 端 host:track-devices 事件流（USB 插拔 / adb connect 秒级反馈）
+async function subscribeDeviceEvents() {
+  if (deviceEventUnlisten) return
+  try {
+    deviceEventUnlisten = await listen<Array<{ serial: string; model: string; status: string; android_version?: string }>>(
+      'adb://devices-changed',
+      (e) => applyDeviceList(e.payload || [], false)
+    )
+  } catch (err) {
+    console.warn('subscribe adb://devices-changed failed', err)
+  }
+}
+function unsubscribeDeviceEvents() {
+  if (deviceEventUnlisten) { deviceEventUnlisten(); deviceEventUnlisten = null }
 }
 
 const detailTabs = computed(() => [
@@ -882,6 +912,8 @@ onMounted(async () => {
   await api.init()
   await api.getCaptured()
   localRules.value = [...api.rewriteRules.value]
+  // 事件驱动的设备同步（USB 插拔 / adb connect 秒级）；首次挂载再做一次兜底扫描
+  await subscribeDeviceEvents()
   await refreshDevices()
   await loadSearchHistory()
 })
@@ -890,16 +922,20 @@ onMounted(async () => {
 onActivated(async () => {
   await api.init()
   await api.getCaptured()
+  await subscribeDeviceEvents()
+  // 短暂扫一次作为首帧兜底（如果 keep-alive 期间事件流已推过就是幂等）
   await refreshDevices()
 })
 
 // keep-alive: 离开 API 页时清理 Tauri 事件监听器，防止叠加注册
 onDeactivated(() => {
   api.cleanup()
+  unsubscribeDeviceEvents()
 })
 
 onUnmounted(() => {
   api.cleanup()
+  unsubscribeDeviceEvents()
 })
 </script>
 

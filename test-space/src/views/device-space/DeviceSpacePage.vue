@@ -6,7 +6,7 @@
       <!-- Tab Switcher (leftmost) -->
       <div class="flex gap-2 shrink-0">
         <button v-for="tab in tabs" :key="tab.key"
-          class="px-5 py-2 rounded-full font-label-md text-label-md transition-all flex items-center hover:scale-105 select-none"
+          class="px-5 py-2 rounded-full font-label-md text-label-md transition-all flex items-center select-none"
           :class="activeTab === tab.key ? 'bg-secondary/10 text-secondary border border-secondary/30' : 'bg-transparent text-on-surface-variant/70 border border-transparent hover:bg-white/30'"
           @click="activeTab = tab.key">
           <span class="material-symbols-outlined text-[16px] align-middle mr-1.5">{{ tab.icon }}</span>
@@ -25,13 +25,13 @@
       </div>
       <Teleport to="body">
         <div v-if="showConnectIpHistory && connectIpHistory.length > 0" class="fixed inset-0 z-40" @click="showConnectIpHistory = false"></div>
-        <div v-if="showConnectIpHistory && connectIpHistory.length > 0" class="fixed z-50 bg-white rounded-lg p-1 max-h-32 overflow-y-auto custom-scrollbar shadow-lg"
+        <div v-if="showConnectIpHistory && connectIpHistory.length > 0" class="fixed z-50 bg-white rounded-lg p-1 max-h-32 overflow-y-auto custom-scrollbar"
           :style="{ top: connectIpDropdownPos.top + 'px', left: connectIpDropdownPos.left + 'px', width: connectIpDropdownPos.width + 'px' }">
           <button v-for="h in connectIpHistory" :key="h" class="w-full flex items-center gap-2 px-2 py-1.5 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none text-left no-border whitespace-nowrap"
             @mousedown.prevent @click="selectConnectIpHistory(h)">{{ h }}</button>
         </div>
       </Teleport>
-      <button class="bg-white/30 border border-outline-variant/30 px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all shrink-0 select-none backdrop-blur-sm" @click="connectToDevice" :disabled="connecting">
+      <button class="bg-white/30 border border-outline-variant/30 px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 transition-all shrink-0 select-none backdrop-blur-sm" @click="connectToDevice" :disabled="connecting">
         <span v-if="connecting" class="w-3.5 h-3.5 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
         <span v-else class="material-symbols-outlined text-[16px]">add_link</span>{{ connecting ? t('device.connecting') : t('device.connect') }}
       </button>
@@ -39,19 +39,19 @@
       <div class="flex items-center gap-2 shrink-0">
         <div v-if="devices.length > 0">
           <button ref="deviceDropdownBtnRef" @click="toggleDeviceDropdown"
-            class="flex items-center gap-2 bg-white/30 border border-outline-variant/30 rounded-full pl-3 pr-3 py-2 font-caption text-caption text-on-surface cursor-pointer hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all min-w-[130px] max-w-[200px] backdrop-blur-sm">
+            class="flex items-center gap-2 bg-white/30 border border-outline-variant/30 rounded-full pl-3 pr-3 py-2 font-caption text-caption text-on-surface cursor-pointer hover:bg-secondary/10 hover:border-secondary/30 transition-all min-w-[130px] max-w-[200px] backdrop-blur-sm">
             <div class="w-2 h-2 rounded-full shrink-0" :class="selectedDevice?.status === 'online' ? 'bg-success-indicator' : 'bg-outline-variant'"></div>
             <span class="truncate flex-1 text-left">{{ selectedDevice?.name || t('device.selectDeviceFirst') }}</span>
             <span class="material-symbols-outlined text-[14px] text-on-surface-variant shrink-0">unfold_more</span>
           </button>
         </div>
-        <button v-if="selectedDevice" class="text-on-surface-variant hover:text-error hover:scale-105 transition-all select-none flex items-center no-border" :title="t('device.disconnect')"
+        <button v-if="selectedDevice" class="text-on-surface-variant hover:text-error transition-all select-none flex items-center no-border" :title="t('device.disconnect')"
           @click="disconnectDeviceHandler(selectedDevice.serial)">
           <span class="material-symbols-outlined text-[16px]">close</span>
         </button>
         <span v-if="devices.length === 0" class="font-caption text-caption text-on-surface-variant/50 whitespace-nowrap">{{ t('device.noDevice') }}</span>
       </div>
-      <button class="text-on-surface-variant hover:text-secondary hover:scale-105 transition-all select-none no-border" @click="scanDevices()" :disabled="scanLoading">
+      <button class="text-on-surface-variant hover:text-secondary transition-all select-none no-border" @click="scanDevices()" :disabled="scanLoading">
         <span class="material-symbols-outlined text-[18px] block" :class="scanLoading ? 'animate-spin' : ''">refresh</span>
       </button>
     </div>
@@ -61,56 +61,56 @@
       <!-- Operations & Actions Grid -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 shrink-0">
         <!-- Device Operations Card -->
-        <div class="glass-panel rounded-xl p-5 flex flex-col gap-4 shadow-md">
+        <div class="glass-panel rounded-xl p-5 flex flex-col gap-4">
           <h3 class="flex items-center gap-2 font-label-md text-label-md text-on-surface select-none">
             <span class="material-symbols-outlined text-[16px] text-on-surface-variant">settings_remote</span> {{ t('device.deviceOps') }}
           </h3>
           <div class="grid grid-cols-3 gap-3">
-            <button class="bg-white/30 border border-outline-variant/30 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm select-none"
+            <button class="bg-white/30 border border-outline-variant/30 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 transition-all text-sm text-on-surface backdrop-blur-sm select-none"
               :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('basic')">
               <span v-if="infoLoading === 'basic'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
               <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">info</span> {{ t('device.basicInfo') }}
             </button>
-            <button class="bg-white/30 border border-outline-variant/30 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm select-none"
+            <button class="bg-white/30 border border-outline-variant/30 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 transition-all text-sm text-on-surface backdrop-blur-sm select-none"
               :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('mac')">
               <span v-if="infoLoading === 'mac'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
               <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">wifi</span> {{ t('device.macInfo') }}
             </button>
-            <button class="bg-white/30 border border-outline-variant/30 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm select-none"
+            <button class="bg-white/30 border border-outline-variant/30 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 transition-all text-sm text-on-surface backdrop-blur-sm select-none"
               :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('whaleos')">
               <span v-if="infoLoading === 'whaleos'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
               <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">description</span> {{ t('device.firmwareInfo') }}
             </button>
-            <button class="bg-white/30 border border-outline-variant/30 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm select-none"
+            <button class="bg-white/30 border border-outline-variant/30 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 transition-all text-sm text-on-surface backdrop-blur-sm select-none"
               :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('storage')">
               <span v-if="infoLoading === 'storage'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
               <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">database</span> {{ t('device.storageInfo') }}
             </button>
-            <button class="bg-white/30 border border-outline-variant/30 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm col-span-1 select-none"
+            <button class="bg-white/30 border border-outline-variant/30 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 transition-all text-sm text-on-surface backdrop-blur-sm col-span-1 select-none"
               :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('keys')">
               <span v-if="infoLoading === 'keys'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
               <span v-else class="material-symbols-outlined text-[16px] text-on-surface-variant">vpn_key</span> {{ t('device.checkKeys') }}
             </button>
-            <button class="bg-white/30 border border-outline-variant/30 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-sm text-on-surface backdrop-blur-sm col-span-1 select-none"
+            <button class="bg-white/30 border border-outline-variant/30 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 transition-all text-sm text-on-surface backdrop-blur-sm col-span-1 select-none"
               :disabled="!selectedDevice" @click="goPerfMonitor">
               <span class="material-symbols-outlined text-[16px] text-on-surface-variant">monitoring</span> {{ t('device.perfMonitor') }}
             </button>
           </div>
           <hr class="border-outline-variant/30 my-1">
           <div class="flex flex-wrap gap-2">
-            <button class="bg-white/30 border border-outline-variant/30 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" :disabled="!selectedDevice" @click="confirmThen(t('device.rebootConfirm2'), rebootDevice)">
+            <button class="bg-white/30 border border-outline-variant/30 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 transition-all backdrop-blur-sm select-none" :disabled="!selectedDevice" @click="confirmThen(t('device.rebootConfirm2'), rebootDevice)">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">restart_alt</span> {{ t('device.reboot') }}
             </button>
-            <button class="bg-white/30 border border-outline-variant/30 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" :disabled="!selectedDevice" @click="rootDevice">
+            <button class="bg-white/30 border border-outline-variant/30 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 transition-all backdrop-blur-sm select-none" :disabled="!selectedDevice" @click="rootDevice">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">shield</span> Root
             </button>
-            <button class="bg-white/30 border border-outline-variant/30 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" :disabled="!selectedDevice" @click="confirmThen(t('device.remountConfirm'), remountDevice)">
+            <button class="bg-white/30 border border-outline-variant/30 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 transition-all backdrop-blur-sm select-none" :disabled="!selectedDevice" @click="confirmThen(t('device.remountConfirm'), remountDevice)">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">published_with_changes</span> Remount
             </button>
           </div>
         </div>
         <!-- Quick Actions Card -->
-        <div class="glass-panel rounded-xl p-5 flex flex-col gap-4 shadow-md">
+        <div class="glass-panel rounded-xl p-5 flex flex-col gap-4">
           <h3 class="flex items-center gap-2 font-label-md text-label-md text-on-surface select-none">
             <span class="material-symbols-outlined text-[16px] text-on-surface-variant">keyboard_command_key</span> {{ t('device.quickActions') }}
           </h3>
@@ -119,30 +119,30 @@
               <input ref="textInputRef" v-model="inputTextValue"
                 class="w-full bg-white/50 border border-outline-variant/60 rounded-full px-3 py-1.5 font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all select-text"
                 :placeholder="t('device.textHint')" @keyup.enter="sendText" @focus="showTextHistory = true" @blur="hideTextHistoryDelayed" />
-              <div v-if="showTextHistory && textHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white rounded-lg p-1 max-h-32 overflow-y-auto custom-scrollbar shadow-lg">
+              <div v-if="showTextHistory && textHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white rounded-lg p-1 max-h-32 overflow-y-auto custom-scrollbar">
                 <button v-for="h in textHistory" :key="h" class="w-full flex items-center gap-2 px-2 py-1.5 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none text-left no-border"
                   @mousedown.prevent @click="selectTextHistory(h)">{{ h }}</button>
               </div>
             </div>
-            <button class="bg-white/30 border border-outline-variant/30 text-on-surface px-4 py-1.5 rounded-xl font-label-md text-label-md hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="sendText" :disabled="!selectedDevice || !inputTextValue.trim()">{{ t('device.send') }}</button>
+            <button class="bg-white/30 border border-outline-variant/30 text-on-surface px-4 py-1.5 rounded-xl font-label-md text-label-md hover:bg-secondary/10 hover:border-secondary/30 transition-all backdrop-blur-sm select-none" @click="sendText" :disabled="!selectedDevice || !inputTextValue.trim()">{{ t('device.send') }}</button>
           </div>
           <hr class="border-outline-variant/30 my-1">
           <div class="flex flex-wrap gap-2">
-            <button class="bg-white/30 border border-outline-variant/30 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="takeScreenshot" :disabled="!selectedDevice">
+            <button class="bg-white/30 border border-outline-variant/30 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 transition-all backdrop-blur-sm select-none" @click="takeScreenshot" :disabled="!selectedDevice">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">image</span> {{ t('device.screenshot') }}
             </button>
-            <button class="bg-white/30 border border-outline-variant/30 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none"
+            <button class="bg-white/30 border border-outline-variant/30 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 transition-all backdrop-blur-sm select-none"
               :class="isRecording ? 'bg-error/10 text-error border border-error/20' : ''"
               :disabled="!selectedDevice || recordingLoading" @click="toggleRecording">
               <span v-if="recordingLoading" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
               <span v-else class="material-symbols-outlined text-[14px]">{{ isRecording ? 'stop' : 'videocam' }}</span>
               {{ recordingLoading ? (isRecording ? t('device.stopping') : t('device.starting')) : (isRecording ? t('device.stopRecording') : t('device.screenrec')) }}
             </button>
-            <button class="bg-white/30 border border-outline-variant/30 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none"
+            <button class="bg-white/30 border border-outline-variant/30 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 transition-all backdrop-blur-sm select-none"
               :disabled="!selectedDevice || logPrepActive" @click="clearLogcatLogs">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">delete_sweep</span> {{ t('device.clearLogs') }}
             </button>
-            <button class="bg-white/30 border border-outline-variant/30 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" :disabled="!selectedDevice" @click="restartAdbServer">
+            <button class="bg-white/30 border border-outline-variant/30 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 transition-all backdrop-blur-sm select-none" :disabled="!selectedDevice" @click="restartAdbServer">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">power_settings_new</span> {{ t('device.restartAdb') }}
             </button>
           </div>
@@ -151,7 +151,7 @@
             {{ logPrepMessage }}
           </div>
           <div class="flex flex-wrap gap-2">
-            <button class="bg-white/30 border border-outline-variant/30 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm select-none"
+            <button class="bg-white/30 border border-outline-variant/30 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 transition-all text-xs text-on-surface backdrop-blur-sm select-none"
               :class="logcatRunning ? 'bg-error/20 text-error border-error/30 hover:bg-error/30' : ''"
               :disabled="!selectedDevice || logPrepActive || (diagRunning && !logcatRunning)" @click="toggleLogcat">
               <span class="material-symbols-outlined text-[14px]" :class="logcatRunning ? 'text-error' : 'text-on-surface-variant'">{{ logcatRunning ? 'stop' : 'assignment' }}</span>
@@ -160,7 +160,7 @@
               </span>
               <span v-else>{{ t('device.realtimeLogs') }}</span>
             </button>
-            <button class="bg-white/30 border border-outline-variant/30 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm select-none"
+            <button class="bg-white/30 border border-outline-variant/30 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 transition-all text-xs text-on-surface backdrop-blur-sm select-none"
               :class="diagRunning ? 'bg-error/20 text-error border-error/30 hover:bg-error/30' : ''"
               :disabled="!selectedDevice || logPrepActive || (logcatRunning && !diagRunning)" @click="toggleDiagnostic">
               <span class="material-symbols-outlined text-[14px]" :class="diagRunning ? 'text-error' : 'text-on-surface-variant'">{{ diagRunning ? 'stop' : 'work' }}</span>
@@ -169,7 +169,7 @@
               </span>
               <span v-else>{{ t('device.diagnostics') }}</span>
             </button>
-            <button class="bg-white/30 border border-outline-variant/30 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm select-none"
+            <button class="bg-white/30 border border-outline-variant/30 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 transition-all text-xs text-on-surface backdrop-blur-sm select-none"
               :class="bootLogcatRunning ? 'bg-error/20 text-error border-error/30 hover:bg-error/30' : ''"
               :disabled="!selectedDevice || logPrepActive || logcatRunning || diagRunning" @click="toggleBootLogcat">
               <span class="material-symbols-outlined text-[14px]" :class="bootLogcatRunning ? 'text-error' : 'text-on-surface-variant'">{{ bootLogcatRunning ? 'stop' : 'pest_control' }}</span>
@@ -178,7 +178,7 @@
               </span>
               <span v-else>{{ t('device.bootLogs') }}</span>
             </button>
-            <button class="bg-white/30 border border-outline-variant/30 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-xs text-on-surface backdrop-blur-sm select-none"
+            <button class="bg-white/30 border border-outline-variant/30 px-3 py-1.5 rounded-xl font-caption text-caption flex items-center gap-1.5 hover:bg-secondary/10 hover:border-secondary/30 transition-all text-xs text-on-surface backdrop-blur-sm select-none"
               :disabled="!selectedDevice" @click="generateBugreport">
               <span class="material-symbols-outlined text-[14px] text-on-surface-variant">bug_report</span> Bugreport
             </button>
@@ -189,7 +189,7 @@
       <!-- Bottom Layout: App Management + 快捷指令 -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0 pb-3">
         <!-- App Management -->
-        <div class="lg:col-span-2 glass-panel rounded-xl flex flex-col min-h-0 overflow-hidden shadow-md">
+        <div class="lg:col-span-2 glass-panel rounded-xl flex flex-col min-h-0 overflow-hidden">
             <!-- App Management Header -->
             <div class="p-4 border-b border-outline-variant/30 flex flex-col gap-3">
               <div class="flex items-center justify-between">
@@ -199,22 +199,22 @@
                     <span class="font-caption text-caption text-on-surface-variant/60 font-normal text-sm">({{ sortedApps.length }})</span>
                   </h3>
                   <div class="flex items-center gap-2 text-sm text-on-surface-variant">
-                    <button class="bg-white/30 border border-outline-variant/30 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="refreshPackageList" :disabled="!selectedDevice || pkgLoading">
+                    <button class="bg-white/30 border border-outline-variant/30 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 transition-all backdrop-blur-sm select-none" @click="refreshPackageList" :disabled="!selectedDevice || pkgLoading">
                       <span v-if="pkgLoading" class="w-3 h-3 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
                       <span v-else class="material-symbols-outlined text-[14px]">refresh</span>{{ t('device.refresh') }}
                     </button>
-                    <label class="flex items-center cursor-pointer hover:scale-105 transition-all px-2 py-1 rounded-xl bg-white/30 border border-outline-variant/30 backdrop-blur-sm hover:bg-secondary/10 hover:border-secondary/30">
+                    <label class="flex items-center cursor-pointer transition-all px-2 py-1 rounded-xl bg-white/30 border border-outline-variant/30 backdrop-blur-sm hover:bg-secondary/10 hover:border-secondary/30">
                       <input type="checkbox" v-model="showThirdParty" class="rounded border-outline-variant text-secondary focus:ring-secondary mr-1 w-3.5 h-3.5 accent-secondary select-text" @change="refreshPackageList" />
                       {{ t('device.thirdPartyApps') }}
                     </label>
-                    <button class="bg-white/30 border border-outline-variant/30 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" :disabled="!selectedDevice" @click="apkDialogOpen = true">
+                    <button class="bg-white/30 border border-outline-variant/30 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 transition-all backdrop-blur-sm select-none" :disabled="!selectedDevice" @click="apkDialogOpen = true">
                       <span class="material-symbols-outlined text-[14px]">file_upload</span> {{ t('device.installApk') }}
                     </button>
-                    <button class="bg-white/30 border border-outline-variant/30 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" @click="getCurrentForegroundApp" :disabled="!selectedDevice || loadingForeground">
+                    <button class="bg-white/30 border border-outline-variant/30 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 transition-all backdrop-blur-sm select-none" @click="getCurrentForegroundApp" :disabled="!selectedDevice || loadingForeground">
                       <span v-if="loadingForeground" class="inline-block w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
                       <span v-else class="material-symbols-outlined text-[14px]">center_focus_strong</span> {{ t('device.foregroundApp') }}
                     </button>
-                    <button class="bg-white/30 border border-outline-variant/30 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" :disabled="!selectedDevice || releaseAppsLoading" @click="showReleaseApps">
+                    <button class="bg-white/30 border border-outline-variant/30 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 transition-all backdrop-blur-sm select-none" :disabled="!selectedDevice || releaseAppsLoading" @click="showReleaseApps">
                       <span v-if="releaseAppsLoading" class="inline-block w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
                       <span v-else class="material-symbols-outlined text-[14px]">new_releases</span> {{ t('device.releaseApps') }}
                     </button>
@@ -228,20 +228,20 @@
                     <input v-model="queryPackageName" class="bg-transparent border-none outline-none w-full font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/50 focus:ring-0 p-0 select-text"
                       :placeholder="t('device.searchApp')" @input="onAppSearchInput" @keyup.enter="queryAppPath" @focus="loadAppSearchHistory" @blur="hideAppSearchHistoryDelayed" />
                   </div>
-                  <div v-if="showAppSearchHistory && appSearchHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white rounded-lg p-1 max-h-32 overflow-y-auto custom-scrollbar shadow-lg">
+                  <div v-if="showAppSearchHistory && appSearchHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white rounded-lg p-1 max-h-32 overflow-y-auto custom-scrollbar">
                     <button v-for="h in appSearchHistory" :key="h" class="w-full flex items-center gap-2 px-2 py-1.5 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none text-left no-border"
                       @mousedown.prevent @click="selectAppSearchHistory(h)">{{ h }}</button>
                   </div>
                 </div>
-                <button class="bg-white/30 border border-outline-variant/30 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm select-none" :disabled="!selectedDevice" @click="queryAppPath">
+                <button class="bg-white/30 border border-outline-variant/30 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 transition-all backdrop-blur-sm select-none" :disabled="!selectedDevice" @click="queryAppPath">
                   <span class="material-symbols-outlined text-[14px]">folder_open</span> {{ t('device.path') }}
                 </button>
                 <div v-if="totalPages > 1" class="flex items-center gap-2 text-sm text-on-surface bg-white/30 border border-outline-variant/30 rounded-xl px-3 py-1 ml-auto backdrop-blur-sm">
-                  <button class="hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 rounded-full p-0.5 transition-all disabled:opacity-50 select-none" :disabled="appPage <= 1" @click="appPage = Math.max(1, appPage - 1); nextTick(loadVisibleAppVersions)">
+                  <button class="hover:bg-secondary/10 hover:border-secondary/30 rounded-full p-0.5 transition-all disabled:opacity-50 select-none" :disabled="appPage <= 1" @click="appPage = Math.max(1, appPage - 1); nextTick(loadVisibleAppVersions)">
                     <span class="material-symbols-outlined text-[16px]">chevron_left</span>
                   </button>
                   <span class="whitespace-nowrap">{{ appPage }} / {{ totalPages }}</span>
-                  <button class="hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 rounded-full p-0.5 transition-all disabled:opacity-50 select-none" :disabled="appPage >= totalPages" @click="appPage = Math.min(totalPages, appPage + 1); nextTick(loadVisibleAppVersions)">
+                  <button class="hover:bg-secondary/10 hover:border-secondary/30 rounded-full p-0.5 transition-all disabled:opacity-50 select-none" :disabled="appPage >= totalPages" @click="appPage = Math.min(totalPages, appPage + 1); nextTick(loadVisibleAppVersions)">
                     <span class="material-symbols-outlined text-[16px]">chevron_right</span>
                   </button>
                 </div>
@@ -257,22 +257,22 @@
                 <tbody class="divide-y divide-outline-variant/30">
                   <tr v-for="app in currentPageApps" :key="app.package_name" :ref="(el) => { if (el && !appItemMeasured) measureAppItem(el as HTMLElement) }" class="hover:bg-white/30 transition-colors group">
                     <td class="pl-1 pr-0 py-2">
-                      <span class="material-symbols-outlined text-success-indicator text-[16px] cursor-pointer hover:scale-125 transition-transform" :title="t('device.start')" @click="startApp(app.package_name)">play_arrow</span>
+                      <span class="material-symbols-outlined text-success-indicator text-[16px] cursor-pointer transition-transform" :title="t('device.start')" @click="startApp(app.package_name)">play_arrow</span>
                     </td>
                     <td class="px-0 py-2">
-                      <span class="material-symbols-outlined text-error text-[16px] cursor-pointer hover:scale-125 transition-transform" :title="t('device.stop')" @click="stopApp(app.package_name)">stop_circle</span>
+                      <span class="material-symbols-outlined text-error text-[16px] cursor-pointer transition-transform" :title="t('device.stop')" @click="stopApp(app.package_name)">stop_circle</span>
                     </td>
                     <td class="px-0 py-2">
-                      <span class="material-symbols-outlined text-on-surface-variant text-[16px] cursor-pointer hover:scale-125 transition-transform" :title="t('device.detail')" @click="showAppDetail(app.package_name)">info</span>
+                      <span class="material-symbols-outlined text-on-surface-variant text-[16px] cursor-pointer transition-transform" :title="t('device.detail')" @click="showAppDetail(app.package_name)">info</span>
                     </td>
                     <td class="px-0 py-2">
-                      <span class="material-symbols-outlined text-on-surface-variant text-[16px] cursor-pointer hover:scale-125 transition-transform" :title="t('device.downloadApk')" @click="downloadApk(app.package_name)">download</span>
+                      <span class="material-symbols-outlined text-on-surface-variant text-[16px] cursor-pointer transition-transform" :title="t('device.downloadApk')" @click="downloadApk(app.package_name)">download</span>
                     </td>
                     <td class="px-0 py-2">
-                      <span class="material-symbols-outlined text-error/70 text-[16px] cursor-pointer hover:scale-125 transition-transform" :title="t('device.clearData')" @click="clearApp(app.package_name)">cleaning_services</span>
+                      <span class="material-symbols-outlined text-error/70 text-[16px] cursor-pointer transition-transform" :title="t('device.clearData')" @click="clearApp(app.package_name)">cleaning_services</span>
                     </td>
                     <td class="pr-1 pl-0 py-2">
-                      <span class="material-symbols-outlined text-error text-[16px] cursor-pointer hover:scale-125 transition-transform" :title="t('device.uninstall')" @click="confirmThen(`${t('device.uninstallConfirm')} ${app.package_name}?`, () => uninstallPkg(app.package_name))">delete</span>
+                      <span class="material-symbols-outlined text-error text-[16px] cursor-pointer transition-transform" :title="t('device.uninstall')" @click="confirmThen(`${t('device.uninstallConfirm')} ${app.package_name}?`, () => uninstallPkg(app.package_name))">delete</span>
                     </td>
                     <td class="pl-2 pr-2 py-2 font-medium text-on-surface">
                       <span class="font-mono cursor-pointer hover:text-secondary hover:underline truncate" :title="app.package_name" @click="copyPackageName(app.package_name)">{{ app.package_name }}</span>
@@ -287,14 +287,14 @@
           </div>
         </div>
         <!-- 快捷指令 Sidebar -->
-        <div class="glass-panel rounded-xl p-5 flex flex-col gap-6 overflow-y-auto shadow-md">
+        <div class="glass-panel rounded-xl p-5 flex flex-col gap-6 overflow-y-auto">
           <div class="flex flex-col gap-3">
             <div class="flex items-center justify-between">
               <h3 class="flex items-center gap-2 font-label-md text-label-md text-on-surface select-none">
                 <span class="material-symbols-outlined text-[16px] text-on-surface-variant">bolt</span> {{ t('device.shortcuts') }}
               </h3>
               <div class="flex items-center gap-1">
-                <button class="bg-white/30 border border-outline-variant/30 px-2 py-1 rounded-xl hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all text-on-surface-variant backdrop-blur-sm select-none" :title="t('device.manage')" @click="showCmdManager = true">
+                <button class="bg-white/30 border border-outline-variant/30 px-2 py-1 rounded-xl hover:bg-secondary/10 hover:border-secondary/30 transition-all text-on-surface-variant backdrop-blur-sm select-none" :title="t('device.manage')" @click="showCmdManager = true">
                   <span class="material-symbols-outlined text-[18px]">edit_note</span>
                 </button>
               </div>
@@ -306,7 +306,7 @@
             </div>
             <div v-if="customCommands.length > 0" class="grid grid-cols-2 gap-2">
               <div v-for="(cmd, idx) in customCommands" :key="idx"
-                class="flex items-center px-3 py-1.5 bg-white/30 border border-outline-variant/30 rounded-xl cursor-pointer hover:bg-secondary/10 hover:border-secondary/30 hover:scale-105 transition-all backdrop-blur-sm" @click="executeCustomCommand(cmd.command)">
+                class="flex items-center px-3 py-1.5 bg-white/30 border border-outline-variant/30 rounded-xl cursor-pointer hover:bg-secondary/10 hover:border-secondary/30 transition-all backdrop-blur-sm" @click="executeCustomCommand(cmd.command)">
                 <div class="font-caption text-caption text-on-surface leading-tight break-all">{{ cmd.name }}</div>
               </div>
             </div>
@@ -322,7 +322,7 @@
       <div class="col-span-1 lg:col-span-3 flex flex-col gap-4 min-h-0 overflow-hidden">
 
         <!-- Screen Mirror -->
-        <div class="glass-panel rounded-xl p-3 flex-1 min-h-0 flex flex-col shadow-md">
+        <div class="glass-panel rounded-xl p-3 flex-1 min-h-0 flex flex-col">
           <div class="flex items-center gap-3 mb-2 flex-wrap shrink-0">
             <div class="flex items-center gap-2 shrink-0">
               <span class="material-symbols-outlined text-[16px]">screenshot_monitor</span>
@@ -370,7 +370,7 @@
         </div>
 
         <!-- Remote Control -->
-        <div class="glass-panel rounded-xl p-3 lg:p-4 xl:p-5 2xl:p-6 shadow-md mb-3 overflow-x-auto">
+        <div class="glass-panel rounded-xl p-3 lg:p-4 xl:p-5 2xl:p-6 mb-3 overflow-x-auto">
           <h3 class="font-label-md text-label-md text-on-surface mb-2 lg:mb-3 xl:mb-4 2xl:mb-5 flex items-center gap-1.5 select-none">
             <span class="material-symbols-outlined text-[14px] lg:text-[16px] xl:text-[18px] 2xl:text-[22px] select-none">gamepad</span><span class="select-none">{{ t('device.remoteControl') }}</span>
           </h3>
@@ -442,7 +442,7 @@
 
       <!-- Right Column: File Manager -->
       <div class="col-span-1 lg:col-span-2 flex flex-col min-h-0 mb-3">
-        <div class="glass-panel rounded-xl p-3 flex flex-col flex-1 min-h-0 shadow-md">
+        <div class="glass-panel rounded-xl p-3 flex flex-col flex-1 min-h-0">
           <div class="flex items-center justify-between mb-2 shrink-0">
             <h3 class="font-label-md text-label-md text-on-surface flex items-center gap-1.5 select-none">
               <span class="material-symbols-outlined text-[16px] select-none">folder_open</span><span class="select-none">{{ t('device.fileManager') }}</span>
@@ -457,7 +457,7 @@
             <input v-model="remotePath" ref="remotePathInputRef"
               class="w-full bg-white border border-outline-variant rounded-lg px-3 py-1.5 font-body-sm text-body-sm text-on-surface font-mono focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all select-text"
               :placeholder="t('device.remotePathHint')" @focus="showRemotePathHistory = true" @blur="hideRemotePathHistoryDelayed" @keyup.enter="navigateToPath" />
-            <div v-if="showRemotePathHistory && remotePathHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white rounded-lg p-1 max-h-32 overflow-y-auto custom-scrollbar shadow-lg">
+            <div v-if="showRemotePathHistory && remotePathHistory.length > 0" class="absolute top-full left-0 right-0 z-20 mt-1 bg-white rounded-lg p-1 max-h-32 overflow-y-auto custom-scrollbar">
               <button v-for="h in remotePathHistory" :key="h" class="w-full flex items-center gap-2 px-2 py-1.5 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none text-left no-border"
                 @mousedown.prevent @click="selectRemotePathHistory(h)">{{ h }}</button>
             </div>
@@ -475,7 +475,7 @@
                 <p class="font-body-sm text-body-sm mt-1">{{ t('device.pathHint') }}</p>
               </div>
               <div v-for="entry in fileEntries" :key="entry.name"
-                class="flex items-center gap-1.5 px-2 py-1 hover:bg-secondary/5 hover:scale-[1.02] cursor-pointer border-b border-outline-variant/20 last:border-0 group transition-transform duration-200 rounded select-none"
+                class="flex items-center gap-1.5 px-2 py-1 hover:bg-secondary/5 cursor-pointer border-b border-outline-variant/20 last:border-0 group transition-transform duration-200 rounded select-none"
                 @click="handleEntryClick(entry, $event)" @contextmenu="showFileContextMenu($event, entry)">
                 <span class="material-symbols-outlined text-[16px] shrink-0"
                   :class="entry.name === '..' ? 'text-secondary' : (entry.isDir ? 'text-secondary' : 'text-on-surface-variant/60')">{{ entry.name === '..' ? 'arrow_back' : (entry.isDir ? 'folder' : 'description') }}</span>
@@ -501,7 +501,7 @@
     <!-- Device Dropdown (teleported to body to escape glass-panel backdrop-filter) -->
     <Teleport to="body">
       <div v-if="showDeviceDropdown" class="fixed inset-0 z-50" @click="showDeviceDropdown = false"></div>
-      <div v-if="showDeviceDropdown" class="fixed z-50 bg-white rounded-lg p-1 max-h-48 overflow-y-auto custom-scrollbar shadow-lg min-w-[200px]"
+      <div v-if="showDeviceDropdown" class="fixed z-50 bg-white rounded-lg p-1 max-h-48 overflow-y-auto custom-scrollbar min-w-[200px]"
         :style="{ top: deviceDropdownPos.top + 'px', left: deviceDropdownPos.left + 'px' }">
         <button v-for="d in devices" :key="d.serial"
           class="w-full flex items-center gap-2 px-2 py-1.5 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none text-left"
@@ -567,7 +567,7 @@
     <!-- File Context Menu -->
     <Teleport to="body">
       <div v-if="fileContextMenu.show" class="fixed inset-0 z-50" @click="closeFileContextMenu" @contextmenu.prevent="closeFileContextMenu"></div>
-      <div v-if="fileContextMenu.show" class="fixed z-50 bg-white border border-outline-variant rounded-lg py-1 min-w-[160px] shadow-lg"
+      <div v-if="fileContextMenu.show" class="fixed z-50 bg-white border border-outline-variant rounded-lg py-1 min-w-[160px]"
         :style="{ top: fileContextMenu.y + 'px', left: fileContextMenu.x + 'px' }">
         <button class="w-full flex items-center gap-2 px-3 py-1.5 font-body-sm text-body-sm text-on-surface hover:bg-gray-100 select-none text-left" @click="copyFilePath(fileContextMenu.entry!)">
           <span class="material-symbols-outlined text-[16px] text-on-surface-variant">content_copy</span>{{ t('device.copyPath') }}
@@ -916,7 +916,7 @@
     <Teleport to="body">
       <Transition name="fade">
         <div v-if="cmdExec.show" class="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-[420px] max-w-[90vw]" @mouseenter="pauseCmdExecAutoClose" @mouseleave="resumeCmdExecAutoClose">
-          <div class="glass-panel rounded-xl px-4 py-3 shadow-xl">
+          <div class="glass-panel rounded-xl px-4 py-3">
             <div class="flex items-center justify-between gap-2 mb-1">
               <div class="flex items-center gap-2 min-w-0">
                 <span v-if="cmdExec.running" class="w-3.5 h-3.5 border-2 border-secondary border-t-transparent rounded-full animate-spin shrink-0"></span>
@@ -965,7 +965,7 @@
     <!-- Toast -->
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="toast.show" class="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 glass-panel rounded-full px-5 py-2.5 flex items-center gap-2 shadow-lg">
+        <div v-if="toast.show" class="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 glass-panel rounded-full px-5 py-2.5 flex items-center gap-2">
           <span v-if="toast.type === 'loading'" class="material-symbols-outlined text-[18px] text-secondary animate-spin">progress_activity</span>
           <span v-else class="material-symbols-outlined text-[18px]"
             :class="toast.type === 'error' ? 'text-error' : 'text-success-indicator'">{{ toast.type === 'error' ? 'error' : 'check_circle' }}</span>
@@ -981,6 +981,7 @@ defineOptions({ name: 'DeviceSpacePage' })
 import { ref, computed, watch, onMounted, onUnmounted, onActivated, onDeactivated, nextTick } from "vue";
 import { useRouter } from "vue-router";
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useAdb, type DeviceProperties } from "@/composables/useAdb";
 import { useI18n } from "@/composables/useI18n";
@@ -1845,11 +1846,22 @@ const recordingFilename = ref("");
 let autoRefreshId: ReturnType<typeof setInterval> | null = null;
 
 // ── Device operations ──
+// 兜底扫描防重入 + 超时保护
+let scanInflight = false;
 async function scanDevices(silent = false) {
+  if (silent) {
+    if (scanInflight) return;
+    if (typeof document !== 'undefined' && document.hidden) return;
+  }
+  scanInflight = true;
   scanLoading.value = true;
   showDeviceDropdown.value = false;
   try {
-    const adbDevices = await listDevices();
+    // 5s 超时保护：ADB 挂起时不再无限期占用
+    const timeoutPromise = new Promise<never>((_, rej) =>
+      setTimeout(() => rej(new Error('scan_timeout')), 5000)
+    );
+    const adbDevices = await Promise.race([listDevices(), timeoutPromise]);
     devices.value = adbDevices.map(d => ({
       serial: d.serial, name: d.model || d.serial,
       status: d.status === "device" ? "online" as const : "offline" as const, os: d.android_version || "Android",
@@ -1866,7 +1878,7 @@ async function scanDevices(silent = false) {
     }
     if (!silent) showToast(t('device.deviceCount', { count: String(devices.value.length) }));
   } catch { if (!silent) showToast(t("device.scanFailed"), "error"); }
-  finally { scanLoading.value = false; }
+  finally { scanLoading.value = false; scanInflight = false; }
 }
 function onConnectIpFocus() {
   if (connectIpHistory.value.length > 0 && connectIpInputRef.value) {
@@ -3139,14 +3151,56 @@ function goPerfMonitor() {
 
 // ── Output Panel ──
 // ── Lifecycle ──
+/**
+ * 事件驱动的设备状态同步
+ * ---------------------------------------------------------------
+ * Rust 端订阅 ADB 官方 `host:track-devices` 协议，设备连接/断开时
+ * 主动推送 `adb://devices-changed`，前端零轮询、延迟 <50ms。
+ * 保留一个 60s 兜底轮询防 ADB server 意外重启后事件流断裂。
+ */
+let deviceEventUnlisten: UnlistenFn | null = null;
+function applyDeviceListPayload(list: Array<{ serial: string; model: string; status: string; android_version?: string }>) {
+  const online = list.filter(d => d.status === 'device' || d.status === 'online');
+  devices.value = online.map(d => ({
+    serial: d.serial,
+    name: d.model || d.serial,
+    status: 'online' as const,
+    os: d.android_version || 'Android',
+  }));
+  if (selectedDevice.value && !devices.value.some(d => d.serial === selectedDevice.value!.serial)) {
+    selectedDevice.value = null;
+    apps.value = [];
+    deviceProps.value = null;
+  }
+  if (devices.value.length > 0 && !selectedDevice.value) {
+    const savedSerial = localStorage.getItem('last_device_serial');
+    const savedDevice = savedSerial ? devices.value.find(d => d.serial === savedSerial) : null;
+    selectDevice(savedDevice || devices.value[0]);
+  }
+}
+
 onMounted(async () => {
-  scanDevices(true);
   loadCustomCommands();
   loadTextHistory();
   loadRemotePathHistory();
   loadConnectIpHistory();
-  // Auto-refresh devices every 5s (silent, no toast)
-  autoRefreshId = setInterval(() => { if (!pkgLoading.value && !scanLoading.value && !connecting.value && !recordingLoading.value) scanDevices(true); }, 5000);
+  // 订阅 Rust 端 host:track-devices 事件流
+  try {
+    deviceEventUnlisten = await listen<Array<{ serial: string; model: string; status: string; android_version?: string }>>(
+      'adb://devices-changed',
+      (e) => applyDeviceListPayload(e.payload || [])
+    );
+  } catch (e) { console.warn('subscribe adb://devices-changed failed', e); }
+  // 首次快照：走一次静默扫描（Rust 端事件流首帧可能稍晚于挂载）
+  const idle = (window as any).requestIdleCallback || ((cb: any) => setTimeout(cb, 200));
+  idle(() => scanDevices(true), { timeout: 1500 });
+  // 60s 兜底扫描：防 ADB server 崩溃后事件流断裂
+  autoRefreshId = setInterval(() => {
+    if (pkgLoading.value || scanLoading.value || connecting.value || recordingLoading.value) return;
+    if (typeof document !== 'undefined' && document.hidden) return;
+    const idle2 = (window as any).requestIdleCallback || ((cb: any) => setTimeout(cb, 0));
+    idle2(() => scanDevices(true), { timeout: 3000 });
+  }, 60000);
   nextTick(() => {
     recalcAppPageSize();
     let rafId: number;
@@ -3169,6 +3223,7 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener('resize', recalcAppPageSize);
   if ((window as any).__appListResizeObserver) (window as any).__appListResizeObserver.disconnect();
+  if (deviceEventUnlisten) { deviceEventUnlisten(); deviceEventUnlisten = null; }
   // Don't stop mirror if standalone popout window is active
   if (!mirrorPopoutActive.value) {
     for (const u of mirrorUnlisten) { u(); }
@@ -3190,63 +3245,59 @@ onUnmounted(() => {
   // Note: log sessions are saved to DB; user can see "running" sessions on next visit
 });
 
-// keep-alive: 切换回设备页时恢复5s轮询
+// keep-alive: 切回设备页时恢复 60s 兜底扫描（事件流已订阅；仅防 ADB server 意外重启）
 onActivated(() => {
   if (!autoRefreshId) {
     autoRefreshId = setInterval(() => {
-      if (!pkgLoading.value && !scanLoading.value && !connecting.value && !recordingLoading.value) scanDevices(true);
-    }, 5000);
+      if (pkgLoading.value || scanLoading.value || connecting.value || recordingLoading.value) return;
+      if (typeof document !== 'undefined' && document.hidden) return;
+      const idle = (window as any).requestIdleCallback || ((cb: any) => setTimeout(cb, 0));
+      idle(() => scanDevices(true), { timeout: 3000 });
+    }, 60000);
   }
 });
 
-// keep-alive: 离开设备页时停止5s轮询（日志采集定时器保持运行，它们是用户主动操作）
+// keep-alive: 离开设备页时停止兜底扫描（事件流仍在 Rust 侧运行，回来时会立即同步）
 onDeactivated(() => {
   if (autoRefreshId) { clearInterval(autoRefreshId); autoRefreshId = null; }
 });
 </script>
 
 <style scoped>
-.text-caption { font-size: 15px !important; font-weight: 400 !important; }
-.text-label-md { font-size: 16px !important; }
-.glass-button { font-weight: 400 !important; }
+/* ── 远程控制禁用态 ────────────────────────────────────── */
+.remote-disabled { opacity: 0.4; pointer-events: none; }
 
-/* Enhanced button borders with depth (inset shadow, not border, to preserve dynamic border-error states) */
-.glass-panel button:not(.glass-button):not(.no-border) {
-  box-shadow:
-    inset 0 0 0 1px rgba(0, 0, 0, 0.09),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    0 1px 2px rgba(0, 0, 0, 0.04);
+/* ── 卡内按钮规范化 ─────────────────────────────────────
+ * 目标：所有 rounded-xl 文本按钮（info/system/input/log/管理）
+ * 统一到同一尺度；rounded-lg / rounded-full 的按钮
+ * （远程控制 D-pad / numpad / tab chip）不被影响。
+ * ──────────────────────────────────────────────────── */
+:deep(button.rounded-xl) {
+  min-height: 30px;
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+  padding-left: 12px !important;
+  padding-right: 12px !important;
+  font-size: 12px !important;
+  line-height: 1.15;
+  letter-spacing: 0.005em;
+  font-weight: 500;
+  gap: 6px;
+}
+:deep(button.rounded-xl) > .material-symbols-outlined {
+  font-size: 14px !important;
 }
 
-/* Disabled state for inline buttons */
-button:disabled,
-button:disabled:hover {
-  opacity: 0.4 !important;
-  cursor: not-allowed !important;
-  filter: grayscale(0.5);
-  transform: none !important;
-  background: rgba(255, 255, 255, 0.12) !important;
-  border-color: rgba(0, 0, 0, 0.04) !important;
-  box-shadow: none !important;
-  animation: none !important;
-  pointer-events: auto !important;
+/* 子分区之间只用一根发丝线 */
+:deep(.glass-panel) hr {
+  border: 0;
+  border-top: 1px solid rgba(28, 27, 31, 0.10);
+  margin: 8px 0;
+}
+html.dark :deep(.glass-panel) hr {
+  border-top-color: rgba(232, 227, 214, 0.10);
 }
 
-/* Disabled state for glass-button */
-.glass-button:disabled,
-.glass-button:disabled:hover {
-  opacity: 0.4 !important;
-  cursor: not-allowed !important;
-  filter: grayscale(0.5);
-  transform: none !important;
-  box-shadow: none !important;
-  animation: none !important;
-}
-
-/* Disabled area for remote control section */
-.remote-disabled {
-  opacity: 0.4;
-  pointer-events: none;
-}
+/* App 列表行内图标点阵：紧凑但清晰 */
+:deep(table td .material-symbols-outlined) { font-size: 15px !important; }
 </style>

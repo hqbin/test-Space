@@ -797,7 +797,27 @@ pub fn run() {
                 )?;
             }
 
+            // 事件驱动的 ADB 设备跟踪（host:track-devices）
+            // 官方协议：客户端连 5037 端口，之后 server 主动推送状态变化
+            // 后台线程自愈重连；进程退出时线程自动结束
+            adb::start_device_tracker(app.handle().clone());
+
             if let Some(window) = app.get_webview_window("main") {
+                // 根据主显示器分辨率计算初始窗口大小
+                //   宽度：屏幕 78%，clamp 到 [1100, 1800]
+                //   高度：屏幕 82%，clamp 到 [680, 1200]
+                //   居中显示
+                if let Ok(Some(monitor)) = window.current_monitor() {
+                    let ps = monitor.size();
+                    let scale = monitor.scale_factor();
+                    let logical_w = ps.width as f64 / scale;
+                    let logical_h = ps.height as f64 / scale;
+                    let target_w = ((logical_w * 0.78).round() as u32).clamp(1100, 1800);
+                    let target_h = ((logical_h * 0.82).round() as u32).clamp(680, 1200);
+                    let _ = window.set_size(tauri::LogicalSize::new(target_w, target_h));
+                    let _ = window.center();
+                }
+
                 let w = window.clone();
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {

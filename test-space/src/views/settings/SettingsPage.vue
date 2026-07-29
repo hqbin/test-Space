@@ -1,6 +1,6 @@
 <template>
   <div class="flex-1 min-h-0 overflow-y-auto select-none px-margin-page pt-safe-area-top pb-4">
-    <div class="glass-panel rounded-xl p-padding-card shadow-md flex flex-col min-h-0 overflow-hidden">
+    <div class="glass-panel rounded-xl p-padding-card flex flex-col min-h-0 overflow-hidden">
       <!-- Language -->
       <div class="flex items-center justify-between gap-4 min-w-0">
         <span class="font-body-md text-body-md text-on-surface font-medium shrink-0">{{ t("settings.language") }}</span>
@@ -61,7 +61,7 @@
               />
               <div
                 v-if="showDeviceDropdown && deviceIdList.length > 0"
-                class="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-md z-10 max-h-60 overflow-y-auto border border-gray-200"
+                class="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg z-10 max-h-60 overflow-y-auto border border-gray-200"
               >
                 <div
                   v-for="item in deviceIdList"
@@ -105,7 +105,7 @@
                   {{ t("settings.cloudUpload") }}
                   <span class="material-symbols-outlined text-[16px]">arrow_drop_down</span>
                 </button>
-                <div v-if="showBackupMenu" class="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-md z-20 min-w-[160px] border border-gray-200">
+                <div v-if="showBackupMenu" class="absolute top-full left-0 mt-1 bg-white rounded-lg z-20 min-w-[160px] border border-gray-200">
                   <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleExport(); showBackupMenu = false">
                     <span class="material-symbols-outlined text-[18px]">file_upload</span>
                     {{ t("settings.exportLocal") }}
@@ -123,7 +123,7 @@
                   {{ t("settings.restore") }}
                   <span class="material-symbols-outlined text-[16px]">arrow_drop_down</span>
                 </button>
-                <div v-if="showRestoreMenu" class="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-md z-20 min-w-[160px] border border-gray-200">
+                <div v-if="showRestoreMenu" class="absolute top-full left-0 mt-1 bg-white rounded-lg z-20 min-w-[160px] border border-gray-200">
                   <div class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 cursor-pointer flex items-center gap-2" @mousedown="handleImport(); showRestoreMenu = false">
                     <span class="material-symbols-outlined text-[18px]">file_download</span>
                     {{ t("settings.importLocal") }}

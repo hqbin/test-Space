@@ -41,37 +41,52 @@ import type { ScriptAiResult } from '@/services/scriptAi'
 const route = useRoute()
 const router = useRouter()
 
-// ── Background gradient ───────────────────────────────────────
+// 每个 space 用一枚极淡的色相点缀纸底，主体保持 paper (#F1EDE4)
 const bgStyle = computed(() => {
   const path = route.path
+  const paper = '#F1EDE4'
   if (path.startsWith('/api-space')) {
     return {
       background:
-        'radial-gradient(circle at 85% 30%, rgba(0,180,200,0.06) 0%, transparent 40%), radial-gradient(circle at 15% 70%, rgba(0,100,200,0.04) 0%, transparent 40%), #F9F9FB',
-    }
-  }
-  if (path.startsWith('/device-space')) {
-    return {
-      background:
-        'radial-gradient(circle at 15% 50%, rgba(76,74,202,0.05), transparent 25%), radial-gradient(circle at 85% 30%, rgba(0,80,203,0.05), transparent 25%), #F9F9FB',
+        `radial-gradient(circle at 85% 30%, rgba(20,160,133,0.05) 0%, transparent 42%), ` +
+        `radial-gradient(circle at 15% 70%, rgba(30,58,95,0.045) 0%, transparent 42%), ${paper}`,
     }
   }
   if (path.startsWith('/device-space/perf-monitor')) {
     return {
       background:
-        'radial-gradient(circle at 20% 40%, rgba(0,200,150,0.06), transparent 30%), radial-gradient(circle at 80% 60%, rgba(0,100,200,0.05), transparent 30%), #F9F9FB',
+        `radial-gradient(circle at 20% 40%, rgba(20,160,133,0.06), transparent 32%), ` +
+        `radial-gradient(circle at 80% 60%, rgba(30,58,95,0.05), transparent 32%), ${paper}`,
+    }
+  }
+  if (path.startsWith('/device-space')) {
+    return {
+      background:
+        `radial-gradient(circle at 15% 50%, rgba(30,58,95,0.055), transparent 28%), ` +
+        `radial-gradient(circle at 85% 30%, rgba(194,78,58,0.045), transparent 28%), ${paper}`,
     }
   }
   if (path.startsWith('/notes-space')) {
-    return { background: 'radial-gradient(circle at 50% 0%, #F9F9FB 0%, #F3F3F5 100%)' }
+    return {
+      background:
+        `radial-gradient(circle at 50% 0%, #F5F1E9 0%, ${paper} 55%, #EEE9DE 100%)`,
+    }
   }
   if (path.startsWith('/ai-space')) {
     return {
       background:
-        'radial-gradient(circle at 20% 30%, rgba(120,80,220,0.06) 0%, transparent 40%), radial-gradient(circle at 80% 70%, rgba(60,180,220,0.05) 0%, transparent 40%), #F9F9FB',
+        `radial-gradient(circle at 20% 30%, rgba(194,78,58,0.05) 0%, transparent 42%), ` +
+        `radial-gradient(circle at 80% 70%, rgba(30,58,95,0.05) 0%, transparent 42%), ${paper}`,
     }
   }
-  return { background: '#F9F9FB' }
+  if (path.startsWith('/script-space')) {
+    return {
+      background:
+        `radial-gradient(circle at 25% 25%, rgba(30,58,95,0.05) 0%, transparent 40%), ` +
+        `radial-gradient(circle at 75% 75%, rgba(194,78,58,0.04) 0%, transparent 40%), ${paper}`,
+    }
+  }
+  return { background: paper }
 })
 
 // ── AI panel global state ─────────────────────────────────────
