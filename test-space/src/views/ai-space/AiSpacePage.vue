@@ -895,6 +895,9 @@ function onMessagesClick(e: MouseEvent) {
 const NOTE_LINK_RE = /\[([^\]]+)\]\(note:([a-f0-9-]+)(?:#([^)]*))?\)/g
 
 /** Convert markdown tables to styled HTML tables */
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
 function renderTables(text: string): string {
   return text.replace(/^\|.+\|(?:\r?\n\|[-:| +]+\|(?:\r?\n\|.+\|)*)/gm, (block) => {
     const lines = block.trim().split('\n')
@@ -903,12 +906,12 @@ function renderTables(text: string): string {
     const alignRow = rows[1].map(c => c.startsWith(':') && c.endsWith(':') ? 'center' : c.endsWith(':') ? 'right' : c.startsWith(':') ? 'left' : '')
     const head = rows[0]
     const body = rows.slice(2)
-    let html = '<table class="ai-table">'
-    html += '<thead><tr>' + head.map((c, i) => `<th${alignRow[i] ? ' style="text-align:' + alignRow[i] + '"' : ''}>${c}</th>`).join('') + '</tr></thead>'
+    let html = '<div style="overflow-x:auto;max-width:100%"><table class="ai-table">'
+    html += '<thead><tr>' + head.map((c, i) => `<th${alignRow[i] ? ' style="text-align:' + alignRow[i] + '"' : ''}>${escapeHtml(c)}</th>`).join('') + '</tr></thead>'
     if (body.length) {
-      html += '<tbody>' + body.map(r => '<tr>' + r.map((c, i) => `<td${alignRow[i] ? ' style="text-align:' + alignRow[i] + '"' : ''}>${c}</td>`).join('') + '</tr>').join('') + '</tbody>'
+      html += '<tbody>' + body.map(r => '<tr>' + r.map((c, i) => `<td${alignRow[i] ? ' style="text-align:' + alignRow[i] + '"' : ''}>${escapeHtml(c)}</td>`).join('') + '</tr>').join('') + '</tbody>'
     }
-    return html + '</table>'
+    return html + '</table></div>'
   })
 }
 
