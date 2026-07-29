@@ -797,6 +797,11 @@ pub fn run() {
                 )?;
             }
 
+            // 事件驱动的 ADB 设备跟踪（host:track-devices）
+            // 官方协议：客户端连 5037 端口，之后 server 主动推送状态变化
+            // 后台线程自愈重连；进程退出时线程自动结束
+            adb::start_device_tracker(app.handle().clone());
+
             if let Some(window) = app.get_webview_window("main") {
                 let w = window.clone();
                 window.on_window_event(move |event| {

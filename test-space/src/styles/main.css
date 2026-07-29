@@ -535,6 +535,58 @@ html.dark .bracket-tag { color: #E8B08A; }
   .notes-tree-header { font-size: 13px !important; font-weight: 600 !important; }
 }
 
+/* ================================================================
+ * Dark Mode 通用文本色兜底
+ * -----------------------------------------------------------------
+ * 页面模板里散布了大量 tailwind 语义色（blue-500/600/purple-600/emerald-600
+ * 之类），它们默认设计用于浅底。dark 模式下背景变深，这些饱和度较高的
+ * 颜色对比度会掉。这里把 600 系列文本统一抬到 400 系列（更亮）。
+ * ============================================================== */
+html.dark .text-blue-500 { color: #7CB2FF !important; }
+html.dark .text-blue-600 { color: #7CB2FF !important; }
+html.dark .text-purple-500 { color: #C4A1FF !important; }
+html.dark .text-purple-600 { color: #C4A1FF !important; }
+html.dark .text-red-500 { color: #FF8A80 !important; }
+html.dark .text-red-600 { color: #FF8A80 !important; }
+html.dark .text-green-500 { color: #7CE1A5 !important; }
+html.dark .text-green-600 { color: #7CE1A5 !important; }
+html.dark .text-emerald-500 { color: #7CE1A5 !important; }
+html.dark .text-emerald-600 { color: #7CE1A5 !important; }
+html.dark .text-orange-500 { color: #FFB47A !important; }
+html.dark .text-orange-600 { color: #FFB47A !important; }
+html.dark .text-yellow-500 { color: #FFD570 !important; }
+html.dark .text-yellow-600 { color: #FFD570 !important; }
+html.dark .text-amber-700 { color: #FFCF7A !important; }
+html.dark .text-gray-600 { color: #C8C3B6 !important; }
+html.dark .text-gray-800 { color: #E8E3D6 !important; }
+html.dark .text-gray-900 { color: #F5F0E4 !important; }
+html.dark .text-black { color: #E8E3D6 !important; }
+
+/* 保证深色下 utility-mapped 白底面板里的默认文字都能看见 */
+html.dark .bg-white, html.dark .bg-white\/50, html.dark .bg-white\/60,
+html.dark .bg-white\/70, html.dark .bg-white\/80, html.dark .bg-white\/90 {
+  color: #E8E3D6;
+}
+html.dark .bg-white *, html.dark .bg-white\/50 *, html.dark .bg-white\/60 *,
+html.dark .bg-white\/70 *, html.dark .bg-white\/80 *, html.dark .bg-white\/90 * {
+  /* 让子元素显式继承（除非它自己指定了颜色） */
+}
+
+/* 常见 badge 底色在 dark 下的可见性 */
+html.dark .bg-blue-500\/10 { background-color: rgba(124, 178, 255, 0.16) !important; }
+html.dark .bg-purple-500\/10 { background-color: rgba(196, 161, 255, 0.16) !important; }
+html.dark .bg-green-500\/10 { background-color: rgba(124, 225, 165, 0.16) !important; }
+html.dark .bg-red-500\/10 { background-color: rgba(255, 138, 128, 0.16) !important; }
+html.dark .bg-orange-500\/10 { background-color: rgba(255, 180, 122, 0.16) !important; }
+html.dark .bg-amber-100 { background-color: rgba(255, 207, 122, 0.16) !important; }
+html.dark .bg-yellow-100 { background-color: rgba(255, 213, 112, 0.14) !important; }
+html.dark .bg-yellow-100\/60 { background-color: rgba(255, 213, 112, 0.14) !important; }
+html.dark .border-amber-200 { border-color: rgba(255, 207, 122, 0.35) !important; }
+html.dark .ring-yellow-300\/50 { --tw-ring-color: rgba(255, 213, 112, 0.35) !important; }
+
+/* Skeleton shimmer 底色 */
+html.dark .skeleton-line { background-color: rgba(232, 227, 214, 0.10) !important; }
+
 /* Dark 变体 */
 html.dark .bg-white       { background-color: rgba(28, 26, 22, 0.85) !important; }
 html.dark .bg-white\/90   { background-color: rgba(28, 26, 22, 0.85) !important; }

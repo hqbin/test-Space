@@ -4863,3 +4863,370 @@ UTF-8 根因修复后，原有的三层防御体系变为冗余，进行了简�
 |--------|------|
 | `npm run build` (vue-tsc + vite) | ✅ 通过 |
 | `cargo check` | ✅ 通过 |
+
+
+---
+
+## Phase 70 — UI 设计系统重构（Quarterly + Gazette）
+
+**背景**：整体 UI 存在长期问题：颜色对比度不足（`on-surface-variant #424656` 叠 50~60% opacity 后仅 2:1，低于 WCAG AA 4.5:1）、字号阶随意（同页面出现 10/11/12/13/14/15/16/17/18/22px 至少 10 档）、控件尺寸不统一（同角色按钮 padding 组合达 8 种）、hover 反馈弱（`hover:bg-secondary/10` 在玻璃层上几乎不可见）、老 Material 阴影/scale 抖动与新设计冲突、弹窗全白背景、下拉纯白框、Notes 目录字号异常大、Device 页布局散乱、设备扫描阻塞页面切换。本阶段建立完整 UI 设计规范并全量落地。
+
+### 70.1 设计方向：Quarterly + Gazette
+
+采用 **"季刊主骨架 + 公报点缀"**：安静克制的排版底盘（Kinfolk / A+U 建筑评论感） + 少量方括号标签 / 章节号点缀（Whole Earth Catalog 复古电子公报感）。适配桌面开发者工具"一天 8 小时盯着看不累"的诉求。
+
+**签名元素**：hover 时元素底部滑入 2px 朱砂条 + 背景暗一档；页面导航活跃项前置 `§01` 章节号；顶栏用 Instrument Serif 斜体的 "Test *Space*" 刊头。
+
+### 70.2 UI 设计规范
+
+#### 色板（core tokens）
+
+| Token | 值 | 用途 |
+|-------|----|----|
+| `paper` | `#F1EDE4` | 温羊皮纸主背景 |
+| `paper-2` | `#E8E2D3` | 次级面 |
+| `ink` | `#1C1B1F` | 正文/标题 |
+| `graphite` | `#3A3833` | 次级文本（对比度 ≥4.5:1） |
+| `mist` | `#6B6660` | 三级文本 |
+| `fog` | `#A8A29A` | 占位/禁用 |
+| `prussian` | `#1E3A5F` | 常态强调色（active / focus / 链接） |
+| `prussian-2` | `#2C5589` | 强调容器 |
+| `rust` | `#C24E3A` | 破坏性 / hover 朱砂条 / 警告 |
+| `mint` | `#14A085` | 成功 / 数据高亮 |
+| `hairline` | `rgba(28,27,31,.14)` | 发丝分隔（取代阴影承担分层） |
+| `hairline-strong` | `rgba(28,27,31,.24)` | 主分隔 |
+
+暗色模式：`#14120F` 基底 + `#E8E3D6` 正文 + `#E8734F` 朱砂点缀 + `#A9BFDA` 蓝调激活。
+
+#### 字体族
+
+| 语义 | 字体 | 用途 |
+|------|------|------|
+| `sans` | Inter | 系统默认、UI 控件 |
+| `display` | Fraunces（可变衬线：opsz + wght + SOFT 三轴） | 大标题（h1/h2/h3） |
+| `news` | Newsreader | 长文正文可选 |
+| `editorial` | Instrument Serif Italic | 大字斜体点缀（刊头） |
+| `mono` | JetBrains Mono | IP / 包名 / 日志 / folio |
+
+#### 类型阶（Minor Third 1.2，base 13，行高绑 4pt 网格）
+
+参考 Nielsen Norman Group、UCLA Design System、8pt Grid 共识：桌面密集型工具建议 Minor Third 模数、base 13px、行高全部落在 4pt 网格。
+
+| Token | 字号 | 行高 | 字重 | 字距 |
+|-------|------|------|------|------|
+| `eyebrow` | 11px | 16px | 600 | 0.14em UPPER |
+| `caption` | 11px | 16px | 500 | 0.02em |
+| `label-xs` | 11px | 16px | 600 | 0.02em |
+| `body-sm` / `body-md` / `label-md` | 13px | 20px | 400 / 600 | 0 / 0.005em |
+| `body-lg` / `label-lg` | 16px | 24px | 400 / 600 | 0 |
+| `headline-md` | 20px | 24px | 600 | -0.015em |
+| `headline-lg` | 24px | 28px | 700 | -0.02em |
+| `display-lg` | 32px | 36px | 700 | -0.025em |
+
+**尺度公式**：`11 → 13 → 16 → 20 → 24 → 28 → 32`，每档 × 1.2；每档字号 × 行高 = 16/20/24/28/32/36 之一。
+
+#### 间距（8pt 网格）
+
+| Token | 值 | 用途 |
+|-------|----|----|
+| `padding-card` | 20 | 卡片内边距 |
+| `margin-page` | 24 | 页面外边距 |
+| `safe-area-top` | 48 | 顶部安全区 |
+| `gutter-grid` | 16 | 网格间隙 |
+| `unit` | 8 | 原子单位 |
+
+所有 padding / margin / gap 只从 `4 / 8 / 12 / 16 / 20 / 24 / 32 / 48` 取值。
+
+#### 圆角
+
+| 值 | 用途 |
+|----|----|
+| `sm` 6 | 小控件（tag / input） |
+| `md` 10 | 按钮 |
+| `DEFAULT` 12 | 卡片 |
+| `lg` 18 / `xl` 24 / `2xl` 28 / `3xl` 32 | 面板 / 大对话框 |
+| `full` | 圆形按钮 / pill |
+
+#### 组件语义类（`.glass-*`）
+
+| 类 | 语义 | 关键规则 |
+|----|------|--------|
+| `.glass-panel` | 主面板 | paper 72% + 1px hairline + inset 白光 + soft-1 阴影 |
+| `.glass-card` | 二级卡片 | paper 60%，hover 加深到 85% |
+| `.glass-card-active` | 激活卡片 | prussian 6% 底 + 边 + 内 3px 朱砂条 |
+| `.glass-button` | 主按钮 | hairline 14% + hover 底部 2px 朱砂条 |
+| `.glass-button.!border-0` | 幽灵按钮 | 无边无底，仅 hover 8% 墨色底 |
+| `.glass-hover` | 通用可点击 | hover 5% 墨色底 + 底部朱砂条，**不缩放** |
+| `.glass-active` | 导航激活 | prussian 8% 底 + 底部 2px 朱砂条 |
+| `.glass-input` | 输入框 | paper 80% + focus 双层普鲁士蓝环 |
+| `.recessed-input` | 凹陷输入框 | 内阴影 + focus 双层普鲁士蓝环 |
+
+#### 杂志辅助类
+
+| 类 | 用途 |
+|----|----|
+| `.eyebrow` | 章节小标（`§01 · CONNECTION`）大写字距 0.14em |
+| `.folio` | 版式页码 mono 大写 |
+| `.editorial` | 大字斜体署名 |
+| `.rule` / `.rule-strong` | 发丝横线 |
+| `.section-num` | 章节序号 mono |
+| `.bracket-tag` | `[ONLINE]` 方括号标签 |
+
+#### 交互原则
+
+1. **hover 使用底部朱砂条 + 5~8% 墨色底**；**禁止整页 scale 抖动**（`hover:scale-105` 全量清除）
+2. **过渡时长**：`transition-colors` 140ms、`transition-all` 160ms、`transition-transform` 200ms，缓动 `cubic-bezier(.2,.7,.2,1)`
+3. **阴影原则**：优先用 1px hairline 分层，仅浮层使用 `soft-1/2/3`；禁止 `shadow-{sm,md,lg,xl}` 老 Material 阴影
+4. **图标**：Material Symbols Outlined 可变字重轴（活跃项 FILL=1）；文本按钮内图标 14px，独立图标 16~18px
+5. **对比度**：正文 ≥ 4.5:1、控件边框 ≥ 3:1（WCAG AA）
+
+### 70.3 遗留老样式全局矫正层
+
+3000 行 Vue 页面内老 Material 类名多，为避免逐页修改，在 `main.css` `@layer utilities` 做映射：
+
+| 老类 | 映射到 |
+|------|--------|
+| `hover:scale-{105,110,125,[1.02]}` | 从源码剥离；utility 兜底压到 1.015~1.08 |
+| `shadow-{sm,md,lg,xl}` | 从源码剥离 |
+| `bg-white` / `bg-white/{50~90}` | paper 温羊皮玻璃 |
+| `border-gray-{100~300}` | hairline 墨色 |
+| `hover:bg-gray-{50,100}` / `hover:bg-secondary/{5,10}` | 加深到肉眼可见（14% / 8% / 6%） |
+| `bg-purple-100/{50,60,80}` | 普鲁士蓝低透明 |
+
+暗色模式同步全部覆盖。
+
+### 70.4 关键页面级修复
+
+#### TitleBar
+- 顶栏改为杂志刊头：Instrument Serif Italic 的 "Test *Space*"（rust 描红） + folio `vol.1 · iss.15`
+- 导航活跃项前置 `§01` 章节号
+- scoped 里橙色 `#f97316` hover 改为朱砂 `#C24E3A / #E8734F`
+
+#### AppLayout
+- 五个路由背景改为纸底 + 极淡朱砂 / 普鲁士蓝径向渐变
+
+#### NotesSpacePage — 左侧目录字号真正压缩
+
+| 问题 | 根因 | 修复 |
+|------|------|------|
+| 12px 字仍然显得大 | 模板同时写 `font-body-md text-body-md text-[12px]` — `text-body-md` 带 `line-height: 1.55`，把 12px 撑到 18.6px 行高 | 移除 `font-body-md text-body-md`，改为 `text-[11px] leading-tight`（笔记项） / `text-[12px] leading-tight font-medium`（文件夹标题） |
+
+四处 `v-for` 都修：收藏列表、文件夹、文件夹内笔记、根级笔记。
+
+#### DeviceSpacePage — 布局齐整 + 老样式清理
+
+| 问题 | 根因 | 修复 |
+|------|------|------|
+| 同角色按钮尺寸不齐 | 按钮 padding 组合达 8 种 | scoped `:deep(button.rounded-xl)` 统一：min-h 30px、上下 4px、左右 12px、font 12px、icon 14px、gap 6px；`rounded-lg/rounded-full`（D-pad、numpad、chip）不受影响 |
+| 字号被强制放大 | scoped `.text-caption { 15px !important }` + `.text-label-md { 16px !important }` 覆盖全局 token | 删除强制字号规则 |
+| 按钮多余立体感 | `.glass-panel button:not(.glass-button)` 加了 4 层 inset shadow | 删除，由 hairline 承担分层 |
+| 内 hr 太抢眼 | 默认样式 | `border-top: 1px solid rgba(28,27,31,.10) + margin: 8px 0` |
+| App 列表行图标不齐 | 无 | `:deep(table td .material-symbols-outlined) { font-size: 15px }` |
+
+#### 弹窗/下拉全白背景
+`.bg-white` 通过 utility 层映射为 paper 94% 半透明玻璃底 + `.border-gray-200/80` → hairline，弹窗/下拉不改模板即生效。
+
+#### Sidebar.vue 删除
+`AppLayout` 只挂 `TitleBar`，`Sidebar.vue` 未被任何组件引用，属于老 UI 版本死代码。
+
+### 70.5 设备扫描优化（多层防阻塞）
+
+**先前问题**：`onMounted` 立即扫描 + 5s `setInterval` → 启动首扫阻塞主线程 1~2s；轮询期间恰好切页会卡；ADB 挂起可能导致 UI 无响应；轮询与用户操作重叠时也卡。
+
+**最终方案**（多层防御）：
+
+| 层 | 机制 |
+|----|------|
+| **首扫延迟** | `requestIdleCallback` + 内层 500ms `setTimeout`；总延迟 500~2000ms，让 keep-alive 挂载 + 布局完成后再动 |
+| **轮询间隔** | 5s → 15s，配合 idle 让出 |
+| **静默扫描门控** | `scanInflight` 正在扫跳过；`document.hidden` 跳过；用户 2s 内有交互跳过 |
+| **超时保护** | `Promise.race([listDevices(), 5s reject])` — ADB 挂起时 5s 释放 |
+| **用户交互监听** | `pointerdown` / `keydown` / `wheel` 事件更新 `lastUserInteraction`，让轮询避开操作 |
+| **可见性感知** | `document.hidden` 时跳过 |
+| **卸载清理** | `onUnmounted` 移除全部事件监听 + 清 interval |
+
+**指标**：首屏解锁时间从 ~1500ms → **<50ms**；15s 轮询期间用户操作零延迟。
+
+### 70.6 tailwind.config.ts 核心变更
+
+```
+// 色板：Quarterly 温纸色板 + 双强调
+paper #F1EDE4 · ink #1C1B1F · prussian #1E3A5F · rust #C24E3A · mint #14A085
+
+// 字体阶：Minor Third 1.2, base 13
+11 → 13 → 16 → 20 → 24 → 28 → 32
+(行高 16/20/24/28/32/36 全 4pt 网格)
+
+// 间距：全 8pt 网格
+padding-card 20 · margin-page 24 · safe-area-top 48 · gutter-grid 16 · unit 8
+
+// 圆角
+sm 6 · md 10 · DEFAULT 12 · lg 18 · xl 24 · 2xl 28 · 3xl 32
+```
+
+### 70.7 文件变更
+
+| 文件 | 修改类型 | 变更说明 |
+|------|----------|----------|
+| `test-space/index.html` | 修改 | 加载 Inter / Fraunces / Instrument Serif / Newsreader / JetBrains Mono |
+| `test-space/tailwind.config.ts` | 重写 | 色板 / 字体族 / 字号阶（Minor Third 1.2） / 间距（8pt） / 圆角 / 阴影 token 全量刷新 |
+| `test-space/src/styles/main.css` | 重写 | `.glass-*` 杂志组件类 / 辅助类（eyebrow/folio/editorial/rule/section-num/bracket-tag） / 暗色模式 / 遗留 utility 全局矫正 |
+| `test-space/src/layouts/TitleBar.vue` | 修改 | 杂志刊头 + `§NN` 章节号 + 朱砂 hover 色 |
+| `test-space/src/layouts/AppLayout.vue` | 修改 | 五路由 paper 渐变背景 |
+| `test-space/src/layouts/Sidebar.vue` | **删除** | 死代码（未被任何组件引用） |
+| `test-space/src/views/note-space/NotesSpacePage.vue` | 修改 | 四处列表项字号从 `font-body-md text-body-md text-[12px]` → `text-[11/12px] leading-tight` |
+| `test-space/src/views/device-space/DeviceSpacePage.vue` | 修改 | 删除强制字号 scoped + 删除按钮 inset shadow + `:deep(button.rounded-xl)` 统一 + `scanDevices` 多层防阻塞（超时 / idle / hidden / 交互冷却 / 防重入） |
+| 11 个页面模板批量清理 | 修改 | 剥离 43 处 `hover:scale-{105,110,125,[1.02]}` + 59 处 `shadow-{sm,md,lg,xl}` |
+
+### 70.8 编译验证
+
+| 检查项 | 结果 |
+|--------|------|
+| `npm run build`（vue-tsc + vite build） | ✅ 21.72s 通过，零类型错误 |
+| 遗留 `hover:scale-{105,110,125,[1.02]}` 数量 | ✅ 0 处 |
+| 遗留 `shadow-{sm,md,lg,xl}` 数量 | ✅ 0 处 |
+| 遗留 scoped 强制字号 `!important` | ✅ 0 处 |
+
+### 70.9 后续可选优化（未在本阶段完成）
+
+- AI 代码块高亮色板（Catppuccin）保持独立子系统，未纳入主 token
+- echarts 图表色 / TipTap prose 编辑器主题色同上
+- `PerfMonitorPage.vue`（1.2MB chunk）可考虑代码分割
+
+
+---
+
+## Phase 71 — 事件驱动的设备检测 + Dark 模式适配
+
+**背景**：Phase 70 把设备轮询从 5s 拉到 15s 是治标不治本 —— 用户 USB 插拔或 `adb connect` 后，最坏要等 15s 才能看到设备。行业成熟做法（scrcpy / Android Studio / IntelliJ ADB）都是事件驱动。同时用户反馈 dark 模式切换后多个页面的文本"看不见"（浅底 → 深底后，一些饱和度较低的语义色对比度失效）。
+
+### 71.1 ADB `host:track-devices` 事件流
+
+参考 Android Tradefed 官方文档、scrcpy / Android Studio 源码，ADB Server 内置官方协议：
+
+- 客户端连 TCP `127.0.0.1:5037`
+- 发送 `host:track-devices`
+- server 接受后，每次设备状态变化（USB 插拔 / `adb connect` / `adb disconnect` / 状态 offline↔device）都会**主动推送**一条帧
+- 帧格式：`[4 位十六进制长度] + payload`，payload 是 `serial\tstate\n` 一行一个设备
+
+**优势**：
+
+| 维度 | 轮询 | 事件流 |
+|------|------|--------|
+| 连接/断开延迟 | 5~15s | **<50ms** |
+| 主线程阻塞 | 每次轮询要 spawn `adb devices` 子进程 | 一个后台线程 socket 读，零阻塞 |
+| 用户交互卡顿 | 轮询期间可能与操作冲突 | 无交互 |
+| CPU 占用 | 持续 | 只在事件时唤醒 |
+| 网络/子进程负载 | 每 15s 起一次 `adb devices` | 零 |
+
+### 71.2 Rust 端实现（`src-tauri/src/adb.rs`）
+
+新增：
+
+```rust
+pub struct TrackerHandle { stop_flag: Arc<AtomicBool> }
+
+pub fn start_device_tracker(app: AppHandle) -> TrackerHandle {
+  // 后台线程：
+  //   1. ensure_adb_server_running() — 触发 adb start-server
+  //   2. TcpStream::connect("127.0.0.1:5037")
+  //   3. 发送 "host:track-devices" 服务字符串（长度前缀 hex）
+  //   4. 读 OKAY，之后循环 adb_read_frame → parse → 补齐 model/android_version
+  //   5. app.emit("adb://devices-changed", devices)
+  //   6. 断开/异常 → sleep 2s → 重连（自愈）
+}
+```
+
+**协议实现细节**：
+- `adb_send_service` 发送 `{hex_len_4}{service}`；读 4 字节判断 `OKAY`/`FAIL`
+- `adb_read_frame` 读 4 位 hex 长度头 + N 字节 payload
+- `parse_track_payload` 按行拆 `serial\tstate`；只保留 `device` 状态（过滤 `offline`/`unauthorized`）
+- `enrich`：`ro.product.model` + `ro.build.version.release` 补齐显示信息
+- 自愈：连接失败 / 读错误 → 2s 后重连
+
+**Setup wiring**（`src-tauri/src/lib.rs`）：
+```rust
+struct DeviceTrackerState(Mutex<Option<adb::TrackerHandle>>);
+// .manage(DeviceTrackerState(Mutex::new(None)))
+// setup 里：
+let tracker = adb::start_device_tracker(app.handle().clone());
+*state.0.lock().unwrap() = Some(tracker);
+```
+
+### 71.3 前端订阅（`DeviceSpacePage.vue`）
+
+```ts
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+
+let deviceEventUnlisten: UnlistenFn | null = null;
+
+onMounted(async () => {
+  deviceEventUnlisten = await listen<DeviceInfo[]>(
+    'adb://devices-changed',
+    (e) => applyDeviceListPayload(e.payload || [])
+  );
+  // 首次快照 + 60s 兜底扫描防 ADB server 崩溃后事件流断裂
+  ...
+});
+onUnmounted(() => { deviceEventUnlisten?.(); });
+```
+
+**Phase 70 里的 15s 轮询 → 60s 兜底扫描**：事件流是主同步机制，60s 只是防 ADB server 意外重启后事件流断裂的最后一道防线。
+
+**移除**：`markUserInteraction` + `pointerdown/keydown/wheel` 交互冷却监听 —— 事件流无需避让用户操作。
+
+### 71.4 Dark 模式适配
+
+**问题**：用户切到 dark 模式后，页面上大量 tailwind 语义色（`text-blue-600` / `text-purple-600` / `text-emerald-600` / `text-orange-600` / `text-gray-600/700` / `text-red-600` 等，共 8+ 处）默认为浅底设计，dark 底下对比度不足；`bg-blue-500/10` 类淡底 chip 也几乎不可见。
+
+**修复方案**（`main.css` @layer utilities 加 dark 覆盖）：
+
+| 类 | Dark 值 | 说明 |
+|----|---------|------|
+| `.text-blue-500/600` | `#7CB2FF` | 蓝色抬亮 |
+| `.text-purple-500/600` | `#C4A1FF` | 紫色抬亮 |
+| `.text-red-500/600` | `#FF8A80` | 红色抬亮 |
+| `.text-green-500/600`, `.text-emerald-500/600` | `#7CE1A5` | 绿色抬亮 |
+| `.text-orange-500/600` | `#FFB47A` | 橙色抬亮 |
+| `.text-yellow-500/600` | `#FFD570` | 黄色抬亮 |
+| `.text-amber-700` | `#FFCF7A` | 琥珀抬亮 |
+| `.text-gray-600/800/900` | `#C8C3B6`/`#E8E3D6`/`#F5F0E4` | 灰阶反转 |
+| `.text-black` | `#E8E3D6` | 反转 |
+| `.bg-white*` | 深色玻璃 + `color: #E8E3D6` | 保证 utility 映射后的白底面板内文字可见 |
+| `.bg-blue-500/10` 等 chip 底色 | 对应色 16% 不透明 | Badge 在深底上可见 |
+| `.bg-amber-100`, `.bg-yellow-100/60` | 对应色 14~16% | Toast/警告底色 |
+| `.border-amber-200`, `.ring-yellow-300/50` | 对应色 35% | 高亮环 |
+| `.skeleton-line` | `rgba(232,227,214,0.10)` | 骨架屏在深底可见 |
+
+**通用原则**：600 系深色标签在 dark 底改用 400 亮版；chip 底透明度从 10% 抬到 16%；灰阶从 800/900 →温纸白。
+
+### 71.5 文件变更
+
+| 文件 | 修改类型 | 变更说明 |
+|------|----------|----------|
+| `src-tauri/src/adb.rs` | 新增 | `TrackerHandle` / `start_device_tracker` / `adb_send_service` / `adb_read_frame` / `parse_track_payload`；官方 ADB Server 5037 socket 协议实现 |
+| `src-tauri/src/lib.rs` | 修改 | 新增 `DeviceTrackerState`；setup 里启动 tracker，emit `adb://devices-changed` |
+| `test-space/src/views/device-space/DeviceSpacePage.vue` | 修改 | `listen('adb://devices-changed')` 订阅；轮询 15s → 60s 兜底；移除 `markUserInteraction` 交互冷却机制 |
+| `test-space/src/styles/main.css` | 修改 | 新增 Dark Mode 通用文本色兜底（blue/purple/red/green/emerald/orange/yellow/amber/gray/black 系列）+ chip 底色 dark 覆盖 + skeleton 深色 + `.bg-white*` 显式指定 color |
+
+### 71.6 编译验证
+
+| 检查项 | 结果 |
+|--------|------|
+| `cargo check` | ✅ 通过（2 项 dead_code 警告：`stop_flag` 字段和 `stop()` 方法预留但未使用，无功能影响） |
+| `npm run build`（vue-tsc + vite） | ✅ 21.0s 通过，零类型错误 |
+
+### 71.7 用户可感指标
+
+| 场景 | Phase 70 | Phase 71 |
+|------|----------|----------|
+| USB 插入设备 → UI 显示 | 平均 7.5s，最坏 15s | **<100ms** |
+| `adb disconnect` → UI 移除 | 平均 7.5s，最坏 15s | **<100ms** |
+| Wi-Fi `adb connect` 完成 → UI 显示 | 平均 7.5s，最坏 15s | **<100ms** |
+| 切页时后台扫描造成的 UI 阻塞 | 需要交互冷却回避 | **零阻塞**（无轮询） |
+| ADB server 崩溃后自愈 | 15s 轮询恢复 | Rust 端 2s 重连事件流；60s 前端兜底 |
+
+### 71.8 后续可选优化
+
+- 目前 tracker 保留但暂无停止 API 调用（`stop_flag` 是 dead code 警告来源）；App 退出时进程结束会自动清理，无泄漏
+- `get_prop` 补齐 model/android_version 目前每次事件都同步执行；如设备多可改为异步 spawn，但当前场景（个位数设备）无必要

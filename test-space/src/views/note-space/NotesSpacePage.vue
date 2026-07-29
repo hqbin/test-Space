@@ -104,7 +104,7 @@
               @dragend="onDragEnd"
             >
               <span class="material-symbols-outlined text-[13px] text-secondary">description</span>
-              <span class="font-body-md text-body-md text-[12px] flex-1 truncate" v-html="highlightText(note.title || t('notes.untitled'))"></span>
+              <span class="text-[11px] leading-tight flex-1 truncate" v-html="highlightText(note.title || t('notes.untitled'))"></span>
               <span class="material-symbols-outlined text-[12px] text-secondary">star</span>
               <button class="glass-button !border-0 px-1.5 py-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.delete')" @mousedown.stop @click.stop="confirmDeleteNote(note)">
                 <span class="material-symbols-outlined text-[11px]">delete</span>
@@ -133,7 +133,7 @@
               @dragend="onDragEnd"
             >
               <span class="material-symbols-outlined text-[14px]">{{ expandedFolders[folder.id] ? 'folder_open' : 'folder' }}</span>
-              <span class="font-body-md text-body-md text-[12px] flex-1 truncate">{{ folder.name }}</span>
+              <span class="text-[12px] leading-tight font-medium flex-1 truncate">{{ folder.name }}</span>
               <button class="glass-button !border-0 px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 select-none" title="Add" @mousedown.stop @click.stop="openFolderAddDropdown(folder.id, $event)">
                 <span class="material-symbols-outlined text-[13px]">add</span>
               </button>
@@ -155,7 +155,7 @@
               @dragend="onDragEnd"
                 >
                   <span class="material-symbols-outlined text-[13px] text-secondary">description</span>
-                  <span class="font-body-md text-body-md text-[12px] flex-1 truncate" v-html="highlightText(note.title || t('notes.untitled'))"></span>
+                  <span class="text-[11px] leading-tight flex-1 truncate" v-html="highlightText(note.title || t('notes.untitled'))"></span>
                   <span v-if="note.isFavorite" class="material-symbols-outlined text-[12px] text-secondary">star</span>
                   <button class="glass-button !border-0 px-1.5 py-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.delete')" @mousedown.stop @click.stop="confirmDeleteNote(note)">
                     <span class="material-symbols-outlined text-[11px]">delete</span>
@@ -182,7 +182,7 @@
               @dragend="onDragEnd"
             >
               <span class="material-symbols-outlined text-[13px] text-secondary">description</span>
-              <span class="font-body-md text-body-md text-[12px] flex-1 truncate" v-html="highlightText(note.title || t('notes.untitled'))"></span>
+              <span class="text-[11px] leading-tight flex-1 truncate" v-html="highlightText(note.title || t('notes.untitled'))"></span>
               <button class="glass-button !border-0 px-1.5 py-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.delete')" @mousedown.stop @click.stop="confirmDeleteNote(note)">
                 <span class="material-symbols-outlined text-[11px]">delete</span>
               </button>

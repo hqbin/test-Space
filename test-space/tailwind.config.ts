@@ -107,11 +107,12 @@ export default {
         "3xl": "32px",
         full: "9999px",
       },
+      /* 8pt 网格：4 · 8 · 12 · 16 · 20 · 24 · 32 · 48 */
       spacing: {
-        "padding-card": "28px",
-        "margin-page": "32px",
-        "safe-area-top": "56px",
-        "gutter-grid": "20px",
+        "padding-card": "20px",
+        "margin-page": "24px",
+        "safe-area-top": "48px",
+        "gutter-grid": "16px",
         unit: "8px",
       },
       fontFamily: {
@@ -130,51 +131,56 @@ export default {
         "body-md": ["Inter"],
         "label-md": ["Inter"],
       },
+      /**
+       * Type scale — Minor Third 1.2, base 13px（桌面密集型工具建议）
+       *   11 / 13 / 16 / 20 / 24 / 28 / 32
+       * 每一档的行高都落在 4pt 网格上，字号 × 行高的乘积 = 16/20/24/28/32/36
+       * 参考: Nielsen Norman、UCLA DS、8pt Grid
+       */
       fontSize: {
-        // 严格 8 档：11 / 12 / 13 / 15 / 17 / 22 / 28 / 40
         eyebrow: [
           "11px",
-          { lineHeight: "1.4", letterSpacing: "0.14em", fontWeight: "600" },
+          { lineHeight: "16px", letterSpacing: "0.14em", fontWeight: "600" },
         ],
         caption: [
-          "13px",
-          { lineHeight: "1.45", letterSpacing: "0.01em", fontWeight: "500" },
+          "11px",
+          { lineHeight: "16px", letterSpacing: "0.02em", fontWeight: "500" },
         ],
         "body-sm": [
           "13px",
-          { lineHeight: "1.5", letterSpacing: "0", fontWeight: "400" },
+          { lineHeight: "20px", letterSpacing: "0", fontWeight: "400" },
         ],
         "body-md": [
-          "15px",
-          { lineHeight: "1.55", letterSpacing: "0", fontWeight: "400" },
+          "13px",
+          { lineHeight: "20px", letterSpacing: "0", fontWeight: "400" },
         ],
         "body-lg": [
-          "17px",
-          { lineHeight: "1.55", letterSpacing: "-0.005em", fontWeight: "400" },
+          "16px",
+          { lineHeight: "24px", letterSpacing: "0", fontWeight: "400" },
+        ],
+        "label-xs": [
+          "11px",
+          { lineHeight: "16px", letterSpacing: "0.02em", fontWeight: "600" },
         ],
         "label-md": [
           "13px",
-          { lineHeight: "1.2", letterSpacing: "0.005em", fontWeight: "600" },
-        ],
-        "label-xs": [
-          "12px",
-          { lineHeight: "1.2", letterSpacing: "0.02em", fontWeight: "600" },
+          { lineHeight: "16px", letterSpacing: "0.005em", fontWeight: "600" },
         ],
         "label-lg": [
-          "15px",
-          { lineHeight: "1.2", letterSpacing: "0", fontWeight: "600" },
+          "16px",
+          { lineHeight: "20px", letterSpacing: "0", fontWeight: "600" },
         ],
         "headline-md": [
-          "22px",
-          { lineHeight: "1.2", letterSpacing: "-0.02em", fontWeight: "600" },
+          "20px",
+          { lineHeight: "24px", letterSpacing: "-0.015em", fontWeight: "600" },
         ],
         "headline-lg": [
-          "28px",
-          { lineHeight: "1.15", letterSpacing: "-0.025em", fontWeight: "700" },
+          "24px",
+          { lineHeight: "28px", letterSpacing: "-0.02em", fontWeight: "700" },
         ],
         "display-lg": [
-          "40px",
-          { lineHeight: "1.05", letterSpacing: "-0.035em", fontWeight: "700" },
+          "32px",
+          { lineHeight: "36px", letterSpacing: "-0.025em", fontWeight: "700" },
         ],
       },
       boxShadow: {

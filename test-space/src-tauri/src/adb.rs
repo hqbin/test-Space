@@ -1,10 +1,13 @@
 use std::process::Command;
 use serde::Serialize;
 use std::collections::HashMap;
+use std::io::{Read, Write};
+use std::net::TcpStream;
 use std::sync::mpsc;
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
+use tauri::{AppHandle, Emitter};
 
 // CPU delta cache for /proc/stat + /proc/[pid]/stat approach.
 // Stores the previous snapshot's cumulative jiffies so we can compute
@@ -113,6 +116,126 @@ pub fn list_devices() -> Vec<DeviceInfo> {
         }
     }
     devices
+}
+
+// ─── Event-driven device tracking via ADB `host:track-devices` ───────
+// 官方 ADB Server 协议：客户端连接 127.0.0.1:5037，发送 `host:track-devices`
+// 之后 server 会在设备状态变化时主动推送消息，格式：
+//   [4 位十六进制长度] + [payload]
+// payload 是 `serial\tstate\n` 一行一个设备。
+// 参考：Android SDK platform-tools 源码 adb 官方协议。
+
+fn ensure_adb_server_running() {
+    // 触发 adb start-server（若已启动则秒回）
+    let _ = adb_cmd().arg("start-server").output();
+}
+
+fn adb_send_service(stream: &mut TcpStream, service: &str) -> std::io::Result<()> {
+    let msg = format!("{:04x}{}", service.len(), service);
+    stream.write_all(msg.as_bytes())?;
+    // 读取 4 字节的 OKAY / FAIL
+    let mut status = [0u8; 4];
+    stream.read_exact(&mut status)?;
+    if &status != b"OKAY" {
+        // 读 FAIL 后的消息长度+消息
+        let mut len_buf = [0u8; 4];
+        let msg = if stream.read_exact(&mut len_buf).is_ok() {
+            if let Ok(len_str) = std::str::from_utf8(&len_buf) {
+                if let Ok(len) = u32::from_str_radix(len_str, 16) {
+                    let mut buf = vec![0u8; len as usize];
+                    let _ = stream.read_exact(&mut buf);
+                    String::from_utf8_lossy(&buf).to_string()
+                } else { "unknown".to_string() }
+            } else { "unknown".to_string() }
+        } else { "unknown".to_string() };
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("adb server rejected {}: {}", service, msg),
+        ));
+    }
+    Ok(())
+}
+
+fn adb_read_frame(stream: &mut TcpStream) -> std::io::Result<String> {
+    let mut len_buf = [0u8; 4];
+    stream.read_exact(&mut len_buf)?;
+    let len_str = std::str::from_utf8(&len_buf)
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidData, "bad length"))?;
+    let len = u32::from_str_radix(len_str, 16)
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidData, "bad hex length"))?;
+    let mut buf = vec![0u8; len as usize];
+    stream.read_exact(&mut buf)?;
+    Ok(String::from_utf8_lossy(&buf).to_string())
+}
+
+fn parse_track_payload(payload: &str) -> Vec<DeviceInfo> {
+    let mut devices = Vec::new();
+    for line in payload.lines() {
+        let mut parts = line.split_whitespace();
+        let serial = match parts.next() { Some(s) => s.to_string(), None => continue };
+        let status = match parts.next() { Some(s) => s.to_string(), None => continue };
+        // track-devices 不带 model 与 android_version，需要一次 getprop 补齐
+        // 但为避免阻塞事件流，先返回空字符串，前端可选择性调用 get_properties
+        devices.push(DeviceInfo {
+            serial,
+            status,
+            model: String::new(),
+            android_version: String::new(),
+        });
+    }
+    devices
+}
+
+/// 启动 host:track-devices 事件流；每次变化通过 tauri Event "adb://devices-changed" 推送。
+/// 后台线程运行至进程退出；连接失败或断开后 2s 重试（自愈）。
+pub fn start_device_tracker(app: AppHandle) {
+    let app_clone = app.clone();
+    thread::spawn(move || loop {
+        ensure_adb_server_running();
+        match TcpStream::connect_timeout(
+            &"127.0.0.1:5037".parse().unwrap(),
+            Duration::from_secs(3),
+        ) {
+            Ok(mut stream) => {
+                let _ = stream.set_read_timeout(Some(Duration::from_secs(60)));
+                if let Err(e) = adb_send_service(&mut stream, "host:track-devices") {
+                    eprintln!("track-devices service error: {}", e);
+                    thread::sleep(Duration::from_secs(2));
+                    continue;
+                }
+                // 首帧 = 当前设备快照；后续每次变化推一帧
+                loop {
+                    match adb_read_frame(&mut stream) {
+                        Ok(payload) => {
+                            let mut devices = parse_track_payload(&payload);
+                            let filtered: Vec<_> = devices.drain(..)
+                                .filter(|d| d.status != "offline")
+                                .collect();
+                            let enriched: Vec<DeviceInfo> = filtered.into_iter().map(|mut d| {
+                                if d.status == "device" {
+                                    d.model = get_prop(&d.serial, "ro.product.model");
+                                    d.android_version = get_prop(&d.serial, "ro.build.version.release");
+                                }
+                                d
+                            }).collect();
+                            let _ = app_clone.emit("adb://devices-changed", &enriched);
+                        }
+                        Err(e) => {
+                            if e.kind() != std::io::ErrorKind::WouldBlock
+                                && e.kind() != std::io::ErrorKind::TimedOut {
+                                eprintln!("track-devices stream ended: {}", e);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("track-devices connect failed: {}", e);
+            }
+        }
+        thread::sleep(Duration::from_secs(2));
+    });
 }
 
 pub fn shell_command(serial: &str, command: &str) -> Result<String, String> {

@@ -981,6 +981,7 @@ defineOptions({ name: 'DeviceSpacePage' })
 import { ref, computed, watch, onMounted, onUnmounted, onActivated, onDeactivated, nextTick } from "vue";
 import { useRouter } from "vue-router";
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useAdb, type DeviceProperties } from "@/composables/useAdb";
 import { useI18n } from "@/composables/useI18n";
@@ -1845,11 +1846,22 @@ const recordingFilename = ref("");
 let autoRefreshId: ReturnType<typeof setInterval> | null = null;
 
 // ── Device operations ──
+// 兜底扫描防重入 + 超时保护
+let scanInflight = false;
 async function scanDevices(silent = false) {
+  if (silent) {
+    if (scanInflight) return;
+    if (typeof document !== 'undefined' && document.hidden) return;
+  }
+  scanInflight = true;
   scanLoading.value = true;
   showDeviceDropdown.value = false;
   try {
-    const adbDevices = await listDevices();
+    // 5s 超时保护：ADB 挂起时不再无限期占用
+    const timeoutPromise = new Promise<never>((_, rej) =>
+      setTimeout(() => rej(new Error('scan_timeout')), 5000)
+    );
+    const adbDevices = await Promise.race([listDevices(), timeoutPromise]);
     devices.value = adbDevices.map(d => ({
       serial: d.serial, name: d.model || d.serial,
       status: d.status === "device" ? "online" as const : "offline" as const, os: d.android_version || "Android",
@@ -1866,7 +1878,7 @@ async function scanDevices(silent = false) {
     }
     if (!silent) showToast(t('device.deviceCount', { count: String(devices.value.length) }));
   } catch { if (!silent) showToast(t("device.scanFailed"), "error"); }
-  finally { scanLoading.value = false; }
+  finally { scanLoading.value = false; scanInflight = false; }
 }
 function onConnectIpFocus() {
   if (connectIpHistory.value.length > 0 && connectIpInputRef.value) {
@@ -3139,19 +3151,56 @@ function goPerfMonitor() {
 
 // ── Output Panel ──
 // ── Lifecycle ──
+/**
+ * 事件驱动的设备状态同步
+ * ---------------------------------------------------------------
+ * Rust 端订阅 ADB 官方 `host:track-devices` 协议，设备连接/断开时
+ * 主动推送 `adb://devices-changed`，前端零轮询、延迟 <50ms。
+ * 保留一个 60s 兜底轮询防 ADB server 意外重启后事件流断裂。
+ */
+let deviceEventUnlisten: UnlistenFn | null = null;
+function applyDeviceListPayload(list: Array<{ serial: string; model: string; status: string; android_version?: string }>) {
+  const online = list.filter(d => d.status === 'device' || d.status === 'online');
+  devices.value = online.map(d => ({
+    serial: d.serial,
+    name: d.model || d.serial,
+    status: 'online' as const,
+    os: d.android_version || 'Android',
+  }));
+  if (selectedDevice.value && !devices.value.some(d => d.serial === selectedDevice.value!.serial)) {
+    selectedDevice.value = null;
+    apps.value = [];
+    deviceProps.value = null;
+  }
+  if (devices.value.length > 0 && !selectedDevice.value) {
+    const savedSerial = localStorage.getItem('last_device_serial');
+    const savedDevice = savedSerial ? devices.value.find(d => d.serial === savedSerial) : null;
+    selectDevice(savedDevice || devices.value[0]);
+  }
+}
+
 onMounted(async () => {
-  // 延迟首扫，让首屏先渲染，避免启动阻塞
-  setTimeout(() => scanDevices(true), 300);
   loadCustomCommands();
   loadTextHistory();
   loadRemotePathHistory();
   loadConnectIpHistory();
-  // 8s 一次静默刷新（原 5s 过密），且用 requestIdleCallback 让出主线程
+  // 订阅 Rust 端 host:track-devices 事件流
+  try {
+    deviceEventUnlisten = await listen<Array<{ serial: string; model: string; status: string; android_version?: string }>>(
+      'adb://devices-changed',
+      (e) => applyDeviceListPayload(e.payload || [])
+    );
+  } catch (e) { console.warn('subscribe adb://devices-changed failed', e); }
+  // 首次快照：走一次静默扫描（Rust 端事件流首帧可能稍晚于挂载）
+  const idle = (window as any).requestIdleCallback || ((cb: any) => setTimeout(cb, 200));
+  idle(() => scanDevices(true), { timeout: 1500 });
+  // 60s 兜底扫描：防 ADB server 崩溃后事件流断裂
   autoRefreshId = setInterval(() => {
     if (pkgLoading.value || scanLoading.value || connecting.value || recordingLoading.value) return;
-    const idle = (window as any).requestIdleCallback || ((cb: any) => setTimeout(cb, 0));
-    idle(() => scanDevices(true));
-  }, 8000);
+    if (typeof document !== 'undefined' && document.hidden) return;
+    const idle2 = (window as any).requestIdleCallback || ((cb: any) => setTimeout(cb, 0));
+    idle2(() => scanDevices(true), { timeout: 3000 });
+  }, 60000);
   nextTick(() => {
     recalcAppPageSize();
     let rafId: number;
@@ -3174,6 +3223,7 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener('resize', recalcAppPageSize);
   if ((window as any).__appListResizeObserver) (window as any).__appListResizeObserver.disconnect();
+  if (deviceEventUnlisten) { deviceEventUnlisten(); deviceEventUnlisten = null; }
   // Don't stop mirror if standalone popout window is active
   if (!mirrorPopoutActive.value) {
     for (const u of mirrorUnlisten) { u(); }
@@ -3195,27 +3245,59 @@ onUnmounted(() => {
   // Note: log sessions are saved to DB; user can see "running" sessions on next visit
 });
 
-// keep-alive: 切回设备页时恢复轮询（8s + idle 让出主线程，避免阻塞切页）
+// keep-alive: 切回设备页时恢复 60s 兜底扫描（事件流已订阅；仅防 ADB server 意外重启）
 onActivated(() => {
   if (!autoRefreshId) {
     autoRefreshId = setInterval(() => {
       if (pkgLoading.value || scanLoading.value || connecting.value || recordingLoading.value) return;
+      if (typeof document !== 'undefined' && document.hidden) return;
       const idle = (window as any).requestIdleCallback || ((cb: any) => setTimeout(cb, 0));
-      idle(() => scanDevices(true));
-    }, 8000);
+      idle(() => scanDevices(true), { timeout: 3000 });
+    }, 60000);
   }
 });
 
-// keep-alive: 离开设备页时停止5s轮询（日志采集定时器保持运行，它们是用户主动操作）
+// keep-alive: 离开设备页时停止兜底扫描（事件流仍在 Rust 侧运行，回来时会立即同步）
 onDeactivated(() => {
   if (autoRefreshId) { clearInterval(autoRefreshId); autoRefreshId = null; }
 });
 </script>
 
 <style scoped>
-/* 保留：远程控制禁用态 */
-.remote-disabled {
-  opacity: 0.4;
-  pointer-events: none;
+/* ── 远程控制禁用态 ────────────────────────────────────── */
+.remote-disabled { opacity: 0.4; pointer-events: none; }
+
+/* ── 卡内按钮规范化 ─────────────────────────────────────
+ * 目标：所有 rounded-xl 文本按钮（info/system/input/log/管理）
+ * 统一到同一尺度；rounded-lg / rounded-full 的按钮
+ * （远程控制 D-pad / numpad / tab chip）不被影响。
+ * ──────────────────────────────────────────────────── */
+:deep(button.rounded-xl) {
+  min-height: 30px;
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+  padding-left: 12px !important;
+  padding-right: 12px !important;
+  font-size: 12px !important;
+  line-height: 1.15;
+  letter-spacing: 0.005em;
+  font-weight: 500;
+  gap: 6px;
 }
+:deep(button.rounded-xl) > .material-symbols-outlined {
+  font-size: 14px !important;
+}
+
+/* 子分区之间只用一根发丝线 */
+:deep(.glass-panel) hr {
+  border: 0;
+  border-top: 1px solid rgba(28, 27, 31, 0.10);
+  margin: 8px 0;
+}
+html.dark :deep(.glass-panel) hr {
+  border-top-color: rgba(232, 227, 214, 0.10);
+}
+
+/* App 列表行内图标点阵：紧凑但清晰 */
+:deep(table td .material-symbols-outlined) { font-size: 15px !important; }
 </style>

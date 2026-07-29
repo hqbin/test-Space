@@ -481,6 +481,7 @@
 defineOptions({ name: 'ApiSpacePage' })
 import { ref, computed, watch, onMounted, onUnmounted, onActivated, onDeactivated, provide } from "vue"
 import { invoke } from "@tauri-apps/api/core"
+import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import { useI18n } from "@/composables/useI18n"
 import { useApiProxy } from "@/composables/useApiProxy"
 import type { ApiCapturedRequest, ApiRewriteRule } from "@/types"
@@ -576,22 +577,51 @@ function deviceName(serial: string) {
 }
 
 const refreshing = ref(false)
+let deviceEventUnlisten: UnlistenFn | null = null
 
+function applyDeviceList(list: Array<{ serial: string; model: string; status: string }>, showFeedback = false) {
+  // 只保留 online（Rust 端事件流已过滤 offline，兜底再过滤一次）
+  const online = list.filter(d => d.status === 'device' || d.status === 'online')
+  devices.value = online
+  if (online.length > 0 && !deviceSerial.value) {
+    deviceSerial.value = online[0].serial
+  } else if (deviceSerial.value && !online.some(d => d.serial === deviceSerial.value)) {
+    // 当前选中的设备已经断开
+    deviceSerial.value = online[0]?.serial || ""
+  }
+  if (showFeedback) {
+    showToast(`${t('api.deviceCount', { count: String(online.length) })}`)
+  }
+}
+
+// 手动刷新按钮：兜底扫一次（事件流为主，此处只在用户点刷新时反馈计数）
 async function refreshDevices() {
   if (refreshing.value) return
   refreshing.value = true
   try {
     const list = await invoke<{ serial: string; model: string; status: string }[]>("adb_list_devices")
-    devices.value = list
-    if (list.length > 0 && !deviceSerial.value) {
-      deviceSerial.value = list[0].serial
-    }
-    showToast(`${t('api.deviceCount', { count: String(list.length) })}`)
+    applyDeviceList(list, true)
   } catch (e: any) {
     showToast(`${t('api.scanFailed')}: ${e}`, "error")
   } finally {
     refreshing.value = false
   }
+}
+
+// 订阅 Rust 端 host:track-devices 事件流（USB 插拔 / adb connect 秒级反馈）
+async function subscribeDeviceEvents() {
+  if (deviceEventUnlisten) return
+  try {
+    deviceEventUnlisten = await listen<Array<{ serial: string; model: string; status: string; android_version?: string }>>(
+      'adb://devices-changed',
+      (e) => applyDeviceList(e.payload || [], false)
+    )
+  } catch (err) {
+    console.warn('subscribe adb://devices-changed failed', err)
+  }
+}
+function unsubscribeDeviceEvents() {
+  if (deviceEventUnlisten) { deviceEventUnlisten(); deviceEventUnlisten = null }
 }
 
 const detailTabs = computed(() => [
@@ -882,6 +912,8 @@ onMounted(async () => {
   await api.init()
   await api.getCaptured()
   localRules.value = [...api.rewriteRules.value]
+  // 事件驱动的设备同步（USB 插拔 / adb connect 秒级）；首次挂载再做一次兜底扫描
+  await subscribeDeviceEvents()
   await refreshDevices()
   await loadSearchHistory()
 })
@@ -890,16 +922,20 @@ onMounted(async () => {
 onActivated(async () => {
   await api.init()
   await api.getCaptured()
+  await subscribeDeviceEvents()
+  // 短暂扫一次作为首帧兜底（如果 keep-alive 期间事件流已推过就是幂等）
   await refreshDevices()
 })
 
 // keep-alive: 离开 API 页时清理 Tauri 事件监听器，防止叠加注册
 onDeactivated(() => {
   api.cleanup()
+  unsubscribeDeviceEvents()
 })
 
 onUnmounted(() => {
   api.cleanup()
+  unsubscribeDeviceEvents()
 })
 </script>
 
