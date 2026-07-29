@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "1.6.13"
+version = "1.6.15"
 description = "Test Space - Engineering Workstation"
 authors = ["Bing"]
 license = ""
