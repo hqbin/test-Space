@@ -806,6 +806,7 @@ Then wait for the tool result before continuing.
 
   const toolCallRegex = /TOOL_CALL:\s*(\w[\w.-]*)\s*(?:\([^)]*\))?\s*\|\s*(\{.*?\})/g
   const toolCalls: ToolCallInfo[] = []
+  let truncated = false
 
   // Auto-continuation: if response was truncated, automatically fetch the rest
   async function completeIfTruncated(
