@@ -97,7 +97,7 @@
                 {{ msg.content }}
               </template>
               <template v-else>
-                <div class="whitespace-pre-wrap" v-html="renderNoteLinks(msg.content)"></div>
+                <div class="whitespace-pre-wrap" v-html="renderContent(msg.content)"></div>
                 <div v-if="msg.toolCalls?.length" class="mt-2 pt-2 border-t border-glass-border-light/30">
                   <div v-for="tc in msg.toolCalls" :key="tc.toolName" class="text-[11px] text-on-surface-variant/60 flex items-center gap-1">
                     <span class="material-symbols-outlined text-[13px]">check_circle</span>
@@ -891,8 +891,27 @@ function onMessagesClick(e: MouseEvent) {
   }
 }
 
-// ── Note link rendering ──
+// ── Content rendering (note links + markdown tables) ──
 const NOTE_LINK_RE = /\[([^\]]+)\]\(note:([a-f0-9-]+)(?:#([^)]*))?\)/g
+
+/** Convert markdown tables to styled HTML tables */
+function renderTables(text: string): string {
+  return text.replace(/^\|.+\|(?:\r?\n\|[-:| +]+\|(?:\r?\n\|.+\|)*)/gm, (block) => {
+    const lines = block.trim().split('\n')
+    if (lines.length < 2) return block
+    const rows = lines.map(l => l.replace(/^\||\|$/g, '').split('|').map(c => c.trim()))
+    const alignRow = rows[1].map(c => c.startsWith(':') && c.endsWith(':') ? 'center' : c.endsWith(':') ? 'right' : c.startsWith(':') ? 'left' : '')
+    const head = rows[0]
+    const body = rows.slice(2)
+    let html = '<table class="ai-table">'
+    html += '<thead><tr>' + head.map((c, i) => `<th${alignRow[i] ? ' style="text-align:' + alignRow[i] + '"' : ''}>${c}</th>`).join('') + '</tr></thead>'
+    if (body.length) {
+      html += '<tbody>' + body.map(r => '<tr>' + r.map((c, i) => `<td${alignRow[i] ? ' style="text-align:' + alignRow[i] + '"' : ''}>${c}</td>`).join('') + '</tr>').join('') + '</tbody>'
+    }
+    return html + '</table>'
+  })
+}
+
 function renderNoteLinks(text: string): string {
   return text.replace(NOTE_LINK_RE, (match, displayText, noteId, heading) => {
     const href = heading
@@ -900,6 +919,10 @@ function renderNoteLinks(text: string): string {
       : `/notes-space?noteId=${noteId}`
     return `<a href="${href}" class="text-secondary underline hover:text-secondary/80 cursor-pointer" data-note-link="${noteId}">${displayText}</a>`
   })
+}
+
+function renderContent(text: string): string {
+  return renderTables(renderNoteLinks(text))
 }
 
 // ── MCP ──
@@ -1097,5 +1120,32 @@ onUnmounted(() => {
 }
 .ai-input-textarea::-webkit-scrollbar-thumb:hover {
   background: rgba(139, 92, 246, 0.4);
+}
+
+/* Markdown tables rendered in chat messages */
+:deep(.ai-table) {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 8px 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+:deep(.ai-table th),
+:deep(.ai-table td) {
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+:deep(.ai-table th) {
+  background: rgba(139, 92, 246, 0.08);
+  font-weight: 600;
+  color: #1a1c1d;
+}
+:deep(.ai-table td) {
+  color: #424656;
+}
+:deep(.ai-table tr:nth-child(even) td) {
+  background: rgba(0, 0, 0, 0.02);
 }
 </style>
