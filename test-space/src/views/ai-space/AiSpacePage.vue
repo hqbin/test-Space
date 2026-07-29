@@ -755,7 +755,10 @@ async function sendMcp(question: string, session: AiSession) {
   const systemPrompt = `You are a helpful AI assistant with access to these MCP tools:\n${toolsDesc}\n\n## Tool Calling Protocol\nWhen a tool can help, output EXACTLY on its own line:\nTOOL_CALL: tool_name | {"arg1": "value1"}\n\n## Multi-Step Workflow\n- You can call tools multiple times across several rounds. After seeing tool results, you may call more tools or provide your final answer.\n- Think step by step: explain your plan, call a tool, review the result, then decide the next action.\n- You may interleave natural language explanations with TOOL_CALL lines.\n\n## Guidelines\n- Use tools only when they genuinely help answer the question.\n- If the first tool's result isn't sufficient, call another tool to get more information.\n- Handle errors: if a tool fails, explain what happened and try an alternative approach if possible.\n- When you have enough information, stop calling tools and provide your final answer.\n- If no tool is relevant, just answer directly using your own knowledge.`
 
   // Multi-round tool-calling loop
-  const MAX_ROUNDS = 8
+  // Round 1 sends full context (system prompt + tools + history + question).
+  // Subsequent rounds send only the latest response + tool results — no need to repeat
+  // tool lists or conversation history, which dramatically reduces token consumption.
+  const MAX_ROUNDS = 5
   const toolCallRegex = /TOOL_CALL:\s*(\w[\w.-]*)\s*(?:\([^)]*\))?\s*\|\s*(\{.*?\})/g
   const allToolCalls: ToolCallInfo[] = []
   let accumulatedAnswer = ''
@@ -815,13 +818,11 @@ async function sendMcp(question: string, session: AiSession) {
 
     allToolCalls.push(...roundToolCalls)
 
-    // Prepare next round: feed the AI its response + tool results
+    // Subsequent rounds: send ONLY the latest exchange + results, not the full context.
+    // The AI already knows the tools and what the original goal was.
     conversation = [
-      { role: systemRole, content: systemPrompt },
-      ...history.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
-      { role: 'user', content: question },
-      { role: 'assistant', content: response },
-      { role: 'user', content: `Tool results:${toolResults}\n\nReview these results and decide: call more tools or provide a final answer.` },
+      { role: systemRole, content: 'You are an AI assistant with MCP tools. Continue your work based on the context below.' },
+      { role: 'user', content: `Your previous response:\n${response}\n\nTool results:${toolResults}\n\nReview these results and decide: call more tools or provide a final answer.` },
     ]
   }
 
