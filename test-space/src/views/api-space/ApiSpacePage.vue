@@ -98,7 +98,7 @@
     <!-- Device Dropdown (Teleport to body) -->
     <Teleport to="body">
       <div v-if="showDeviceDropdown" class="fixed inset-0 z-50" @click="showDeviceDropdown = false" />
-      <div v-if="showDeviceDropdown" class="fixed z-50 bg-white rounded-lg p-1 max-h-48 overflow-y-auto custom-scrollbar shadow-lg min-w-[200px]"
+      <div v-if="showDeviceDropdown" class="fixed z-50 bg-white rounded-lg p-1 max-h-48 overflow-y-auto custom-scrollbar min-w-[200px]"
         :style="{ top: deviceDropdownPos.top + 'px', left: deviceDropdownPos.left + 'px', width: deviceDropdownPos.width + 'px' }">
         <button v-for="d in devices" :key="d.serial"
           class="w-full flex items-center gap-2 px-2 py-1.5 rounded font-caption text-caption text-on-surface hover:bg-gray-100 select-none text-left no-border"
@@ -123,7 +123,7 @@
       <Teleport to="body">
         <div v-if="showSearchHistory && searchHistory.length > 0" class="fixed inset-0 z-40" @click="showSearchHistory = false"></div>
         <div v-if="showSearchHistory && searchHistory.length > 0"
-          class="fixed z-50 bg-white border shadow-lg rounded-lg max-h-48 overflow-y-auto"
+          class="fixed z-50 bg-white border rounded-lg max-h-48 overflow-y-auto"
           :style="{ top: searchDropdownPos.top + 'px', left: searchDropdownPos.left + 'px', width: searchDropdownPos.width + 'px' }">
           <button v-for="q in searchHistory" :key="q"
             class="w-full text-left px-3 py-1.5 text-caption text-on-surface hover:bg-gray-100 truncate whitespace-nowrap"
@@ -145,7 +145,7 @@
     <!-- Main Content: Request List + Detail Panel -->
     <div class="flex-1 flex gap-4 min-h-0">
       <!-- Request List -->
-      <div class="glass-panel rounded-xl flex-[0_0_40%] min-w-[360px] max-w-[50%] flex flex-col overflow-hidden shadow-md">
+      <div class="glass-panel rounded-xl flex-[0_0_40%] min-w-[360px] max-w-[50%] flex flex-col overflow-hidden">
         <div class="flex-1 overflow-y-auto custom-scrollbar p-2">
           <div v-if="filteredList.length === 0" class="flex flex-col items-center justify-center h-full text-on-surface-variant gap-2">
             <span class="material-symbols-outlined text-[48px] opacity-40">dns</span>
@@ -184,7 +184,7 @@
       </div>
 
       <!-- Detail Panel -->
-      <div class="glass-panel rounded-xl flex-1 flex flex-col overflow-hidden min-w-0 shadow-md">
+      <div class="glass-panel rounded-xl flex-1 flex flex-col overflow-hidden min-w-0">
         <div v-if="!selectedRequest" class="flex items-center justify-center h-full text-on-surface-variant gap-2 select-text">
           <span class="material-symbols-outlined text-[48px] opacity-40">touch_app</span>
           <span class="text-body-md">{{ t('api.detailPanel') }}</span>
@@ -461,7 +461,7 @@
     <!-- Toast -->
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="toastMsg" class="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 glass-panel rounded-full px-5 py-2.5 flex items-center gap-2 shadow-lg">
+        <div v-if="toastMsg" class="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 glass-panel rounded-full px-5 py-2.5 flex items-center gap-2">
           <span class="material-symbols-outlined text-[18px]" :class="toastType === 'error' ? 'text-error' : 'text-success-indicator'">{{ toastType === 'error' ? 'error' : 'check_circle' }}</span>
           <span class="font-body-md text-body-md text-on-surface">{{ toastMsg }}</span>
         </div>

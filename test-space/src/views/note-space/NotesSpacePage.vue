@@ -1,7 +1,7 @@
 <template>
   <div class="flex flex-1 min-h-0 -mx-margin-page overflow-hidden pb-4 box-border select-none">
     <!-- Left: Search + File Tree -->
-    <div class="flex-shrink-0 flex flex-col w-64 ml-3 overflow-hidden rounded-xl bg-white/10 backdrop-blur-[60px] border border-white/50 shadow-lg">
+    <div class="flex-shrink-0 flex flex-col w-64 ml-3 overflow-hidden rounded-xl bg-white/10 backdrop-blur-[60px] border border-white/50">
       <div class="p-3 border-b border-glass-border-light/50">
         <div class="glass-input flex items-center gap-2 px-3 py-2 rounded-lg">
           <span class="material-symbols-outlined text-[14px] text-on-surface-variant" :class="searching ? 'animate-spin' : ''">{{ searching ? 'progress_activity' : 'search' }}</span>
@@ -41,7 +41,7 @@
             <span class="truncate font-medium">{{ spaces.find(s => s.id === selectedSpaceId)?.name || t('notes.allNotes') }}</span>
             <span class="material-symbols-outlined text-[14px]">expand_more</span>
           </button>
-          <div v-if="showSpaceDropdown" class="absolute left-0 right-0 top-full mt-1 bg-white rounded-lg shadow-xl border border-gray-200/80 z-50 overflow-hidden">
+          <div v-if="showSpaceDropdown" class="absolute left-0 right-0 top-full mt-1 bg-white rounded-lg border border-gray-200/80 z-50 overflow-hidden">
             <div class="py-1 max-h-[200px] overflow-y-auto">
               <div
                 v-for="space in spaces"
@@ -196,13 +196,13 @@
     <!-- Center: TipTap Editor -->
     <div class="flex-1 min-w-0 flex flex-col bg-transparent pt-4 pl-3 pr-3">
       <!-- Empty state when no note selected -->
-      <div v-if="!selectedNoteId" class="flex-1 glass-panel rounded-xl flex items-center justify-center shadow-md">
+      <div v-if="!selectedNoteId" class="flex-1 glass-panel rounded-xl flex items-center justify-center">
         <div class="text-center">
           <span class="material-symbols-outlined text-[48px] text-on-surface-variant/30">note_add</span>
           <p class="font-body-md text-body-md text-on-surface-variant/50 mt-3">{{ t('notes.selectNote') }}</p>
         </div>
       </div>
-      <div v-else-if="contentLoading" class="flex-1 glass-panel rounded-xl shadow-md overflow-hidden">
+      <div v-else-if="contentLoading" class="flex-1 glass-panel rounded-xl overflow-hidden">
         <div class="skeleton-shimmer w-full h-full p-4 flex flex-col gap-3 overflow-hidden">
           <div class="flex items-center gap-2"><div class="skeleton-line h-5 w-48 rounded-md"></div><div class="skeleton-line h-5 w-16 rounded-md ml-auto"></div></div>
           <div class="border-b border-glass-border-light/30 my-1"></div>
@@ -238,7 +238,7 @@
           <div class="flex items-center gap-2"><div class="skeleton-line h-3 w-3/4 rounded-md"></div></div>
         </div>
       </div>
-      <div v-else class="flex-1 min-w-0 min-h-0 glass-panel rounded-xl flex flex-col shadow-md">
+      <div v-else class="flex-1 min-w-0 min-h-0 glass-panel rounded-xl flex flex-col">
         <div class="sticky top-0 z-10 bg-white/60 backdrop-blur-md border-b border-glass-border-light/30 px-4 py-2 flex items-center gap-2">
           <input             v-model="noteTitle"
             :placeholder="t('notes.noteTitle')"
@@ -253,7 +253,7 @@
               <button class="toolbar-btn !p-1 select-none" :title="t('notes.exportMd')" @click="showExportMenu = !showExportMenu">
                 <span class="material-symbols-outlined text-[20px]">file_download</span>
               </button>
-              <div v-if="showExportMenu" class="absolute right-0 top-full mt-1 bg-white rounded-xl py-1 min-w-[220px] z-50 shadow-xl border border-gray-200/80 overflow-hidden" @click.stop>
+              <div v-if="showExportMenu" class="absolute right-0 top-full mt-1 bg-white rounded-xl py-1 min-w-[220px] z-50 border border-gray-200/80 overflow-hidden" @click.stop>
                 <button class="hover:bg-gray-100 w-full text-left px-4 py-2.5 text-[13px] text-gray-700 flex items-center gap-2 transition-colors select-none" @click="exportAs('docx')">
                   <span class="material-symbols-outlined text-[16px] text-gray-500">description</span> {{ t('notes.exportWord') }}
                 </button>
@@ -353,7 +353,7 @@
     <!-- TOC Toggle Button (semi-transparent, right side) -->
     <button
       v-if="selectedNoteId && !showToc"
-      class="fixed right-0 top-1/2 -translate-y-1/2 z-50 bg-white/40 backdrop-blur-md border border-white/60 rounded-l-md px-1.5 py-4 shadow-lg hover:bg-white/60 hover:pr-2 transition-all opacity-[85%] select-none"
+      class="fixed right-0 top-1/2 -translate-y-1/2 z-50 bg-white/40 backdrop-blur-md border border-white/60 rounded-l-md px-1.5 py-4 hover:bg-white/60 hover:pr-2 transition-all opacity-[85%] select-none"
       :title="t('notes.toc')"
       @click="showToc = true"
     >
@@ -363,7 +363,7 @@
     <!-- Backlinks Toggle -->
     <button
       v-if="selectedNoteId && !showBacklinks"
-      class="fixed right-0 top-1/2 translate-y-8 z-50 bg-white/40 backdrop-blur-md border border-white/60 rounded-l-md px-1.5 py-3 shadow-lg hover:bg-white/60 hover:pr-2 transition-all opacity-[85%] select-none"
+      class="fixed right-0 top-1/2 translate-y-8 z-50 bg-white/40 backdrop-blur-md border border-white/60 rounded-l-md px-1.5 py-3 hover:bg-white/60 hover:pr-2 transition-all opacity-[85%] select-none"
       :title="t('notes.backlinks')"
       @click="showBacklinks = true"
     >
@@ -543,7 +543,7 @@
     <!-- Folder Add Dropdown (Teleported) -->
     <Teleport to="body">
       <div v-if="folderAddDropdownId" ref="folderAddDropdownRef" class="fixed z-50" :style="{ left: folderAddDropdownPos.x + 'px', top: folderAddDropdownPos.y + 'px' }">
-        <div class="bg-white rounded-lg shadow-xl border border-gray-200/80 overflow-hidden min-w-[140px]">
+        <div class="bg-white rounded-lg border border-gray-200/80 overflow-hidden min-w-[140px]">
           <button class="w-full flex items-center gap-2 px-3 py-2 text-[12px] hover:bg-gray-50 transition-colors text-left select-none" @click="createSubFolder(folderAddDropdownId!)">
             <span class="material-symbols-outlined text-[14px]">create_new_folder</span> {{ t('notes.newFolderTitle') }}
           </button>
@@ -568,7 +568,7 @@
             <button
               v-for="c in presetTextColors"
               :key="c"
-              class="w-5 h-5 rounded-full border hover:scale-110 transition-transform"
+              class="w-5 h-5 rounded-full border transition-transform"
               :class="c === currentTextColor ? 'border-secondary ring-2 ring-secondary/40' : 'border-black/10'"
               :style="{ backgroundColor: c }"
               @mousedown.prevent="selectTextColor(c)"
@@ -641,7 +641,7 @@
                 <span class="truncate">{{ folders.find(f => f.id === importTargetFolderId)?.name || t('notes.importRoot') }}</span>
                 <span class="material-symbols-outlined text-[14px]" :class="showImportFolderDropdown ? 'rotate-180' : ''">expand_more</span>
               </button>
-              <div v-if="showImportFolderDropdown" class="absolute left-0 right-0 top-full mt-1 bg-white rounded-lg shadow-xl border border-gray-200/80 z-50 overflow-hidden">
+              <div v-if="showImportFolderDropdown" class="absolute left-0 right-0 top-full mt-1 bg-white rounded-lg border border-gray-200/80 z-50 overflow-hidden">
                 <div class="py-1 max-h-[200px] overflow-y-auto">
                   <div class="flex items-center gap-2 px-3 py-1.5 text-[11px] cursor-pointer transition-colors select-none" :class="importTargetFolderId === null ? 'bg-purple-100/60 text-secondary font-medium' : 'hover:bg-gray-50 text-on-surface-variant'" @click.stop="selectImportFolder(null)">
                     <span class="material-symbols-outlined text-[14px] text-secondary" :style="{ visibility: importTargetFolderId === null ? 'visible' : 'hidden' }">check</span>
@@ -694,7 +694,7 @@
   <!-- Toast notification -->
   <Teleport to="body">
     <Transition name="fade">
-      <div v-if="toast.show" class="fixed bottom-8 left-1/2 -translate-x-1/2 z-[200] glass-panel rounded-full px-5 py-2.5 flex items-center gap-2 shadow-lg max-w-[80vw]">
+      <div v-if="toast.show" class="fixed bottom-8 left-1/2 -translate-x-1/2 z-[200] glass-panel rounded-full px-5 py-2.5 flex items-center gap-2 max-w-[80vw]">
         <span v-if="toast.type === 'loading'" class="material-symbols-outlined text-[18px] text-secondary animate-spin">progress_activity</span>
         <span v-else class="material-symbols-outlined text-[18px]"
           :class="toast.type === 'error' ? 'text-error' : 'text-success-indicator'">

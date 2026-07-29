@@ -1,27 +1,39 @@
 <template>
-  <div class="h-12 shrink-0 flex items-center bg-glass-surface/15 backdrop-blur-[60px] border-b border-glass-border-light shadow-sm title-bar px-3">
-    <div class="flex items-center gap-1 h-full select-none">
-      <router-link v-for="item in navItems" :key="item.path" :to="item.path"
-        class="glass-hover rounded-lg px-3 py-1.5 flex items-center gap-1.5 transition-colors"
-        :class="isActive(item.path) ? 'glass-active font-semibold' : 'text-on-surface-variant'">
+  <div class="h-12 shrink-0 flex items-center bg-glass-surface/60 backdrop-blur-[30px] border-b border-glass-border-light title-bar px-4">
+    <!-- 杂志刊头 -->
+    <div class="flex items-center gap-3 h-full select-none shrink-0 pr-2">
+      <div class="flex items-baseline gap-1.5">
+        <span class="font-editorial italic text-[18px] leading-none text-ink tracking-tight">Test</span>
+        <span class="font-editorial italic text-[18px] leading-none text-rust tracking-tight">Space</span>
+      </div>
+      <span class="folio hidden md:inline">— vol.1 · iss.15</span>
+    </div>
+
+    <span class="h-4 w-px bg-hairline-strong mx-2 shrink-0"></span>
+
+    <div class="flex items-center gap-0.5 h-full select-none">
+      <router-link v-for="(item, i) in navItems" :key="item.path" :to="item.path"
+        class="glass-hover rounded-md px-2.5 py-1.5 flex items-center gap-1.5 relative"
+        :class="isActive(item.path) ? 'glass-active' : 'text-graphite'">
+        <span class="folio opacity-70 mr-0.5" v-if="isActive(item.path)">§{{ String(i + 1).padStart(2, '0') }}</span>
         <span class="material-symbols-outlined text-[15px]"
           :style="{ fontVariationSettings: `'FILL' ${isActive(item.path) ? 1 : 0}` }">{{ item.icon }}</span>
-        <span class="font-label-xs text-label-xs whitespace-nowrap">{{ t(item.labelKey) }}</span>
+        <span class="text-[12px] font-semibold tracking-wide whitespace-nowrap">{{ t(item.labelKey) }}</span>
       </router-link>
     </div>
 
     <div data-tauri-drag-region class="flex-1 h-full cursor-grab active:cursor-grabbing"></div>
 
     <router-link to="/settings"
-      class="glass-hover rounded-lg px-3 py-1.5 flex items-center gap-1.5 transition-colors text-on-surface-variant select-none"
-      :class="isActive('/settings') ? 'glass-active font-semibold' : ''">
+      class="glass-hover rounded-md px-2.5 py-1.5 flex items-center gap-1.5 text-graphite select-none"
+      :class="isActive('/settings') ? 'glass-active' : ''">
       <span class="material-symbols-outlined text-[15px]"
         :style="{ fontVariationSettings: `'FILL' ${isActive('/settings') ? 1 : 0}` }">settings</span>
     </router-link>
 
     <button
-      class="glass-hover rounded-lg px-3 py-1.5 flex items-center gap-1.5 transition-colors text-on-surface-variant select-none"
-      :class="syncBusy ? 'opacity-60 cursor-not-allowed' : ''"
+      class="glass-hover rounded-md px-2.5 py-1.5 flex items-center gap-1.5 text-graphite select-none"
+      :class="syncBusy ? 'opacity-50 cursor-not-allowed' : ''"
       @click="runSync"
     >
       <span class="material-symbols-outlined text-[15px]" :class="syncBusy ? 'animate-spin' : ''">sync</span>
@@ -29,7 +41,7 @@
 
     <Teleport to="body">
       <div v-if="syncToast.show" class="fixed left-1/2 -translate-x-1/2 top-4 z-[99999] pointer-events-none">
-        <div class="glass-panel rounded-full px-5 py-2.5 flex items-center gap-2 shadow-lg bg-white/90 backdrop-blur-sm border">
+        <div class="glass-panel rounded-full px-5 py-2.5 flex items-center gap-2 bg-white/90 backdrop-blur-sm border">
           <span v-if="syncToast.type === 'loading'" class="material-symbols-outlined text-[18px] animate-spin text-on-surface-variant">sync</span>
           <span v-else-if="syncToast.type === 'success'" class="material-symbols-outlined text-[18px] text-success-indicator">check_circle</span>
           <span v-else class="material-symbols-outlined text-[18px] text-error">error</span>
@@ -39,13 +51,13 @@
     </Teleport>
 
     <div class="flex items-center h-full ml-2 select-none">
-      <button @click="minimize" class="window-btn h-full px-2.5 flex items-center justify-center transition-all rounded-lg group hover:scale-110" :title="t('nav.minimize')">
+      <button @click="minimize" class="window-btn h-full px-2.5 flex items-center justify-center transition-all rounded-lg group" :title="t('nav.minimize')">
         <span class="material-symbols-outlined text-[15px] text-on-surface-variant window-btn-icon">horizontal_rule</span>
       </button>
-      <button @click="toggleMaximize" class="window-btn h-full px-2.5 flex items-center justify-center transition-all rounded-lg group hover:scale-110" :title="isMax ? t('nav.restore') : t('nav.maximize')">
+      <button @click="toggleMaximize" class="window-btn h-full px-2.5 flex items-center justify-center transition-all rounded-lg group" :title="isMax ? t('nav.restore') : t('nav.maximize')">
         <span class="material-symbols-outlined text-[15px] text-on-surface-variant window-btn-icon">{{ isMax ? 'fullscreen_exit' : 'crop_square' }}</span>
       </button>
-      <button @click="closeWindow" class="window-btn h-full px-2.5 flex items-center justify-center transition-all rounded-lg group hover:scale-110" :title="t('nav.close')">
+      <button @click="closeWindow" class="window-btn h-full px-2.5 flex items-center justify-center transition-all rounded-lg group" :title="t('nav.close')">
         <span class="material-symbols-outlined text-[15px] text-on-surface-variant group-hover:text-red-500">close</span>
       </button>
     </div>
@@ -151,12 +163,18 @@ onUnmounted(() => {
 
 <style scoped>
 .window-btn {
-  transition: all 0.2s ease;
+  transition: color 0.16s ease, background-color 0.16s ease;
+}
+.window-btn:hover {
+  background-color: rgba(28, 27, 31, 0.05);
 }
 .window-btn:hover .window-btn-icon {
-  color: #f97316;
+  color: #C24E3A;
+}
+html.dark .window-btn:hover {
+  background-color: rgba(232, 227, 214, 0.06);
 }
 html.dark .window-btn:hover .window-btn-icon {
-  color: #fb923c;
+  color: #E8734F;
 }
 </style>

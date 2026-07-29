@@ -4,7 +4,7 @@
     <button
       v-if="!open && showTrigger"
       ref="triggerRef"
-      class="fixed right-0 bottom-24 z-50 bg-white/40 backdrop-blur-md border border-white/60 rounded-l-md px-1.5 py-4 shadow-lg hover:bg-white/60 hover:pr-2 transition-all opacity-[85%] select-none"
+      class="fixed right-0 bottom-24 z-50 bg-white/40 backdrop-blur-md border border-white/60 rounded-l-md px-1.5 py-4 hover:bg-white/60 hover:pr-2 transition-all opacity-[85%] select-none"
       :title="triggerTitle"
       @click="open = true"
     >

@@ -2,7 +2,7 @@
   <div class="flex flex-1 min-h-0 -mx-margin-page overflow-hidden pb-4 box-border select-none">
     <!-- Sessions Sidebar -->
     <div v-if="sessions.length > 0"
-      class="flex-shrink-0 flex flex-col w-56 ml-3 overflow-hidden rounded-xl bg-white/10 backdrop-blur-[60px] border border-white/50 shadow-lg"
+      class="flex-shrink-0 flex flex-col w-56 ml-3 overflow-hidden rounded-xl bg-white/10 backdrop-blur-[60px] border border-white/50"
     >
       <div class="p-2 border-b border-glass-border-light/50 flex items-center gap-1">
         <div class="relative flex-1" ref="modeDropdownRef">
@@ -11,7 +11,7 @@
             <span class="truncate flex-1 ml-1">{{ currentTabLabel }}</span>
             <span class="material-symbols-outlined text-[14px]">expand_more</span>
           </button>
-          <div v-if="showModeDropdown" class="absolute left-0 right-0 top-full mt-1 bg-white rounded-lg shadow-xl border border-gray-200/80 z-50 overflow-hidden">
+          <div v-if="showModeDropdown" class="absolute left-0 right-0 top-full mt-1 bg-white rounded-lg border border-gray-200/80 z-50 overflow-hidden">
             <div class="py-1">
               <div v-for="tab in tabs" :key="tab.key"
                 class="flex items-center gap-2 px-3 py-1.5 text-[12px] cursor-pointer transition-colors"
@@ -32,7 +32,7 @@
         <div v-for="s in sessions" :key="s.id"
           class="group flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer transition-colors"
           :class="s.id === activeSessionId
-            ? 'bg-purple-100/60 text-secondary font-medium shadow-sm'
+            ? 'bg-purple-100/60 text-secondary font-medium'
             : 'text-on-surface-variant hover:bg-white/15 hover:text-on-surface'"
           @click="switchSession(s.id)"
         >
@@ -64,7 +64,7 @@
     <!-- Chat Area -->
     <div class="flex-1 min-w-0 flex flex-col bg-transparent pl-3 pr-3" :class="sessions.length > 0 ? 'pt-4' : 'pt-4 pl-3 pr-3'">
       <!-- Empty state when no sessions -->
-      <div v-if="!activeSession" class="flex-1 glass-panel rounded-xl flex flex-col items-center justify-center shadow-md gap-3">
+      <div v-if="!activeSession" class="flex-1 glass-panel rounded-xl flex flex-col items-center justify-center gap-3">
         <span class="material-symbols-outlined text-5xl text-on-surface-variant/20">smart_toy</span>
         <p class="text-[13px] text-on-surface-variant/60">{{ t('ai.noSession') }}</p>
         <button class="glass-button px-5 py-2 rounded-full text-[13px] glass-active select-none" @click="createNewSession">
@@ -144,7 +144,7 @@
                 <span class="material-symbols-outlined text-[14px]">close</span>
               </button>
             </div>
-            <div class="relative overflow-hidden glass-panel rounded-xl border border-purple-200/50 shadow-sm bg-white/80 ring-1 ring-purple-300/40 focus-within:ring-purple-400/70 transition-all">
+            <div class="relative overflow-hidden glass-panel rounded-xl border border-purple-200/50 bg-white/80 ring-1 ring-purple-300/40 focus-within:ring-purple-400/70 transition-all">
               <textarea ref="inputRef" v-model="input"
                 :placeholder="inputPlaceholder"
                 class="ai-input-textarea w-full bg-transparent px-4 py-2.5 text-[13px] outline-none select-text resize-none rounded-xl"

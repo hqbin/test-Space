@@ -57,7 +57,7 @@
       <Teleport to="body">
         <Transition name="fade-scale">
           <div v-if="groupDropdownOpen" class="fixed z-[9999]" :style="groupDropdownStyle" @click.stop>
-            <div class="glass-panel rounded-2xl py-1 shadow-xl" style="min-width:160px">
+            <div class="glass-panel rounded-2xl py-1" style="min-width:160px">
               <div class="px-3 py-1 text-caption text-on-surface-variant select-none">选择分组</div>
               <div class="flex items-center gap-2 rounded-xl px-3 py-1.5 cursor-pointer select-none mx-1"
                 :class="!test.selectedGroupId.value ? 'bg-white/20 font-medium' : 'hover:bg-white/10'"
@@ -93,7 +93,7 @@
     <!-- Test Cases Area -->
     <div class="flex-1 flex gap-4 min-h-0">
       <!-- Case List: Endpoint-grouped expandable view -->
-      <div class="glass-panel rounded-xl flex-[0_0_45%] min-w-[400px] max-w-[55%] flex flex-col overflow-hidden shadow-md">
+      <div class="glass-panel rounded-xl flex-[0_0_45%] min-w-[400px] max-w-[55%] flex flex-col overflow-hidden">
         <div class="flex-1 overflow-y-auto custom-scrollbar p-2">
           <div v-if="test.testCases.value.length === 0" class="flex flex-col items-center justify-center h-full text-on-surface-variant gap-2 px-8 text-center">
             <span class="material-symbols-outlined text-[48px] opacity-40">science</span>
@@ -192,7 +192,7 @@
       </div>
 
       <!-- Case Detail Panel -->
-      <div class="glass-panel rounded-xl flex-1 flex flex-col overflow-hidden min-w-0 shadow-md">
+      <div class="glass-panel rounded-xl flex-1 flex flex-col overflow-hidden min-w-0">
         <div v-if="!selectedCase" class="flex items-center justify-center h-full text-on-surface-variant gap-2 select-text">
           <span class="material-symbols-outlined text-[48px] opacity-40">touch_app</span>
           <span class="text-body-md">选择一个用例查看详情</span>
@@ -770,7 +770,7 @@
     <!-- Toast -->
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="toastMsg" class="fixed bottom-8 left-1/2 -translate-x-1/2 z-[200] glass-panel rounded-full px-5 py-2.5 flex items-center gap-2 shadow-lg">
+        <div v-if="toastMsg" class="fixed bottom-8 left-1/2 -translate-x-1/2 z-[200] glass-panel rounded-full px-5 py-2.5 flex items-center gap-2">
           <span class="material-symbols-outlined text-[18px]"
             :class="toastType === 'error' ? 'text-error' : toastType === 'info' ? 'text-blue-500' : 'text-success-indicator'">
             {{ toastType === 'error' ? 'error' : toastType === 'info' ? 'info' : 'check_circle' }}

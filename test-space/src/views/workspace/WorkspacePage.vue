@@ -45,7 +45,7 @@
             />
             {{ project.running ? "Running" : "Paused" }}
           </div>
-          <div class="w-14 h-14 rounded-2xl bg-white/40 border border-white/60 flex items-center justify-center mb-6 shadow-sm">
+          <div class="w-14 h-14 rounded-2xl bg-white/40 border border-white/60 flex items-center justify-center mb-6">
             <span class="material-symbols-outlined text-2xl" :class="project.running ? 'text-primary' : 'text-tertiary'">
               {{ project.icon }}
             </span>

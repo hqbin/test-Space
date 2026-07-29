@@ -41,7 +41,7 @@
 
     <div class="flex-1 flex gap-4 min-h-0">
       <!-- Script library sidebar -->
-      <div class="w-56 flex-shrink-0 ml-3 rounded-xl bg-white/10 backdrop-blur-[60px] border border-white/50 shadow-lg flex flex-col overflow-hidden">
+      <div class="w-56 flex-shrink-0 ml-3 rounded-xl bg-white/10 backdrop-blur-[60px] border border-white/50 flex flex-col overflow-hidden">
         <div class="px-3 py-2 border-b border-white/10 flex items-center gap-2">
           <span class="text-[13px] text-on-surface font-medium flex-shrink-0">{{ t("nav.scripts") }}</span>
           <div class="flex-1 relative">
@@ -197,7 +197,7 @@
 
     <!-- Snippet tooltip -->
     <Teleport to="body">
-      <div v-if="activeTip !== null && tipSnippet" class="fixed z-[10000] px-3 py-2 rounded-lg text-[12px] text-white/90 max-w-[280px] max-h-[40vh] overflow-y-auto pointer-events-none shadow-xl border border-white/10"
+      <div v-if="activeTip !== null && tipSnippet" class="fixed z-[10000] px-3 py-2 rounded-lg text-[12px] text-white/90 max-w-[280px] max-h-[40vh] overflow-y-auto pointer-events-none border border-white/10"
         :style="tipStyle" style="background: rgba(20,22,28,0.95); backdrop-filter: blur(12px);">
         <div class="font-medium text-green-400 mb-1 font-mono text-[11px]">{{ tipSnippet.label }}</div>
         <div class="text-white/50 leading-relaxed">{{ tipSnippet.desc }}</div>
