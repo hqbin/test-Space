@@ -278,7 +278,7 @@ import { ref, reactive, computed, watch, nextTick, onMounted, onActivated, onUnm
 import { useRouter } from 'vue-router'
 import { useI18n } from '@/composables/useI18n'
 import { isAiConfigured, loadAiConfig, type AiConfig } from '@/services/aiSettings'
-import { chatWithNotes, callAiChat, resolveSystemRole, type AiChatMessage } from '@/services/noteAi'
+import { chatWithNotes, callAiChat, callAiChatWithTools, resolveSystemRole, type AiChatMessage, type AiToolDefinition } from '@/services/noteAi'
 import { useTokenUsage } from '@/stores/useTokenUsage'
 import { loadNotes } from '@/services/database'
 import type { AiSession, ChatMsg, ChatMode, NoteItem, McpServerConfig, McpAuthType, McpTool } from '@/types'
@@ -774,129 +774,99 @@ async function sendMcp(question: string, session: AiSession) {
     .filter(m => m.role === 'user' || m.role === 'assistant')
     .slice(-4)
 
-  // Always fetch fresh tool list
+  // Fetch fresh tool list and convert to native OpenAI format
   const tools = await getAllToolsFlat()
   if (tools.length === 0) {
     await sendChat(question, '', session)
     return
   }
 
-  const toolsDesc = tools.map(t =>
-    `- ${t.tool.name}${t.tool.description ? ': ' + t.tool.description : ''}`
-  ).join('\n')
+  const aiTools: AiToolDefinition[] = tools.map(t => ({
+    type: 'function',
+    function: {
+      name: t.tool.name,
+      description: t.tool.description || '',
+      parameters: t.tool.inputSchema || { type: 'object', properties: {} },
+    },
+  }))
 
   const systemRole = resolveSystemRole(aiConfig.value)
-  // Single-pass system prompt: clear tool protocol + table output expectation
-  const systemPrompt = `You are a helpful AI assistant with access to these MCP tools:\n${toolsDesc}
+  const systemPrompt = 'You are a helpful AI assistant with access to MCP tools. Use them when needed to answer the user\'s question. Always respond in the same language as the user.'
 
-## Tool Calling
-When a tool can help, output exactly one line:
-TOOL_CALL: tool_name | {"arg1": "value1"}
-Then wait for the tool result before continuing.
-
-## Output Format
-- Use proper Markdown (tables, code blocks, lists) where it fits naturally
-- Keep responses clear and well-structured
-
-## Rules
-- Call a tool first if it can answer the question, then summarize the result.
-- After you call a tool, I will reply with the result. Then you can call another tool or give the final answer.
-- If no tool is relevant, answer directly.
-- Always respond in the same language as the user's question.`
-
-  const toolCallRegex = /TOOL_CALL:\s*(\w[\w.-]*)\s*(?:\([^)]*\))?\s*\|\s*(\{.*?\})/g
-  const toolCalls: ToolCallInfo[] = []
-  let truncated = false
-
-  // Auto-continuation: if response was truncated, automatically fetch the rest
-  async function completeIfTruncated(
-    content: string, messages: AiChatMessage[], prevMessages: AiChatMessage[]
-  ): Promise<{ content: string }> {
-    let result = content
-    for (let i = 0; i < 3; i++) {
-      if (!truncated) break
-      const cont = await callAiChat(aiConfig.value, [
-        ...prevMessages,
-        { role: 'assistant', content: result },
-        { role: 'user', content: 'Continue from where you stopped. Do not repeat yourself.' },
-      ])
-      addUsage(cont.usage)
-      if (cont.answer) result += '\n' + cont.answer
-      truncated = cont.truncated
-    }
-    return { content: result }
-  }
-
-  // Round 1: initial call with tools + question
-  const initMessages: AiChatMessage[] = [
+  const allToolCalls: ToolCallInfo[] = []
+  let accumulatedContent = ''
+  let conversation: AiChatMessage[] = [
     { role: systemRole, content: systemPrompt },
     ...history.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
     { role: 'user', content: question },
   ]
-  const firstResult = await callAiChat(aiConfig.value, initMessages)
-  let response = firstResult.answer
-  truncated = firstResult.truncated
-  addUsage(firstResult.usage)
-  if (!response) { session.messages.push({ role: 'assistant', content: '(empty response)' }); return }
 
-  // Auto-continue if first response was truncated
-  if (truncated) {
-    const completed = await completeIfTruncated(response, [
-      ...initMessages,
-      { role: 'assistant', content: response },
-    ], initMessages)
-    response = completed.content
-  }
-
-  // Parse and execute tool calls
-  let toolResults = ''
-  let cleanResponse = response
-  toolCallRegex.lastIndex = 0
-  for (let match: RegExpExecArray | null; (match = toolCallRegex.exec(response)) !== null;) {
-    const toolName = match[1]
-    let args: Record<string, unknown> = {}
-    try { args = JSON.parse(match[2]) } catch {}
-    const tool = tools.find(t => t.tool.name === toolName)
-    if (tool) {
-      const server = servers.value.find(s => s.id === tool.serverId && s.enabled)
-      if (server) {
-        toolCalls.push({ toolName, serverName: tool.serverName })
-        try {
-          const toolResult = await mcpCallTool(server, toolName, args)
-          const resultText = JSON.stringify(toolResult?.content || toolResult)
-          toolResults += `\n[${toolName}] result: ${resultText}`
-        } catch (e: any) {
-          toolResults += `\n[${toolName}] error: ${e.message || e}`
-        }
-      }
-    }
-    cleanResponse = cleanResponse.replace(match[0], '')
-  }
-
-  if (toolCalls.length > 0) {
-    // Round 2: feed tool results back for final answer
-    const finalMessages: AiChatMessage[] = [
-      { role: systemRole, content: systemPrompt },
-      ...history.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
-      { role: 'user', content: question },
-      { role: 'assistant', content: cleanResponse || 'Calling tools...' },
-      { role: 'user', content: `Tool results:${toolResults}\n\nProvide a final answer.` },
-    ]
-    const finalResult = await callAiChat(aiConfig.value, finalMessages)
-    let finalAnswer = finalResult.answer || '(no response)'
-    truncated = finalResult.truncated
-    addUsage(finalResult.usage)
-    if (truncated) {
-      const completed = await completeIfTruncated(finalAnswer, finalMessages, [
-        ...finalMessages.slice(0, -1),
-        { role: 'assistant', content: finalAnswer },
+  async function continueIfTruncated(content: string): Promise<string> {
+    let result = content
+    for (let i = 0; i < 3; i++) {
+      const next = await callAiChat(aiConfig.value, [
+        ...conversation,
+        { role: 'assistant', content: result },
+        { role: 'user', content: 'Continue from where you stopped. Do not repeat yourself.' },
       ])
-      finalAnswer = completed.content
+      addUsage(next.usage)
+      if (next.answer) result += '\n' + next.answer
+      if (!next.truncated) break
     }
-    session.messages.push({ role: 'assistant', content: finalAnswer, toolCalls })
-  } else {
-    session.messages.push({ role: 'assistant', content: response })
+    return result
   }
+
+  for (let round = 0; round < 5; round++) {
+    const result = await callAiChatWithTools(aiConfig.value, conversation, aiTools)
+    addUsage(result.usage)
+
+    if (result.content) {
+      accumulatedContent += (accumulatedContent ? '\n\n' : '') + result.content
+    }
+
+    if (result.truncated) {
+      accumulatedContent = await continueIfTruncated(accumulatedContent)
+    }
+
+    if (!result.toolCalls || result.toolCalls.length === 0) {
+      break
+    }
+
+    // Push the assistant message WITH tool_calls (required by API spec for tool result matching)
+    conversation.push({
+      role: 'assistant',
+      content: result.content || null,
+      tool_calls: result.toolCalls,
+    })
+
+    // Execute each tool call and push results
+    for (const tc of result.toolCalls) {
+      const toolName = tc.function.name
+      let args: Record<string, unknown> = {}
+      try { args = JSON.parse(tc.function.arguments) } catch {}
+      const desc = tools.find(t => t.tool.name === toolName)
+      if (!desc) continue
+      const server = servers.value.find(s => s.id === desc.serverId && s.enabled)
+      if (!server) continue
+
+      allToolCalls.push({ toolName, serverName: desc.serverName })
+      let toolResult: string
+      try {
+        const res = await mcpCallTool(server, toolName, args)
+        toolResult = JSON.stringify(res?.content || res)
+      } catch (e: any) {
+        toolResult = `Error: ${e.message || e}`
+      }
+
+      conversation.push({ role: 'tool', tool_call_id: tc.id, content: toolResult })
+    }
+  }
+
+  session.messages.push({
+    role: 'assistant',
+    content: accumulatedContent || '(no response)',
+    toolCalls: allToolCalls.length > 0 ? allToolCalls : undefined,
+  })
 }
 
 function scrollToBottom() {

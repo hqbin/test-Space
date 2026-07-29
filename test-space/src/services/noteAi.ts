@@ -3,8 +3,10 @@ import type { AiConfig } from '@/services/aiSettings'
 import type { AiMemory } from '@/services/database'
 
 export interface AiChatMessage {
-  role: 'user' | 'assistant' | 'system' | 'developer'
-  content: string
+  role: 'user' | 'assistant' | 'system' | 'developer' | 'tool'
+  content: string | null
+  tool_calls?: { id: string; type: string; function: { name: string; arguments: string } }[]
+  tool_call_id?: string
 }
 
 /**
@@ -568,6 +570,86 @@ export async function callAiChat(config: AiConfig, messages: AiChatMessage[]): P
       }
     : undefined
   return { answer, truncated, usage }
+}
+
+// ── Native function calling (OpenAI tool_calls API) ──
+
+export interface AiToolDefinition {
+  type: 'function'
+  function: {
+    name: string
+    description?: string
+    parameters: Record<string, unknown>
+  }
+}
+
+export interface AiChatWithToolsResult {
+  content: string
+  toolCalls: { id: string; type: string; function: { name: string; arguments: string } }[]
+  truncated: boolean
+  usage?: { promptTokens: number; completionTokens: number; totalTokens: number }
+}
+
+/**
+ * Call AI with native function/tool calling support.
+ * Falls back to text-only if the provider doesn't support tools.
+ */
+export async function callAiChatWithTools(
+  config: AiConfig,
+  messages: AiChatMessage[],
+  tools: AiToolDefinition[],
+): Promise<AiChatWithToolsResult> {
+  const body: Record<string, unknown> = {
+    model: config.model.trim(),
+    messages,
+    tools,
+    tool_choice: 'auto',
+  }
+  if (config.provider === 'mimo') body.stream = false
+
+  // Try native function calling; fall back to text-only if provider doesn't support tools
+  try {
+    return await doToolsCall(config, body)
+  } catch {
+    const fallback = await callAiChat(config, messages)
+    return { content: fallback.answer, toolCalls: [], truncated: fallback.truncated, usage: fallback.usage }
+  }
+}
+
+async function doToolsCall(config: AiConfig, body: Record<string, unknown>): Promise<AiChatWithToolsResult> {
+  const f = await getFetch()
+  const headers = buildAuthHeaders(config)
+  const res = await f(config.endpoint.trim(), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  })
+
+  const text = await res.text()
+  let json: any
+  try { json = JSON.parse(text) } catch { throw new Error(`API ${res.status}: ${text.slice(0, 300)}`) }
+
+  if (!res.ok) {
+    throw new Error(json.error?.message || json.error?.code || json.error || json.message || `HTTP ${res.status}`)
+  }
+
+  const choice = json.choices?.[0]
+  const rawToolCalls = choice?.message?.tool_calls || []
+  const toolCalls = rawToolCalls.map((tc: any) => ({
+    id: tc.id,
+    type: tc.type || 'function',
+    function: { name: tc.function?.name || '', arguments: tc.function?.arguments || '{}' },
+  }))
+  const content = choice?.message?.content?.trim() || ''
+  const truncated = choice?.finish_reason === 'length'
+  const usage = json.usage
+    ? {
+        promptTokens: json.usage.prompt_tokens ?? 0,
+        completionTokens: json.usage.completion_tokens ?? 0,
+        totalTokens: json.usage.total_tokens ?? 0,
+      }
+    : undefined
+  return { content, toolCalls, truncated, usage }
 }
 
 export async function testAiConnection(config: AiConfig): Promise<string> {
