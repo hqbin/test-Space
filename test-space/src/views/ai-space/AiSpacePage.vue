@@ -133,12 +133,11 @@
                 <span class="material-symbols-outlined text-[14px]">close</span>
               </button>
             </div>
-            <div class="relative flex glass-panel rounded-xl border border-purple-200/50 shadow-sm bg-white/80 ring-1 ring-purple-300/40 focus-within:ring-purple-400/70 transition-all">
+            <div class="relative glass-panel rounded-xl border border-purple-200/50 shadow-sm bg-white/80 ring-1 ring-purple-300/40 focus-within:ring-purple-400/70 transition-all">
               <textarea ref="inputRef" v-model="input"
                 :placeholder="inputPlaceholder"
-                class="w-full bg-transparent px-4 py-2.5 text-[13px] outline-none select-text resize-none overflow-y-auto"
+                class="ai-input-textarea w-full bg-transparent px-4 py-2.5 text-[13px] outline-none select-text resize-none rounded-xl"
                 :disabled="sessionLoading.get(activeSessionId)"
-                :style="{ maxHeight: '160px' }"
                 rows="1"
                 @keydown="onInputKeydown"
                 @paste="onInputPaste"
@@ -620,11 +619,18 @@ function autoTitle(msg: string): string {
 }
 
 // ── Input auto-resize ──
+const INPUT_MAX_HEIGHT_RATIO = 0.50
+function getInputMaxHeight(): number {
+  return Math.floor(window.innerHeight * INPUT_MAX_HEIGHT_RATIO)
+}
 function autoResizeInput() {
   const el = inputRef.value
   if (!el) return
-  el.style.height = 'auto'
-  el.style.height = Math.min(el.scrollHeight, 160) + 'px'
+  const maxH = getInputMaxHeight()
+  el.style.height = '0px'
+  const target = el.scrollHeight
+  el.style.height = Math.min(target, maxH) + 'px'
+  el.style.overflowY = target > maxH ? 'auto' : 'hidden'
 }
 
 function onInputKeydown(e: KeyboardEvent) {
@@ -1047,3 +1053,19 @@ onUnmounted(() => {
   document.removeEventListener('click', onDocumentClick)
 })
 </script>
+
+<style scoped>
+.ai-input-textarea::-webkit-scrollbar {
+  width: 5px;
+}
+.ai-input-textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ai-input-textarea::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.25);
+  border-radius: 10px;
+}
+.ai-input-textarea::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.4);
+}
+</style>
