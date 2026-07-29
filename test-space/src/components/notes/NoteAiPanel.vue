@@ -296,6 +296,8 @@ watch(messages, () => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', onDocumentPointerDown, true)
+  if (contextDebounce) clearTimeout(contextDebounce)
+  if (saveHistoryDebounce) clearTimeout(saveHistoryDebounce)
 })
 
 watch(open, (v) => {

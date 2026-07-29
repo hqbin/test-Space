@@ -1,5 +1,6 @@
 use std::process::Command;
 use serde::Serialize;
+use std::collections::HashMap;
 use std::sync::mpsc;
 use std::sync::Mutex;
 use std::thread;
@@ -13,7 +14,7 @@ struct CpuSnapshot {
     idle_jiffies: u64,
     proc_ticks: std::collections::HashMap<u32, u64>, // pid -> utime + stime
 }
-static PREV_CPU: Mutex<Option<CpuSnapshot>> = Mutex::new(None);
+static PREV_CPU: Mutex<Option<HashMap<String, CpuSnapshot>>> = Mutex::new(None);
 
 
 #[cfg(target_os = "windows")]
@@ -115,18 +116,48 @@ pub fn list_devices() -> Vec<DeviceInfo> {
 }
 
 pub fn shell_command(serial: &str, command: &str) -> Result<String, String> {
-    let output = adb_cmd()
+    use std::io::Read;
+    use std::process::Stdio;
+
+    let mut child = adb_cmd()
         .args(["-s", serial, "shell", command])
-        .output()
-        .map_err(|e| format!("ADB shell failed: {}", e))?;
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("ADB shell spawn failed: {}", e))?;
+
+    let deadline = std::time::Instant::now() + Duration::from_secs(120);
+    let poll = Duration::from_millis(50);
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {
+                if std::time::Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err("ADB shell command timed out (120s)".to_string());
+                }
+                thread::sleep(poll);
+            }
+            Err(e) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("ADB shell wait failed: {}", e));
+            }
+        }
+    };
+
+    let mut stdout = String::new();
+    let mut stderr = String::new();
+    if let Some(mut out) = child.stdout.take() { let _ = out.read_to_string(&mut stdout); }
+    if let Some(mut err) = child.stderr.take() { let _ = err.read_to_string(&mut stderr); }
+
     let mut result = stdout;
     if !stderr.is_empty() {
         if !result.is_empty() { result.push('\n'); }
         result.push_str(&stderr);
     }
-    if output.status.success() || !result.is_empty() {
+    if status.success() || !result.is_empty() {
         Ok(result)
     } else {
         Err(stderr)
@@ -772,7 +803,8 @@ pub fn get_perf_snapshot(serial: &str, watch_app: Option<&str>) -> Result<PerfSn
     // Compute CPU percentages from /proc/stat delta (across ~10s polling interval).
     // Using a static cache avoids the 1s sampling delay of `top -n 1 -d 1 -b`.
     if let Ok(mut prev_guard) = PREV_CPU.lock() {
-        if let Some(ref prev) = *prev_guard {
+        let map = prev_guard.get_or_insert_with(HashMap::new);
+        if let Some(prev) = map.get(serial) {
             let total_delta = current_cpu_jiffies.saturating_sub(prev.total_jiffies);
             if total_delta > 0 {
                 let idle_delta = current_idle_jiffies.saturating_sub(prev.idle_jiffies);
@@ -792,7 +824,7 @@ pub fn get_perf_snapshot(serial: &str, watch_app: Option<&str>) -> Result<PerfSn
             }
         }
         // Store current stats as previous for next poll
-        *prev_guard = Some(CpuSnapshot {
+        map.insert(serial.to_string(), CpuSnapshot {
             total_jiffies: current_cpu_jiffies,
             idle_jiffies: current_idle_jiffies,
             proc_ticks: current_proc_ticks,

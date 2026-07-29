@@ -1005,7 +1005,7 @@ async fn try_install_system_cert(serial: &str, cert_pem: &str, app: &tauri::AppH
     app.emit("proxy:debug", "[proxy] 设备已获取 root 权限").ok();
 
     // adb root 后 adbd 会重启，等一会
-    std::thread::sleep(std::time::Duration::from_secs(2));
+    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
     let remount_result = tokio::task::spawn_blocking({
         let s = serial.to_string();
@@ -1026,7 +1026,7 @@ async fn try_install_system_cert(serial: &str, cert_pem: &str, app: &tauri::AppH
         let _ = tokio::task::spawn_blocking(move || {
             crate::adb::shell_command(&dis_serial, "avbctl disable-verification")
         }).await;
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
         // retry remount
         let remount_serial2 = serial.to_string();

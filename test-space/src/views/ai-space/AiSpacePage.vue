@@ -79,10 +79,10 @@
           class="flex-1 overflow-y-auto custom-scrollbar space-y-3 py-2 pr-1 min-h-0"
         >
           <div v-for="(msg, i) in activeSession.messages" :key="i"
-            class="text-[13px] leading-relaxed"
+            class="text-[13px] leading-relaxed group/msg"
             :class="msg.role === 'user' ? 'flex justify-end' : ''"
           >
-            <div class="max-w-[80%] px-4 py-2.5 rounded-2xl whitespace-pre-wrap break-words select-text"
+            <div class="relative max-w-[80%] px-4 py-2.5 rounded-2xl whitespace-pre-wrap break-words select-text"
               :class="msg.role === 'user'
                 ? 'bg-purple-100/80 text-on-surface rounded-br-md'
                 : 'bg-white/90 text-on-surface border border-glass-border-light/40 rounded-bl-md'"
@@ -97,12 +97,23 @@
                 {{ msg.content }}
               </template>
               <template v-else>
-                <div class="whitespace-pre-wrap" v-html="renderContent(msg.content)"></div>
+                <div v-if="msg.streaming" class="ai-markdown whitespace-normal" v-html="renderStreamingMarkdown(msg.content)"></div>
+                <div v-else class="ai-markdown whitespace-normal" v-html="renderMarkdown(msg.content)"></div>
                 <div v-if="msg.toolCalls?.length" class="mt-2 pt-2 border-t border-glass-border-light/30">
                   <div v-for="tc in msg.toolCalls" :key="tc.toolName" class="text-[11px] text-on-surface-variant/60 flex items-center gap-1">
                     <span class="material-symbols-outlined text-[13px]">check_circle</span>
                     <span>Called: {{ tc.toolName }} on {{ tc.serverName }}</span>
                   </div>
+                </div>
+                <div v-if="!msg.streaming"
+                  class="flex gap-1 mt-1.5 pt-1.5 border-t border-transparent group-hover/msg:border-glass-border-light/30 opacity-0 group-hover/msg:opacity-100 transition-all"
+                >
+                  <button class="p-0.5 rounded hover:bg-black/5 text-on-surface-variant/40 hover:text-on-surface-variant transition-colors" @click="copyMessage(msg.content)" title="复制">
+                    <span class="material-symbols-outlined text-[13px]">content_copy</span>
+                  </button>
+                  <button v-if="canRegenerate(i)" class="p-0.5 rounded hover:bg-black/5 text-on-surface-variant/40 hover:text-on-surface-variant transition-colors" @click="regenerate(i)" title="重新生成">
+                    <span class="material-symbols-outlined text-[13px]">refresh</span>
+                  </button>
                 </div>
               </template>
             </div>
@@ -152,11 +163,16 @@
             <button v-if="mode === 'mcp'" class="glass-button px-2.5 py-2.5 rounded-xl text-on-surface-variant/60 hover:text-on-surface select-none shrink-0" :title="t('ai.mcpSettings')" @click="showMcpManager = true">
               <span class="material-symbols-outlined text-[18px]">extension</span>
             </button>
-            <button class="glass-button px-3.5 py-2.5 rounded-xl glass-active select-none shrink-0"
+            <button v-if="!sessionAbortControllers.has(activeSessionId)" class="glass-button px-3.5 py-2.5 rounded-xl glass-active select-none shrink-0"
               :disabled="sessionLoading.get(activeSessionId) || (!input.trim() && !uploadedImage && !attachedFile)"
               @click="send"
             >
               <span class="material-symbols-outlined text-[18px]">send</span>
+            </button>
+            <button v-else class="glass-button px-3.5 py-2.5 rounded-xl glass-active select-none shrink-0 !text-red-400 hover:!bg-red-50/50"
+              @click="stopGeneration"
+            >
+              <span class="material-symbols-outlined text-[18px]">stop</span>
             </button>
           </div>
           <input ref="fileInputRef" type="file" accept="image/*,.txt" class="hidden" @change="onFileSelected" />
@@ -278,7 +294,8 @@ import { ref, reactive, computed, watch, nextTick, onMounted, onActivated, onUnm
 import { useRouter } from 'vue-router'
 import { useI18n } from '@/composables/useI18n'
 import { isAiConfigured, loadAiConfig, type AiConfig } from '@/services/aiSettings'
-import { chatWithNotes, callAiChat, callAiChatWithTools, resolveSystemRole, type AiChatMessage, type AiToolDefinition } from '@/services/noteAi'
+import { chatWithNotes, callAiChat, callAiChatWithTools, callChatApiStream, chatWithNotesStream, resolveSystemRole, type AiChatMessage, type AiToolDefinition } from '@/services/noteAi'
+import { renderMarkdown, renderStreamingMarkdown } from '@/composables/useMarkdownRenderer'
 import { useTokenUsage } from '@/stores/useTokenUsage'
 import { loadNotes } from '@/services/database'
 import type { AiSession, ChatMsg, ChatMode, NoteItem, McpServerConfig, McpAuthType, McpTool } from '@/types'
@@ -297,7 +314,7 @@ import { getSetting, setSetting } from '@/services/database'
 
 const { t } = useI18n()
 const router = useRouter()
-const { addUsage, loadUsage } = useTokenUsage()
+const { addUsage, loadUsage, flushUsage } = useTokenUsage()
 
 const tabs = [
   { key: 'chat' as ChatMode, labelKey: 'ai.chatTab', icon: 'chat' },
@@ -331,6 +348,7 @@ const inputPlaceholder = computed(() => {
 // ── Per-session loading/error state (using reactive Map to avoid spread overhead) ──
 const sessionLoading = reactive(new Map<string, boolean>())
 const sessionError = reactive(new Map<string, string>())
+const sessionAbortControllers = reactive(new Map<string, AbortController>())
 
 function setLoading(sessionId: string, v: boolean) {
   sessionLoading.set(sessionId, v)
@@ -340,6 +358,10 @@ function setError(sessionId: string, msg: string) {
 }
 function clearError(sessionId: string) {
   sessionError.delete(sessionId)
+}
+function stopGeneration() {
+  const ac = sessionAbortControllers.get(activeSessionId.value)
+  if (ac) ac.abort()
 }
 
 // ── Sessions ──
@@ -440,7 +462,12 @@ async function loadSessions() {
     const raw = await getSetting(SESSIONS_KEY)
     if (raw) {
       const parsed = JSON.parse(raw) as AiSession[]
-      if (Array.isArray(parsed)) sessions.value = parsed
+      if (Array.isArray(parsed)) {
+        for (const s of parsed) {
+          for (const m of s.messages) m.streaming = false
+        }
+        sessions.value = parsed
+      }
     }
   } catch {}
   ensureSessionExists()
@@ -528,6 +555,7 @@ function commitRename() {
     s.updatedAt = new Date().toISOString()
   }
   renamingId.value = null
+  saveSessions()
 }
 
 function cancelRename() {
@@ -542,8 +570,14 @@ function confirmDeleteSession(s: AiSession) {
 function doDeleteSession() {
   if (!deleteTarget.value) return
   const id = deleteTarget.value.id
+  const ac = sessionAbortControllers.get(id)
+  if (ac) {
+    ac.abort()
+    sessionAbortControllers.delete(id)
+  }
   sessions.value = sessions.value.filter(s => s.id !== id)
   clearError(id)
+  sessionLoading.delete(id)
   if (activeSessionId.value === id) {
     const modeSessions = sessions.value.filter(s => s.mode === mode.value)
     activeSessionId.value = modeSessions.length > 0 ? modeSessions[0].id : ''
@@ -606,7 +640,7 @@ async function getFetch(): Promise<typeof fetch> {
   return tauriFetch
 }
 
-async function callChatApiWithImage(prompt: string, imageBase64: string, history: AiChatMessage[]): Promise<string> {
+async function callChatApiWithImage(prompt: string, imageBase64: string, history: AiChatMessage[], signal?: AbortSignal): Promise<string> {
   const f = await getFetch()
   const config = aiConfig.value
   const body: Record<string, unknown> = {
@@ -625,7 +659,7 @@ async function callChatApiWithImage(prompt: string, imageBase64: string, history
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (config.authMode === 'api-key') headers['api-key'] = config.apiKey.trim()
   else headers['Authorization'] = `Bearer ${config.apiKey.trim()}`
-  const res = await f(config.endpoint.trim(), { method: 'POST', headers, body: JSON.stringify(body) })
+  const res = await f(config.endpoint.trim(), { method: 'POST', headers, body: JSON.stringify(body), signal })
   const text = await res.text()
   let json: any
   try { json = JSON.parse(text) } catch { throw new Error(`API ${res.status}: ${text.slice(0, 300)}`) }
@@ -730,29 +764,62 @@ async function send() {
 }
 
 async function sendChat(question: string, imageData: string, session: AiSession) {
+  const sid = session.id
   const history: AiChatMessage[] = session.messages
     .filter(m => m.role === 'user' || m.role === 'assistant')
     .slice(0, -1)
     .map(m => ({ role: m.role, content: m.content }))
 
-  let answer: string
-  let usage: any
   if (imageData) {
-    answer = await callChatApiWithImage(question, imageData, history)
-  } else {
-    const result = await callAiChat(aiConfig.value, [
-      { role: resolveSystemRole(aiConfig.value), content: 'You are a helpful assistant.' },
-      ...history,
-      { role: 'user', content: question },
-    ])
-    answer = result.answer
-    usage = result.usage
+    const ac = new AbortController()
+    sessionAbortControllers.set(sid, ac)
+    try {
+      const answer = await callChatApiWithImage(question, imageData, history, ac.signal)
+      if (ac.signal.aborted) return
+      session.messages.push({ role: 'assistant', content: answer || '(empty)' })
+    } catch (e: any) {
+      if (e.name === 'AbortError') return
+      throw e
+    } finally {
+      sessionAbortControllers.delete(sid)
+    }
+    return
   }
-  addUsage(usage)
-  session.messages.push({ role: 'assistant', content: answer || '(empty)' })
+
+  const messages: AiChatMessage[] = [
+    { role: resolveSystemRole(aiConfig.value), content: 'You are a helpful assistant.' },
+    ...history,
+    { role: 'user', content: question },
+  ]
+
+  const msgIndex = session.messages.length
+  session.messages.push({ role: 'assistant', content: '', streaming: true })
+
+  const ac = new AbortController()
+  sessionAbortControllers.set(sid, ac)
+
+  try {
+    let frameRequested = false
+    const result = await callChatApiStream(aiConfig.value, messages, (delta) => {
+      session.messages[msgIndex].content += delta
+      if (!frameRequested) {
+        frameRequested = true
+        requestAnimationFrame(() => { frameRequested = false; scrollToBottom() })
+      }
+    }, ac.signal)
+
+    addUsage(result.usage)
+    if (result.aborted && !session.messages[msgIndex].content) {
+      session.messages.splice(msgIndex, 1)
+    }
+  } finally {
+    if (session.messages[msgIndex]) session.messages[msgIndex].streaming = false
+    sessionAbortControllers.delete(sid)
+  }
 }
 
 async function sendNotes(question: string, imageData: string, session: AiSession) {
+  const sid = session.id
   const history: AiChatMessage[] = session.messages
     .filter(m => m.role === 'user' || m.role === 'assistant')
     .slice(0, -1)
@@ -763,13 +830,35 @@ async function sendNotes(question: string, imageData: string, session: AiSession
     return
   }
 
-  const result = await chatWithNotes(aiConfig.value, question, notes.value, history)
-  contextNoteCount.value = result.contextNoteCount
-  addUsage(result.usage)
-  session.messages.push({ role: 'assistant', content: result.answer })
+  const msgIndex = session.messages.length
+  session.messages.push({ role: 'assistant', content: '', streaming: true })
+
+  const ac = new AbortController()
+  sessionAbortControllers.set(sid, ac)
+
+  try {
+    let frameRequested = false
+    const result = await chatWithNotesStream(aiConfig.value, question, notes.value, history, [], (delta) => {
+      session.messages[msgIndex].content += delta
+      if (!frameRequested) {
+        frameRequested = true
+        requestAnimationFrame(() => { frameRequested = false; scrollToBottom() })
+      }
+    }, ac.signal)
+
+    contextNoteCount.value = result.contextNoteCount
+    addUsage(result.usage)
+    if (result.aborted && !session.messages[msgIndex].content) {
+      session.messages.splice(msgIndex, 1)
+    }
+  } finally {
+    if (session.messages[msgIndex]) session.messages[msgIndex].streaming = false
+    sessionAbortControllers.delete(sid)
+  }
 }
 
 async function sendMcp(question: string, session: AiSession) {
+  const sid = session.id
   const history = session.messages
     .filter(m => m.role === 'user' || m.role === 'assistant')
     .slice(-4)
@@ -801,72 +890,84 @@ async function sendMcp(question: string, session: AiSession) {
     { role: 'user', content: question },
   ]
 
-  async function continueIfTruncated(content: string): Promise<string> {
-    let result = content
-    for (let i = 0; i < 3; i++) {
-      const next = await callAiChat(aiConfig.value, [
-        ...conversation,
-        { role: 'assistant', content: result },
-        { role: 'user', content: 'Continue from where you stopped. Do not repeat yourself.' },
-      ])
-      addUsage(next.usage)
-      if (next.answer) result += '\n' + next.answer
-      if (!next.truncated) break
-    }
-    return result
-  }
+  const msgIndex = session.messages.length
+  session.messages.push({ role: 'assistant', content: '', streaming: true })
 
-  for (let round = 0; round < 5; round++) {
-    const result = await callAiChatWithTools(aiConfig.value, conversation, aiTools)
-    addUsage(result.usage)
+  const ac = new AbortController()
+  sessionAbortControllers.set(sid, ac)
 
-    if (result.content) {
-      accumulatedContent += (accumulatedContent ? '\n\n' : '') + result.content
-    }
+  try {
+    // Only run a final streaming pass when the loop exits with tool_calls
+    // still pending synthesis. When the model returns content without tool_calls,
+    // that content IS the final answer — a second stream would duplicate it.
+    let needsFinalStream = false
+    for (let round = 0; round < 5; round++) {
+      if (ac.signal.aborted) break
+      const result = await callAiChatWithTools(aiConfig.value, conversation, aiTools)
+      addUsage(result.usage)
 
-    if (result.truncated) {
-      accumulatedContent = await continueIfTruncated(accumulatedContent)
-    }
-
-    if (!result.toolCalls || result.toolCalls.length === 0) {
-      break
-    }
-
-    // Push the assistant message WITH tool_calls (required by API spec for tool result matching)
-    conversation.push({
-      role: 'assistant',
-      content: result.content || null,
-      tool_calls: result.toolCalls,
-    })
-
-    // Execute each tool call and push results
-    for (const tc of result.toolCalls) {
-      const toolName = tc.function.name
-      let args: Record<string, unknown> = {}
-      try { args = JSON.parse(tc.function.arguments) } catch {}
-      const desc = tools.find(t => t.tool.name === toolName)
-      if (!desc) continue
-      const server = servers.value.find(s => s.id === desc.serverId && s.enabled)
-      if (!server) continue
-
-      allToolCalls.push({ toolName, serverName: desc.serverName })
-      let toolResult: string
-      try {
-        const res = await mcpCallTool(server, toolName, args)
-        toolResult = JSON.stringify(res?.content || res)
-      } catch (e: any) {
-        toolResult = `Error: ${e.message || e}`
+      if (result.content) {
+        accumulatedContent += (accumulatedContent ? '\n\n' : '') + result.content
+        session.messages[msgIndex].content = accumulatedContent
+        scrollToBottom()
       }
 
-      conversation.push({ role: 'tool', tool_call_id: tc.id, content: toolResult })
-    }
-  }
+      if (!result.toolCalls || result.toolCalls.length === 0) {
+        needsFinalStream = false
+        break
+      }
 
-  session.messages.push({
-    role: 'assistant',
-    content: accumulatedContent || '(no response)',
-    toolCalls: allToolCalls.length > 0 ? allToolCalls : undefined,
-  })
+      conversation.push({
+        role: 'assistant',
+        content: result.content || null,
+        tool_calls: result.toolCalls,
+      })
+
+      for (const tc of result.toolCalls) {
+        if (ac.signal.aborted) break
+        const toolName = tc.function.name
+        let args: Record<string, unknown> = {}
+        try { args = JSON.parse(tc.function.arguments) } catch {}
+        const desc = tools.find(t => t.tool.name === toolName)
+        if (!desc) continue
+        const server = servers.value.find(s => s.id === desc.serverId && s.enabled)
+        if (!server) continue
+
+        allToolCalls.push({ toolName, serverName: desc.serverName })
+        let toolResult: string
+        try {
+          const res = await mcpCallTool(server, toolName, args)
+          toolResult = JSON.stringify(res?.content || res)
+        } catch (e: any) {
+          toolResult = `Error: ${e.message || e}`
+        }
+
+        conversation.push({ role: 'tool', tool_call_id: tc.id, content: toolResult })
+      }
+      needsFinalStream = true
+    }
+
+    if (needsFinalStream && !ac.signal.aborted) {
+      if (accumulatedContent) accumulatedContent += '\n\n'
+      session.messages[msgIndex].content = accumulatedContent
+      let frameRequested = false
+      const streamResult = await callChatApiStream(aiConfig.value, conversation, (delta) => {
+        accumulatedContent += delta
+        session.messages[msgIndex].content = accumulatedContent
+        if (!frameRequested) {
+          frameRequested = true
+          requestAnimationFrame(() => { frameRequested = false; scrollToBottom() })
+        }
+      }, ac.signal)
+      addUsage(streamResult.usage)
+    }
+
+    session.messages[msgIndex].content = accumulatedContent || '(no response)'
+    session.messages[msgIndex].toolCalls = allToolCalls.length > 0 ? allToolCalls : undefined
+  } finally {
+    if (session.messages[msgIndex]) session.messages[msgIndex].streaming = false
+    sessionAbortControllers.delete(sid)
+  }
 }
 
 function scrollToBottom() {
@@ -879,6 +980,7 @@ function goSettings() { router.push('/settings') }
 
 function onMessagesClick(e: MouseEvent) {
   const target = e.target as HTMLElement
+  // Handle note links
   const link = target.closest('[data-note-link]') as HTMLElement | null
   if (link) {
     e.preventDefault()
@@ -888,44 +990,65 @@ function onMessagesClick(e: MouseEvent) {
     if (noteId) {
       router.push({ path: '/notes-space', query: { noteId, heading: headingMatch?.[1] ? decodeURIComponent(headingMatch[1]) : undefined } })
     }
+    return
+  }
+  // Handle code block copy buttons
+  const copyBtn = target.closest('[data-copy-code]') as HTMLElement | null
+  if (copyBtn) {
+    e.preventDefault()
+    const code = copyBtn.getAttribute('data-copy-code') || ''
+    navigator.clipboard.writeText(code).then(() => showToast('已复制', true)).catch(() => {})
   }
 }
 
-// ── Content rendering (note links + markdown tables) ──
-const NOTE_LINK_RE = /\[([^\]]+)\]\(note:([a-f0-9-]+)(?:#([^)]*))?\)/g
-
-/** Convert markdown tables to styled HTML tables */
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+function copyMessage(content: string) {
+  navigator.clipboard.writeText(content).then(() => showToast('已复制', true)).catch(() => {})
 }
-function renderTables(text: string): string {
-  return text.replace(/^\|.+\|(?:\r?\n\|[-:| +]+\|(?:\r?\n\|.+\|)*)/gm, (block) => {
-    const lines = block.trim().split('\n')
-    if (lines.length < 2) return block
-    const rows = lines.map(l => l.replace(/^\||\|$/g, '').split('|').map(c => c.trim()))
-    const alignRow = rows[1].map(c => c.startsWith(':') && c.endsWith(':') ? 'center' : c.endsWith(':') ? 'right' : c.startsWith(':') ? 'left' : '')
-    const head = rows[0]
-    const body = rows.slice(2)
-    let html = '<div style="overflow-x:auto;max-width:100%"><table class="ai-table">'
-    html += '<thead><tr>' + head.map((c, i) => `<th${alignRow[i] ? ' style="text-align:' + alignRow[i] + '"' : ''}>${escapeHtml(c)}</th>`).join('') + '</tr></thead>'
-    if (body.length) {
-      html += '<tbody>' + body.map(r => '<tr>' + r.map((c, i) => `<td${alignRow[i] ? ' style="text-align:' + alignRow[i] + '"' : ''}>${escapeHtml(c)}</td>`).join('') + '</tr>').join('') + '</tbody>'
+
+function canRegenerate(index: number): boolean {
+  if (!activeSession.value) return false
+  const msgs = activeSession.value.messages
+  if (msgs[index]?.role !== 'assistant') return false
+  if (index !== msgs.length - 1) return false
+  if (sessionLoading.get(activeSessionId.value)) return false
+  return true
+}
+
+async function regenerate(index: number) {
+  if (!activeSession.value || !canRegenerate(index)) return
+  const session = activeSession.value
+  // Find the user message preceding this assistant message
+  let userMsgIndex = index - 1
+  while (userMsgIndex >= 0 && session.messages[userMsgIndex].role !== 'user') userMsgIndex--
+  if (userMsgIndex < 0) return
+
+  const userMsg = session.messages[userMsgIndex]
+  // Remove assistant message(s) after the user message
+  session.messages.splice(index)
+
+  const sid = session.id
+  setLoading(sid, true)
+  clearError(sid)
+
+  try {
+    const content = userMsg.fileContent
+      ? `[File: ${userMsg.fileName}]\n${userMsg.fileContent}${userMsg.content ? '\n\n' + userMsg.content : ''}`
+      : userMsg.content
+    if (mode.value === 'chat') {
+      await sendChat(content, userMsg.image || '', session)
+    } else if (mode.value === 'notes') {
+      await sendNotes(content, userMsg.image || '', session)
+    } else {
+      await sendMcp(content, session)
     }
-    return html + '</table></div>'
-  })
-}
-
-function renderNoteLinks(text: string): string {
-  return text.replace(NOTE_LINK_RE, (match, displayText, noteId, heading) => {
-    const href = heading
-      ? `/notes-space?noteId=${noteId}&heading=${encodeURIComponent(heading)}`
-      : `/notes-space?noteId=${noteId}`
-    return `<a href="${href}" class="text-secondary underline hover:text-secondary/80 cursor-pointer" data-note-link="${noteId}">${displayText}</a>`
-  })
-}
-
-function renderContent(text: string): string {
-  return renderTables(renderNoteLinks(text))
+  } catch (e: any) {
+    setError(sid, e.message || String(e))
+  } finally {
+    setLoading(sid, false)
+    session.updatedAt = new Date().toISOString()
+    await nextTick()
+    scrollToBottom()
+  }
 }
 
 // ── MCP ──
@@ -1098,13 +1221,18 @@ onActivated(() => {
   if (!historyLoaded.value) {
     loadAiConfig().then(c => { aiConfig.value = c; historyLoaded.value = true }).catch(() => {})
   }
-  loadAllNotes(false)
+  loadAllNotes(true)
   loadServers().catch(() => {})
 })
 
 onUnmounted(() => {
   if (toastTimer) clearTimeout(toastTimer)
   if (saveTimer) clearTimeout(saveTimer)
+  // Abort any in-flight AI requests
+  for (const ac of sessionAbortControllers.values()) ac.abort()
+  sessionAbortControllers.clear()
+  // Flush any pending token usage before unmount
+  flushUsage()
   document.removeEventListener('paste', onGlobalPaste)
   document.removeEventListener('click', onDocumentClick)
 })
@@ -1126,6 +1254,10 @@ onUnmounted(() => {
 }
 
 /* Markdown tables rendered in chat messages */
+:deep(.ai-table-wrap) {
+  overflow-x: auto;
+  max-width: 100%;
+}
 :deep(.ai-table) {
   border-collapse: collapse;
   width: 100%;
@@ -1151,4 +1283,162 @@ onUnmounted(() => {
 :deep(.ai-table tr:nth-child(even) td) {
   background: rgba(0, 0, 0, 0.02);
 }
+
+/* AI Markdown content styles */
+:deep(.ai-markdown) {
+  word-break: break-word;
+}
+:deep(.ai-markdown p) {
+  margin: 0.4em 0;
+}
+:deep(.ai-markdown p:first-child) {
+  margin-top: 0;
+}
+:deep(.ai-markdown p:last-child) {
+  margin-bottom: 0;
+}
+:deep(.ai-markdown h1),
+:deep(.ai-markdown h2),
+:deep(.ai-markdown h3),
+:deep(.ai-markdown h4) {
+  margin: 0.8em 0 0.4em;
+  font-weight: 600;
+  line-height: 1.3;
+}
+:deep(.ai-markdown h1) { font-size: 1.3em; }
+:deep(.ai-markdown h2) { font-size: 1.15em; }
+:deep(.ai-markdown h3) { font-size: 1.05em; }
+:deep(.ai-markdown h4) { font-size: 1em; }
+:deep(.ai-markdown ul),
+:deep(.ai-markdown ol) {
+  margin: 0.4em 0;
+  padding-left: 1.5em;
+}
+:deep(.ai-markdown li) {
+  margin: 0.2em 0;
+}
+:deep(.ai-markdown blockquote) {
+  margin: 0.5em 0;
+  padding: 0.3em 0.8em;
+  border-left: 3px solid rgba(139, 92, 246, 0.4);
+  background: rgba(139, 92, 246, 0.04);
+  border-radius: 0 6px 6px 0;
+}
+:deep(.ai-markdown hr) {
+  border: none;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  margin: 0.8em 0;
+}
+:deep(.ai-markdown strong) {
+  font-weight: 600;
+}
+:deep(.ai-markdown a) {
+  color: #7c3aed;
+  text-decoration: underline;
+}
+:deep(.ai-markdown a:hover) {
+  opacity: 0.8;
+}
+
+/* Inline code */
+:deep(.ai-inline-code) {
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.15);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+  font-size: 0.9em;
+  font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
+}
+
+/* Code blocks */
+:deep(.ai-code-block) {
+  margin: 0.6em 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: #1e1e2e;
+}
+:deep(.ai-code-header) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+:deep(.ai-code-lang) {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  font-family: inherit;
+}
+:deep(.ai-code-copy) {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+:deep(.ai-code-copy:hover) {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.1);
+}
+:deep(.ai-code-block pre) {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  font-size: 12px;
+  line-height: 1.6;
+}
+:deep(.ai-code-block code) {
+  font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
+  color: #cdd6f4;
+}
+
+/* Streaming cursor */
+:deep(.ai-cursor) {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: #7c3aed;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  animation: ai-blink 0.8s infinite;
+}
+@keyframes ai-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+/* highlight.js token colors (Catppuccin Mocha inspired) */
+:deep(.hljs-keyword) { color: #cba6f7; }
+:deep(.hljs-string) { color: #a6e3a1; }
+:deep(.hljs-number) { color: #fab387; }
+:deep(.hljs-comment) { color: #6c7086; font-style: italic; }
+:deep(.hljs-function) { color: #89b4fa; }
+:deep(.hljs-title) { color: #89b4fa; }
+:deep(.hljs-params) { color: #f2cdcd; }
+:deep(.hljs-built_in) { color: #f9e2af; }
+:deep(.hljs-literal) { color: #fab387; }
+:deep(.hljs-type) { color: #f9e2af; }
+:deep(.hljs-attr) { color: #89dceb; }
+:deep(.hljs-attribute) { color: #89dceb; }
+:deep(.hljs-selector-tag) { color: #cba6f7; }
+:deep(.hljs-selector-class) { color: #89b4fa; }
+:deep(.hljs-selector-id) { color: #fab387; }
+:deep(.hljs-variable) { color: #f5c2e7; }
+:deep(.hljs-meta) { color: #f9e2af; }
+:deep(.hljs-tag) { color: #89b4fa; }
+:deep(.hljs-name) { color: #cba6f7; }
+:deep(.hljs-property) { color: #89dceb; }
+:deep(.hljs-punctuation) { color: #9399b2; }
+:deep(.hljs-operator) { color: #89dceb; }
+:deep(.hljs-regexp) { color: #f5c2e7; }
+:deep(.hljs-deletion) { color: #f38ba8; }
+:deep(.hljs-addition) { color: #a6e3a1; }
 </style>

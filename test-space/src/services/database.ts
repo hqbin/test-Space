@@ -222,6 +222,7 @@ export async function closeDb() {
   if (db) {
     await db.close()
     db = null
+    dbPromise = null
   }
 }
 
@@ -531,22 +532,25 @@ async function repairEmptyPlainText(d: Database) {
     const rows = await d.select<{ id: string; content: string }[]>(
       `SELECT id, content FROM notes WHERE content IS NOT NULL AND content != '' AND (plain_text IS NULL OR plain_text = '')`
     )
-    for (const row of rows) {
-      const plainText = htmlToPlainText(DOMPurify.sanitize(row.content))
-      if (plainText) {
-        await d.execute('UPDATE notes SET plain_text = ? WHERE id = ?', [plainText, row.id])
-        try {
-          await d.execute('DELETE FROM notes_fts WHERE note_id = ?', [row.id])
-          await d.execute(
-            "INSERT INTO notes_fts (note_id, title, content, plain_text, tags) SELECT id, title, content, ?, tags FROM notes WHERE id = ?",
-            [plainText, row.id]
-          )
-        } catch {}
+    if (rows.length > 0) {
+      // No transaction wrapping — tauri-plugin-sql pool splits BEGIN/COMMIT
+      // across connections. Each row is independently idempotent.
+      for (const row of rows) {
+        const plainText = htmlToPlainText(DOMPurify.sanitize(row.content))
+        if (plainText) {
+          try {
+            await d.execute('UPDATE notes SET plain_text = ? WHERE id = ?', [plainText, row.id])
+            await d.execute('DELETE FROM notes_fts WHERE note_id = ?', [row.id])
+            await d.execute(
+              "INSERT INTO notes_fts (note_id, title, content, plain_text, tags) SELECT id, title, content, ?, tags FROM notes WHERE id = ?",
+              [plainText, row.id]
+            )
+          } catch {}
+        }
       }
+      console.log(`[DB] Repaired plain_text for ${rows.length} notes`)
     }
-    if (rows.length > 0) console.log(`[DB] Repaired plain_text for ${rows.length} notes`)
     _plainTextRepaired = true
-    // Persist the flag so future startups skip this scan entirely
     await d.execute(
       `INSERT INTO app_settings (key, value) VALUES ('plain_text_repaired', '1')
        ON CONFLICT(key) DO UPDATE SET value = '1'`
@@ -802,6 +806,8 @@ export async function listScripts(): Promise<ScriptItem[]> {
  */
 export async function updateScriptSortOrders(items: { id: string; sortOrder: number }[]) {
   const d = await getDb()
+  // No transaction wrapping — tauri-plugin-sql pool splits BEGIN/COMMIT
+  // across connections. Each UPDATE is independent and idempotent.
   for (const item of items) {
     await d.execute(`UPDATE scripts SET sort_order = ? WHERE id = ?`, [item.sortOrder, item.id])
   }
@@ -902,35 +908,68 @@ function _yieldToMain(): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, 0));
 }
 
-export async function exportAllData(): Promise<AppBackup> {
+export interface BackupProgress {
+  phase: string
+  current: number
+  total: number
+}
+export type ProgressCallback = (info: BackupProgress) => void
+
+// Yield to the main thread every N rows in tight loops so the UI can paint.
+const YIELD_EVERY = 20
+
+export async function exportAllData(onProgress?: ProgressCallback): Promise<AppBackup> {
+  const emit = (phase: string, current = 0, total = 0) => {
+    onProgress?.({ phase, current, total })
+  }
+  emit('读取设置')
   const settings = await loadSettings()
   await _yieldToMain()
   const d = await getDb()
+  emit('读取输入历史')
   const inputHistory = await d.select<InputHistoryEntry[]>(
     'SELECT id, key_name as keyName, value, created_at as createdAt FROM input_history ORDER BY sort_order DESC'
   )
   await _yieldToMain()
+  emit('读取日志会话')
   const logSessions = await d.select<LogSession[]>(
     'SELECT id, type, device_serial as deviceSerial, status, started_at as startedAt, metadata FROM log_sessions ORDER BY started_at DESC'
   )
   await _yieldToMain()
+  emit('读取笔记空间')
   const noteSpaces = await d.select<any[]>('SELECT id, name, sort_order as sortOrder, created_at as createdAt, updated_at as updatedAt FROM note_spaces')
   const noteFolders = await loadNoteFolders()
   await _yieldToMain()
-  const notes = await loadNotes()
+  emit('读取笔记')
+  // Read notes directly — skip the plain_text repair pass that loadNotes triggers.
+  // Export doesn't need repaired plain_text; running it here means every restore
+  // → export cycle would re-scan every note.
+  const noteRows = await d.select<any[]>(
+    `SELECT id, folder_id as folderId, title, content, content_json as contentJson, plain_text as plainText,
+            tags, is_favorite as isFavorite, created_at as createdAt, updated_at as updatedAt
+     FROM notes ORDER BY title COLLATE NOCASE ASC`
+  )
+  const notes = noteRows.map(r => ({ ...r, tags: safeJsonParse(r.tags, []), isFavorite: !!r.isFavorite, plainText: r.plainText || '' }))
+  await _yieldToMain()
+  emit('读取笔记历史版本')
   const noteVersions = await d.select<NoteVersion[]>(
     'SELECT id, note_id as noteId, content, saved_at as savedAt FROM note_versions ORDER BY saved_at ASC'
   )
   await _yieldToMain()
+  emit('读取笔记链接')
   const noteLinks = await d.select<NoteLink[]>(
     'SELECT id, source_note_id as sourceNoteId, target_note_id as targetNoteId, created_at as createdAt FROM note_links'
   )
+  emit('读取脚本')
   const scripts = await listScripts()
   await _yieldToMain()
+  emit('读取 AI 记忆')
   const aiMemories = await d.select<AiMemory[]>(
     'SELECT id, content, created_at as createdAt, updated_at as updatedAt FROM note_ai_memories'
   )
+  emit('读取代理规则')
   const proxyRules = await loadProxyRules()
+  emit('读取接口测试')
   const apiTestGroups = await loadApiTestGroups()
   await _yieldToMain()
   const apiTestCases = await loadApiTestCases()
@@ -972,10 +1011,12 @@ export async function exportAllData(): Promise<AppBackup> {
     perfSessions: undefined,
     mcpServers: undefined,
   }
+  emit('读取性能会话')
   try {
     const ps = await d.select<PerfSessionBackup[]>('SELECT * FROM perf_sessions ORDER BY created_at DESC')
     if (ps.length > 0) backup.perfSessions = ps
   } catch {}
+  emit('读取 MCP 配置')
   try {
     const raw = await getSetting('mcp_server_configs')
     if (raw) {
@@ -983,6 +1024,7 @@ export async function exportAllData(): Promise<AppBackup> {
       if (Array.isArray(parsed) && parsed.length > 0) backup.mcpServers = parsed
     }
   } catch {}
+  emit('完成')
   return backup
 }
 
@@ -1015,14 +1057,18 @@ function validateBackup(backup: any): string | null {
  *
  * Returns per-category counts so the caller can present a summary to the user.
  */
-export async function importAllDataIncremental(backup: AppBackup): Promise<{
+export async function importAllDataIncremental(backup: AppBackup, onProgress?: ProgressCallback): Promise<{
   imported: number
+  updated: number
   skipped: number
   failures: string[]
 }> {
   const err = validateBackup(backup)
   if (err) throw new Error(err)
   const d = await getDb()
+  const emit = (phase: string, current = 0, total = 0) => {
+    onProgress?.({ phase, current, total })
+  }
   const maxRetries = 3
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try { await d.select('SELECT 1'); break }
@@ -1033,18 +1079,47 @@ export async function importAllDataIncremental(backup: AppBackup): Promise<{
   }
 
   let imported = 0
+  let updated = 0
   let skipped = 0
   const failures: string[] = []
 
-  // ── 1. NOTE SPACES ─ match by name; build backupSpaceId → localSpaceId map ──
+  // Compare ISO-8601 timestamps as strings (lexicographic == chronological for ISO format)
+  const isBackupNewer = (backupTs?: string | null, localTs?: string | null): boolean => {
+    if (!backupTs) return false
+    if (!localTs) return true
+    return backupTs > localTs
+  }
+
+  // NOTE: no transaction wrapping — tauri-plugin-sql uses a connection pool,
+  // so BEGIN/COMMIT on separate execute() calls can land on different connections.
+  // This import is safe to run without a transaction: matching by business keys
+  // makes every INSERT/UPDATE idempotent, so a mid-import failure can be resumed
+  // by re-running the restore (it will pick up where it stopped).
+
+  // ── 1. NOTE SPACES ─ match by name; update if backup is newer ──
+  emit('恢复笔记空间')
   const spaceIdMap: Record<string, string> = {}
-  const localSpaces = (await d.select<{ id: string; name: string }[]>(
-    'SELECT id, name FROM note_spaces'
+  const localSpaces = (await d.select<{ id: string; name: string; updated_at: string }[]>(
+    'SELECT id, name, updated_at FROM note_spaces'
   )) || []
-  const localSpaceByName = new Map(localSpaces.map(s => [s.name, s.id]))
+  const localSpaceByName = new Map(localSpaces.map(s => [s.name, s]))
   for (const s of backup.noteSpaces || []) {
     const existing = localSpaceByName.get(s.name)
-    if (existing) { spaceIdMap[s.id] = existing; skipped++; continue }
+    if (existing) {
+      spaceIdMap[s.id] = existing.id
+      if (isBackupNewer(s.updatedAt, existing.updated_at)) {
+        try {
+          await d.execute(
+            'UPDATE note_spaces SET sort_order = ?, updated_at = ? WHERE id = ?',
+            [s.sortOrder ?? 0, s.updatedAt, existing.id]
+          )
+          updated++
+        } catch (e: any) { failures.push(`space "${s.name}" update: ${e.message || e}`) }
+      } else {
+        skipped++
+      }
+      continue
+    }
     try {
       await d.execute(
         'INSERT INTO note_spaces (id, name, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
@@ -1075,14 +1150,29 @@ export async function importAllDataIncremental(backup: AppBackup): Promise<{
       localParentId = folderIdMap[bkParentId] ?? null
     }
 
-    const existing = (await d.select<{ id: string }[]>(
-      `SELECT id FROM note_folders
+    const existing = (await d.select<{ id: string; updated_at: string }[]>(
+      `SELECT id, updated_at FROM note_folders
         WHERE IFNULL(space_id, '') = IFNULL(?, '')
           AND IFNULL(parent_id, '') = IFNULL(?, '')
           AND name = ?`,
       [localSpaceId, localParentId, f.name]
     )) || []
-    if (existing.length > 0) { folderIdMap[f.id] = existing[0].id; skipped++; return }
+    if (existing.length > 0) {
+      folderIdMap[f.id] = existing[0].id
+      const bkUpdated = f.updatedAt ?? f.updated_at
+      if (isBackupNewer(bkUpdated, existing[0].updated_at)) {
+        try {
+          await d.execute(
+            'UPDATE note_folders SET sort_order = ?, updated_at = ? WHERE id = ?',
+            [f.sortOrder ?? f.sort_order ?? 0, bkUpdated, existing[0].id]
+          )
+          updated++
+        } catch (e: any) { failures.push(`folder "${f.name}" update: ${e.message || e}`) }
+      } else {
+        skipped++
+      }
+      return
+    }
 
     try {
       await d.execute(
@@ -1095,37 +1185,89 @@ export async function importAllDataIncremental(backup: AppBackup): Promise<{
   }
   for (const f of backup.noteFolders || []) await processFolder(f)
 
-  // ── 3. NOTES ─ match by (remapped folder_id, title). Track newly-inserted note IDs
-  //             so version/link imports can be scoped to fresh notes only. ──
+  // ── 3. NOTES ─ match by (remapped folder_id, title); update if backup is newer.
+  //             Track newly-inserted note IDs so version/link imports can be
+  //             scoped to fresh notes only. ──
   const noteIdMap: Record<string, string> = {}
   const freshlyInsertedNoteIds = new Set<string>()
-  for (const rawNote of backup.notes || []) {
+  const notesArr = backup.notes || []
+  emit('恢复笔记', 0, notesArr.length)
+  for (let ni = 0; ni < notesArr.length; ni++) {
+    const rawNote = notesArr[ni]
     const n: any = rawNote
     const bkFolderId = n.folderId ?? n.folder_id ?? null
     const localFolderId: string | null = bkFolderId ? (folderIdMap[bkFolderId] ?? null) : null
 
-    const existing = (await d.select<{ id: string }[]>(
-      `SELECT id FROM notes
+    const existing = (await d.select<{ id: string; updated_at: string }[]>(
+      `SELECT id, updated_at FROM notes
         WHERE IFNULL(folder_id, '') = IFNULL(?, '')
           AND title = ?`,
       [localFolderId, n.title ?? '']
     )) || []
-    if (existing.length > 0) { noteIdMap[n.id] = existing[0].id; skipped++; continue }
+    // Ensure plain_text is populated so the restore doesn't leave empty values
+    // that would trigger a per-note repair loop on the next loadNotes() call.
+    const bkContent = n.content ?? ''
+    let plainText: string = n.plainText ?? n.plain_text ?? ''
+    if (!plainText && bkContent) {
+      try { plainText = htmlToPlainText(DOMPurify.sanitize(bkContent)) } catch { plainText = '' }
+    }
+    const tagsStr = JSON.stringify(n.tags ?? [])
+
+    if (existing.length > 0) {
+      const localId = existing[0].id
+      noteIdMap[n.id] = localId
+      const bkUpdated = n.updatedAt ?? n.updated_at
+      if (isBackupNewer(bkUpdated, existing[0].updated_at)) {
+        try {
+          await d.execute(
+            `UPDATE notes SET content = ?, content_json = ?, plain_text = ?, tags = ?, is_favorite = ?, updated_at = ?
+              WHERE id = ?`,
+            [bkContent, n.contentJson ?? n.content_json ?? null, plainText, tagsStr, n.isFavorite ? 1 : 0, bkUpdated, localId]
+          )
+          // Refresh FTS index for this note
+          try {
+            await d.execute('DELETE FROM notes_fts WHERE note_id = ?', [localId])
+            await d.execute(
+              'INSERT INTO notes_fts (note_id, title, content, plain_text, tags) VALUES (?, ?, ?, ?, ?)',
+              [localId, n.title ?? '', bkContent, plainText, tagsStr]
+            )
+          } catch {}
+          updated++
+        } catch (e: any) { failures.push(`note "${n.title}" update: ${e.message || e}`) }
+      } else {
+        skipped++
+      }
+      continue
+    }
 
     try {
       await d.execute(
         'INSERT INTO notes (id, folder_id, title, content, content_json, plain_text, tags, is_favorite, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [n.id, localFolderId, n.title ?? '', n.content ?? '', n.contentJson ?? null, n.plainText ?? n.plain_text ?? '', JSON.stringify(n.tags ?? []), n.isFavorite ? 1 : 0, n.createdAt, n.updatedAt]
+        [n.id, localFolderId, n.title ?? '', bkContent, n.contentJson ?? null, plainText, tagsStr, n.isFavorite ? 1 : 0, n.createdAt, n.updatedAt]
       )
+      // Insert FTS row for the new note so search finds it immediately.
+      try {
+        await d.execute(
+          'INSERT INTO notes_fts (note_id, title, content, plain_text, tags) VALUES (?, ?, ?, ?, ?)',
+          [n.id, n.title ?? '', bkContent, plainText, tagsStr]
+        )
+      } catch {}
       noteIdMap[n.id] = n.id
       freshlyInsertedNoteIds.add(n.id)
       imported++
     } catch (e: any) { failures.push(`note "${n.title}": ${e.message || e}`) }
+    if ((ni + 1) % YIELD_EVERY === 0) {
+      emit('恢复笔记', ni + 1, notesArr.length)
+      await _yieldToMain()
+    }
   }
+  emit('恢复笔记', notesArr.length, notesArr.length)
 
   // ── 4. NOTE VERSIONS ─ only import for freshly-inserted notes (skipped notes keep local history) ──
-  for (const rawV of backup.noteVersions || []) {
-    const v: any = rawV
+  const versionsArr = backup.noteVersions || []
+  emit('恢复笔记历史', 0, versionsArr.length)
+  for (let vi = 0; vi < versionsArr.length; vi++) {
+    const v: any = versionsArr[vi]
     const bkNoteId = v.noteId ?? v.note_id
     if (!freshlyInsertedNoteIds.has(bkNoteId)) continue
     try {
@@ -1135,10 +1277,15 @@ export async function importAllDataIncremental(backup: AppBackup): Promise<{
       )
       imported++
     } catch { /* silently ignore individual version failures */ }
+    if ((vi + 1) % YIELD_EVERY === 0) {
+      emit('恢复笔记历史', vi + 1, versionsArr.length)
+      await _yieldToMain()
+    }
   }
 
   // ── 5. NOTE LINKS ─ only import if the source note was freshly inserted AND target
   //                   resolves to some local note (either fresh or existing by name) ──
+  emit('恢复笔记链接')
   for (const rawL of backup.noteLinks || []) {
     const l: any = rawL
     const src = l.sourceNoteId ?? l.source_note_id
@@ -1155,25 +1302,42 @@ export async function importAllDataIncremental(backup: AppBackup): Promise<{
     } catch { /* ignore */ }
   }
 
-  // ── 6. SCRIPTS ─ match by (type, name); scripts of same name in different types coexist ──
-  const localScripts = (await d.select<{ type: string; name: string }[]>(
-    'SELECT type, name FROM scripts'
+  // ── 6. SCRIPTS ─ match by (type, name); update if backup is newer ──
+  emit('恢复脚本')
+  const localScripts = (await d.select<{ id: string; type: string; name: string; updated_at: string }[]>(
+    'SELECT id, type, name, updated_at FROM scripts'
   )) || []
-  const localScriptKeys = new Set(localScripts.map(s => `${s.type}::${s.name}`))
+  const localScriptsByKey = new Map(localScripts.map(s => [`${s.type}::${s.name}`, s]))
   for (const rawS of backup.scripts || []) {
     const s: any = rawS
     const key = `${s.type ?? 'bat'}::${s.name}`
-    if (localScriptKeys.has(key)) { skipped++; continue }
+    const existing = localScriptsByKey.get(key)
+    const bkUpdated = s.updatedAt ?? s.updated_at ?? s.createdAt ?? s.created_at
+    if (existing) {
+      if (isBackupNewer(bkUpdated, existing.updated_at)) {
+        try {
+          await d.execute(
+            'UPDATE scripts SET content = ?, sort_order = ?, updated_at = ? WHERE id = ?',
+            [s.content ?? '', s.sortOrder ?? s.sort_order ?? 0, bkUpdated, existing.id]
+          )
+          updated++
+        } catch (e: any) { failures.push(`script "${s.name}" update: ${e.message || e}`) }
+      } else {
+        skipped++
+      }
+      continue
+    }
     try {
       await d.execute(
         'INSERT INTO scripts (id, name, type, content, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [s.id, s.name, s.type ?? 'bat', s.content ?? '', s.sortOrder ?? s.sort_order ?? 0, s.createdAt ?? s.created_at, s.updatedAt ?? s.updated_at ?? s.createdAt]
+        [s.id, s.name, s.type ?? 'bat', s.content ?? '', s.sortOrder ?? s.sort_order ?? 0, s.createdAt ?? s.created_at, bkUpdated]
       )
       imported++
     } catch (e: any) { failures.push(`script "${s.name}": ${e.message || e}`) }
   }
 
   // ── 7. AI MEMORIES ─ dedup by content (already the identity for user-visible memories) ──
+  emit('恢复 AI 记忆')
   const localMems = (await d.select<{ content: string }[]>(
     'SELECT content FROM note_ai_memories'
   )) || []
@@ -1190,51 +1354,93 @@ export async function importAllDataIncremental(backup: AppBackup): Promise<{
     } catch (e: any) { failures.push(`memory: ${e.message || e}`) }
   }
 
-  // ── 8. API TEST GROUPS ─ match by name ──
-  const localGroups = (await d.select<{ name: string }[]>(
-    'SELECT name FROM api_test_groups'
+  // ── 8. API TEST GROUPS ─ match by name; update if backup is newer ──
+  emit('恢复接口测试分组')
+  const localGroups = (await d.select<{ id: string; name: string; updated_at: string }[]>(
+    'SELECT id, name, updated_at FROM api_test_groups'
   )) || []
-  const localGroupNames = new Set(localGroups.map(g => g.name))
+  const localGroupsByName = new Map(localGroups.map(g => [g.name, g]))
   const groupIdMap: Record<string, string> = {}
   for (const rawG of backup.apiTestGroups || []) {
     const g: any = rawG
-    if (localGroupNames.has(g.name)) { skipped++; continue }
+    const existing = localGroupsByName.get(g.name)
+    const bkUpdated = g.updatedAt ?? g.updated_at
+    if (existing) {
+      groupIdMap[g.id] = existing.id
+      if (isBackupNewer(bkUpdated, existing.updated_at)) {
+        try {
+          await d.execute(
+            'UPDATE api_test_groups SET description = ?, color = ?, sort_order = ?, updated_at = ? WHERE id = ?',
+            [g.description ?? '', g.color ?? '#6366f1', g.sortOrder ?? g.sort_order ?? 0, bkUpdated, existing.id]
+          )
+          updated++
+        } catch (e: any) { failures.push(`group "${g.name}" update: ${e.message || e}`) }
+      } else {
+        skipped++
+      }
+      continue
+    }
     try {
       await d.execute(
         'INSERT INTO api_test_groups (id, name, description, color, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [g.id, g.name, g.description ?? '', g.color ?? '#6366f1', g.sortOrder ?? g.sort_order ?? 0, g.createdAt ?? g.created_at, g.updatedAt ?? g.updated_at]
+        [g.id, g.name, g.description ?? '', g.color ?? '#6366f1', g.sortOrder ?? g.sort_order ?? 0, g.createdAt ?? g.created_at, bkUpdated]
       )
       groupIdMap[g.id] = g.id
       imported++
     } catch (e: any) { failures.push(`group "${g.name}": ${e.message || e}`) }
   }
 
-  // ── 9. API TEST CASES ─ match by (group_id, method, path, name); only for newly inserted groups ──
-  const localCases = (await d.select<{ group_id: string; method: string; path: string; name: string }[]>(
-    'SELECT group_id, method, path, name FROM api_test_cases'
+  // ── 9. API TEST CASES ─ match by (group_id, method, path, name); update if backup is newer ──
+  const localCases = (await d.select<{ id: string; group_id: string; method: string; path: string; name: string; updated_at: string }[]>(
+    'SELECT id, group_id, method, path, name, updated_at FROM api_test_cases'
   )) || []
-  const localCaseKeys = new Set(localCases.map(c => `${c.group_id}::${c.method}::${c.path}::${c.name}`))
+  const localCasesByKey = new Map(localCases.map(c => [`${c.group_id}::${c.method}::${c.path}::${c.name}`, c]))
   const caseIdMap: Record<string, string> = {}
   const freshlyInsertedCaseIds = new Set<string>()
-  for (const rawC of backup.apiTestCases || []) {
+  const casesArr = backup.apiTestCases || []
+  emit('恢复接口测试用例', 0, casesArr.length)
+  for (let ci = 0; ci < casesArr.length; ci++) {
+    const rawC = casesArr[ci]
     const c: any = rawC
     const bkGroupId = c.groupId ?? c.group_id
     const localGroupId = groupIdMap[bkGroupId] ?? bkGroupId
     const caseKey = `${localGroupId}::${c.method}::${c.path}::${c.name}`
-    if (localCaseKeys.has(caseKey)) { skipped++; continue }
+    const existing = localCasesByKey.get(caseKey)
+    const bkUpdated = c.updatedAt ?? c.updated_at
+    if (existing) {
+      caseIdMap[c.id] = existing.id
+      if (isBackupNewer(bkUpdated, existing.updated_at)) {
+        try {
+          await d.execute(
+            `UPDATE api_test_cases SET description = ?, type = ?, url = ?, host = ?, query = ?, headers = ?, body = ?, body_is_base64 = ?, assertions = ?, source_request_id = ?, enabled = ?, sort_order = ?, updated_at = ?
+              WHERE id = ?`,
+            [c.description ?? '', c.type, c.url, c.host ?? '', c.query ?? null, JSON.stringify(c.headers ?? []), c.body ?? null, c.bodyIsBase64 ? 1 : 0, JSON.stringify(c.assertions ?? []), c.sourceRequestId ?? c.source_request_id ?? null, c.enabled ? 1 : 0, c.sortOrder ?? c.sort_order ?? 0, bkUpdated, existing.id]
+          )
+          updated++
+        } catch (e: any) { failures.push(`case "${c.name}" update: ${e.message || e}`) }
+      } else {
+        skipped++
+      }
+      continue
+    }
     try {
       await d.execute(
         `INSERT INTO api_test_cases (id, group_id, name, description, type, method, url, host, path, query, headers, body, body_is_base64, assertions, source_request_id, enabled, sort_order, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [c.id, localGroupId, c.name, c.description ?? '', c.type, c.method, c.url, c.host ?? '', c.path, c.query ?? null, JSON.stringify(c.headers ?? []), c.body ?? null, c.bodyIsBase64 ? 1 : 0, JSON.stringify(c.assertions ?? []), c.sourceRequestId ?? c.source_request_id ?? null, c.enabled ? 1 : 0, c.sortOrder ?? c.sort_order ?? 0, c.createdAt ?? c.created_at, c.updatedAt ?? c.updated_at]
+        [c.id, localGroupId, c.name, c.description ?? '', c.type, c.method, c.url, c.host ?? '', c.path, c.query ?? null, JSON.stringify(c.headers ?? []), c.body ?? null, c.bodyIsBase64 ? 1 : 0, JSON.stringify(c.assertions ?? []), c.sourceRequestId ?? c.source_request_id ?? null, c.enabled ? 1 : 0, c.sortOrder ?? c.sort_order ?? 0, c.createdAt ?? c.created_at, bkUpdated]
       )
       caseIdMap[c.id] = c.id
       freshlyInsertedCaseIds.add(c.id)
       imported++
     } catch (e: any) { failures.push(`case "${c.name}": ${e.message || e}`) }
+    if ((ci + 1) % YIELD_EVERY === 0) {
+      emit('恢复接口测试用例', ci + 1, casesArr.length)
+      await _yieldToMain()
+    }
   }
 
   // ── 10. API TEST REPORTS ─ match by name ──
+  emit('恢复测试报告')
   const localReports = (await d.select<{ name: string }[]>(
     'SELECT name FROM api_test_reports'
   )) || []
@@ -1257,8 +1463,10 @@ export async function importAllDataIncremental(backup: AppBackup): Promise<{
   }
 
   // ── 11. API TEST RESULTS ─ only for freshly-inserted reports ──
-  for (const rawR of backup.apiTestResults || []) {
-    const r: any = rawR
+  const resultsArr = backup.apiTestResults || []
+  emit('恢复测试结果', 0, resultsArr.length)
+  for (let ri = 0; ri < resultsArr.length; ri++) {
+    const r: any = resultsArr[ri]
     const bkReportId = r.reportId ?? r.report_id
     if (!freshlyInsertedReportIds.has(bkReportId)) continue
     try {
@@ -1269,7 +1477,12 @@ export async function importAllDataIncremental(backup: AppBackup): Promise<{
       )
       imported++
     } catch { /* ignore individual result failures */ }
+    if ((ri + 1) % YIELD_EVERY === 0) {
+      emit('恢复测试结果', ri + 1, resultsArr.length)
+      await _yieldToMain()
+    }
   }
+  emit('完成')
 
   // NOTE: app_settings, input_history, log_sessions, recent_files, favorites, proxy_rules
   // are intentionally NOT touched. Cloud restore preserves local preferences/state.
@@ -1282,13 +1495,16 @@ export async function importAllDataIncremental(backup: AppBackup): Promise<{
   } catch {}
 
   if (failures.length > 0) console.warn('[importAllDataIncremental] failures:', failures)
-  return { imported, skipped, failures }
+  return { imported, updated, skipped, failures }
 }
 
-export async function importAllData(backup: AppBackup) {
+export async function importAllData(backup: AppBackup, onProgress?: ProgressCallback) {
   const err = validateBackup(backup)
   if (err) throw new Error(err)
   const d = await getDb()
+  const emit = (phase: string, current = 0, total = 0) => {
+    onProgress?.({ phase, current, total })
+  }
   const maxRetries = 3
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -1300,77 +1516,135 @@ export async function importAllData(backup: AppBackup) {
     }
   }
   const failures: string[] = []
-  const deletes = [
-    'app_settings', 'input_history', 'log_sessions',
-    'note_folders', 'notes', 'notes_fts', 'note_versions', 'note_links', 'scripts', 'note_ai_memories',
-    'api_test_groups', 'api_test_cases', 'api_test_reports', 'api_test_results', 'perf_sessions',
-  ]
-  for (const table of deletes) {
-    try { await d.execute(`DELETE FROM ${table}`) } catch (e: any) { failures.push(`DELETE ${table}: ${e}`) }
-  }
-  try { await d.execute('DELETE FROM note_spaces') } catch {}
-  const inserts: [string, string, any[], (item: any) => unknown[]][] = [
-    ['input_history', 'key_name, value, created_at, sort_order', backup.inputHistory || [], h => [h.keyName, h.value, h.createdAt, Date.parse(h.createdAt)]],
-    ['log_sessions', 'id, type, device_serial, status, started_at, metadata', backup.logSessions || [], s => [s.id, s.type, s.deviceSerial, s.status, s.startedAt, s.metadata]],
-    ['note_spaces', 'id, name, sort_order, created_at, updated_at', backup.noteSpaces || [], (s: any) => [s.id, s.name, s.sortOrder ?? s.sort_order ?? 0, s.createdAt ?? s.created_at, s.updatedAt ?? s.updated_at]],
-    ['note_folders', 'id, space_id, name, parent_id, sort_order, created_at, updated_at', backup.noteFolders || [], (f: any) => [f.id, f.spaceId ?? f.space_id ?? null, f.name, f.parentId ?? f.parent_id ?? null, f.sortOrder ?? f.sort_order ?? 0, f.createdAt ?? f.created_at, f.updatedAt ?? f.updated_at]],
-    ['notes', 'id, folder_id, title, content, content_json, plain_text, tags, is_favorite, created_at, updated_at', backup.notes || [], (n: any) => [n.id, n.folderId ?? n.folder_id ?? null, n.title ?? '', n.content ?? '', n.contentJson ?? n.content_json ?? null, n.plainText ?? n.plain_text ?? '', JSON.stringify(n.tags ?? []), n.isFavorite ? 1 : 0, n.createdAt ?? n.created_at, n.updatedAt ?? n.updated_at]],
-    ['note_versions', 'id, note_id, content, saved_at', backup.noteVersions || [], (v: any) => [v.id, v.noteId ?? v.note_id, v.content, v.savedAt ?? v.saved_at]],
-    ['note_links', 'id, source_note_id, target_note_id, created_at', backup.noteLinks || [], (l: any) => [l.id, l.sourceNoteId ?? l.source_note_id, l.targetNoteId ?? l.target_note_id, l.createdAt ?? l.created_at]],
-    ['scripts', 'id, name, type, content, sort_order, created_at, updated_at', backup.scripts || [], (s: any) => [s.id, s.name, s.type ?? 'bat', s.content ?? '', s.sortOrder ?? s.sort_order ?? 0, s.createdAt ?? s.created_at, s.updatedAt ?? s.updated_at ?? s.createdAt]],
-    ['note_ai_memories', 'id, content, created_at, updated_at', backup.aiMemories || [], (m: any) => [m.id, m.content, m.createdAt ?? m.created_at, m.updatedAt ?? m.updated_at ?? m.createdAt]],
-    ['api_test_groups', 'id, name, description, color, sort_order, created_at, updated_at', backup.apiTestGroups || [], (g: any) => [g.id, g.name, g.description ?? '', g.color ?? '#6366f1', g.sortOrder ?? g.sort_order ?? 0, g.createdAt ?? g.created_at, g.updatedAt ?? g.updated_at]],
-    ['api_test_cases', 'id, group_id, name, description, type, method, url, host, path, query, headers, body, body_is_base64, assertions, source_request_id, enabled, sort_order, created_at, updated_at', backup.apiTestCases || [], (c: any) => [c.id, c.groupId ?? c.group_id, c.name, c.description ?? '', c.type, c.method, c.url, c.host ?? '', c.path, c.query ?? null, JSON.stringify(c.headers ?? []), c.body ?? null, c.bodyIsBase64 ? 1 : 0, JSON.stringify(c.assertions ?? []), c.sourceRequestId ?? c.source_request_id ?? null, c.enabled ? 1 : 0, c.sortOrder ?? c.sort_order ?? 0, c.createdAt ?? c.created_at, c.updatedAt ?? c.updated_at]],
-    ['api_test_reports', 'id, name, description, total_cases, passed_cases, failed_cases, total_duration, started_at, completed_at, status, created_at', backup.apiTestReports || [], (r: any) => [r.id, r.name, r.description ?? '', r.totalCases ?? r.total_cases ?? 0, r.passedCases ?? r.passed_cases ?? 0, r.failedCases ?? r.failed_cases ?? 0, r.totalDuration ?? r.total_duration ?? 0, r.startedAt ?? r.started_at, r.completedAt ?? r.completed_at ?? null, r.status, r.createdAt ?? r.created_at]],
-    ['api_test_results', 'id, report_id, case_id, passed, status_code, response_body, response_headers, duration, error_message, assertion_results, started_at, completed_at', backup.apiTestResults || [], (r: any) => [r.id, r.reportId ?? r.report_id, r.caseId ?? r.case_id, r.passed ? 1 : 0, r.statusCode ?? r.status_code ?? null, r.responseBody ?? r.response_body ?? null, r.responseHeaders ?? r.response_headers ? JSON.stringify(r.responseHeaders ?? r.response_headers) : null, r.duration ?? null, r.errorMessage ?? r.error_message ?? null, r.assertionResults ?? r.assertion_results ? JSON.stringify(r.assertionResults ?? r.assertion_results) : null, r.startedAt ?? r.started_at, r.completedAt ?? r.completed_at]],
-    ['perf_sessions', 'id, name, device_serial, started_at, ended_at, interval_ms, data, created_at', backup.perfSessions || [], (s: any) => [s.id, s.name, s.device_serial, s.started_at, s.ended_at, s.interval_ms, s.data, s.created_at]],
-  ]
-  for (const [table, cols, items, toParams] of inserts) {
-    if (!Array.isArray(items) || items.length === 0) continue
-    for (const item of items) {
+  // NOTE: no transaction wrapping — tauri-plugin-sql uses a connection pool,
+  // so BEGIN/COMMIT on separate execute() calls can land on different connections.
+  // If import fails midway, the user can retry from the same backup file.
+  try {
+    emit('清理旧数据')
+    const deletes = [
+      'app_settings', 'input_history', 'log_sessions',
+      'note_folders', 'notes', 'notes_fts', 'note_versions', 'note_links', 'scripts', 'note_ai_memories',
+      'api_test_groups', 'api_test_cases', 'api_test_reports', 'api_test_results', 'perf_sessions',
+    ]
+    for (let i = 0; i < deletes.length; i++) {
+      const table = deletes[i]
+      try { await d.execute(`DELETE FROM ${table}`) } catch (e: any) { failures.push(`DELETE ${table}: ${e}`) }
+      emit('清理旧数据', i + 1, deletes.length)
+    }
+    try { await d.execute('DELETE FROM note_spaces') } catch {}
+    await _yieldToMain()
+    const inserts: [string, string, any[], (item: any) => unknown[]][] = [
+      ['input_history', 'key_name, value, created_at, sort_order', backup.inputHistory || [], h => [h.keyName, h.value, h.createdAt, Date.parse(h.createdAt)]],
+      ['log_sessions', 'id, type, device_serial, status, started_at, metadata', backup.logSessions || [], s => [s.id, s.type, s.deviceSerial, s.status, s.startedAt, s.metadata]],
+      ['note_spaces', 'id, name, sort_order, created_at, updated_at', backup.noteSpaces || [], (s: any) => [s.id, s.name, s.sortOrder ?? s.sort_order ?? 0, s.createdAt ?? s.created_at, s.updatedAt ?? s.updated_at]],
+      ['note_folders', 'id, space_id, name, parent_id, sort_order, created_at, updated_at', backup.noteFolders || [], (f: any) => [f.id, f.spaceId ?? f.space_id ?? null, f.name, f.parentId ?? f.parent_id ?? null, f.sortOrder ?? f.sort_order ?? 0, f.createdAt ?? f.created_at, f.updatedAt ?? f.updated_at]],
+      // NOTE: notes are handled separately below so we can populate plain_text and notes_fts
+      ['note_versions', 'id, note_id, content, saved_at', backup.noteVersions || [], (v: any) => [v.id, v.noteId ?? v.note_id, v.content, v.savedAt ?? v.saved_at]],
+      ['note_links', 'id, source_note_id, target_note_id, created_at', backup.noteLinks || [], (l: any) => [l.id, l.sourceNoteId ?? l.source_note_id, l.targetNoteId ?? l.target_note_id, l.createdAt ?? l.created_at]],
+      ['scripts', 'id, name, type, content, sort_order, created_at, updated_at', backup.scripts || [], (s: any) => [s.id, s.name, s.type ?? 'bat', s.content ?? '', s.sortOrder ?? s.sort_order ?? 0, s.createdAt ?? s.created_at, s.updatedAt ?? s.updated_at ?? s.createdAt]],
+      ['note_ai_memories', 'id, content, created_at, updated_at', backup.aiMemories || [], (m: any) => [m.id, m.content, m.createdAt ?? m.created_at, m.updatedAt ?? m.updated_at ?? m.createdAt]],
+      ['api_test_groups', 'id, name, description, color, sort_order, created_at, updated_at', backup.apiTestGroups || [], (g: any) => [g.id, g.name, g.description ?? '', g.color ?? '#6366f1', g.sortOrder ?? g.sort_order ?? 0, g.createdAt ?? g.created_at, g.updatedAt ?? g.updated_at]],
+      ['api_test_cases', 'id, group_id, name, description, type, method, url, host, path, query, headers, body, body_is_base64, assertions, source_request_id, enabled, sort_order, created_at, updated_at', backup.apiTestCases || [], (c: any) => [c.id, c.groupId ?? c.group_id, c.name, c.description ?? '', c.type, c.method, c.url, c.host ?? '', c.path, c.query ?? null, JSON.stringify(c.headers ?? []), c.body ?? null, c.bodyIsBase64 ? 1 : 0, JSON.stringify(c.assertions ?? []), c.sourceRequestId ?? c.source_request_id ?? null, c.enabled ? 1 : 0, c.sortOrder ?? c.sort_order ?? 0, c.createdAt ?? c.created_at, c.updatedAt ?? c.updated_at]],
+      ['api_test_reports', 'id, name, description, total_cases, passed_cases, failed_cases, total_duration, started_at, completed_at, status, created_at', backup.apiTestReports || [], (r: any) => [r.id, r.name, r.description ?? '', r.totalCases ?? r.total_cases ?? 0, r.passedCases ?? r.passed_cases ?? 0, r.failedCases ?? r.failed_cases ?? 0, r.totalDuration ?? r.total_duration ?? 0, r.startedAt ?? r.started_at, r.completedAt ?? r.completed_at ?? null, r.status, r.createdAt ?? r.created_at]],
+      ['api_test_results', 'id, report_id, case_id, passed, status_code, response_body, response_headers, duration, error_message, assertion_results, started_at, completed_at', backup.apiTestResults || [], (r: any) => [r.id, r.reportId ?? r.report_id, r.caseId ?? r.case_id, r.passed ? 1 : 0, r.statusCode ?? r.status_code ?? null, r.responseBody ?? r.response_body ?? null, r.responseHeaders ?? r.response_headers ? JSON.stringify(r.responseHeaders ?? r.response_headers) : null, r.duration ?? null, r.errorMessage ?? r.error_message ?? null, r.assertionResults ?? r.assertion_results ? JSON.stringify(r.assertionResults ?? r.assertion_results) : null, r.startedAt ?? r.started_at, r.completedAt ?? r.completed_at]],
+      ['perf_sessions', 'id, name, device_serial, started_at, ended_at, interval_ms, data, created_at', backup.perfSessions || [], (s: any) => [s.id, s.name, s.device_serial, s.started_at, s.ended_at, s.interval_ms, s.data, s.created_at]],
+    ]
+    for (const [table, cols, items, toParams] of inserts) {
+      if (!Array.isArray(items) || items.length === 0) continue
+      emit(`导入 ${table}`, 0, items.length)
+      let i = 0
+      for (const item of items) {
+        try {
+          const params = toParams(item)
+          await d.execute(`INSERT INTO ${table} (${cols}) VALUES (${params.map(() => '?').join(',')})`, params)
+        } catch (e: any) {
+          failures.push(`INSERT ${table}: ${e.message || e}`)
+        }
+        i++
+        if (i % YIELD_EVERY === 0) {
+          emit(`导入 ${table}`, i, items.length)
+          await _yieldToMain()
+        }
+      }
+      emit(`导入 ${table}`, items.length, items.length)
+    }
+
+    // Notes: compute plain_text if missing (avoids triggering repair on next
+    // loadNotes) and populate notes_fts so full-text search works after import.
+    const notesList = backup.notes || []
+    emit('导入笔记', 0, notesList.length)
+    for (let i = 0; i < notesList.length; i++) {
+      const n: any = notesList[i]
+      const bkContent = n.content ?? ''
+      let plainText: string = n.plainText ?? n.plain_text ?? ''
+      if (!plainText && bkContent) {
+        try { plainText = htmlToPlainText(DOMPurify.sanitize(bkContent)) } catch { plainText = '' }
+      }
+      const tagsStr = JSON.stringify(n.tags ?? [])
+      let inserted = false
       try {
-        const params = toParams(item)
-        await d.execute(`INSERT INTO ${table} (${cols}) VALUES (${params.map(() => '?').join(',')})`, params)
+        await d.execute(
+          'INSERT INTO notes (id, folder_id, title, content, content_json, plain_text, tags, is_favorite, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [n.id, n.folderId ?? n.folder_id ?? null, n.title ?? '', bkContent, n.contentJson ?? n.content_json ?? null, plainText, tagsStr, n.isFavorite ? 1 : 0, n.createdAt ?? n.created_at, n.updatedAt ?? n.updated_at]
+        )
+        inserted = true
       } catch (e: any) {
-        failures.push(`INSERT ${table}: ${e.message || e}`)
+        failures.push(`INSERT notes: ${e.message || e}`)
+      }
+      if (inserted) {
+        try {
+          await d.execute(
+            'INSERT INTO notes_fts (note_id, title, content, plain_text, tags) VALUES (?, ?, ?, ?, ?)',
+            [n.id, n.title ?? '', bkContent, plainText, tagsStr]
+          )
+        } catch {}
+      }
+      if ((i + 1) % YIELD_EVERY === 0) {
+        emit('导入笔记', i + 1, notesList.length)
+        await _yieldToMain()
       }
     }
-  }
-  for (const [key, value] of Object.entries(backup.settings || {})) {
-    try {
-      await d.execute('INSERT INTO app_settings (key, value) VALUES (?, ?)', [key, value])
-    } catch (e: any) {
-      failures.push(`INSERT app_settings(${key}): ${e.message || e}`)
+    emit('导入笔记', notesList.length, notesList.length)
+
+    emit('导入设置')
+    for (const [key, value] of Object.entries(backup.settings || {})) {
+      try {
+        await d.execute('INSERT INTO app_settings (key, value) VALUES (?, ?)', [key, value])
+      } catch (e: any) {
+        failures.push(`INSERT app_settings(${key}): ${e.message || e}`)
+      }
     }
-  }
-  // Restore proxy rules
-  if (backup.proxyRules && backup.proxyRules.length > 0) {
-    try {
-      await d.execute(
-        'INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)',
-        ['proxy_rules', JSON.stringify(backup.proxyRules)]
-      )
-    } catch (e: any) {
-      failures.push(`INSERT proxy_rules: ${e.message || e}`)
+    // Restore proxy rules
+    if (backup.proxyRules && backup.proxyRules.length > 0) {
+      try {
+        await d.execute(
+          'INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)',
+          ['proxy_rules', JSON.stringify(backup.proxyRules)]
+        )
+      } catch (e: any) {
+        failures.push(`INSERT proxy_rules: ${e.message || e}`)
+      }
     }
-  }
-  // Restore MCP server configs
-  if (backup.mcpServers && backup.mcpServers.length > 0) {
-    try {
-      await d.execute(
-        'INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)',
-        ['mcp_server_configs', JSON.stringify(backup.mcpServers)]
-      )
-    } catch (e: any) {
-      failures.push(`INSERT mcp_server_configs: ${e.message || e}`)
+    // Restore MCP server configs
+    if (backup.mcpServers && backup.mcpServers.length > 0) {
+      try {
+        await d.execute(
+          'INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)',
+          ['mcp_server_configs', JSON.stringify(backup.mcpServers)]
+        )
+      } catch (e: any) {
+        failures.push(`INSERT mcp_server_configs: ${e.message || e}`)
+      }
     }
+    if (failures.length > 0) {
+      throw new Error(`导入部分失败 (${failures.length}项): ${failures[0]}`)
+    }
+  } catch (e) {
+    if (failures.length > 0) {
+      console.warn('[importAllData] failures:', failures)
+    }
+    throw e
   }
-  if (failures.length > 0) {
-    console.warn('[importAllData] failures:', failures)
-    throw new Error(`导入部分失败 (${failures.length}项): ${failures[0]}`)
-  }
-  // Reset plain_text repair flag so the next loadNoteList() re-scans any
-  // notes whose plain_text was empty in the backup file.
   _plainTextRepaired = false
   try {
     await d.execute(`DELETE FROM app_settings WHERE key = 'plain_text_repaired'`)

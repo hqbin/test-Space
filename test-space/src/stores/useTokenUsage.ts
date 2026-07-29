@@ -14,6 +14,7 @@ const completionTokens = ref(0)
 const totalTokens = ref(0)
 
 let loaded = false
+let persistTimer: ReturnType<typeof setTimeout> | null = null
 
 export function useTokenUsage() {
   async function loadUsage() {
@@ -30,12 +31,27 @@ export function useTokenUsage() {
     } catch {}
   }
 
-  function persistUsage() {
+  function flushUsage() {
+    if (!persistTimer) return
+    clearTimeout(persistTimer)
+    persistTimer = null
     db.setSetting(STORAGE_KEY, JSON.stringify({
       promptTokens: promptTokens.value,
       completionTokens: completionTokens.value,
       totalTokens: totalTokens.value,
     })).catch(() => {})
+  }
+
+  function persistUsage() {
+    if (persistTimer) clearTimeout(persistTimer)
+    persistTimer = setTimeout(() => {
+      persistTimer = null
+      db.setSetting(STORAGE_KEY, JSON.stringify({
+        promptTokens: promptTokens.value,
+        completionTokens: completionTokens.value,
+        totalTokens: totalTokens.value,
+      })).catch(() => {})
+    }, 1500)
   }
 
   function addUsage(usage?: TokenUsage) {
@@ -60,5 +76,6 @@ export function useTokenUsage() {
     addUsage,
     resetUsage,
     loadUsage,
+    flushUsage,
   }
 }

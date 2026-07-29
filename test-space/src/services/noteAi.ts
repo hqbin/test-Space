@@ -44,6 +44,11 @@ const DEFAULT_MIN_CONTEXT_TOKENS = 800
 
 let tauriFetch: typeof fetch | null = null
 
+// BM25 corpus stats cache — invalidated when notes array reference changes
+let _bm25CachedNotes: NoteItem[] | null = null
+let _bm25CachedChunks: NoteChunk[] | null = null
+let _bm25CachedStats: { idf: Map<string, number>; avgdl: number } | null = null
+
 async function getFetch(): Promise<typeof fetch> {
   if (tauriFetch) return tauriFetch
   try {
@@ -264,37 +269,51 @@ export function selectContextChunks(
   const configuredBudget = Number.isFinite(maxContextTokens) ? maxContextTokens : 0
   const budget = Math.max(DEFAULT_MIN_CONTEXT_TOKENS, configuredBudget - systemReserve - queryReserve)
 
-  // Step 1: chunk all notes
-  const allChunks: NoteChunk[] = []
-  for (const note of notes) {
-    const pieces = chunkNoteContent(note)
-    if (pieces.length === 0) {
-      allChunks.push({
-        noteId: note.id,
-        title: note.title || '无标题',
-        index: 0,
-        text: '(空)',
-        score: 0,
+  // Step 1: chunk all notes (use cache if notes reference unchanged)
+  let allChunks: NoteChunk[]
+  if (_bm25CachedNotes === notes && _bm25CachedChunks) {
+    allChunks = _bm25CachedChunks.map(c => ({ ...c, score: 0 }))
+  } else {
+    allChunks = []
+    for (const note of notes) {
+      const pieces = chunkNoteContent(note)
+      if (pieces.length === 0) {
+        allChunks.push({
+          noteId: note.id,
+          title: note.title || '无标题',
+          index: 0,
+          text: '(空)',
+          score: 0,
+        })
+        continue
+      }
+      pieces.forEach((text, index) => {
+        allChunks.push({
+          noteId: note.id,
+          title: note.title || '无标题',
+          index,
+          text,
+          score: 0,
+        })
       })
-      continue
     }
-    pieces.forEach((text, index) => {
-      allChunks.push({
-        noteId: note.id,
-        title: note.title || '无标题',
-        index,
-        text,
-        score: 0,
-      })
-    })
+    _bm25CachedNotes = notes
+    _bm25CachedChunks = allChunks
+    _bm25CachedStats = null
   }
 
-  // Step 2: BM25 scoring (corpus-aware)
+  // Step 2: BM25 scoring (corpus-aware, with cached stats)
   if (query.trim()) {
     const contentChunks = allChunks.filter(c => c.text !== '(空)')
-    const stats = contentChunks.length > 0
-      ? computeBm25Stats(contentChunks.map(c => c.text))
-      : { idf: new Map(), avgdl: 1 }
+    let stats: { idf: Map<string, number>; avgdl: number }
+    if (_bm25CachedStats) {
+      stats = _bm25CachedStats
+    } else {
+      stats = contentChunks.length > 0
+        ? computeBm25Stats(contentChunks.map(c => c.text))
+        : { idf: new Map(), avgdl: 1 }
+      _bm25CachedStats = stats
+    }
 
     // Precompute title BM25 per note
     const titleScores = new Map<string, number>()
@@ -570,6 +589,177 @@ export async function callAiChat(config: AiConfig, messages: AiChatMessage[]): P
       }
     : undefined
   return { answer, truncated, usage }
+}
+
+// ── Streaming API ──
+
+export interface StreamCallResult {
+  usage?: { promptTokens: number; completionTokens: number; totalTokens: number }
+  finishReason?: string
+  aborted: boolean
+}
+
+async function* parseSSEStream(
+  reader: ReadableStreamDefaultReader<Uint8Array>
+): AsyncGenerator<string> {
+  const decoder = new TextDecoder()
+  let buffer = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const parts = buffer.split('\n')
+    buffer = parts.pop() ?? ''
+    for (const line of parts) {
+      if (line.startsWith('data: ')) {
+        const payload = line.slice(6).trim()
+        if (payload === '[DONE]') return
+        if (payload) yield payload
+      }
+    }
+  }
+}
+
+export async function callChatApiStream(
+  config: AiConfig,
+  messages: AiChatMessage[],
+  onDelta: (delta: string) => void,
+  signal?: AbortSignal
+): Promise<StreamCallResult> {
+  if (config.provider === 'mimo') {
+    const json = await callChatApi(config, messages)
+    const answer = json.choices?.[0]?.message?.content?.trim() || ''
+    onDelta(answer)
+    const usage = json.usage
+      ? { promptTokens: json.usage.prompt_tokens ?? 0, completionTokens: json.usage.completion_tokens ?? 0, totalTokens: json.usage.total_tokens ?? 0 }
+      : undefined
+    return { usage, finishReason: json.choices?.[0]?.finish_reason, aborted: false }
+  }
+
+  const body = buildRequestBody(config, messages)
+  body.stream = true
+  body.stream_options = { include_usage: true }
+
+  const f = await getFetch()
+  let res: Response
+  try {
+    res = await f(config.endpoint.trim(), {
+      method: 'POST',
+      headers: buildAuthHeaders(config),
+      body: JSON.stringify(body),
+      signal,
+    })
+  } catch (e: any) {
+    if (e.name === 'AbortError') return { aborted: true }
+    throw e
+  }
+
+  if (!res.ok) {
+    const text = await res.text()
+    let errMsg: string
+    try {
+      const json = JSON.parse(text)
+      errMsg = json.error?.message || json.error?.code || json.error || json.message || `HTTP ${res.status}`
+      if (typeof errMsg !== 'string') errMsg = JSON.stringify(errMsg)
+    } catch {
+      errMsg = `API ${res.status}: ${text.slice(0, 300)}`
+    }
+    throw new Error(errMsg)
+  }
+
+  if (!res.body) {
+    const json = await callChatApi(config, messages)
+    const answer = json.choices?.[0]?.message?.content?.trim() || ''
+    onDelta(answer)
+    const usage = json.usage
+      ? { promptTokens: json.usage.prompt_tokens ?? 0, completionTokens: json.usage.completion_tokens ?? 0, totalTokens: json.usage.total_tokens ?? 0 }
+      : undefined
+    return { usage, finishReason: json.choices?.[0]?.finish_reason, aborted: false }
+  }
+
+  const reader = res.body.getReader()
+  let capturedUsage: StreamCallResult['usage']
+  let capturedFinishReason: string | undefined
+
+  try {
+    for await (const data of parseSSEStream(reader)) {
+      try {
+        const chunk = JSON.parse(data)
+        const delta = chunk.choices?.[0]?.delta?.content
+        if (delta) onDelta(delta)
+        if (chunk.usage) {
+          capturedUsage = {
+            promptTokens: chunk.usage.prompt_tokens ?? 0,
+            completionTokens: chunk.usage.completion_tokens ?? 0,
+            totalTokens: chunk.usage.total_tokens ?? 0,
+          }
+        }
+        const fr = chunk.choices?.[0]?.finish_reason
+        if (fr) capturedFinishReason = fr
+      } catch { /* skip malformed JSON */ }
+    }
+  } catch (e: any) {
+    if (e.name === 'AbortError') return { usage: capturedUsage, aborted: true }
+    throw e
+  }
+
+  return { usage: capturedUsage, finishReason: capturedFinishReason, aborted: false }
+}
+
+export async function chatWithNotesStream(
+  config: AiConfig,
+  question: string,
+  allNotes: NoteItem[],
+  history: AiChatMessage[],
+  memories: AiMemory[],
+  onDelta: (delta: string) => void,
+  signal?: AbortSignal
+): Promise<AiChatResult & { aborted: boolean }> {
+  const { chunks, noteIds } = selectContextChunks(allNotes, question, config.maxContextTokens)
+  const context = buildChunkContext(chunks)
+
+  const relevantMemories = scoreMemories(question, memories)
+  const memoriesBlock = relevantMemories.length > 0
+    ? `\n\n已知长期记忆（仅供参考，不可替代笔记引用）：\n${relevantMemories.map(m => `- ${m.content}`).join('\n')}`
+    : ''
+
+  const systemPrompt = `你是 Test Space 笔记助手。根据下方「参考笔记片段」和已知长期记忆回答用户问题。${memoriesBlock}
+
+规则：
+1. 优先基于参考笔记片段作答；长期记忆可作为补充，但不能替代笔记内容。如果笔记片段中能找到相关信息，必须优先使用并引用来源。如果没有相关笔记或笔记内容不足以回答，可以使用自身知识回答，但需在回答末尾注明"（基于自身知识回答，未在笔记中找到相关信息）"。
+2. 只要回答中使用了笔记片段的内容，必须在正文对应位置引用来源笔记。引用格式：[显示文字](note:笔记ID)。若能定位到具体段落，使用 [显示文字](note:笔记ID#标题文字) 格式。
+3. 「标题文字」的选取规则：参考笔记片段是按笔记的 H1/H2/H3 标题切分的，每个片段的第一行就是该段的标题。引用时「标题文字」必须直接复制该片段第一行的原文（保留大小写、空格、中英文），不要改写、不要总结、不要加 # 号。
+4. 不要在回答末尾单独列出「参考笔记」清单，引用直接内嵌在正文中。
+5. 回答简洁准确，使用与用户相同的语言。
+6. 即使有长期记忆可以直接回答，也要检查笔记片段是否有更详细的内容，如有则引用。`
+
+  const userContent = `参考笔记（共 ${allNotes.length} 篇，检索 ${noteIds.length} 篇 / ${chunks.length} 个片段）：\n${context || '(无参考内容)'}\n\n用户问题：${question}`
+
+  const systemRole = resolveSystemRole(config)
+  const msgs: AiChatMessage[] = [
+    { role: systemRole, content: systemPrompt },
+    ...history.slice(-4),
+    { role: 'user', content: userContent },
+  ]
+
+  let answer = ''
+  const result = await callChatApiStream(config, msgs, (delta) => {
+    answer += delta
+    onDelta(delta)
+  }, signal)
+
+  if (result.aborted && !answer) {
+    return { answer: '', contextNoteCount: 0, contextChunkCount: 0, memoryCount: 0, aborted: true }
+  }
+
+  return {
+    answer: answer.trim(),
+    contextNoteCount: noteIds.length,
+    contextChunkCount: chunks.length,
+    memoryCount: relevantMemories.length,
+    usage: result.usage,
+    aborted: result.aborted,
+  }
 }
 
 // ── Native function calling (OpenAI tool_calls API) ──

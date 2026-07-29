@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, shallowRef, computed, triggerRef } from 'vue'
 import type { PerfSnapshot } from '@/composables/usePerfMonitor'
 
 export interface SnapshotPoint {
@@ -55,8 +55,8 @@ export const usePerfMonitorStore = defineStore('perfMonitor', () => {
   const maxPoints = 86400
   const trimThreshold = Math.floor(maxPoints * 1.1)
   const latestSnapshot = ref<PerfSnapshot | null>(null)
-  const processPssHistory = ref<Map<string, { time: number; pssKb: number }[]>>(new Map())
-  const processCpuHistory = ref<Map<string, { time: number; cpuPercent: number }[]>>(new Map())
+  const processPssHistory = shallowRef<Map<string, { time: number; pssKb: number }[]>>(new Map())
+  const processCpuHistory = shallowRef<Map<string, { time: number; cpuPercent: number }[]>>(new Map())
   const maxTrackedProcs = 30
   const topAppCount = ref(20)
   const cpuTopNCount = ref(20)
@@ -109,7 +109,7 @@ export const usePerfMonitorStore = defineStore('perfMonitor', () => {
     }
     history.value.push(point)
     if (history.value.length > trimThreshold) {
-      history.value = history.value.slice(-maxPoints)
+      history.value.splice(0, history.value.length - maxPoints)
     }
     latestSnapshot.value = snapshot
 
@@ -173,14 +173,17 @@ export const usePerfMonitorStore = defineStore('perfMonitor', () => {
       }
     }
 
+    triggerRef(processPssHistory)
+    triggerRef(processCpuHistory)
+
     return null
   }
 
   function clearHistory() {
     history.value = []
     latestSnapshot.value = null
-    processPssHistory.value.clear()
-    processCpuHistory.value.clear()
+    processPssHistory.value = new Map()
+    processCpuHistory.value = new Map()
     watermarkHistory.value = []
     dmesgBuffer.value = []
     dmesgTotalLines.value = 0

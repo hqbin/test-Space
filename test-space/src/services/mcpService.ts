@@ -246,13 +246,18 @@ export async function callTool(server: McpServerConfig, toolName: string, args: 
 export async function getAllEnabledTools(): Promise<{ server: McpServerConfig; tools: McpTool[] }[]> {
   const servers = await loadMcpServers()
   const enabled = servers.filter(s => s.enabled)
-  const results: { server: McpServerConfig; tools: McpTool[] }[] = []
-  for (const server of enabled) {
-    try {
+  const settled = await Promise.allSettled(
+    enabled.map(async server => {
       const tools = await listTools(server)
-      results.push({ server, tools })
-    } catch (e) {
-      console.warn(`[MCP] Failed to list tools for ${server.name}:`, e)
+      return { server, tools }
+    })
+  )
+  const results: { server: McpServerConfig; tools: McpTool[] }[] = []
+  for (const result of settled) {
+    if (result.status === 'fulfilled') {
+      results.push(result.value)
+    } else {
+      console.warn(`[MCP] Failed to list tools:`, result.reason)
     }
   }
   return results

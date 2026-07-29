@@ -18,6 +18,7 @@ struct ActiveConnection {
     message_endpoint: String,
     close_flag: Arc<std::sync::atomic::AtomicBool>,
     response_rx: broadcast::Receiver<String>,
+    client: Client,
 }
 
 pub struct SseState(std::sync::Mutex<HashMap<String, ActiveConnection>>);
@@ -202,6 +203,7 @@ pub async fn mcp_sse_init(
             message_endpoint: mep.clone(),
             close_flag,
             response_rx: rx,
+            client: client,
         });
     }
 
@@ -214,10 +216,10 @@ pub async fn mcp_sse_call(
     body: String,
     state: tauri::State<'_, SseState>,
 ) -> Result<String, String> {
-    let (session_id, message_endpoint, response_rx) = {
+    let (session_id, message_endpoint, response_rx, post_client) = {
         let map = state.0.lock().map_err(|e| e.to_string())?;
         let conn = map.get(&server_id).ok_or_else(|| "SSE connection not found".to_string())?;
-        (conn.session_id.clone(), conn.message_endpoint.clone(), conn.response_rx.resubscribe())
+        (conn.session_id.clone(), conn.message_endpoint.clone(), conn.response_rx.resubscribe(), conn.client.clone())
     };
 
     // Append session_id only if not already in the URL
@@ -227,11 +229,6 @@ pub async fn mcp_sse_call(
         format!("{}?session_id={}", message_endpoint, percent_encode(&session_id))
     };
     log::info!("[MCP SSE] POST to {}", post_url);
-
-    let post_client = Client::builder()
-        .connect_timeout(Duration::from_secs(10))
-        .build()
-        .map_err(|e| format!("POST client build failed: {}", e))?;
 
     let post_resp = match post_client
         .post(&post_url)

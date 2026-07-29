@@ -100,6 +100,7 @@ export type ChatMode = 'chat' | 'notes' | 'mcp'
 export interface ChatMsg {
   role: 'user' | 'assistant'
   content: string
+  streaming?: boolean
   image?: string
   fileName?: string
   fileContent?: string
