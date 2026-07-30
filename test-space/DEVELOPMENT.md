@@ -4867,6 +4867,41 @@ UTF-8 根因修复后，原有的三层防御体系变为冗余，进行了简�
 
 ---
 
+## Phase 73 — PerfMonitor shell_command 管道死锁修复 + 前端显示优化（已完成 ✅）
+
+> UI 分支合并重写了 `shell_command()` 导致管道死锁：`perf_get_snapshot` 的单条 ADB shell 命令（`cat /proc/[0-9]*/stat` + `ps -A` 等）输出量可超管道缓冲区，但新代码改为 `spawn()` + 进程退出后才读管道 → 子进程写阻塞 → 双方死锁 → 120s 超时 → 前端一直看不到任何数据。
+
+同时修复了前端两个显示问题：`chartVisibility` localStorage 缺少 `deviceInfo` 键导致设备信息面板（含运行时间）隐藏且无恢复按钮；隐藏图表恢复后未加载最新数据。
+
+### 改动清单
+
+| # | 问题 | 严重程度 | 根因与修复方式 |
+|---|------|----------|----------|
+| ① | 采集启动后一直无数据显示，120s 后弹"ADB 连接异常" | **阻塞** | `shell_command()` 管道死锁 — 在 `try_wait()` 轮询前用独立线程**并发读取** stdout/stderr，消除管道满时的写阻塞 |
+| ② | 底部设备运行时间不显示 | **高** | `chartVisibility` 从 localStorage 恢复时未合并默认值，旧存储缺少 `deviceInfo` 键 → `undefined` → `v-show` 隐藏。改为 `stored[key] ?? true` 合并默认值 |
+| ③ | 隐藏图表恢复后仍空白 | **中** | `scheduleRender()` 在图表隐藏时跳过更新，恢复可见时 watch 只调了 `resize()`。增加 `updateCpuChartDebounced()`/`updateTopAppChartDebounced()` 调用 |
+| ④ | 无恢复 deviceInfo 面板的按钮 | **低** | 隐藏图表恢复按钮只覆盖了 `topApp`/`cpu`，缺失 `deviceInfo`。新增 devies 图标恢复按钮 |
+| ⑤ | 移除水位线和 dmesg 流显示 | **清理** | 移除模板中水位线摘要和 dmesg 流区块，移除对应的响应式状态和轮询定时器 |
+
+### 影响范围
+
+- `shell_command()` 修复**影响全体调用方**（proxy 代理设置、dumpsys、dmesg、ANR 检测等 20+ 处），全部消除管道死锁风险
+- 前端改动仅限 `PerfMonitorPage.vue`，不涉及其它页面
+
+### 文件变更
+
+| 文件 | 修改类型 | 变更说明 |
+|------|----------|----------|
+| `src-tauri/src/adb.rs` | 修改 | `shell_command()` 并发管道读取修复 |
+| `src/views/device-space/PerfMonitorPage.vue` | 修改 | chartVisibility 合并默认值 + 恢复数据加载 + deviceInfo 恢复按钮 + 移除水位线/dmesg 显示 |
+
+### 编译验证
+
+| 检查项 | 结果 |
+|--------|------|
+| `npm run build` (vue-tsc + vite) | ✅ 通过 |
+| `cargo check` | ✅ 通过 |
+
 ## Phase 70 — UI 设计系统重构（Quarterly + Gazette）
 
 **背景**：整体 UI 存在长期问题：颜色对比度不足（`on-surface-variant #424656` 叠 50~60% opacity 后仅 2:1，低于 WCAG AA 4.5:1）、字号阶随意（同页面出现 10/11/12/13/14/15/16/17/18/22px 至少 10 档）、控件尺寸不统一（同角色按钮 padding 组合达 8 种）、hover 反馈弱（`hover:bg-secondary/10` 在玻璃层上几乎不可见）、老 Material 阴影/scale 抖动与新设计冲突、弹窗全白背景、下拉纯白框、Notes 目录字号异常大、Device 页布局散乱、设备扫描阻塞页面切换。本阶段建立完整 UI 设计规范并全量落地。

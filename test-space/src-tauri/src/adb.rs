@@ -249,6 +249,24 @@ pub fn shell_command(serial: &str, command: &str) -> Result<String, String> {
         .spawn()
         .map_err(|e| format!("ADB shell spawn failed: {}", e))?;
 
+    // 必须在 try_wait 轮询之前就开始读取管道，否则输出量超过管道缓冲区
+    //（特别是 perf_get_snapshot 中 cat /proc/[0-9]*/stat + ps -A 产生的大量输出）
+    // 会导致子进程写阻塞 → 死锁 → 120s 超时。
+    let stdout_handle = child.stdout.take().map(|out| {
+        std::thread::spawn(move || {
+            let mut buf = String::new();
+            let _ = std::io::BufReader::new(out).read_to_string(&mut buf);
+            buf
+        })
+    });
+    let stderr_handle = child.stderr.take().map(|err| {
+        std::thread::spawn(move || {
+            let mut buf = String::new();
+            let _ = std::io::BufReader::new(err).read_to_string(&mut buf);
+            buf
+        })
+    });
+
     let deadline = std::time::Instant::now() + Duration::from_secs(120);
     let poll = Duration::from_millis(50);
     let status = loop {
@@ -270,10 +288,8 @@ pub fn shell_command(serial: &str, command: &str) -> Result<String, String> {
         }
     };
 
-    let mut stdout = String::new();
-    let mut stderr = String::new();
-    if let Some(mut out) = child.stdout.take() { let _ = out.read_to_string(&mut stdout); }
-    if let Some(mut err) = child.stderr.take() { let _ = err.read_to_string(&mut stderr); }
+    let stdout = stdout_handle.and_then(|h| h.join().ok()).unwrap_or_default();
+    let stderr = stderr_handle.and_then(|h| h.join().ok()).unwrap_or_default();
 
     let mut result = stdout;
     if !stderr.is_empty() {

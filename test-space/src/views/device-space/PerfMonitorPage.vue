@@ -21,6 +21,9 @@
         <button v-if="!chartVisibility.cpu" class="glass-button p-1.5 rounded-lg" title="显示CPU使用率" @click="toggleChartVisibility('cpu')">
           <span class="material-symbols-outlined text-[14px]">memory</span>
         </button>
+        <button v-if="!chartVisibility.deviceInfo" class="glass-button p-1.5 rounded-lg" title="显示设备信息" @click="toggleChartVisibility('deviceInfo')">
+          <span class="material-symbols-outlined text-[14px]">devices</span>
+        </button>
       </div>
       <Teleport to="body">
         <Transition name="fade-scale">
@@ -116,39 +119,9 @@
         <span class="font-body-sm text-body-sm text-on-surface" style="max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">内核: <strong>{{ kernelVersion }}</strong></span>
         <span class="h-4 w-[1px] bg-glass-border-dark"></span>
         <span class="font-body-sm text-body-sm text-on-surface">设备时间: <strong>{{ deviceDateFormatted }}</strong></span>
-        <span v-if="watermarkSummary" class="h-4 w-[1px] bg-glass-border-dark"></span>
-        <span v-if="watermarkSummary" class="font-caption text-caption text-on-surface-variant" style="max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" :title="watermarkSummary">水位线: <strong>{{ watermarkSummary }}</strong></span>
         <button class="glass-hover rounded-lg p-1 ml-auto" @click="toggleChartVisibility('deviceInfo')">
           <span class="material-symbols-outlined text-[14px]">visibility_off</span>
         </button>
-      </div>
-
-      <!-- Dmesg Streaming -->
-      <div v-show="chartVisibility.deviceInfo" class="glass-panel rounded-xl p-3 px-4 flex flex-col shrink-0">
-        <div class="flex items-center gap-2">
-          <span class="material-symbols-outlined text-[14px] text-secondary">terminal</span>
-          <span class="font-caption text-caption text-on-surface-variant">dmesg 流</span>
-          <span class="font-caption text-caption text-on-surface-variant">({{ store.dmesgBuffer.length }} 条 / {{ store.dmesgTotalLines }} 总)</span>
-          <!-- ANR / Tombstone notification -->
-          <div v-if="store.newAnrFiles.length > 0 || store.newTombstoneFiles.length > 0" class="flex items-center gap-1 ml-2">
-            <span class="material-symbols-outlined text-[14px] text-error">warning</span>
-            <span v-if="store.newAnrFiles.length > 0" class="font-caption text-caption text-error">{{ store.newAnrFiles.length }} ANR</span>
-            <span v-if="store.newTombstoneFiles.length > 0" class="font-caption text-caption text-error">{{ store.newTombstoneFiles.length }} Tombstone</span>
-            <button class="glass-hover rounded-lg px-1.5 py-0.5 text-caption" @click="store.newAnrFiles = []; store.newTombstoneFiles = []">清除</button>
-          </div>
-          <button v-if="showDmesg" class="glass-hover rounded-lg p-1 ml-auto" @click="showDmesg = false">
-            <span class="material-symbols-outlined text-[14px]">expand_less</span>
-          </button>
-          <button v-else class="glass-hover rounded-lg p-1 ml-auto" @click="showDmesg = true">
-            <span class="material-symbols-outlined text-[14px]">expand_more</span>
-          </button>
-        </div>
-        <div v-if="showDmesg" class="mt-1 bg-black/5 rounded-lg p-2 max-h-[200px] overflow-y-auto font-mono text-caption leading-tight custom-scrollbar select-text" style="font-size:10px">
-          <div v-for="seg in store.dmesgBuffer.slice(-200)" :key="seg.time + seg.text.slice(0,20)" class="text-on-surface-variant">
-            {{ seg.text }}
-          </div>
-          <div v-if="store.dmesgBuffer.length === 0" class="text-on-surface-variant/50 italic">等待 dmesg 数据...</div>
-        </div>
       </div>
     </div>
 
@@ -259,13 +232,12 @@
 import { ref, computed, watch, onMounted, onUnmounted, onActivated, onDeactivated, nextTick, type Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from '@/composables/useI18n'
-import { usePerfMonitor, type PerfSnapshot, type WatermarkInfo, type DmesgPollResult, type AnrTombstoneResult, type LogcatDiag } from '@/composables/usePerfMonitor'
+import { usePerfMonitor, type PerfSnapshot } from '@/composables/usePerfMonitor'
 import { useAdb } from '@/composables/useAdb'
 import { usePerfMonitorStore } from '@/stores/usePerfMonitorStore'
 import { savePerfSession, listPerfSessions, deletePerfSession, type PerfSessionRow } from '@/services/database'
 
 import { mkdir, writeTextFile, readTextFile } from '@tauri-apps/plugin-fs'
-import { appDataDir } from '@tauri-apps/api/path'
 import { open } from '@tauri-apps/plugin-dialog'
 import { invoke } from '@tauri-apps/api/core'
 import * as echarts from 'echarts'
@@ -274,7 +246,7 @@ defineOptions({ name: 'PerfMonitorPage' })
 
 const router = useRouter()
 const { t } = useI18n()
-const { getSnapshot, getWatermark, pollDmesg, checkAnrTombstones, logcatIsAlive, logcatDiag } = usePerfMonitor()
+const { getSnapshot, logcatIsAlive, logcatDiag } = usePerfMonitor()
 const { shell, rootDevice, pullFile } = useAdb()
 const store = usePerfMonitorStore()
 
@@ -285,12 +257,26 @@ const deviceSerial = ref(localStorage.getItem('last_device_serial') || '')
 const isPageActive = ref(true)
 
 // Chart visibility state with localStorage persistence
-const chartVisibility = ref<Record<string, boolean>>(JSON.parse(localStorage.getItem('perfChartVisibility') || '{"cpu":true,"topApp":true,"deviceInfo":true}'))
+// Merge stored visibility with defaults so any missing keys (e.g. deviceInfo
+// added after a later phase) default to true instead of undefined (which hides
+// the panel with no way to restore it).
+const DEFAULT_CHART_VISIBILITY: Record<string, boolean> = { cpu: true, topApp: true, deviceInfo: true }
+function loadChartVisibility(): Record<string, boolean> {
+  const stored = JSON.parse(localStorage.getItem('perfChartVisibility') || '{}')
+  const merged: Record<string, boolean> = {}
+  for (const key of Object.keys(DEFAULT_CHART_VISIBILITY)) {
+    merged[key] = stored[key] ?? true
+  }
+  return merged
+}
+const chartVisibility = ref<Record<string, boolean>>(loadChartVisibility())
 watch(chartVisibility, (val, oldVal) => {
   localStorage.setItem('perfChartVisibility', JSON.stringify(val))
   nextTick(() => {
-    if (val.cpu && !oldVal.cpu) cpuChart?.resize()
-    if (val.topApp && !oldVal.topApp) topAppChart?.resize()
+    // When re-showing a chart, load latest data from store so it's not empty
+    if (val.cpu && !oldVal.cpu) { cpuChart?.resize(); updateCpuChartDebounced() }
+    if (val.topApp && !oldVal.topApp) { topAppChart?.resize(); updateTopAppChartDebounced() }
+    // deviceInfo is a text/info panel — no chart update needed
   })
 }, { deep: true })
 
@@ -478,75 +464,6 @@ let topAppChart: echarts.ECharts | null = null
 let chartResizeObserver: ResizeObserver | null = null
 const cpuChartRef = ref<HTMLElement | null>(null)
 const topAppChartRef = ref<HTMLElement | null>(null)
-
-// Watermark state (collected every 60s)
-const watermarkInfo = ref<WatermarkInfo | null>(null)
-let watermarkTimer: ReturnType<typeof setInterval> | null = null
-const watermarkSummary = computed(() => {
-  const w = watermarkInfo.value
-  if (!w || !w.zones || w.zones.length === 0) return ''
-  return w.zones.map(z => `${z.name}: free=${(z.free_kb*4/1024).toFixed(0)}M min=${(z.min_kb*4/1024).toFixed(0)}M low=${(z.low_kb*4/1024).toFixed(0)}M high=${(z.high_kb*4/1024).toFixed(0)}M`).join(' | ')
-})
-async function collectWatermark(serial: string) {
-  if (!serial) return
-  try {
-    const w = await getWatermark(serial)
-    watermarkInfo.value = w
-    // Store history for chart
-    const allMin = w.zones.reduce((s, z) => s + z.min_kb, 0)
-    const allLow = w.zones.reduce((s, z) => s + z.low_kb, 0)
-    const allHigh = w.zones.reduce((s, z) => s + z.high_kb, 0)
-    store.addWatermarkPoint({
-      nrFreePagesKb: w.total_free_pages_kb,
-      minKb: allMin * 4,
-      lowKb: allLow * 4,
-      highKb: allHigh * 4,
-    })
-  } catch {}
-}
-
-// Dmesg streaming (every 30s)
-let dmesgTimer: ReturnType<typeof setInterval> | null = null
-async function pollDmesgStream(serial: string) {
-  if (!serial) return
-  try {
-    const result = await pollDmesg(serial, store.dmesgTotalLines, store.dmesgLastLine)
-    store.dmesgTotalLines = result.total_lines
-    store.dmesgLastLine = result.last_line
-    if (result.new_lines.length > 0) {
-      store.addDmesgLines(result.new_lines)
-    }
-  } catch {}
-}
-
-// ANR / Tombstone detection (every 60s)
-let anrTimer: ReturnType<typeof setInterval> | null = null
-async function pollAnrTombstones(serial: string, logDir: string) {
-  if (!serial) return
-  try {
-    const result = await checkAnrTombstones(serial, store.knownAnrFiles, store.knownTombstoneFiles)
-    if (result.new_anr_files.length > 0 || result.new_tombstone_files.length > 0) {
-      store.setAnrTombstoneFound(result.new_anr_files, result.new_tombstone_files)
-      // Pull new files into anr/ and tombstone/ subdirectories (same as captureOneTimeLogs)
-      const anrDir = logDir + 'anr/'
-      const tombDir = logDir + 'tombstone/'
-      try { await mkdir(anrDir, { recursive: true }) } catch {}
-      try { await mkdir(tombDir, { recursive: true }) } catch {}
-      for (const f of result.new_anr_files) {
-        try {
-          await invoke("adb_pull", { serial, remote: '/data/anr/' + f, local: anrDir + f })
-        } catch {}
-      }
-      for (const f of result.new_tombstone_files) {
-        try {
-          await invoke("adb_pull", { serial, remote: '/data/tombstones/' + f, local: tombDir + f })
-        } catch {}
-      }
-    }
-  } catch {}
-}
-
-const showDmesg = ref(false)
 
 // Reactive device info (updated every snapshot)
 const uptimeSecs = ref(0)
@@ -2386,27 +2303,12 @@ async function startPolling() {
   // 7. Start periodic meminfo collection (first after 5s, then every 30s)
   setTimeout(() => collectLogs(serial), 5000)
   logTimer = setInterval(() => collectLogs(serial), 30000)
-
-  // 8. Start watermark collection (every 60s)
-  collectWatermark(serial)
-  watermarkTimer = setInterval(() => collectWatermark(serial), 60000)
-
-  // 9. Start dmesg streaming (every 30s)
-  pollDmesgStream(serial)
-  dmesgTimer = setInterval(() => pollDmesgStream(serial), 30000)
-
-  // 10. Start ANR / Tombstone detection (every 60s, after 30s delay)
-  setTimeout(() => pollAnrTombstones(serial, sessionLogDir.value), 30000)
-  anrTimer = setInterval(() => pollAnrTombstones(serial, sessionLogDir.value), 60000)
 }
 async function stopPolling() {
   // Show loading overlay immediately on pause — before any async work
   store.setCollecting(false)
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
   if (logTimer) { clearInterval(logTimer); logTimer = null }
-  if (watermarkTimer) { clearInterval(watermarkTimer); watermarkTimer = null }
-  if (dmesgTimer) { clearInterval(dmesgTimer); dmesgTimer = null }
-  if (anrTimer) { clearInterval(anrTimer); anrTimer = null }
 
   // Skip everything if no data collected
   if (store.history.length === 0) {
