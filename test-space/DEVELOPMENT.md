@@ -5230,3 +5230,154 @@ onUnmounted(() => { deviceEventUnlisten?.(); });
 
 - 目前 tracker 保留但暂无停止 API 调用（`stop_flag` 是 dead code 警告来源）；App 退出时进程结束会自动清理，无泄漏
 - `get_prop` 补齐 model/android_version 目前每次事件都同步执行；如设备多可改为异步 spawn，但当前场景（个位数设备）无必要
+
+---
+
+## 七十二、Phase 72 — 交互一致性 & 卡顿修复 & AI 配置刷新（已完成 ✅）
+
+本阶段针对用户反馈集中修复交互一致性、hover 反馈、页面切换卡顿以及 AI 配置刷新问题。
+
+### 72.1 设备页面 Tab 按钮 hover 统一
+
+**问题**：`常用命令` / `其他命令` 两个 Tab 使用旧的 `bg-secondary/10 border-secondary/30` 胶囊样式，跟顶部导航（`glass-hover` + `glass-active`）不一致。
+
+**改动**（`src/views/device-space/DeviceSpacePage.vue`）：
+- Tab 按钮改用 `glass-hover rounded-md`，激活态 `glass-active font-semibold`
+- 图标使用 Material Symbols `FILL 0/1`：非活跃 `FILL 0`，活跃 `FILL 1`，与 `TitleBar.vue` 完全对齐
+- 结构：`icon (15px) + label (12px, font-semibold, tracking-wide)`
+
+### 72.2 列表条目去除下划线 hover
+
+**问题**：笔记 / 接口 / 接口测试的列表条目使用 `glass-hover`，会显示底部朱砂条 —— 高频列表下视觉噪音过重。
+
+**改动**（`src/styles/main.css`）：
+- 新增 `.list-hover` 类：只加深背景（`rgba(28,27,31, 6%-10%)`），无底部朱砂条
+- 暗色变体：`rgba(232,227,214, 8%-14%)`
+- 应用于：笔记页面文件夹/笔记条目 + 收藏栏、接口页面请求列表、接口测试页面分组/端点/用例行
+
+### 72.3 笔记页面空间选择器重设计
+
+**问题**：原空间下拉尺寸小、字号 11px、和纸底色近似，观感"寡淡"。
+
+**改动**（`src/views/note-space/NotesSpacePage.vue`）：
+- 顶部加 `folio` 小标签 `SPACE` 作为分区提示
+- 主标题改用 `editorial` 斜体大字号（15px），呼应 TitleBar 的刊头风格
+- 下拉面板改成 `bg-white` 不透明 + `border-outline-variant/40` + `shadow-lg`（曾用半透明 `glass-panel` 与底部文字重叠，已改回实心）
+- 选中标记从底色 hover 改为 `radio_button_checked/unchecked` 单选按钮语义
+- 新建入口只保留在下拉底部（曾在触发器右侧加过 `+` 按钮，冗余，已删除）
+
+### 72.4 脚本 & AI 页面 hover 可见性修复
+
+**问题**：脚本页面列表和 AI 会话列表使用 `hover:bg-white/5` / `hover:bg-white/15`，Tailwind 生成的低透明白叠在纸底 + 玻璃背板上几乎不可见。
+
+**改动**：
+1. **全局 hover 映射**（`src/styles/main.css`）：将 `.hover:bg-white/5`、`/8`、`/10`、`/15`、`/20` 映射到墨色叠层（`rgba(28,27,31, 5%-12%)`），暗色对应浅墨色 —— 保持模板不变的前提下全局修复
+2. **脚本页面列表条目**（`src/views/script-space/ScriptSpacePage.vue`）：新增 scoped `.script-list-item`
+   - 默认：字色 72% 灰
+   - Hover：`bg rgba(28,27,31, 0.08) + color #1C1B1F`
+   - 活跃态：`bg rgba(30,58,95, 0.12) + color #1E3A5F + font-weight 600 + inset 3px 朱砂条`
+3. **AI 会话列表条目**（`src/views/ai-space/AiSpacePage.vue`）：新增 scoped `.ai-session-item`，方案与脚本页一致
+
+### 72.5 AI 页面切换对话卡顿修复
+
+**问题**：切换会话时所有历史消息的 `v-html="renderMarkdown(msg.content)"` 会全量重跑 marked + hljs + DOMPurify。
+
+**改动**（`src/views/ai-space/AiSpacePage.vue`）：
+- 消息 `<div v-for>` 加 `v-memo="[msg.content, msg.streaming, msg.role, msg.image, msg.fileName, msg.toolCalls?.length ?? 0]"`
+- 只有消息内容 / 流状态 / 工具调用变化时才重新渲染，切换会话时静态历史消息完全跳过渲染
+
+### 72.6 页面之间切换卡顿修复
+
+**问题**：`AppLayout.vue` 的 `watch(route.path, { immediate: true })` 每次切页都 `await loadAiConfig()`，命中一次 SQLite 读。
+
+**改动**（`src/layouts/AppLayout.vue`）：
+- 引入 `lastPath` 记录上次路由
+- 只有 `lastPath.startsWith('/settings')` 且当前进入笔记/脚本页时才重新读取 AI 配置
+- 其余切换纯内存判定，无 DB 操作
+
+### 72.7 笔记页面删除空间按钮"无反应"
+
+**问题**：`doDeleteSpace` 内先 `await db.deleteNoteSpace(id)` → `await db.loadNoteFolders()` → **`await db.loadNotes()`**（拉整张笔记表的 `content` + `content_json`），90 条笔记时耗时 1.7s（见 SQLite slow_statement 日志），期间 `deleteSpaceTarget` 不清空，弹窗不关 → 视觉上"点了没反应"。
+
+**改动**（`src/views/note-space/NotesSpacePage.vue`）：
+- **立即关闭弹窗 + 从内存移除空间** —— 让用户第一时间看到 UI 反馈
+- DB 操作后台异步执行，失败时用 Toast 提示
+- `loadNotes()` 改为 `loadNoteList()`：只读元数据 + `plainText`，不读富文本大字段
+
+### 72.8 `loadNotes` 慢查询导致的软件卡顿
+
+**问题**：SQLite 日志显示 `SELECT ... FROM notes ORDER BY title` 耗时 1.76s，独占 SQLite 单写线程 → 编辑笔记时的保存被排队，其他 DB 操作阻塞。根因是 AI 页面 `onActivated` 每次都 `await loadAllNotes(true)`。
+
+**改动**（`src/views/ai-space/AiSpacePage.vue`）：
+- `loadAllNotes` 内 `loadNotes()` → `loadNoteList()`
+- AI 笔记问答的 RAG 逻辑（`chunkNoteContent` in `noteAi.ts`）已有 fallback：`content` 为空时自动使用 `plainText` 分块，功能完全不受影响
+- 数据库负担从"读全表富文本"降到"读全表小字段"，切换和笔记编辑之间的相互阻塞消除
+
+### 72.9 AI 未配置弹窗覆盖全局
+
+**问题**：原实现 `Teleport to body` + `fixed inset-0 z-[999]`，遮盖整个应用（包括顶部导航），用户无法切走。
+
+**改动**（`src/views/ai-space/AiSpacePage.vue`）：
+- 移除 `Teleport`，弹窗改成 AI 页面内的 `absolute inset-0 z-20`
+- 页面根容器 `<div>` 加 `relative` 作为定位锚点
+- 蒙版层 `bg-white/60 backdrop-blur-sm`：实心遮罩，禁止操作 AI 内容区
+- 蒙版**不覆盖顶部导航栏**（不在 AI 页面容器内）→ 用户可随时切换到其他页面
+
+### 72.10 AI 配置修改后 `configured` 状态不更新
+
+**问题**：`onActivated` 中 `if (!historyLoaded.value)` 守卫只让首次挂载读一次 `loadAiConfig()`，用户在设置页保存 API 配置后回到 AI 页时 `configured` 计算属性仍是旧值 → 蒙版一直显示。
+
+**改动**（`src/views/ai-space/AiSpacePage.vue`）：
+- 去掉 `historyLoaded` 守卫，每次 `onActivated` 都重新 `loadAiConfig()`
+- `loadAiConfig` 只读 `app_settings` 单行 KV，耗时可忽略，不引入性能问题
+- 蒙版加**手动刷新按钮**作为兜底：
+  - `refreshConfig()` 触发时按钮图标 `animate-spin` + `disabled` 防止连点
+  - 配置完整 → Toast 成功
+  - 配置缺字段 → Toast 明确列出缺少的字段（`API Key / Endpoint / Model`）
+  - DB 读取失败 → Toast 错误信息
+
+### 72.11 影响文件一览
+
+| 文件 | 修改类型 | 变更说明 |
+|------|----------|----------|
+| `src/styles/main.css` | 修改 | 新增 `.list-hover` 类（含暗色变体）；`.hover:bg-white/5-20` 和 `.hover:bg-black/5` 全局映射到墨色叠层 |
+| `src/layouts/AppLayout.vue` | 修改 | `watch(route.path)` 只在从 `/settings` 返回时刷新 AI 配置，其余纯内存判定 |
+| `src/views/device-space/DeviceSpacePage.vue` | 修改 | Tab 按钮改用 `glass-hover` + `glass-active` + `FILL 0/1` 图标 |
+| `src/views/note-space/NotesSpacePage.vue` | 修改 | 空间选择器重设计（`folio` + `editorial` + 实心下拉 + 单选按钮语义）；文件夹 / 笔记 / 收藏列表条目改用 `.list-hover`；`doDeleteSpace` 立即关闭弹窗 + 改用 `loadNoteList` |
+| `src/views/api-space/ApiSpacePage.vue` | 修改 | 请求列表条目改用 `.list-hover` |
+| `src/views/api-space/ApiTestPage.vue` | 修改 | 端点行 + 用例行改用 `.list-hover` |
+| `src/views/script-space/ScriptSpacePage.vue` | 修改 | 脚本列表条目新增 scoped `.script-list-item` 类（hover + 活跃态 + 暗色） |
+| `src/views/ai-space/AiSpacePage.vue` | 修改 | 会话列表 scoped `.ai-session-item`；消息 `v-memo` 加依赖；`loadAllNotes` 改用 `loadNoteList`；`onActivated` 每次重读 AI 配置；未配置蒙版 inline 化 + 加刷新按钮 + Toast 反馈 |
+
+### 72.12 编译验证
+
+| 检查项 | 结果 |
+|--------|------|
+| `npx vue-tsc --noEmit` | ✅ 零类型错误 |
+| `npm run build` | ✅ 28.4s 通过 |
+
+### 72.13 用户可感指标
+
+| 场景 | Phase 71 | Phase 72 |
+|------|----------|----------|
+| 设备 Tab 切换视觉 | 与顶部导航不一致 | 与顶部导航完全一致 |
+| 笔记 / API / API 测试列表 hover | 底部朱砂条视觉噪音 | 纯背景加深，clean |
+| 脚本 / AI 会话列表 hover | 几乎不可见（`white/15`） | 墨色叠层清晰可见 |
+| 脚本 / AI 会话列表选中态 | 白色叠层近似不可见 | 蓝紫底 + 朱砂条 + 加粗 |
+| 页面之间切换 | 每次 SQLite 读 AI 配置 | 纯内存判定，仅设置页返回时读 |
+| AI 切换会话 | 全量重跑 marked + hljs | `v-memo` 跳过静态消息 |
+| 删除笔记空间 | 点击"删除"后 1.7s 无反应 | 立即关闭弹窗 |
+| 编辑笔记时其他操作 | SQLite 单写线程被 `loadNotes` 独占 1.7s | `loadNoteList` 无阻塞 |
+| AI 未配置蒙版 | 覆盖整个应用，无法切走 | 只覆盖 AI 页面区域，顶栏可用 |
+| 配置修改后回到 AI 页 | `configured` 不更新，需重启 | 每次激活重读 + 手动刷新兜底 |
+
+### 72.14 设计系统 Token 补充
+
+本阶段扩展了 `.list-hover` 作为**列表条目专用 hover 语义**，与 `.glass-hover`（含底部朱砂条，用于按钮/tab）形成互补：
+
+| 类名 | 用途 | 视觉特征 |
+|------|------|----------|
+| `.glass-button` | 按钮 | 玻璃底 + 底部朱砂条 |
+| `.glass-hover` | Tab / 导航项 / 交互卡片 | 底部朱砂条 + 背景加深 |
+| `.list-hover` | 高频列表条目 | 仅背景加深，无装饰条 |
+| `.glass-active` | 选中态 | 蓝紫底 + 底部朱砂粗条 |
