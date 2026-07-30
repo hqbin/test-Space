@@ -81,7 +81,7 @@
         <span>{{ t('notes.favorites') }}</span>
         <span class="ml-auto text-[10px] text-on-surface-variant/60">{{ favoriteNotes.length }}</span>
       </div>
-      <div class="flex-1 overflow-y-auto p-2 custom-scrollbar" style="position:relative" @dragenter.prevent @dragover.prevent>
+      <div ref="sidebarRef" class="flex-1 overflow-y-auto p-2 custom-scrollbar" style="position:relative" @dragenter.prevent @dragover.prevent>
         <div v-if="dataLoading" class="skeleton-shimmer px-2 py-1 space-y-2" style="position:absolute;inset:0;z-index:1;background:white/10;backdrop-filter:blur(60px)">
           <div class="flex items-center gap-2 px-2 py-1"><div class="skeleton-line h-3 w-4 rounded-md"></div><div class="skeleton-line h-3 w-24 rounded-md"></div></div>
           <div class="flex items-center gap-2 px-2 py-1" style="padding-left:24px"><div class="skeleton-line h-3 w-4 rounded-md"></div><div class="skeleton-line h-3 w-32 rounded-md"></div></div>
@@ -100,6 +100,7 @@
           <div v-for="note in favoriteNotes" :key="note.id" class="group">
             <div
               draggable="true"
+              :data-note-id="note.id"
               class="list-hover flex items-center gap-1.5 px-2 py-0.5 rounded-md cursor-pointer"
               :class="[selectedNoteId === note.id ? 'bg-purple-100/60 text-secondary font-medium' : 'text-on-surface-variant', highlightedNoteIds.has(note.id) ? 'bg-yellow-100/60 ring-1 ring-yellow-300/50' : '']"
               @click="selectNote(note)"
@@ -151,6 +152,7 @@
               <li v-for="note in getNotesByFolder(folder.id)" :key="note.id" class="group">
                 <div
                   draggable="true"
+                  :data-note-id="note.id"
                   class="list-hover flex items-center gap-1.5 px-2 py-0.5 rounded-md cursor-pointer"
                   :class="[selectedNoteId === note.id ? 'bg-purple-100/60 text-secondary font-medium' : 'text-on-surface-variant', highlightedNoteIds.has(note.id) ? 'bg-yellow-100/60 ring-1 ring-yellow-300/50' : '']"
                   @click="selectNote(note)"
@@ -178,6 +180,7 @@
           <div v-for="note in uncategorizedNotes" :key="note.id" class="group">
             <div
               draggable="true"
+              :data-note-id="note.id"
               class="list-hover flex items-center gap-1.5 px-2 py-0.5 rounded-md cursor-pointer"
               :class="[selectedNoteId === note.id ? 'bg-purple-100/60 text-secondary font-medium' : 'text-on-surface-variant', highlightedNoteIds.has(note.id) ? 'bg-yellow-100/60 ring-1 ring-yellow-300/50' : '']"
               @click="selectNote(note)"
@@ -790,6 +793,7 @@ const folders = ref<NoteFolder[]>([])
 const notes = ref<NoteItem[]>([])
 const selectedFolderId = ref<string | null>(null)
 const selectedNoteId = ref<string | null>(null)
+const sidebarRef = ref<HTMLDivElement | null>(null)
 const noteVersions = ref<NoteVersion[]>([])
 const expandedFolders = ref<Record<string, boolean>>({})
 const showFavorites = ref(false)
@@ -1364,15 +1368,48 @@ async function syncNoteLinksFromContent(noteId: string, html: string) {
 
 function openNoteById(noteId: string, headingAnchor?: string) {
   const note = notes.value.find(n => n.id === noteId)
-  if (!note) return
+  if (!note) {
+    // Try matching by title (AI may have hallucinated/written title instead of UUID)
+    const titleMatch = notes.value.find(n =>
+      n.title === noteId || n.title.includes(noteId) || noteId.includes(n.title)
+    )
+    if (titleMatch) {
+      _pendingHeadingAnchor = headingAnchor?.trim() || null
+      selectNote(titleMatch)
+      return
+    }
+    // Try matching by ID prefix (in case AI truncated the UUID)
+    const prefixMatch = notes.value.find(n =>
+      n.id.startsWith(noteId) || noteId.startsWith(n.id)
+    )
+    if (prefixMatch) {
+      _pendingHeadingAnchor = headingAnchor?.trim() || null
+      selectNote(prefixMatch)
+      return
+    }
+    showToast('未找到该笔记（AI 可能生成了不存在的笔记 ID）', 'error')
+    return
+  }
   _pendingHeadingAnchor = headingAnchor?.trim() || null
   // If this note is already open, scroll immediately; otherwise selectNote will scroll after load
   if (selectedNoteId.value === noteId && headingAnchor) {
     _pendingHeadingAnchor = null
     scrollToHeadingByText(headingAnchor.trim())
+    requestAnimationFrame(() => scrollListToSelectedNote())
   } else {
     selectNote(note)
   }
+}
+
+/** Scroll the sidebar list to center the selected note item. */
+function scrollListToSelectedNote() {
+  const sidebar = sidebarRef.value
+  if (!sidebar) return
+  const selectedId = selectedNoteId.value
+  if (!selectedId) return
+  const el = sidebar.querySelector<HTMLElement>(`[data-note-id="${selectedId}"]`)
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
 }
 
 /** Normalize text for anchor matching: trim, lowercase, collapse whitespace, strip punctuation. */
@@ -1423,6 +1460,16 @@ function scrollToHeadingByText(anchor: string) {
   fuzzy.sort((a, b) => b.score - a.score)
   const el: HTMLElement | undefined = exact[0] || fuzzy[0]?.el
   if (!el) return
+
+  // rAF ensures browser layout is complete before scrolling (prevents jitter when
+  // this is called right after nextTick + contentLoading = false on large notes).
+  requestAnimationFrame(() => {
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    // Wait for the smooth scroll to actually finish before capturing element position.
+    // Fixed timeouts are unreliable because scroll duration depends on distance and browser.
+    // Detect scroll idle by watching the scroll container's scrollTop go quiet for 100ms.
+    waitForScrollSettle(() => flashHeadingInline(el))
+  })
 
   // rAF ensures browser layout is complete before scrolling (prevents jitter when
   // this is called right after nextTick + contentLoading = false on large notes).
@@ -1656,6 +1703,10 @@ async function selectNote(note: NoteItem) {
   _pendingNoteId = targetId
   selectedFolderId.value = null
   selectedNoteId.value = note.id
+  // Expand parent folder to make selected note visible in sidebar
+  if (note.folderId) {
+    expandedFolders.value[note.folderId] = true
+  }
   noteTitle.value = note.title
   if (editor.value) {
     editor.value.commands.setContent("")
@@ -1716,6 +1767,9 @@ async function selectNote(note: NoteItem) {
   } else if (searchQuery.value.trim()) {
     setTimeout(() => updateSearchHighlights(), 80)
   }
+
+  // Scroll sidebar to make selected note visible
+  requestAnimationFrame(() => scrollListToSelectedNote())
 
   // Defer non-critical work
   requestAnimationFrame(async () => {
@@ -2471,12 +2525,7 @@ const visibleTocItems = computed(() => {
 // Handle route query param changes (e.g., navigating from AI page with note link)
 watch(() => route.query, (q) => {
   if (q.noteId) {
-    const noteId = q.noteId as string
-    const heading = q.heading as string | undefined
-    const note = notes.value.find(n => n.id === noteId)
-    if (note) {
-      openNoteById(noteId, heading)
-    }
+    openNoteById(q.noteId as string, q.heading as string | undefined)
   }
 })
 

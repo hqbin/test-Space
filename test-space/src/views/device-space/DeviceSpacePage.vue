@@ -631,16 +631,15 @@
     <!-- Info Query Dialog -->
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="infoDialog.show" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="infoDialog.show = false">
-          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
-          <div class="glass-panel rounded-[2rem] p-6 w-full max-w-xl max-h-[80vh] relative z-10 bg-white/60 overflow-y-auto">
-            <div class="flex justify-between items-center mb-4">
+        <div v-if="infoDialog.show" class="fixed inset-0 z-50 flex items-center justify-center bg-black/10 backdrop-blur-sm" @click="infoDialog.show = false">
+          <div class="glass-panel rounded-[2rem] p-6 w-full max-w-xl max-h-[80vh] relative z-10 bg-white/60 flex flex-col" @click.stop>
+            <div class="flex justify-between items-center mb-4 shrink-0">
               <h3 class="font-label-lg text-label-lg text-on-surface font-semibold select-none">{{ infoDialog.title }}</h3>
-              <button class="glass-button p-1 rounded select-none" @click="infoDialog.show = false">
+              <button class="glass-button p-1 rounded shrink-0 select-none" @click="infoDialog.show = false">
                 <span class="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
-            <div class="space-y-1.5">
+            <div class="space-y-1.5 flex-1 overflow-y-auto min-h-0">
               <div v-for="(item, idx) in infoDialog.entries" :key="idx" class="border-b border-outline-variant/20 py-1.5 last:border-0">
                 <div class="flex flex-col gap-0.5">
                   <span class="font-label-md text-label-md text-on-surface font-medium text-[13px] break-all">{{ item.key }}</span>
@@ -660,17 +659,16 @@
 
       <!-- Result Dialog -->
       <Transition name="fade">
-        <div v-if="resultDialog.show" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="resultDialog.show = false">
-          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
-          <div class="glass-panel rounded-[2rem] p-6 w-full max-w-lg relative z-10 bg-white/60">
-            <div class="flex justify-between items-center mb-3">
+        <div v-if="resultDialog.show" class="fixed inset-0 z-50 flex items-center justify-center bg-black/10 backdrop-blur-sm" @click="resultDialog.show = false">
+          <div class="glass-panel rounded-[2rem] p-6 w-full max-w-lg relative z-10 bg-white/60 flex flex-col max-h-[80vh]" @click.stop>
+            <div class="flex justify-between items-center mb-3 shrink-0">
               <h3 class="font-label-lg text-label-lg text-on-surface font-semibold select-none">{{ resultDialog.title }}</h3>
-              <button class="glass-button p-1 rounded select-none" @click="resultDialog.show = false">
+              <button class="glass-button p-1 rounded shrink-0 select-none" @click="resultDialog.show = false">
                 <span class="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
-            <pre class="bg-black/5 rounded-xl p-3 text-[12px] font-mono whitespace-pre-wrap break-all max-h-64 overflow-y-auto mb-3 select-text">{{ resultDialog.content }}</pre>
-            <div class="flex gap-2 justify-end">
+            <pre class="bg-black/5 rounded-xl p-3 text-[12px] font-mono whitespace-pre-wrap break-all flex-1 overflow-y-auto min-h-0 mb-3 select-text">{{ resultDialog.content }}</pre>
+            <div class="flex gap-2 justify-end shrink-0">
               <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md select-none" @click="resultDialog.show = false">{{ t('device.close') }}</button>
               <button class="glass-button px-3 py-1 rounded-lg font-label-md text-label-md flex items-center gap-1 select-none" @click="copyToClipboard(resultDialog.content); showToast(t('device.copied'))">
                 <span class="material-symbols-outlined text-[14px]">content_copy</span>{{ t('device.copy') }}
@@ -709,14 +707,13 @@
 
       <!-- Release Apps Dialog -->
       <Transition name="fade">
-        <div v-if="releaseApps.show" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="closeReleaseApps">
-          <div class="absolute inset-0 bg-black/30 backdrop-blur-sm"></div>
-          <div class="glass-panel rounded-[2rem] p-6 w-full max-w-3xl relative z-10 bg-white/60 max-h-[85vh] flex flex-col">
+        <div v-if="releaseApps.show" class="fixed inset-0 z-50 flex items-center justify-center bg-black/10 backdrop-blur-sm" @click="closeReleaseApps">
+          <div class="glass-panel rounded-[2rem] p-6 w-full max-w-3xl relative z-10 bg-white/60 max-h-[85vh] flex flex-col" @click.stop>
             <div class="flex justify-between items-center mb-4 shrink-0">
               <h3 class="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-1.5 select-none">
                 <span class="material-symbols-outlined text-[16px]">new_releases</span>{{ t('device.releaseApps') }}
               </h3>
-              <button class="glass-button p-1 rounded select-none" @click="closeReleaseApps">
+              <button class="glass-button p-1 rounded shrink-0 select-none" @click="closeReleaseApps">
                 <span class="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
@@ -777,9 +774,6 @@
                   </div>
                 </div>
               </template>
-            </div>
-            <div class="flex gap-2 justify-end pt-4 border-t border-outline-variant/30 mt-4 shrink-0">
-              <button class="glass-button px-4 py-2 rounded-lg font-label-md text-label-md select-none" @click="closeReleaseApps">{{ t('device.close') }}</button>
             </div>
           </div>
         </div>

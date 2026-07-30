@@ -292,7 +292,7 @@
 
 <script setup lang="ts">
 defineOptions({ name: 'AiSpacePage' })
-import { ref, reactive, computed, watch, nextTick, onMounted, onActivated, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, nextTick, onMounted, onActivated, onDeactivated, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from '@/composables/useI18n'
 import { isAiConfigured, loadAiConfig, type AiConfig } from '@/services/aiSettings'
@@ -813,10 +813,13 @@ async function sendChat(question: string, imageData: string, session: AiSession)
     addUsage(result.usage)
     if (result.aborted && !session.messages[msgIndex].content) {
       session.messages.splice(msgIndex, 1)
+    } else if (!session.messages[msgIndex].content.trim()) {
+      session.messages[msgIndex].content = '(AI 返回了空回复，请重试)'
     }
   } finally {
     if (session.messages[msgIndex]) session.messages[msgIndex].streaming = false
     sessionAbortControllers.delete(sid)
+    saveSessions()
   }
 }
 
@@ -852,10 +855,13 @@ async function sendNotes(question: string, imageData: string, session: AiSession
     addUsage(result.usage)
     if (result.aborted && !session.messages[msgIndex].content) {
       session.messages.splice(msgIndex, 1)
+    } else if (!session.messages[msgIndex].content.trim()) {
+      session.messages[msgIndex].content = '(AI 返回了空回复，请重试)'
     }
   } finally {
     if (session.messages[msgIndex]) session.messages[msgIndex].streaming = false
     sessionAbortControllers.delete(sid)
+    saveSessions()
   }
 }
 
@@ -969,6 +975,7 @@ async function sendMcp(question: string, session: AiSession) {
   } finally {
     if (session.messages[msgIndex]) session.messages[msgIndex].streaming = false
     sessionAbortControllers.delete(sid)
+    saveSessions()
   }
 }
 
@@ -988,7 +995,8 @@ function onMessagesClick(e: MouseEvent) {
     e.preventDefault()
     const noteId = link.getAttribute('data-note-link')
     const href = link.getAttribute('href') || ''
-    const headingMatch = href.match(/#([^#]+)$/)
+    // Extract heading from query param &heading= (not # fragment — the URL uses query string)
+    const headingMatch = href.match(/[?&]heading=([^&#]+)/)
     if (noteId) {
       router.push({ path: '/notes-space', query: { noteId, heading: headingMatch?.[1] ? decodeURIComponent(headingMatch[1]) : undefined } })
     }
@@ -1228,6 +1236,12 @@ onActivated(() => {
   // 后台异步刷新笔记 / MCP。不 await：切换回 AI 页立即显示会话；数据回来后再无缝更新。
   loadAllNotes(true).catch(() => {})
   loadServers().catch(() => {})
+})
+
+// 切换页面时刷新保存，避免 keep-alive 下未保存的内容丢失
+onDeactivated(() => {
+  if (saveTimer) clearTimeout(saveTimer)
+  saveSessions()
 })
 
 // 未配置蒙版上的手动刷新（自动刷新失败时的兜底）

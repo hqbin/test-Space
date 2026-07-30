@@ -14,7 +14,7 @@ export interface AnswerSegment {
  */
 export function parseAnswerNoteLinks(text: string): AnswerSegment[] {
   // Capture optional #anchor after the uuid
-  const regex = /\[([^\]]+)\]\(note:([a-f0-9-]{36})(?:#([^)]*))?\)/gi
+  const regex = /\[([^\]]+)\]\(note:([a-f0-9-]+)(?:#([^)]*))?\)/gi
   const segments: AnswerSegment[] = []
   let lastIndex = 0
   let match: RegExpExecArray | null
