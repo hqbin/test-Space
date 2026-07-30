@@ -152,10 +152,10 @@
             <span class="text-body-md">{{ t('api.noRequests') }}</span>
           </div>
           <div v-for="req in filteredList" :key="req.id"
-            class="rounded-xl px-3 py-2.5 mb-1 cursor-pointer transition-all select-none api-request-item"
+            class="rounded-xl px-3 py-2.5 mb-1 cursor-pointer transition-colors select-none api-request-item"
             :class="{
               'glass-card-active': selectedRequest?.id === req.id,
-              'glass-hover': selectedRequest?.id !== req.id,
+              'list-hover': selectedRequest?.id !== req.id,
               'ring-2 ring-red-400/50': api.pendingBreakpoints.value.has(req.id) || api.pendingBreakpoints.value.has(req.id + '_resp')
             }"
             @click="handleRequestClick(req)">

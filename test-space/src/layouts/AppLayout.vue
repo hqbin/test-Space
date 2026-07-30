@@ -139,18 +139,18 @@ const aiPanelVisible = computed(() =>
   route.path.startsWith('/notes-space') || route.path.startsWith('/script-space')
 )
 
-// Watch route changes to reload AI config when returning from settings
+// 只在离开 /settings 后返回笔记/脚本页时刷新 AI 配置。
+// 原来每次切页都同步 await loadAiConfig() 会命中一次 SQLite 读，
+// 是页面之间切换卡顿的主要来源。
+let lastPath = ''
 watch(
   () => route.path,
   async (path) => {
     await ensureAiConfig()
-    // Re-read AI config only when navigating TO notes/script from settings
-    // (ensureAiConfig has a one-time flag, so only Settings changes need an explicit reload)
-    if (path.startsWith('/notes-space') || path.startsWith('/script-space')) {
-      // Only reload if config was already loaded once (i.e. user may have changed it in Settings)
-      if (aiConfigLoaded) {
-        try { aiConfig.value = await loadAiConfig() } catch {}
-      }
+    const cameFromSettings = lastPath.startsWith('/settings')
+    lastPath = path
+    if (cameFromSettings && aiConfigLoaded && (path.startsWith('/notes-space') || path.startsWith('/script-space'))) {
+      try { aiConfig.value = await loadAiConfig() } catch {}
     }
   },
   { immediate: true }

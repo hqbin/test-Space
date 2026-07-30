@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-1 min-h-0 -mx-margin-page overflow-hidden pb-4 box-border select-none">
+  <div class="relative flex flex-1 min-h-0 -mx-margin-page overflow-hidden pb-4 box-border select-none">
     <!-- Sessions Sidebar -->
     <div v-if="sessions.length > 0"
       class="flex-shrink-0 flex flex-col w-56 ml-3 overflow-hidden rounded-xl bg-white/10 backdrop-blur-[60px] border border-white/50"
@@ -30,10 +30,8 @@
       </div>
       <div class="flex-1 overflow-y-auto custom-scrollbar p-1.5 space-y-0.5">
         <div v-for="s in sessions" :key="s.id"
-          class="group flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer transition-colors"
-          :class="s.id === activeSessionId
-            ? 'bg-purple-100/60 text-secondary font-medium'
-            : 'text-on-surface-variant hover:bg-white/15 hover:text-on-surface'"
+          class="ai-session-item group flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer"
+          :class="s.id === activeSessionId ? 'is-active' : ''"
           @click="switchSession(s.id)"
         >
           <span class="material-symbols-outlined text-[14px] shrink-0" :class="s.id === activeSessionId ? 'text-secondary' : 'text-on-surface-variant/40'">{{ modeIcon(s.mode) }}</span>
@@ -79,6 +77,7 @@
           class="flex-1 overflow-y-auto custom-scrollbar space-y-3 py-2 pr-1 min-h-0"
         >
           <div v-for="(msg, i) in activeSession.messages" :key="i"
+            v-memo="[msg.content, msg.streaming, msg.role, msg.image, msg.fileName, msg.toolCalls?.length ?? 0]"
             class="text-[13px] leading-relaxed group/msg"
             :class="msg.role === 'user' ? 'flex justify-end' : ''"
           >
@@ -267,18 +266,21 @@
       </div>
     </Teleport>
 
-    <!-- Not configured overlay -->
-    <Teleport to="body">
-      <div v-if="!configured" class="fixed inset-0 z-[999] flex items-center justify-center bg-white/60" @click.self="goSettings">
-        <div class="glass-panel rounded-2xl p-8 w-[360px] border border-glass-border-light shadow-2xl flex flex-col items-center gap-4 bg-white/95">
-          <span class="material-symbols-outlined text-[48px] text-on-surface-variant/30">settings</span>
-          <p class="text-[13px] text-on-surface-variant text-center">{{ t('ai.noConfig') }}</p>
-          <button class="glass-button px-5 py-2 rounded-full text-[13px] glass-active select-none" @click="goSettings">
+    <!-- Not configured mask (只盖住 AI 页面区域，顶栏导航仍可点击) -->
+    <div v-if="!configured" class="absolute inset-0 z-20 flex items-center justify-center bg-white/60 backdrop-blur-sm">
+      <div class="rounded-2xl p-6 w-[320px] border border-outline-variant/40 shadow-lg flex flex-col items-center gap-3 bg-white">
+        <span class="material-symbols-outlined text-[36px] text-on-surface-variant/40">settings</span>
+        <p class="text-[13px] text-on-surface-variant text-center">{{ t('ai.noConfig') }}</p>
+        <div class="flex gap-2 mt-1">
+          <button class="glass-button px-4 py-1.5 rounded-full text-[13px] glass-active select-none" @click="goSettings">
             {{ t('ai.goSettings') }}
+          </button>
+          <button class="glass-button px-4 py-1.5 rounded-full text-[13px] flex items-center gap-1 select-none" :disabled="refreshingConfig" @click="refreshConfig" :title="t('cloudSync.syncing')">
+            <span class="material-symbols-outlined text-[15px]" :class="refreshingConfig ? 'animate-spin' : ''">refresh</span>
           </button>
         </div>
       </div>
-    </Teleport>
+    </div>
 
     <!-- Toast -->
     <div v-if="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[99999] px-5 py-2.5 rounded-full text-[13px] font-semibold shadow-2xl border pointer-events-none transition-all"
@@ -297,7 +299,7 @@ import { isAiConfigured, loadAiConfig, type AiConfig } from '@/services/aiSettin
 import { chatWithNotes, callAiChat, callAiChatWithTools, callChatApiStream, chatWithNotesStream, resolveSystemRole, type AiChatMessage, type AiToolDefinition } from '@/services/noteAi'
 import { renderMarkdown, renderStreamingMarkdown } from '@/composables/useMarkdownRenderer'
 import { useTokenUsage } from '@/stores/useTokenUsage'
-import { loadNotes } from '@/services/database'
+import { loadNoteList } from '@/services/database'
 import type { AiSession, ChatMsg, ChatMode, NoteItem, McpServerConfig, McpAuthType, McpTool } from '@/types'
 import {
   loadMcpServers,
@@ -1062,7 +1064,9 @@ function authTypeLabel(type: McpAuthType): string { return authTypeLabels[type] 
 async function loadAllNotes(force = false) {
   if (!force && _notesCache) { notes.value = _notesCache; return }
   try {
-    notes.value = await loadNotes()
+    // 只加载元数据 + plainText，避免拉整张笔记表的 HTML/JSON 大字段
+    // （慢查询日志显示 loadNotes 在 90 条时要 1.7s，会独占 SQLite 写线程）
+    notes.value = await loadNoteList()
     _notesCache = notes.value
   } catch { notes.value = [] }
 }
@@ -1218,12 +1222,39 @@ onMounted(async () => {
 })
 
 onActivated(() => {
-  if (!historyLoaded.value) {
-    loadAiConfig().then(c => { aiConfig.value = c; historyLoaded.value = true }).catch(() => {})
-  }
-  loadAllNotes(true)
+  // 每次激活都重读 AI 配置 —— 用户可能刚从设置页保存了 endpoint / apiKey。
+  // loadAiConfig 只读 app_settings 单行 KV，耗时可忽略。
+  loadAiConfig().then(c => { aiConfig.value = c; historyLoaded.value = true }).catch(() => {})
+  // 后台异步刷新笔记 / MCP。不 await：切换回 AI 页立即显示会话；数据回来后再无缝更新。
+  loadAllNotes(true).catch(() => {})
   loadServers().catch(() => {})
 })
+
+// 未配置蒙版上的手动刷新（自动刷新失败时的兜底）
+const refreshingConfig = ref(false)
+async function refreshConfig() {
+  if (refreshingConfig.value) return
+  refreshingConfig.value = true
+  try {
+    const fresh = await loadAiConfig()
+    aiConfig.value = fresh
+    // 立即用 isAiConfigured 判断新配置是否完整并给出反馈，
+    // 避免"点了没反应"的错觉 —— 常见是三个字段中有一个还没填。
+    if (isAiConfigured(fresh)) {
+      showToast(t('cloudSync.success') || 'Loaded', true)
+    } else {
+      const missing: string[] = []
+      if (!fresh.apiKey.trim()) missing.push('API Key')
+      if (!fresh.endpoint.trim()) missing.push('Endpoint')
+      if (!fresh.model.trim()) missing.push('Model')
+      showToast(`${t('ai.noConfig')}: ${missing.join(' / ')}`, false)
+    }
+  } catch (e: any) {
+    showToast(e?.message || 'Load failed', false)
+  } finally {
+    refreshingConfig.value = false
+  }
+}
 
 onUnmounted(() => {
   if (toastTimer) clearTimeout(toastTimer)
@@ -1239,6 +1270,34 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* AI 会话侧栏条目：默认灰字，hover 墨色叠层可见；活跃态浅蓝紫底 + 左侧朱砂条 */
+.ai-session-item {
+  color: rgba(28, 27, 31, 0.68);
+  transition: background-color .16s ease, color .16s ease;
+}
+.ai-session-item:hover {
+  background-color: rgba(28, 27, 31, 0.07);
+  color: #1C1B1F;
+}
+.ai-session-item.is-active {
+  background-color: rgba(30, 58, 95, 0.10);
+  color: #1E3A5F;
+  font-weight: 500;
+  box-shadow: inset 3px 0 0 0 #C24E3A;
+}
+:global(html.dark) .ai-session-item {
+  color: rgba(232, 227, 214, 0.72);
+}
+:global(html.dark) .ai-session-item:hover {
+  background-color: rgba(232, 227, 214, 0.09);
+  color: #FFF8EA;
+}
+:global(html.dark) .ai-session-item.is-active {
+  background-color: rgba(232, 141, 108, 0.16);
+  color: #FFF8EA;
+  box-shadow: inset 3px 0 0 0 #E8734F;
+}
+
 .ai-input-textarea::-webkit-scrollbar {
   width: 5px;
 }

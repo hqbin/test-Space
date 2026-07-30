@@ -34,43 +34,46 @@
           </button>
         </div>
       </div>
-      <!-- Space selector dropdown -->
-      <div class="px-2 py-1.5 border-b border-glass-border-light/30">
+      <!-- Space selector -->
+      <div class="px-3 py-2 border-b border-glass-border-light/30">
+        <div class="folio mb-1 opacity-70">Space</div>
         <div class="relative" ref="spaceDropdownRef">
-          <button class="w-full flex items-center justify-between gap-1 px-2 py-1 rounded-md text-[11px] glass-hover cursor-pointer transition-colors text-on-surface-variant select-none" @click="showSpaceDropdown = !showSpaceDropdown">
-            <span class="truncate font-medium">{{ spaces.find(s => s.id === selectedSpaceId)?.name || t('notes.allNotes') }}</span>
-            <span class="material-symbols-outlined text-[14px]">expand_more</span>
+          <button class="w-full list-hover flex items-baseline justify-between gap-1 px-2 py-1 rounded-md text-left select-none" @click="showSpaceDropdown = !showSpaceDropdown">
+            <span class="truncate editorial text-[15px] leading-none text-ink">{{ spaces.find(s => s.id === selectedSpaceId)?.name || t('notes.allNotes') }}</span>
+            <span class="material-symbols-outlined text-[13px] text-on-surface-variant/60 shrink-0 transition-transform" :class="showSpaceDropdown ? 'rotate-180' : ''">expand_more</span>
           </button>
-          <div v-if="showSpaceDropdown" class="absolute left-0 right-0 top-full mt-1 bg-white rounded-lg border border-gray-200/80 z-50 overflow-hidden">
-            <div class="py-1 max-h-[200px] overflow-y-auto">
+          <div v-if="showSpaceDropdown" class="absolute left-0 right-0 top-full mt-1 rounded-xl z-50 overflow-hidden shadow-lg border border-outline-variant/40 bg-white">
+            <div class="py-1 max-h-[220px] overflow-y-auto custom-scrollbar">
               <div
                 v-for="space in spaces"
                 :key="space.id"
-                class="flex items-center justify-between px-3 py-1.5 text-[11px] cursor-pointer transition-colors group"
-                :class="selectedSpaceId === space.id ? 'bg-purple-100/60 text-secondary font-medium' : 'hover:bg-gray-50 text-on-surface-variant'"
+                class="list-hover flex items-center justify-between gap-1.5 px-3 py-1.5 text-[12px] cursor-pointer group"
+                :class="selectedSpaceId === space.id ? 'bg-purple-100/60 text-secondary font-medium' : 'text-on-surface-variant'"
                 @click="selectSpace(space.id); showSpaceDropdown = false"
               >
+                <span class="material-symbols-outlined text-[13px] shrink-0" :class="selectedSpaceId === space.id ? 'text-secondary' : 'text-on-surface-variant/40'">{{ selectedSpaceId === space.id ? 'radio_button_checked' : 'radio_button_unchecked' }}</span>
                 <span class="truncate flex-1">{{ space.name }}</span>
-                <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100">
-                  <button class="p-0.5 rounded hover:bg-black/5 select-none" @click.stop="startRenameSpace(space)" :title="t('notes.rename')">
+                <div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 shrink-0">
+                  <button class="glass-button !border-0 p-0.5 rounded select-none" @click.stop="startRenameSpace(space)" :title="t('notes.rename')">
                     <span class="material-symbols-outlined text-[12px]">edit</span>
                   </button>
-                  <button class="p-0.5 rounded hover:bg-red-50 text-red-400 select-none" @click.stop="confirmDeleteSpace(space)" :title="t('notes.delete')">
+                  <button class="glass-button !border-0 p-0.5 rounded text-error select-none" @click.stop="confirmDeleteSpace(space)" :title="t('notes.delete')">
                     <span class="material-symbols-outlined text-[12px]">delete</span>
                   </button>
                 </div>
               </div>
             </div>
-            <div class="border-t border-gray-100 py-1">
-              <button class="w-full flex items-center gap-1 px-3 py-1.5 text-[11px] text-on-surface-variant hover:bg-gray-50 transition-colors select-none" @click="createSpace(); showSpaceDropdown = false">
-                <span class="material-symbols-outlined text-[13px]">add</span> {{ t('notes.newSpace') }}
+            <div class="border-t border-outline-variant/30">
+              <button class="list-hover w-full flex items-center gap-1.5 px-3 py-2 text-[12px] text-on-surface font-medium select-none" @click="createSpace(); showSpaceDropdown = false">
+                <span class="material-symbols-outlined text-[14px] text-secondary">add_circle</span>
+                <span>{{ t('notes.newSpace') }}</span>
               </button>
             </div>
           </div>
         </div>
       </div>
       <div
-        class="px-3 py-1 flex items-center gap-1.5 glass-hover cursor-pointer text-[12px]"
+        class="px-3 py-1 flex items-center gap-1.5 list-hover cursor-pointer text-[12px]"
         :class="showFavorites ? 'bg-purple-100/60 text-secondary font-medium' : 'text-on-surface-variant'"
         @click="toggleFavorites"
       >
@@ -97,7 +100,7 @@
           <div v-for="note in favoriteNotes" :key="note.id" class="group">
             <div
               draggable="true"
-              class="glass-hover flex items-center gap-1.5 px-2 py-0.5 rounded-md cursor-pointer transition-colors"
+              class="list-hover flex items-center gap-1.5 px-2 py-0.5 rounded-md cursor-pointer"
               :class="[selectedNoteId === note.id ? 'bg-purple-100/60 text-secondary font-medium' : 'text-on-surface-variant', highlightedNoteIds.has(note.id) ? 'bg-yellow-100/60 ring-1 ring-yellow-300/50' : '']"
               @click="selectNote(note)"
               @dragstart="onDragStart(note, $event)"
@@ -125,7 +128,7 @@
           >
             <div
               draggable="true"
-              class="glass-hover flex items-center gap-1.5 px-2 py-1 rounded-md cursor-pointer transition-colors group relative"
+              class="list-hover flex items-center gap-1.5 px-2 py-1 rounded-md cursor-pointer group relative"
               :style="{ paddingLeft: (8 + depth * 16) + 'px' }"
               :class="selectedFolderId === folder.id && !showFavorites ? 'bg-purple-100/60 text-secondary font-medium' : 'text-on-surface-variant'"
               @click="selectFolder(folder.id)"
@@ -148,7 +151,7 @@
               <li v-for="note in getNotesByFolder(folder.id)" :key="note.id" class="group">
                 <div
                   draggable="true"
-                  class="glass-hover flex items-center gap-1.5 px-2 py-0.5 rounded-md cursor-pointer transition-colors"
+                  class="list-hover flex items-center gap-1.5 px-2 py-0.5 rounded-md cursor-pointer"
                   :class="[selectedNoteId === note.id ? 'bg-purple-100/60 text-secondary font-medium' : 'text-on-surface-variant', highlightedNoteIds.has(note.id) ? 'bg-yellow-100/60 ring-1 ring-yellow-300/50' : '']"
                   @click="selectNote(note)"
               @dragstart="onDragStart(note, $event)"
@@ -175,7 +178,7 @@
           <div v-for="note in uncategorizedNotes" :key="note.id" class="group">
             <div
               draggable="true"
-              class="glass-hover flex items-center gap-1.5 px-2 py-0.5 rounded-md cursor-pointer transition-colors"
+              class="list-hover flex items-center gap-1.5 px-2 py-0.5 rounded-md cursor-pointer"
               :class="[selectedNoteId === note.id ? 'bg-purple-100/60 text-secondary font-medium' : 'text-on-surface-variant', highlightedNoteIds.has(note.id) ? 'bg-yellow-100/60 ring-1 ring-yellow-300/50' : '']"
               @click="selectNote(note)"
               @dragstart="onDragStart(note, $event)"
@@ -1074,21 +1077,24 @@ function confirmDeleteSpace(space: NoteSpace) {
 async function doDeleteSpace() {
   if (!deleteSpaceTarget.value) return
   const id = deleteSpaceTarget.value.id
+  // 立即关闭弹窗并从列表移除 —— 用户能马上看到反馈，避免"点了没反应"的错觉
+  deleteSpaceTarget.value = null
+  spaces.value = spaces.value.filter(s => s.id !== id)
+  if (selectedSpaceId.value === id) {
+    selectedSpaceId.value = spaces.value.length > 0 ? spaces.value[0].id : null
+  }
   try {
     await db.deleteNoteSpace(id)
     await yieldToMain()
-    spaces.value = spaces.value.filter(s => s.id !== id)
     folders.value = await db.loadNoteFolders()
     await yieldToMain()
-    notes.value = await db.loadNotes()
+    // 只加载元数据，避免拉整个笔记正文导致阻塞
+    notes.value = await db.loadNoteList()
     rebuildTitleMap()
-    if (selectedSpaceId.value === id) {
-      selectedSpaceId.value = spaces.value.length > 0 ? spaces.value[0].id : null
-    }
   } catch (e) {
     console.error('Failed to delete space:', e)
+    showToast(t('notes.deleteFailed') || 'Delete failed', 'error')
   }
-  deleteSpaceTarget.value = null
 }
 
 // ── Folder Management ────────────────────────────────────────

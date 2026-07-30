@@ -133,6 +133,22 @@
   .glass-hover:hover::after { transform: scaleX(1); }
   .glass-hover:active { background: rgba(28, 27, 31, 0.10) !important; }
 
+  /* 列表行悬停：只有背景加深，没有底部朱砂条。
+     用于笔记 / 接口 / 接口测试列表这类高频出现的行 —
+     视觉噪音更低，仍保留清晰的 hover 反馈。 */
+  .list-hover {
+    position: relative;
+    cursor: pointer;
+    transition: background-color .16s ease, color .16s ease;
+  }
+  .list-hover:hover {
+    background-color: rgba(28, 27, 31, 0.06) !important;
+    color: #1C1B1F;
+  }
+  .list-hover:active {
+    background-color: rgba(28, 27, 31, 0.10) !important;
+  }
+
   /* 激活态：底部粗朱砂条 + 深文本 */
   .glass-active {
     background: rgba(30, 58, 95, 0.08) !important;
@@ -333,6 +349,15 @@ html.dark .glass-hover:hover {
 html.dark .glass-hover:hover::after { background: #E8734F; }
 html.dark .glass-button::after     { background: #E8734F; }
 
+/* list-hover 暗色变体 */
+html.dark .list-hover:hover {
+  background-color: rgba(232, 227, 214, 0.08) !important;
+  color: #FFF8EA;
+}
+html.dark .list-hover:active {
+  background-color: rgba(232, 227, 214, 0.14) !important;
+}
+
 /* 文本色重映射 */
 html.dark .text-on-surface { color: #E8E3D6; }
 html.dark .text-on-surface-variant { color: #A8A29A; }
@@ -460,6 +485,15 @@ html.dark .bracket-tag { color: #E8B08A; }
   .hover\:bg-white\/30:hover {
     background-color: rgba(255, 253, 247, 0.90) !important;
   }
+
+  /* 低透明度白 hover 在纸底上等于隐形 —— 映射到墨色 hover 让脚本 / AI 页面
+     那些"看似能点却毫无反馈"的按钮有清晰的加深反馈。只改颜色不动尺寸。 */
+  .hover\:bg-white\/5:hover   { background-color: rgba(28, 27, 31, 0.05) !important; }
+  .hover\:bg-white\/8:hover   { background-color: rgba(28, 27, 31, 0.07) !important; }
+  .hover\:bg-white\/10:hover  { background-color: rgba(28, 27, 31, 0.08) !important; }
+  .hover\:bg-white\/15:hover  { background-color: rgba(28, 27, 31, 0.10) !important; }
+  .hover\:bg-white\/20:hover  { background-color: rgba(28, 27, 31, 0.12) !important; }
+  .hover\:bg-black\/5:hover   { background-color: rgba(28, 27, 31, 0.08) !important; }
   .hover\:bg-gray-100:hover {
     background-color: rgba(28, 27, 31, 0.06) !important;
   }
@@ -613,6 +647,11 @@ html.dark .hover\:border-secondary\/30:hover {
 html.dark .hover\:bg-white\/30:hover {
   background-color: rgba(232, 227, 214, 0.10) !important;
 }
+html.dark .hover\:bg-white\/5:hover  { background-color: rgba(232, 227, 214, 0.06) !important; }
+html.dark .hover\:bg-white\/8:hover  { background-color: rgba(232, 227, 214, 0.08) !important; }
+html.dark .hover\:bg-white\/10:hover { background-color: rgba(232, 227, 214, 0.09) !important; }
+html.dark .hover\:bg-white\/15:hover { background-color: rgba(232, 227, 214, 0.12) !important; }
+html.dark .hover\:bg-white\/20:hover { background-color: rgba(232, 227, 214, 0.14) !important; }
 html.dark .hover\:bg-gray-100:hover {
   background-color: rgba(232, 227, 214, 0.08) !important;
 }

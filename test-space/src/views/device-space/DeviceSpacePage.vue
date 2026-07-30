@@ -4,13 +4,14 @@
     <!-- Connection Bar - always visible, moved up -->
     <div class="glass-panel rounded-xl p-3 px-5 flex items-center gap-3 flex-nowrap overflow-hidden">
       <!-- Tab Switcher (leftmost) -->
-      <div class="flex gap-2 shrink-0">
+      <div class="flex gap-1 shrink-0">
         <button v-for="tab in tabs" :key="tab.key"
-          class="px-5 py-2 rounded-full font-label-md text-label-md transition-all flex items-center select-none"
-          :class="activeTab === tab.key ? 'bg-secondary/10 text-secondary border border-secondary/30' : 'bg-transparent text-on-surface-variant/70 border border-transparent hover:bg-white/30'"
+          class="glass-hover rounded-md px-3 py-1.5 flex items-center gap-1.5 text-label-md font-label-md select-none"
+          :class="activeTab === tab.key ? 'glass-active font-semibold' : 'text-graphite'"
           @click="activeTab = tab.key">
-          <span class="material-symbols-outlined text-[16px] align-middle mr-1.5">{{ tab.icon }}</span>
-          {{ tab.label }}
+          <span class="material-symbols-outlined text-[15px]"
+            :style="{ fontVariationSettings: `'FILL' ${activeTab === tab.key ? 1 : 0}` }">{{ tab.icon }}</span>
+          <span class="text-[12px] font-semibold tracking-wide whitespace-nowrap">{{ tab.label }}</span>
         </button>
       </div>
       <div class="h-5 w-[1px] bg-glass-border-dark shrink-0 ml-auto"></div>

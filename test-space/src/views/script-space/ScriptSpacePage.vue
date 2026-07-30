@@ -64,9 +64,9 @@
           </div>
           <div v-for="s in pagedScripts" :key="s.id"
             :data-script-id="s.id"
-            class="flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors text-[13px] border-b border-white/[2%]"
+            class="script-list-item flex items-center gap-2 px-3 py-2 cursor-pointer text-[13px] border-b border-white/[2%]"
             :class="[
-              currentScript?.id === s.id ? 'bg-white/15 text-on-surface font-medium' : 'text-on-surface-variant hover:bg-white/5 hover:text-on-surface',
+              currentScript?.id === s.id ? 'is-active' : '',
               dragOverId === s.id ? 'border-t-2 border-t-purple-400/60' : '',
               dragSrcId === s.id ? 'opacity-40' : '',
             ]"
@@ -1168,6 +1168,34 @@ defineExpose({ globalType, editingContent, siblingScriptNames, applyAiScript })
 .dropdown-leave-to {
   opacity: 0;
   transform: translateY(-6px);
+}
+
+/* 脚本列表条目：非活跃 hover 用可见的墨色叠层；活跃态用蓝紫底 + 左侧朱砂条 */
+.script-list-item {
+  color: rgba(28, 27, 31, 0.72);
+  transition: background-color .16s ease, color .16s ease;
+}
+.script-list-item:hover {
+  background-color: rgba(28, 27, 31, 0.08);
+  color: #1C1B1F;
+}
+.script-list-item.is-active {
+  background-color: rgba(30, 58, 95, 0.12);
+  color: #1E3A5F;
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 0 #C24E3A;
+}
+:global(html.dark) .script-list-item {
+  color: rgba(232, 227, 214, 0.72);
+}
+:global(html.dark) .script-list-item:hover {
+  background-color: rgba(232, 227, 214, 0.10);
+  color: #FFF8EA;
+}
+:global(html.dark) .script-list-item.is-active {
+  background-color: rgba(232, 141, 108, 0.18);
+  color: #FFF8EA;
+  box-shadow: inset 3px 0 0 0 #E8734F;
 }
 
 .editor-textarea::selection {

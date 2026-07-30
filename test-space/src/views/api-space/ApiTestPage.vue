@@ -136,7 +136,7 @@
 
               <!-- Endpoint groups (expandable) -->
               <div v-for="ep in paginatedEndpointEntries(group.id).entries" :key="ep.key" class="mb-1">
-                <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg glass-hover group relative">
+                <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg list-hover group relative">
                   <div class="absolute inset-0 rounded-lg cursor-pointer" @click="toggleEndpoint(ep.key)" />
                   <span class="material-symbols-outlined text-[14px] text-on-surface-variant transition-transform relative pointer-events-none" :class="expandedEndpoints.has(ep.key) ? 'rotate-90' : ''">chevron_right</span>
                   <span class="font-mono text-caption px-1.5 py-0.5 rounded-md font-semibold whitespace-nowrap relative pointer-events-none" :class="methodClass(ep.method)">{{ ep.method }}</span>
@@ -159,8 +159,8 @@
                 <!-- Expanded cases for this endpoint -->
                 <div v-if="expandedEndpoints.has(ep.key)" class="ml-4 border-l-2 border-white/10 pl-2">
                   <div v-for="tc in ep.cases" :key="tc.id"
-                    class="rounded-xl px-3 py-2 mb-1 cursor-pointer transition-all select-none"
-                    :class="selectedCase?.id === tc.id ? 'glass-card-active' : 'glass-hover'"
+                    class="rounded-xl px-3 py-2 mb-1 cursor-pointer transition-colors select-none"
+                    :class="selectedCase?.id === tc.id ? 'glass-card-active' : 'list-hover'"
                     @click="selectedCase = tc">
                     <div class="flex items-center gap-2 mb-1">
                       <span class="text-caption px-1.5 py-0.5 rounded-md font-semibold whitespace-nowrap"
