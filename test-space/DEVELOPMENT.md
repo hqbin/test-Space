@@ -171,7 +171,7 @@ D:\TestSpace\test-space/
     ├── tauri.conf.json                 # Tauri 配置（窗口、权限、插件）
     ├── build.rs                        # 构建脚本
     ├── windows/
-    │   └── hooks.nsh                   # NSIS 安装程序钩子（防快捷方式重复）
+    │   └── hooks.nsh                   # NSIS 安装程序钩子（防快捷方式重复 + 安装后同步刷新桌面图标缓存）
     ├── capabilities/
     │   └── default.json                # Tauri 2 权限能力
     ├── icons/                          # 应用图标
@@ -836,6 +836,7 @@ MCP（Model Context Protocol）集成，支持注册 SSE/Streamable HTTP 协议�
 - **单实例**：`tauri-plugin-single-instance` 插件注册为第一个插件，第二次启动时自动聚焦已有窗口并退出
 - **HTTP 插件**：`tauri_plugin_http::init()` 注册，用于云端备份 API 调用（绕过 CORS）
 - **系统托盘**：`setup` 中创建 `TrayIconBuilder`，图标使用应用默认窗口图标，tooltip "TestSpace"，右键菜单（显示窗口 / 退出）
+- **安装后图标缓存刷新**：`windows/hooks.nsh` 的 `NSIS_HOOK_POSTINSTALL` 通过 `SHChangeNotify` 三步刷新桌面图标缓存——① `SHCNE_UPDATEITEM + SHCNF_FLUSH` 针对 exe 本身（失效 Shell 对该文件的图标缓存条目）② 同样通知当前用户和所有用户的桌面 `.lnk` 快捷方式 ③ 全局 `SHCNE_ASSOCCHANGED + SHCNF_FLUSH` 兜底广播。任务栏/托盘图标因来自运行中的新 exe 进程无需处理；桌面图标依赖 Shell 的 iconcache 数据库，不主动通知则要等 Explorer 后台扫描才会自动刷新（通常重启后数分钟）。
 - **关闭按钮拦截**：`on_window_event` 拦截 `CloseRequested`，`api.prevent_close()` 阻止关闭，`window.hide()` 隐藏到系统托盘
 
 ```rust
@@ -5416,3 +5417,62 @@ onUnmounted(() => { deviceEventUnlisten?.(); });
 | `.glass-hover` | Tab / 导航项 / 交互卡片 | 底部朱砂条 + 背景加深 |
 | `.list-hover` | 高频列表条目 | 仅背景加深，无装饰条 |
 | `.glass-active` | 选中态 | 蓝紫底 + 底部朱砂粗条 |
+
+### Phase 73 — 应用图标重设计与安装包图标刷新优化（已完成 ✅）
+
+#### 73.1 问题背景
+
+原图标存在两个问题：
+1. 旧图标的 PNG 源文件圆角外区域为不透明白/灰色背景（alpha=255），打包成 `.ico` 后 Windows 直接显示完整方块，导致任务栏/桌面显示为直角方形图标
+2. `windows/hooks.nsh` 的 `POSTINSTALL` 钩子只删除了 Win7 遗留的 `IconCache.db`，未覆盖 Windows 10/11 实际使用的 `iconcache_*.db`，老用户覆盖安装后图标缓存无法自动刷新
+
+#### 73.2 图标源文件替换
+
+| 项目 | 说明 |
+|------|------|
+| 新源文件 | `testspace_logo_transparent_background_with_container.png`（1024×1024） |
+| 透明通道 | 四角 alpha=0，设计稿自带单层圆角卡片，无需额外裁剪 |
+| 生成命令 | `npx tauri icon src-tauri/icons/icon.png` |
+| 覆盖文件 | `icons/icon.ico`、`icons/icon.icns`、`icons/32x32.png`、`icons/64x64.png`、`icons/128x128.png`、`icons/128x128@2x.png` 及全部 Android/iOS 平台图标 |
+
+> **注意**：源文件必须有真正的透明通道（四角 alpha=0），棋盘格是查看器的透明表示，不是像素颜色。Stitch 等工具导出的 PNG 会将透明区域烘焙为灰色实底，需在 Figma / PS 中重新导出并保留 alpha 通道。
+
+#### 73.3 NSIS 安装后图标缓存刷新
+
+将 `POSTINSTALL` 钩子从"杀 Explorer + 删缓存 + 重启 Explorer"改为轻量的 `SHChangeNotify` 通知：
+
+```nsis
+!macro NSIS_HOOK_POSTINSTALL
+  System::Call "shell32::SHChangeNotify(i 0x8000000, i 0, i 0, i 0)"
+!macroend
+```
+
+**原因**：
+- 杀 Explorer 会导致安装完成时屏幕短暂黑屏，用户体验差
+- 市面上成熟应用（Chrome、VS Code 等）均不在安装器中强制重启 Explorer
+- `SHChangeNotify` 在绝大多数情况下可触发图标刷新；极少数旧缓存条目在用户下次注销重新登录时自动更新
+
+#### 73.4 Windows 图标缓存说明
+
+| 缓存文件 | 位置 | 说明 |
+|---------|------|------|
+| `IconCache.db` | `%LOCALAPPDATA%\` | Win7 遗留，Win10/11 基本不用 |
+| `iconcache_*.db` | `%LOCALAPPDATA%\Microsoft\Windows\Explorer\` | Win10/11 实际使用，Explorer 运行时锁定，只能在 Explorer 停止后删除 |
+
+手动强制刷新（开发调试用）：
+```powershell
+taskkill /F /IM explorer.exe
+attrib -h "%LOCALAPPDATA%\Microsoft\Windows\Explorer\iconcache_*.db"
+del /f /q /a "%LOCALAPPDATA%\Microsoft\Windows\Explorer\iconcache_*.db"
+del "%LOCALAPPDATA%\IconCache.db"
+start explorer.exe
+```
+
+#### 73.5 关联文件
+
+| 文件 | 修改类型 | 说明 |
+|------|----------|------|
+| `src-tauri/icons/icon.png` | 替换 | 新透明背景源文件（1024×1024，四角 alpha=0） |
+| `src-tauri/icons/icon.ico` | 重新生成 | 由 `tauri icon` 命令自动生成 |
+| `src-tauri/icons/*.png` | 重新生成 | 全平台图标由 `tauri icon` 命令自动生成 |
+| `src-tauri/windows/hooks.nsh` | 修改 | `POSTINSTALL` 改为轻量 `SHChangeNotify`，移除强制重启 Explorer 逻辑 |
