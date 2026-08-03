@@ -18,6 +18,16 @@
 | **前端修改** | 涉及 Vue 组件、CSS、布局、样式、UI 交互、动效 | `frontend-design` |
 | **UI/UX 设计** | 视觉设计、配色、字体、图标、设计系统 | `ui-ux-pro-max` |
 | **Bug 修复** | 功能异常、崩溃、错误、测试失败、意外行为 | `systematic-debugging` |
+| **硬 Bug / 性能问题** | 难以复现、根因不明、性能退化、需要系统诊断 | `diagnosing-bugs` |
+| **测试驱动开发** | 提到 TDD、红绿重构、先写测试再实现 | `tdd` |
+| **代码审查** | 审查分支、PR、某次提交之后的变更 | `code-review` |
+| **技术调研** | 调研问题、收集文档资料、了解 API 用法 | `research` |
+| **原型验证** | 快速验证方案可行性、探索 UI 形态、试验状态模型 | `prototype` |
+| **重构规划** | 计划重构、拆解重构步骤、制定重构 RFC | `request-refactor-plan` |
+| **方案压测** | 压力测试设计方案、深度追问决策、质疑架构 | `grilling` |
+| **接口 / 模块设计** | 设计 API、比较模块形态、深模块设计、改善可测试性 | `codebase-design` |
+| **合并冲突** | 解决 git merge / rebase 冲突 | `resolving-merge-conflicts` |
+| **QA 会话** | 会话式报告 bug、QA 测试走查、批量提 issue | `qa` |
 | **其他开发任务** | 后端、数据库、脚本、配置、文档等 | `dev-workflow` |
 
 > **调用方式**：判断任务类型后，使用 `Skill` 工具调用对应的 skill。如果任务同时涉及多个类型，则依次调用。调用 skills 前不需要问我确认，直接执行。
