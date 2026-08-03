@@ -39,7 +39,7 @@
         <div class="folio mb-1 opacity-70">Space</div>
         <div class="relative" ref="spaceDropdownRef">
           <button class="w-full list-hover flex items-baseline justify-between gap-1 px-2 py-1 rounded-md text-left select-none" @click="showSpaceDropdown = !showSpaceDropdown">
-            <span class="truncate editorial text-[15px] leading-none text-ink">{{ spaces.find(s => s.id === selectedSpaceId)?.name || t('notes.allNotes') }}</span>
+            <span class="truncate min-w-0 font-semibold text-[13px] leading-snug text-on-surface" :title="spaces.find(s => s.id === selectedSpaceId)?.name || t('notes.allNotes')">{{ spaces.find(s => s.id === selectedSpaceId)?.name || t('notes.allNotes') }}</span>
             <span class="material-symbols-outlined text-[13px] text-on-surface-variant/60 shrink-0 transition-transform" :class="showSpaceDropdown ? 'rotate-180' : ''">expand_more</span>
           </button>
           <div v-if="showSpaceDropdown" class="absolute left-0 right-0 top-full mt-1 rounded-xl z-50 overflow-hidden shadow-lg border border-outline-variant/40 bg-white">
@@ -419,8 +419,8 @@
 
     <!-- Link Dialog -->
     <Teleport to="body">
-      <div v-if="showLinkDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="showLinkDialog = false">
-        <div class="glass-panel rounded-[2rem] p-6 w-96 bg-white/60" @click.stop>
+      <div v-if="showLinkDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @mousedown.self="showLinkDialog = false">
+        <div class="glass-panel rounded-[2rem] p-6 w-96 bg-white/60" @click.stop @mousedown.stop>
           <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-4 select-none">{{ t('notes.insertLink') }}</h3>
           <div class="flex gap-2 mb-4">
             <button
@@ -530,7 +530,7 @@
 
     <!-- Rename Dialog -->
     <Teleport to="body">
-      <div v-if="renameTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="renameTarget = null">
+      <div v-if="renameTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @mousedown.self="renameTarget = null">
         <div class="glass-panel rounded-2xl p-6 w-80 bg-white/60">
           <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-4 select-none">{{ t('notes.rename') }}</h3>
           <input             v-model="renameValue"
@@ -587,7 +587,7 @@
 
     <!-- Delete Space Confirmation -->
     <Teleport to="body">
-      <div v-if="deleteSpaceTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="deleteSpaceTarget = null">
+      <div v-if="deleteSpaceTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @mousedown.self="deleteSpaceTarget = null">
         <div class="glass-panel rounded-2xl p-6 w-80 bg-white/80">
           <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-2 select-none">{{ t('notes.deleteSpace') }}</h3>
           <p class="text-[13px] text-on-surface-variant mb-6" v-html="t('notes.deleteSpaceDesc', { name: `<strong>${escapeHtml(deleteSpaceTarget.name)}</strong>` })"></p>
@@ -601,7 +601,7 @@
 
     <!-- Delete Folder Confirmation -->
     <Teleport to="body">
-      <div v-if="deleteFolderTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="deleteFolderTarget = null">
+      <div v-if="deleteFolderTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @mousedown.self="deleteFolderTarget = null">
         <div class="glass-panel rounded-2xl p-6 w-96 bg-white/80">
           <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-2 select-none">{{ t('notes.deleteFolder') }}</h3>
           <p class="text-[13px] text-on-surface-variant mb-2" v-html="t('notes.deleteFolderDesc', { name: `<strong>${escapeHtml(deleteFolderTarget.name)}</strong>` })"></p>
@@ -623,7 +623,7 @@
 
     <!-- Delete Note Confirmation -->
     <Teleport to="body">
-      <div v-if="deleteNoteTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="deleteNoteTarget = null">
+      <div v-if="deleteNoteTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @mousedown.self="deleteNoteTarget = null">
         <div class="glass-panel rounded-2xl p-6 w-80 bg-white/80">
           <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-2 select-none">{{ t('notes.deleteNote') }}</h3>
           <p class="text-[13px] text-on-surface-variant mb-6" v-html="t('notes.deleteNoteDesc', { name: `<strong>${escapeHtml(deleteNoteTarget.title || t('notes.untitled'))}</strong>` })"></p>
@@ -637,8 +637,8 @@
 
     <!-- Import Dialog -->
     <Teleport to="body">
-      <div v-if="showImportDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="showImportDialog = false">
-        <div class="glass-panel rounded-[2rem] p-6 w-96 bg-white/60" @click.stop>
+      <div v-if="showImportDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @mousedown.self="showImportDialog = false">
+        <div class="glass-panel rounded-[2rem] p-6 w-96 bg-white/60" @click.stop @mousedown.stop>
           <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-4 select-none">{{ t('notes.importDialogTitle') }}</h3>
           <div class="mb-4">
             <label class="text-[12px] text-on-surface-variant block mb-1">{{ t('notes.importTargetFolder') }}</label>
@@ -671,8 +671,8 @@
 
     <!-- Export Dialog -->
     <Teleport to="body">
-      <div v-if="showExportDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @click.self="showExportDialog = false">
-        <div class="glass-panel rounded-[2rem] p-6 w-96 bg-white/60 max-h-[80vh] flex flex-col" @click.stop>
+      <div v-if="showExportDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" @mousedown.self="showExportDialog = false">
+        <div class="glass-panel rounded-[2rem] p-6 w-96 bg-white/60 max-h-[80vh] flex flex-col" @click.stop @mousedown.stop>
           <h3 class="font-label-md text-label-md text-on-surface font-semibold mb-4 select-none flex items-center justify-between">
             <span>{{ t('notes.exportDialogTitle') }}</span>
             <button class="glass-button px-2 py-1 rounded-full text-[10px] select-none" @click="toggleAllNotes">{{ exportAllSelected ? t('notes.exportDeselectAll') : t('notes.exportSelectAll') }}</button>

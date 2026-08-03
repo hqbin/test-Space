@@ -335,8 +335,8 @@
     <!-- Rule Editor Dialog -->
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="showRuleEditor" class="fixed inset-0 z-[100] flex items-center justify-center" @click.self="showRuleEditor = false">
-          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
+        <div v-if="showRuleEditor" class="fixed inset-0 z-[100] flex items-center justify-center" @mousedown.self="showRuleEditor = false">
+          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm pointer-events-none"></div>
           <div class="glass-panel rounded-[2rem] p-6 w-full max-w-md relative z-10 bg-white/90 max-h-[80vh] flex flex-col">
             <div class="flex justify-between items-center mb-4">
               <h3 class="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-1.5 select-none">
@@ -406,8 +406,8 @@
 
     <!-- Breakpoint Edit Dialog -->
     <Teleport to="body">
-      <div v-if="showBreakpointEditor" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/20 backdrop-blur-sm" @click.self="showBreakpointEditor = false">
-        <div class="glass-panel rounded-2xl p-6 w-[700px] max-h-[85vh] overflow-y-auto" @click.stop>
+      <div v-if="showBreakpointEditor" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/20 backdrop-blur-sm" @mousedown.self="showBreakpointEditor = false">
+        <div class="glass-panel rounded-2xl p-6 w-[700px] max-h-[85vh] overflow-y-auto" @click.stop @mousedown.stop>
           <div class="text-headline-md font-semibold mb-4">{{ breakpointPhase === 'request' ? 'Edit Request' : 'Edit Response' }}</div>
           <div class="space-y-3 mb-4">
             <div>
@@ -438,8 +438,8 @@
     <!-- Result Dialog -->
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="resultDialog.show" class="fixed inset-0 z-[100] flex items-center justify-center" @click.self="resultDialog.show = false">
-          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
+        <div v-if="resultDialog.show" class="fixed inset-0 z-[100] flex items-center justify-center" @mousedown.self="resultDialog.show = false">
+          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm pointer-events-none"></div>
           <div class="glass-panel rounded-[2rem] p-6 w-full max-w-md relative z-10 bg-white/90 max-h-[80vh] flex flex-col">
             <div class="flex justify-between items-center mb-4">
               <h3 class="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-1.5 select-none">

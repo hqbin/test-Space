@@ -593,8 +593,8 @@
     <!-- File Edit Dialog -->
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="fileEditDialog.show" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="fileEditDialog.show = false">
-          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
+        <div v-if="fileEditDialog.show" class="fixed inset-0 z-50 flex items-center justify-center" @mousedown.self="fileEditDialog.show = false">
+          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm pointer-events-none"></div>
           <div class="glass-panel rounded-[2rem] p-4 w-full max-w-6xl h-[85vh] relative z-10 bg-white/60 flex flex-col">
             <div class="flex justify-between items-center mb-2 shrink-0">
               <div class="flex items-center gap-2 min-w-0">
@@ -631,8 +631,8 @@
     <!-- Info Query Dialog -->
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="infoDialog.show" class="fixed inset-0 z-50 flex items-center justify-center bg-black/10 backdrop-blur-sm" @click="infoDialog.show = false">
-          <div class="glass-panel rounded-[2rem] p-6 w-full max-w-xl max-h-[80vh] relative z-10 bg-white/60 flex flex-col" @click.stop>
+        <div v-if="infoDialog.show" class="fixed inset-0 z-50 flex items-center justify-center bg-black/10 backdrop-blur-sm" @mousedown="infoDialog.show = false">
+          <div class="glass-panel rounded-[2rem] p-6 w-full max-w-xl max-h-[80vh] relative z-10 bg-white/60 flex flex-col" @click.stop @mousedown.stop>
             <div class="flex justify-between items-center mb-4 shrink-0">
               <h3 class="font-label-lg text-label-lg text-on-surface font-semibold select-none">{{ infoDialog.title }}</h3>
               <button class="glass-button p-1 rounded shrink-0 select-none" @click="infoDialog.show = false">
@@ -659,8 +659,8 @@
 
       <!-- Result Dialog -->
       <Transition name="fade">
-        <div v-if="resultDialog.show" class="fixed inset-0 z-50 flex items-center justify-center bg-black/10 backdrop-blur-sm" @click="resultDialog.show = false">
-          <div class="glass-panel rounded-[2rem] p-6 w-full max-w-lg relative z-10 bg-white/60 flex flex-col max-h-[80vh]" @click.stop>
+        <div v-if="resultDialog.show" class="fixed inset-0 z-50 flex items-center justify-center bg-black/10 backdrop-blur-sm" @mousedown="resultDialog.show = false">
+          <div class="glass-panel rounded-[2rem] p-6 w-full max-w-lg relative z-10 bg-white/60 flex flex-col max-h-[80vh]" @click.stop @mousedown.stop>
             <div class="flex justify-between items-center mb-3 shrink-0">
               <h3 class="font-label-lg text-label-lg text-on-surface font-semibold select-none">{{ resultDialog.title }}</h3>
               <button class="glass-button p-1 rounded shrink-0 select-none" @click="resultDialog.show = false">
@@ -680,8 +680,8 @@
 
       <!-- App Detail Dialog -->
       <Transition name="fade">
-        <div v-if="appDetailDialog.show" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="appDetailDialog.show = false">
-          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
+        <div v-if="appDetailDialog.show" class="fixed inset-0 z-50 flex items-center justify-center" @mousedown.self="appDetailDialog.show = false">
+          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm pointer-events-none"></div>
           <div class="glass-panel rounded-[2rem] p-6 w-full max-w-lg relative z-10 bg-white/60">
             <div class="flex justify-between items-center mb-3">
               <h3 class="font-label-lg text-label-lg text-on-surface font-semibold break-all select-none">{{ appDetailDialog.title }}</h3>
@@ -707,8 +707,8 @@
 
       <!-- Release Apps Dialog -->
       <Transition name="fade">
-        <div v-if="releaseApps.show" class="fixed inset-0 z-50 flex items-center justify-center bg-black/10 backdrop-blur-sm" @click="closeReleaseApps">
-          <div class="glass-panel rounded-[2rem] p-6 w-full max-w-3xl relative z-10 bg-white/60 max-h-[85vh] flex flex-col" @click.stop>
+        <div v-if="releaseApps.show" class="fixed inset-0 z-50 flex items-center justify-center bg-black/10 backdrop-blur-sm" @mousedown="closeReleaseApps">
+          <div class="glass-panel rounded-[2rem] p-6 w-full max-w-3xl relative z-10 bg-white/60 max-h-[85vh] flex flex-col" @click.stop @mousedown.stop>
             <div class="flex justify-between items-center mb-4 shrink-0">
               <h3 class="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-1.5 select-none">
                 <span class="material-symbols-outlined text-[16px]">new_releases</span>{{ t('device.releaseApps') }}
@@ -783,7 +783,7 @@
     <!-- APK Install Dialog -->
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="apkDialogOpen" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="closeApkDialog">
+        <div v-if="apkDialogOpen" class="fixed inset-0 z-50 flex items-center justify-center" @mousedown.self="closeApkDialog">
           <div class="absolute inset-0 bg-black/10 backdrop-blur-sm pointer-events-none"></div>
           <div class="glass-panel rounded-[2rem] p-6 w-full max-w-md relative z-10 bg-white/60">
             <div class="flex justify-between items-center mb-4">
@@ -830,8 +830,8 @@
     <!-- Cmd Manager Dialog -->
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="showCmdManager" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="showCmdManager = false">
-          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
+        <div v-if="showCmdManager" class="fixed inset-0 z-50 flex items-center justify-center" @mousedown.self="showCmdManager = false">
+          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm pointer-events-none"></div>
           <div class="glass-panel rounded-[2rem] p-6 w-full max-w-md relative z-10 bg-white/60 max-h-[80vh] flex flex-col">
             <div class="flex justify-between items-center mb-4">
               <h3 class="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-1.5 select-none">
@@ -877,9 +877,16 @@
                     </div>
                   </div>
               </div>
-              <div class="pt-3 border-t border-outline-variant/30">
+              <div class="pt-3 border-t border-outline-variant/30 flex items-center gap-2">
                 <button class="text-sm text-on-surface-variant hover:text-secondary flex items-center gap-1 transition-colors select-none no-border" @click="addCustomCommand">
                   <span class="material-symbols-outlined text-[16px]">add</span>{{ t('device.addShortcut') }}
+                </button>
+                <div class="flex-1"></div>
+                <button class="glass-button px-2.5 py-1.5 rounded-lg flex items-center gap-1 text-caption font-caption select-none" @click="exportCustomCommands">
+                  <span class="material-symbols-outlined text-[14px]">upload</span>{{ t('device.exportShortcuts') }}
+                </button>
+                <button class="glass-button px-2.5 py-1.5 rounded-lg flex items-center gap-1 text-caption font-caption select-none" @click="importCustomCommands">
+                  <span class="material-symbols-outlined text-[14px]">download</span>{{ t('device.importShortcuts') }}
                 </button>
               </div>
             </div>
@@ -891,8 +898,8 @@
     <!-- Confirm Dialog -->
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="confirmDialog.show" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="confirmDialog.onCancel()">
-          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
+        <div v-if="confirmDialog.show" class="fixed inset-0 z-50 flex items-center justify-center" @mousedown.self="confirmDialog.onCancel()">
+          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm pointer-events-none"></div>
           <div class="glass-panel rounded-[2rem] p-6 w-full max-w-sm relative z-10 bg-white/60">
             <div class="flex items-center gap-3 mb-4">
               <span class="material-symbols-outlined text-[24px] text-error">warning</span>
@@ -932,8 +939,8 @@
     <!-- Screenshot Preview -->
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="showScreenshotPreview && screenshotDataUrl" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="showScreenshotPreview = false">
-          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
+        <div v-if="showScreenshotPreview && screenshotDataUrl" class="fixed inset-0 z-50 flex items-center justify-center" @mousedown.self="showScreenshotPreview = false">
+          <div class="absolute inset-0 bg-black/10 backdrop-blur-sm pointer-events-none"></div>
           <div class="glass-panel rounded-[2rem] p-6 w-full max-w-2xl relative z-10 bg-white/60 max-h-[85vh] flex flex-col">
             <div class="flex justify-between items-center mb-4">
               <h3 class="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-1.5 select-none">
@@ -1268,6 +1275,37 @@ async function loadCustomCommands() {
 }
 async function saveCustomCommands() {
   await setSetting('adb_custom_commands', JSON.stringify(customCommands.value));
+}
+async function exportCustomCommands() {
+  try {
+    const { save } = await import('@tauri-apps/plugin-dialog');
+    const { writeTextFile } = await import('@tauri-apps/plugin-fs');
+    const dest = await save({ defaultPath: 'shortcuts.json', filters: [{ name: 'JSON', extensions: ['json'] }] });
+    if (!dest) return;
+    await writeTextFile(dest, JSON.stringify(customCommands.value, null, 2));
+    showToast(t('device.shortcutsExported'));
+  } catch (e) {
+    showToast(t('device.shortcutsImportFail'), 'error');
+  }
+}
+async function importCustomCommands() {
+  try {
+    const { open } = await import('@tauri-apps/plugin-dialog');
+    const { readTextFile } = await import('@tauri-apps/plugin-fs');
+    const selected = await open({ multiple: false, filters: [{ name: 'JSON', extensions: ['json'] }] });
+    if (!selected) return;
+    const text = await readTextFile(selected as string);
+    const parsed = JSON.parse(text);
+    if (!Array.isArray(parsed) || !parsed.every(c => typeof c.name === 'string' && typeof c.command === 'string')) {
+      showToast(t('device.shortcutsImportFail'), 'error');
+      return;
+    }
+    customCommands.value = parsed;
+    await saveCustomCommands();
+    showToast(t('device.shortcutsImported'));
+  } catch {
+    showToast(t('device.shortcutsImportFail'), 'error');
+  }
 }
 function addCustomCommand() { editingCmdIndex.value = -1; editingCmdName.value = ""; editingCmdValue.value = ""; }
 function startEditCustomCommand(idx: number) {

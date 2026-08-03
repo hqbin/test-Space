@@ -206,7 +206,7 @@
 
     <!-- Delete confirmation modal -->
     <Teleport to="body">
-      <div v-if="deleteTarget" class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40" @click.self="deleteTarget = null">
+      <div v-if="deleteTarget" class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40" @mousedown.self="deleteTarget = null">
         <div class="rounded-2xl p-6 w-[340px] border border-white/10 shadow-2xl" style="background: rgba(30,32,40,0.95); backdrop-filter: blur(20px);">
           <div class="text-[15px] font-medium text-white mb-2">{{ t("scripts.deleteTitle") }}</div>
           <div class="text-[13px] text-white/50 mb-5">{{ t("scripts.deleteDesc", { name: deleteTarget.name }) }}</div>
@@ -220,7 +220,7 @@
 
     <!-- Type switch confirm modal -->
     <Teleport to="body">
-      <div v-if="pendingTypeSwitch" class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40" @click.self="pendingTypeSwitch = null">
+      <div v-if="pendingTypeSwitch" class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40" @mousedown.self="pendingTypeSwitch = null">
         <div class="rounded-2xl p-6 w-[360px] border border-white/10 shadow-2xl" style="background: rgba(30,32,40,0.95); backdrop-filter: blur(20px);">
           <div class="text-[15px] font-medium text-white mb-2">{{ t("scripts.typeTitle") }}</div>
           <div class="text-[13px] text-white/50 mb-5">{{ t("scripts.typeDesc", { name: editingName || 'untitled' }) }}</div>

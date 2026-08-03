@@ -181,7 +181,7 @@
 
     <!-- MCP Server Manager Modal -->
     <Teleport to="body">
-      <div v-if="showMcpManager" class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/20" @click.self="showMcpManager = false">
+      <div v-if="showMcpManager" class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/20" @mousedown.self="showMcpManager = false">
         <div class="glass-panel rounded-2xl p-5 w-[480px] border border-glass-border-light shadow-2xl flex flex-col gap-4 bg-white/90">
           <div class="flex items-center justify-between">
             <span class="text-[15px] font-semibold text-on-surface">{{ t('ai.mcpSettings') }}</span>
@@ -254,7 +254,7 @@
 
     <!-- Delete Session Confirm -->
     <Teleport to="body">
-      <div v-if="deleteTarget" class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/20" @click.self="deleteTarget = null">
+      <div v-if="deleteTarget" class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/20" @mousedown.self="deleteTarget = null">
         <div class="glass-panel rounded-2xl p-5 w-[340px] border border-glass-border-light shadow-2xl flex flex-col gap-4 bg-white/90">
           <div class="text-[15px] font-semibold text-on-surface">{{ t('notes.deleteNote') }}</div>
           <div class="text-[12px] text-on-surface-variant">{{ t('notes.deleteNoteDesc', { name: deleteTarget.title || 'New Chat' }) }}</div>
