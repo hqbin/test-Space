@@ -24,9 +24,28 @@
             </div>
           </div>
         </div>
-        <button class="glass-button !border-0 px-1.5 py-1.5 select-none" :title="t('ai.newSession')" @click="createNewSession">
+        <button class="glass-button !border-0 px-1.5 py-1.5 select-none" :title="t('ai.newSession')" @click="createNewSession()">
           <span class="material-symbols-outlined text-[14px]">add</span>
         </button>
+        <div v-if="skills.length > 0" class="relative" ref="skillDropdownRef">
+          <button class="glass-button !border-0 px-1.5 py-1.5 select-none" title="从 Skill 创建" @click="showSkillDropdown = !showSkillDropdown">
+            <span class="material-symbols-outlined text-[14px]">auto_awesome</span>
+          </button>
+          <div v-if="showSkillDropdown" class="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg border border-gray-200/80 z-50 overflow-hidden shadow-lg">
+            <div class="py-1">
+              <div v-for="skill in skills" :key="skill.id"
+                class="flex items-center gap-2 px-3 py-1.5 text-[12px] cursor-pointer hover:bg-gray-50 text-on-surface-variant"
+                @click="launchSkill(skill)"
+              >
+                <span class="material-symbols-outlined text-[13px] text-secondary">auto_awesome</span>
+                <div class="flex-1 min-w-0">
+                  <div class="truncate font-medium text-on-surface">{{ skill.name }}</div>
+                  <div v-if="skill.description" class="truncate text-[10px] text-on-surface-variant/60">{{ skill.description }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="flex-1 overflow-y-auto custom-scrollbar p-1.5 space-y-0.5">
         <div v-for="s in sessions" :key="s.id"
@@ -65,7 +84,7 @@
       <div v-if="!activeSession" class="flex-1 glass-panel rounded-xl flex flex-col items-center justify-center gap-3">
         <span class="material-symbols-outlined text-5xl text-on-surface-variant/20">smart_toy</span>
         <p class="text-[13px] text-on-surface-variant/60">{{ t('ai.noSession') }}</p>
-        <button class="glass-button px-5 py-2 rounded-full text-[13px] glass-active select-none" @click="createNewSession">
+        <button class="glass-button px-5 py-2 rounded-full text-[13px] glass-active select-none" @click="createNewSession()">
           <span class="material-symbols-outlined text-[16px] mr-1">add</span>
           {{ t('ai.newSession') }}
         </button>
@@ -77,7 +96,7 @@
           class="flex-1 overflow-y-auto custom-scrollbar space-y-3 py-2 pr-1 min-h-0"
         >
           <div v-for="(msg, i) in activeSession.messages" :key="i"
-            v-memo="[msg.content, msg.streaming, msg.role, msg.image, msg.fileName, msg.toolCalls?.length ?? 0]"
+            v-memo="[msg.content, msg.streaming, msg.role, msg.image, msg.fileName, msg.toolCalls?.length ?? 0, msg.files?.length ?? 0]"
             class="text-[13px] leading-relaxed group/msg"
             :class="msg.role === 'user' ? 'flex justify-end' : ''"
           >
@@ -104,11 +123,24 @@
                     <span>Called: {{ tc.toolName }} on {{ tc.serverName }}</span>
                   </div>
                 </div>
+                <div v-if="msg.files?.length" class="mt-2 pt-2 border-t border-glass-border-light/30 flex flex-wrap gap-1.5">
+                  <button v-for="f in msg.files" :key="f.name"
+                    class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-secondary/10 border border-secondary/20 text-[11px] text-secondary hover:bg-secondary/20 transition-colors select-none"
+                    @click="downloadFile(f)"
+                  >
+                    <span class="material-symbols-outlined text-[13px]">{{ fileIcon(f.mimeType) }}</span>
+                    <span class="truncate max-w-[140px]">{{ f.name }}</span>
+                    <span class="material-symbols-outlined text-[12px]">download</span>
+                  </button>
+                </div>
                 <div v-if="!msg.streaming"
                   class="flex gap-1 mt-1.5 pt-1.5 border-t border-transparent group-hover/msg:border-glass-border-light/30 opacity-0 group-hover/msg:opacity-100 transition-all"
                 >
                   <button class="p-0.5 rounded hover:bg-black/5 text-on-surface-variant/40 hover:text-on-surface-variant transition-colors" @click="copyMessage(msg.content)" title="复制">
                     <span class="material-symbols-outlined text-[13px]">content_copy</span>
+                  </button>
+                  <button class="p-0.5 rounded hover:bg-black/5 text-on-surface-variant/40 hover:text-on-surface-variant transition-colors" @click="downloadMessage(msg.content)" title="保存为文件">
+                    <span class="material-symbols-outlined text-[13px]">download</span>
                   </button>
                   <button v-if="canRegenerate(i)" class="p-0.5 rounded hover:bg-black/5 text-on-surface-variant/40 hover:text-on-surface-variant transition-colors" @click="regenerate(i)" title="重新生成">
                     <span class="material-symbols-outlined text-[13px]">refresh</span>
@@ -155,13 +187,81 @@
               ></textarea>
             </div>
           </div>
-          <div class="flex gap-1">
+          <div class="flex gap-1 items-end">
             <button v-if="mode !== 'notes'" class="glass-button px-2.5 py-2.5 rounded-xl text-on-surface-variant/60 hover:text-on-surface select-none shrink-0" :title="t('ai.attach')" @click="triggerFileUpload">
               <span class="material-symbols-outlined text-[18px]">attach_file</span>
             </button>
-            <button v-if="mode === 'mcp'" class="glass-button px-2.5 py-2.5 rounded-xl text-on-surface-variant/60 hover:text-on-surface select-none shrink-0" :title="t('ai.mcpSettings')" @click="showMcpManager = true">
-              <span class="material-symbols-outlined text-[18px]">extension</span>
-            </button>
+
+            <!-- Session MCP picker -->
+            <div class="relative shrink-0" ref="sessionMcpPickerRef">
+              <button
+                class="glass-button px-2.5 py-2.5 rounded-xl select-none shrink-0 transition-colors"
+                :class="activeSession?.enabledServerIds?.length === 0 ? 'text-on-surface-variant/30' : 'text-on-surface-variant/60 hover:text-on-surface'"
+                title="选择 MCP 服务"
+                @click="showSessionMcpPicker = !showSessionMcpPicker; showSessionSkillPicker = false"
+              >
+                <span class="material-symbols-outlined text-[18px]">extension</span>
+              </button>
+              <div v-if="showSessionMcpPicker" class="absolute bottom-full mb-1 right-0 w-56 bg-white rounded-xl border border-gray-200/80 z-50 shadow-lg overflow-hidden">
+                <div class="px-3 py-2 border-b border-gray-100 flex items-center justify-between">
+                  <span class="text-[11px] font-medium text-on-surface-variant/60">MCP 服务（本会话）</span>
+                  <button class="text-[10px] text-secondary hover:text-secondary/70 transition-colors" @click="showMcpManager = true; showSessionMcpPicker = false">管理</button>
+                </div>
+                <div class="py-1 max-h-48 overflow-y-auto custom-scrollbar">
+                  <div v-if="servers.filter(s => s.enabled).length === 0" class="px-3 py-2 text-[11px] text-on-surface-variant/40">无可用 MCP 服务</div>
+                  <label v-for="srv in servers.filter(s => s.enabled)" :key="srv.id"
+                    class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer select-none"
+                  >
+                    <input type="checkbox" class="accent-secondary" :checked="isSessionServerEnabled(srv.id)" @change="toggleSessionServer(srv.id)" />
+                    <div class="flex-1 min-w-0">
+                      <div class="text-[12px] font-medium text-on-surface truncate">{{ srv.name }}</div>
+                      <div class="text-[10px] text-on-surface-variant/50 truncate">{{ srv.endpoint }}</div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Session Skill picker -->
+            <div class="relative shrink-0" ref="sessionSkillPickerRef">
+              <button
+                class="glass-button px-2.5 py-2.5 rounded-xl select-none shrink-0 transition-colors"
+                :class="activeSession?.skillId ? 'text-secondary' : 'text-on-surface-variant/60 hover:text-on-surface'"
+                title="选择 Skill"
+                @click="showSessionSkillPicker = !showSessionSkillPicker; showSessionMcpPicker = false"
+              >
+                <span class="material-symbols-outlined text-[18px]">auto_awesome</span>
+              </button>
+              <div v-if="showSessionSkillPicker" class="absolute bottom-full mb-1 right-0 w-60 bg-white rounded-xl border border-gray-200/80 z-50 shadow-lg overflow-hidden">
+                <div class="px-3 py-2 border-b border-gray-100 flex items-center justify-between">
+                  <span class="text-[11px] font-medium text-on-surface-variant/60">Skill（本会话）</span>
+                  <button class="text-[10px] text-secondary hover:text-secondary/70 transition-colors" @click="showSkillManager = true; showSessionSkillPicker = false">管理</button>
+                </div>
+                <div class="py-1 max-h-48 overflow-y-auto custom-scrollbar">
+                  <div v-if="skills.length === 0" class="px-3 py-2 text-[11px] text-on-surface-variant/40">还没有 Skill</div>
+                  <div
+                    v-if="activeSession?.skillId"
+                    class="flex items-center gap-2 px-3 py-1.5 hover:bg-red-50 cursor-pointer text-[11px] text-red-400"
+                    @click="if(activeSession){ activeSession.skillId = undefined; activeSession.systemPrompt = undefined }; showSessionSkillPicker = false"
+                  >
+                    <span class="material-symbols-outlined text-[13px]">close</span>清除 Skill
+                  </div>
+                  <div v-for="skill in skills" :key="skill.id"
+                    class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer"
+                    :class="activeSession?.skillId === skill.id ? 'bg-purple-50' : ''"
+                    @click="applySkillToSession(skill)"
+                  >
+                    <span class="material-symbols-outlined text-[13px]" :class="activeSession?.skillId === skill.id ? 'text-secondary' : 'text-on-surface-variant/40'">auto_awesome</span>
+                    <div class="flex-1 min-w-0">
+                      <div class="text-[12px] font-medium text-on-surface truncate">{{ skill.name }}</div>
+                      <div v-if="skill.description" class="text-[10px] text-on-surface-variant/50 truncate">{{ skill.description }}</div>
+                    </div>
+                    <span v-if="activeSession?.skillId === skill.id" class="material-symbols-outlined text-[13px] text-secondary shrink-0">check</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <button v-if="!sessionAbortControllers.has(activeSessionId)" class="glass-button px-3.5 py-2.5 rounded-xl glass-active select-none shrink-0"
               :disabled="sessionLoading.get(activeSessionId) || (!input.trim() && !uploadedImage && !attachedFile)"
               @click="send"
@@ -266,6 +366,81 @@
       </div>
     </Teleport>
 
+    <!-- Skills Manager Modal -->
+    <Teleport to="body">
+      <div v-if="showSkillManager" class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/30 backdrop-blur-sm" @mousedown.self="showSkillManager = false">
+        <div class="glass-panel rounded-[2rem] bg-white/60 p-6 w-[560px] max-h-[80vh] border border-glass-border-light shadow-2xl flex flex-col gap-4">
+          <!-- Header -->
+          <div class="flex items-center justify-between shrink-0">
+            <div class="flex items-center gap-2">
+              <button v-if="skillManagerView === 'edit'" class="glass-button p-1 rounded" @click="skillManagerView = 'list'; editingSkill = null">
+                <span class="material-symbols-outlined text-[16px]">arrow_back</span>
+              </button>
+              <span class="text-[15px] font-semibold text-on-surface">{{ skillManagerView === 'list' ? 'Skills 管理' : (editingSkill ? '编辑 Skill' : '新建 Skill') }}</span>
+            </div>
+            <button class="glass-button p-1 rounded" @click="showSkillManager = false">
+              <span class="material-symbols-outlined text-[18px]">close</span>
+            </button>
+          </div>
+
+          <!-- List view -->
+          <div v-if="skillManagerView === 'list'" class="flex flex-col gap-3 min-h-0">
+            <div class="flex-1 overflow-y-auto custom-scrollbar space-y-2 min-h-0 max-h-[50vh]">
+              <div v-if="skills.length === 0" class="text-[12px] text-on-surface-variant/40 text-center py-6">还没有 Skill，点击下方按钮新建</div>
+              <div v-for="skill in skills" :key="skill.id" class="flex items-start gap-3 px-3 py-2.5 rounded-xl bg-white/40 border border-glass-border-light/40">
+                <span class="material-symbols-outlined text-[16px] text-secondary mt-0.5 shrink-0">auto_awesome</span>
+                <div class="flex-1 min-w-0">
+                  <div class="text-[13px] font-medium text-on-surface truncate">{{ skill.name }}</div>
+                  <div v-if="skill.description" class="text-[11px] text-on-surface-variant/60 truncate mt-0.5">{{ skill.description }}</div>
+                  <div class="text-[10px] text-on-surface-variant/40 mt-1 line-clamp-2 whitespace-pre-wrap">{{ skill.systemPrompt.slice(0, 120) }}{{ skill.systemPrompt.length > 120 ? '…' : '' }}</div>
+                </div>
+                <div class="flex items-center gap-1 shrink-0">
+                  <template v-if="skillDeleteConfirmId === skill.id">
+                    <span class="text-[11px] text-red-400 mr-1">确认删除?</span>
+                    <button class="p-0.5 rounded hover:bg-white/10 text-red-400 transition-colors" @click="deleteSkill(skill.id)">
+                      <span class="material-symbols-outlined text-[14px]">check</span>
+                    </button>
+                    <button class="p-0.5 rounded hover:bg-white/10 text-on-surface-variant/40 transition-colors" @click="skillDeleteConfirmId = null">
+                      <span class="material-symbols-outlined text-[14px]">close</span>
+                    </button>
+                  </template>
+                  <template v-else>
+                    <button class="p-0.5 rounded hover:bg-white/10 text-on-surface-variant/40 hover:text-yellow-600 transition-colors" title="编辑" @click="openEditSkill(skill)">
+                      <span class="material-symbols-outlined text-[14px]">edit</span>
+                    </button>
+                    <button class="p-0.5 rounded hover:bg-white/10 text-on-surface-variant/40 hover:text-red-400 transition-colors" title="删除" @click="skillDeleteConfirmId = skill.id">
+                      <span class="material-symbols-outlined text-[14px]">delete</span>
+                    </button>
+                  </template>
+                </div>
+              </div>
+            </div>
+            <button class="glass-button self-start px-4 py-1.5 rounded-full text-[12px] glass-active select-none shrink-0" @click="openNewSkill">
+              <span class="material-symbols-outlined text-[14px] mr-1">add</span>新建 Skill
+            </button>
+          </div>
+
+          <!-- Edit / New view -->
+          <div v-else class="flex flex-col gap-3 min-h-0 flex-1">
+            <input v-model="skillForm.name" class="glass-input w-full px-3 py-2 rounded-lg text-[13px] outline-none select-text shrink-0" placeholder="Skill 名称（必填）" />
+            <input v-model="skillForm.description" class="glass-input w-full px-3 py-2 rounded-lg text-[13px] outline-none select-text shrink-0" placeholder="描述（可选）" />
+            <div class="flex-1 flex flex-col min-h-0">
+              <div class="text-[11px] text-on-surface-variant/60 mb-1 shrink-0">系统提示词（System Prompt）</div>
+              <textarea
+                v-model="skillForm.systemPrompt"
+                class="glass-input flex-1 w-full px-3 py-2 rounded-lg text-[12px] outline-none select-text resize-none custom-scrollbar min-h-[160px] max-h-[40vh]"
+                placeholder="在这里输入系统提示词，可以很长。例如：你是一个专业测试报告生成助手，需要先通过 MCP 工具获取测试数据，然后生成结构化的 Markdown 报告……"
+              ></textarea>
+            </div>
+            <div class="flex justify-end gap-2 shrink-0">
+              <button class="px-4 py-1.5 rounded-full text-[12px] text-on-surface-variant border border-glass-border-light hover:bg-white/10 transition-colors select-none" @click="skillManagerView = 'list'; editingSkill = null">取消</button>
+              <button class="px-4 py-1.5 rounded-full text-[12px] glass-button glass-active select-none" :disabled="!skillForm.name.trim() || !skillForm.systemPrompt.trim()" @click="saveSkillForm">保存</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- Not configured mask (只盖住 AI 页面区域，顶栏导航仍可点击) -->
     <div v-if="!configured" class="absolute inset-0 z-20 flex items-center justify-center bg-white/60 backdrop-blur-sm">
       <div class="rounded-2xl p-6 w-[320px] border border-outline-variant/40 shadow-lg flex flex-col items-center gap-3 bg-white">
@@ -300,7 +475,7 @@ import { chatWithNotes, callAiChat, callAiChatWithTools, callChatApiStream, chat
 import { renderMarkdown, renderStreamingMarkdown } from '@/composables/useMarkdownRenderer'
 import { useTokenUsage } from '@/stores/useTokenUsage'
 import { loadNoteList } from '@/services/database'
-import type { AiSession, ChatMsg, ChatMode, NoteItem, McpServerConfig, McpAuthType, McpTool } from '@/types'
+import type { AiSession, ChatMsg, ChatMode, NoteItem, McpServerConfig, McpAuthType, McpTool, AiSkill } from '@/types'
 import {
   loadMcpServers,
   saveMcpServers,
@@ -321,7 +496,6 @@ const { addUsage, loadUsage, flushUsage } = useTokenUsage()
 const tabs = [
   { key: 'chat' as ChatMode, labelKey: 'ai.chatTab', icon: 'chat' },
   { key: 'notes' as ChatMode, labelKey: 'ai.notesTab', icon: 'description' },
-  { key: 'mcp' as ChatMode, labelKey: 'ai.mcpTab', icon: 'extension' },
 ]
 
 const mode = ref<ChatMode>('chat')
@@ -342,9 +516,8 @@ function modeLabel(m: ChatMode): string {
 const currentTabIcon = computed(() => modeIcon(mode.value))
 const currentTabLabel = computed(() => modeLabel(mode.value))
 const inputPlaceholder = computed(() => {
-  if (mode.value === 'chat') return t('ai.inputPlaceholder')
   if (mode.value === 'notes') return t('ai.inputNotesPlaceholder')
-  return t('ai.inputMcpPlaceholder')
+  return t('ai.inputPlaceholder')
 })
 
 // ── Per-session loading/error state (using reactive Map to avoid spread overhead) ──
@@ -441,6 +614,62 @@ const notes = ref<NoteItem[]>([])
 const contextNoteCount = ref(0)
 let _notesCache: NoteItem[] | null = null
 
+// Skills
+const skills = ref<AiSkill[]>([])
+const SKILLS_KEY = 'ai_skills'
+const showSkillManager = ref(false)
+const skillManagerView = ref<'list' | 'edit'>('list')
+const editingSkill = ref<AiSkill | null>(null)
+const skillForm = ref({ name: '', description: '', systemPrompt: '' })
+const skillDeleteConfirmId = ref<string | null>(null)
+
+async function loadSkills() {
+  try {
+    const raw = await getSetting(SKILLS_KEY)
+    skills.value = raw ? JSON.parse(raw) : []
+  } catch { skills.value = [] }
+}
+
+async function saveSkills() {
+  await setSetting(SKILLS_KEY, JSON.stringify(skills.value))
+}
+
+function openNewSkill() {
+  editingSkill.value = null
+  skillForm.value = { name: '', description: '', systemPrompt: '' }
+  skillManagerView.value = 'edit'
+}
+
+function openEditSkill(skill: AiSkill) {
+  editingSkill.value = skill
+  skillForm.value = { name: skill.name, description: skill.description || '', systemPrompt: skill.systemPrompt }
+  skillManagerView.value = 'edit'
+}
+
+async function saveSkillForm() {
+  const name = skillForm.value.name.trim()
+  const systemPrompt = skillForm.value.systemPrompt.trim()
+  if (!name || !systemPrompt) return
+  const now = new Date().toISOString()
+  if (editingSkill.value) {
+    const idx = skills.value.findIndex(s => s.id === editingSkill.value!.id)
+    if (idx >= 0) {
+      skills.value[idx] = { ...skills.value[idx], name, description: skillForm.value.description.trim() || undefined, systemPrompt, updatedAt: now }
+    }
+  } else {
+    skills.value.push({ id: crypto.randomUUID(), name, description: skillForm.value.description.trim() || undefined, systemPrompt, createdAt: now, updatedAt: now })
+  }
+  await saveSkills()
+  skillManagerView.value = 'list'
+  editingSkill.value = null
+}
+
+async function deleteSkill(id: string) {
+  skills.value = skills.value.filter(s => s.id !== id)
+  skillDeleteConfirmId.value = null
+  await saveSkills()
+}
+
 // MCP
 const servers = ref<McpServerConfig[]>([])
 const allTools = ref<McpToolDescriptor[]>([])
@@ -454,7 +683,47 @@ const editingServerId = ref<string | null>(null)
 const isEditing = computed(() => editingServerId.value !== null)
 const testingServers = ref<Set<string>>(new Set())
 
-const loadingLabel = computed(() => mode.value === 'mcp' ? t('ai.mcpThinking') : t('ai.thinking'))
+// Session-level MCP / Skill picker
+const showSessionMcpPicker = ref(false)
+const showSessionSkillPicker = ref(false)
+const sessionMcpPickerRef = ref<HTMLDivElement>()
+const sessionSkillPickerRef = ref<HTMLDivElement>()
+
+function getSessionServers(session: AiSession): McpServerConfig[] {
+  if (!session.enabledServerIds) return servers.value.filter(s => s.enabled)
+  return servers.value.filter(s => session.enabledServerIds!.includes(s.id))
+}
+
+function toggleSessionServer(serverId: string) {
+  const session = activeSession.value
+  if (!session) return
+  // undefined means "all enabled" — first toggle initialises to all enabled IDs
+  const all = servers.value.filter(s => s.enabled).map(s => s.id)
+  const current = session.enabledServerIds ?? all
+  if (current.includes(serverId)) {
+    session.enabledServerIds = current.filter(id => id !== serverId)
+  } else {
+    session.enabledServerIds = [...current, serverId]
+  }
+}
+
+function isSessionServerEnabled(serverId: string): boolean {
+  const session = activeSession.value
+  if (!session) return false
+  if (!session.enabledServerIds) return servers.value.find(s => s.id === serverId)?.enabled ?? false
+  return session.enabledServerIds.includes(serverId)
+}
+
+function applySkillToSession(skill: AiSkill) {
+  const session = activeSession.value
+  if (!session) return
+  session.systemPrompt = skill.systemPrompt
+  session.skillId = skill.id
+  showSessionSkillPicker.value = false
+  showToast(`已应用 Skill: ${skill.name}`, true)
+}
+
+const loadingLabel = computed(() => t('ai.thinking'))
 
 // ── Session persistence ──
 const SESSIONS_KEY = 'ai_chat_sessions'
@@ -467,6 +736,8 @@ async function loadSessions() {
       if (Array.isArray(parsed)) {
         for (const s of parsed) {
           for (const m of s.messages) m.streaming = false
+          // migrate legacy mcp mode
+          if ((s.mode as string) === 'mcp') s.mode = 'chat'
         }
         sessions.value = parsed
       }
@@ -486,15 +757,17 @@ function ensureSessionExists() {
   }
 }
 
-function createNewSession() {
+function createNewSession(skill?: AiSkill) {
   const id = crypto.randomUUID()
   const s: AiSession = {
     id,
-    title: 'New Chat',
+    title: skill ? skill.name : 'New Chat',
     mode: mode.value,
     messages: [],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    systemPrompt: skill?.systemPrompt,
+    skillId: skill?.id,
   }
   sessions.value.push(s)
   activeSessionId.value = id
@@ -505,6 +778,15 @@ function createNewSession() {
     resetInputHeight()
     inputRef.value?.focus()
   })
+}
+
+// Skill quick-launch dropdown in sidebar
+const showSkillDropdown = ref(false)
+const skillDropdownRef = ref<HTMLDivElement>()
+
+function launchSkill(skill: AiSkill) {
+  showSkillDropdown.value = false
+  createNewSession(skill)
 }
 
 function resetInputHeight() {
@@ -522,7 +804,6 @@ function switchSession(id: string) {
   const s = sessions.value.find(ses => ses.id === id)
   if (s && s.mode !== mode.value) {
     mode.value = s.mode
-    if (mode.value === 'mcp') refreshTools()
   }
   // Restore draft for target session
   input.value = draftInputs.value[id] || ''
@@ -612,13 +893,15 @@ function toggleModeDropdown() {
 }
 
 function onDocumentClick(e: MouseEvent) {
-  const el = modeDropdownRef.value
-  if (!el || showModeDropdown.value) {
-    const target = e.target as HTMLElement
-    if (el && !el.contains(target)) {
-      showModeDropdown.value = false
-    }
-  }
+  const target = e.target as HTMLElement
+  const modeEl = modeDropdownRef.value
+  if (modeEl && !modeEl.contains(target)) showModeDropdown.value = false
+  const skillEl = skillDropdownRef.value
+  if (skillEl && !skillEl.contains(target)) showSkillDropdown.value = false
+  const mcpPickEl = sessionMcpPickerRef.value
+  if (mcpPickEl && !mcpPickEl.contains(target)) showSessionMcpPicker.value = false
+  const skillPickEl = sessionSkillPickerRef.value
+  if (skillPickEl && !skillPickEl.contains(target)) showSessionSkillPicker.value = false
 }
 
 // ── Mode switching ──
@@ -628,7 +911,6 @@ function switchMode(newMode: ChatMode) {
   showModeDropdown.value = false
   ensureSessionExists()
   clearAttachments()
-  if (newMode === 'mcp') refreshTools().catch(() => {})
 }
 
 // ── API helpers ──
@@ -752,8 +1034,6 @@ async function send() {
       await sendChat(content, imageData, session)
     } else if (mode.value === 'notes') {
       await sendNotes(content, imageData, session)
-    } else {
-      await sendMcp(content, session)
     }
   } catch (e: any) {
     setError(sid, e.message || String(e))
@@ -788,8 +1068,132 @@ async function sendChat(question: string, imageData: string, session: AiSession)
     return
   }
 
+  // Get session-scoped tools
+  const sessionServerIds = session.enabledServerIds
+  const allDescriptors = await getAllToolsFlat()
+  const tools = sessionServerIds !== undefined
+    ? allDescriptors.filter(d => sessionServerIds.includes(d.serverId))
+    : allDescriptors
+
+  const systemRole = resolveSystemRole(aiConfig.value)
+  const systemContent = session.systemPrompt ?? 'You are a helpful assistant.'
+
+  // If tools available, run agentic tool-calling loop
+  if (tools.length > 0) {
+    const aiTools: AiToolDefinition[] = tools.map(t => ({
+      type: 'function',
+      function: {
+        name: t.tool.name,
+        description: t.tool.description || '',
+        parameters: t.tool.inputSchema || { type: 'object', properties: {} },
+      },
+    }))
+
+    const allToolCalls: ToolCallInfo[] = []
+    const pendingFiles: import('@/types').MsgFile[] = []
+    let accumulatedContent = ''
+    let conversation: AiChatMessage[] = [
+      { role: systemRole, content: systemContent },
+      ...history,
+      { role: 'user', content: question },
+    ]
+
+    const msgIndex = session.messages.length
+    session.messages.push({ role: 'assistant', content: '', streaming: true })
+
+    const ac = new AbortController()
+    sessionAbortControllers.set(sid, ac)
+
+    try {
+      let needsFinalStream = false
+      for (let round = 0; round < 10; round++) {
+        if (ac.signal.aborted) break
+        const result = await callAiChatWithTools(aiConfig.value, conversation, aiTools)
+        addUsage(result.usage)
+
+        if (result.content) {
+          accumulatedContent += (accumulatedContent ? '\n\n' : '') + result.content
+          session.messages[msgIndex].content = accumulatedContent
+          scrollToBottom()
+        }
+
+        if (!result.toolCalls || result.toolCalls.length === 0) {
+          needsFinalStream = false
+          break
+        }
+
+        conversation.push({
+          role: 'assistant',
+          content: result.content || null,
+          tool_calls: result.toolCalls,
+        })
+
+        for (const tc of result.toolCalls) {
+          if (ac.signal.aborted) break
+          const toolName = tc.function.name
+          let args: Record<string, unknown> = {}
+          try { args = JSON.parse(tc.function.arguments) } catch {}
+          const desc = tools.find(t => t.tool.name === toolName)
+          if (!desc) continue
+          const server = servers.value.find(s => s.id === desc.serverId && s.enabled)
+          if (!server) continue
+
+          allToolCalls.push({ toolName, serverName: desc.serverName })
+          let toolResult: string
+          try {
+            const res = await mcpCallTool(server, toolName, args)
+            // Extract binary blobs from MCP content array
+            if (Array.isArray(res?.content)) {
+              for (const item of res.content) {
+                if (item.type === 'blob' || item.type === 'resource') {
+                  const data = item.blob || item.data || ''
+                  const mime = item.mimeType || 'application/octet-stream'
+                  const name = item.name || item.uri?.split('/').pop() || `file-${Date.now()}`
+                  pendingFiles.push({ name, mimeType: mime, data, encoding: 'base64' })
+                } else if (item.type === 'text' && item.text) {
+                  // keep text items in the tool result as-is
+                }
+              }
+            }
+            toolResult = JSON.stringify(res?.content || res)
+          } catch (e: any) {
+            toolResult = `Error: ${e.message || e}`
+          }
+
+          conversation.push({ role: 'tool', tool_call_id: tc.id, content: toolResult })
+        }
+        needsFinalStream = true
+      }
+
+      if (needsFinalStream && !ac.signal.aborted) {
+        if (accumulatedContent) accumulatedContent += '\n\n'
+        session.messages[msgIndex].content = accumulatedContent
+        let frameRequested = false
+        const streamResult = await callChatApiStream(aiConfig.value, conversation, (delta) => {
+          accumulatedContent += delta
+          session.messages[msgIndex].content = accumulatedContent
+          if (!frameRequested) {
+            frameRequested = true
+            requestAnimationFrame(() => { frameRequested = false; scrollToBottom() })
+          }
+        }, ac.signal)
+        addUsage(streamResult.usage)
+      }
+
+      session.messages[msgIndex].content = accumulatedContent || '(no response)'
+      if (allToolCalls.length > 0) session.messages[msgIndex].toolCalls = allToolCalls
+      if (pendingFiles.length > 0) session.messages[msgIndex].files = pendingFiles
+    } finally {
+      if (session.messages[msgIndex]) session.messages[msgIndex].streaming = false
+      sessionAbortControllers.delete(sid)
+      saveSessions()
+    }
+    return
+  }
+
+  // No tools — plain streaming chat
   const messages: AiChatMessage[] = [
-    { role: resolveSystemRole(aiConfig.value), content: 'You are a helpful assistant.' },
+    { role: systemRole, content: systemContent },
     ...history,
     { role: 'user', content: question },
   ]
@@ -865,120 +1269,6 @@ async function sendNotes(question: string, imageData: string, session: AiSession
   }
 }
 
-async function sendMcp(question: string, session: AiSession) {
-  const sid = session.id
-  const history = session.messages
-    .filter(m => m.role === 'user' || m.role === 'assistant')
-    .slice(-4)
-
-  // Fetch fresh tool list and convert to native OpenAI format
-  const tools = await getAllToolsFlat()
-  if (tools.length === 0) {
-    await sendChat(question, '', session)
-    return
-  }
-
-  const aiTools: AiToolDefinition[] = tools.map(t => ({
-    type: 'function',
-    function: {
-      name: t.tool.name,
-      description: t.tool.description || '',
-      parameters: t.tool.inputSchema || { type: 'object', properties: {} },
-    },
-  }))
-
-  const systemRole = resolveSystemRole(aiConfig.value)
-  const systemPrompt = 'You are a helpful AI assistant with access to MCP tools. Use them when needed to answer the user\'s question. Always respond in the same language as the user.'
-
-  const allToolCalls: ToolCallInfo[] = []
-  let accumulatedContent = ''
-  let conversation: AiChatMessage[] = [
-    { role: systemRole, content: systemPrompt },
-    ...history.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
-    { role: 'user', content: question },
-  ]
-
-  const msgIndex = session.messages.length
-  session.messages.push({ role: 'assistant', content: '', streaming: true })
-
-  const ac = new AbortController()
-  sessionAbortControllers.set(sid, ac)
-
-  try {
-    // Only run a final streaming pass when the loop exits with tool_calls
-    // still pending synthesis. When the model returns content without tool_calls,
-    // that content IS the final answer — a second stream would duplicate it.
-    let needsFinalStream = false
-    for (let round = 0; round < 5; round++) {
-      if (ac.signal.aborted) break
-      const result = await callAiChatWithTools(aiConfig.value, conversation, aiTools)
-      addUsage(result.usage)
-
-      if (result.content) {
-        accumulatedContent += (accumulatedContent ? '\n\n' : '') + result.content
-        session.messages[msgIndex].content = accumulatedContent
-        scrollToBottom()
-      }
-
-      if (!result.toolCalls || result.toolCalls.length === 0) {
-        needsFinalStream = false
-        break
-      }
-
-      conversation.push({
-        role: 'assistant',
-        content: result.content || null,
-        tool_calls: result.toolCalls,
-      })
-
-      for (const tc of result.toolCalls) {
-        if (ac.signal.aborted) break
-        const toolName = tc.function.name
-        let args: Record<string, unknown> = {}
-        try { args = JSON.parse(tc.function.arguments) } catch {}
-        const desc = tools.find(t => t.tool.name === toolName)
-        if (!desc) continue
-        const server = servers.value.find(s => s.id === desc.serverId && s.enabled)
-        if (!server) continue
-
-        allToolCalls.push({ toolName, serverName: desc.serverName })
-        let toolResult: string
-        try {
-          const res = await mcpCallTool(server, toolName, args)
-          toolResult = JSON.stringify(res?.content || res)
-        } catch (e: any) {
-          toolResult = `Error: ${e.message || e}`
-        }
-
-        conversation.push({ role: 'tool', tool_call_id: tc.id, content: toolResult })
-      }
-      needsFinalStream = true
-    }
-
-    if (needsFinalStream && !ac.signal.aborted) {
-      if (accumulatedContent) accumulatedContent += '\n\n'
-      session.messages[msgIndex].content = accumulatedContent
-      let frameRequested = false
-      const streamResult = await callChatApiStream(aiConfig.value, conversation, (delta) => {
-        accumulatedContent += delta
-        session.messages[msgIndex].content = accumulatedContent
-        if (!frameRequested) {
-          frameRequested = true
-          requestAnimationFrame(() => { frameRequested = false; scrollToBottom() })
-        }
-      }, ac.signal)
-      addUsage(streamResult.usage)
-    }
-
-    session.messages[msgIndex].content = accumulatedContent || '(no response)'
-    session.messages[msgIndex].toolCalls = allToolCalls.length > 0 ? allToolCalls : undefined
-  } finally {
-    if (session.messages[msgIndex]) session.messages[msgIndex].streaming = false
-    sessionAbortControllers.delete(sid)
-    saveSessions()
-  }
-}
-
 function scrollToBottom() {
   nextTick(() => {
     messagesRef.value?.scrollTo({ top: messagesRef.value.scrollHeight, behavior: 'smooth' })
@@ -1009,6 +1299,16 @@ function onMessagesClick(e: MouseEvent) {
     const code = copyBtn.getAttribute('data-copy-code') || ''
     navigator.clipboard.writeText(code).then(() => showToast('已复制', true)).catch(() => {})
   }
+}
+
+function fileIcon(mime: string): string {
+  if (mime.includes('spreadsheet') || mime.includes('excel') || mime === 'text/csv') return 'table_chart'
+  if (mime.includes('word') || mime.includes('document')) return 'description'
+  if (mime.includes('presentation') || mime.includes('powerpoint')) return 'slideshow'
+  if (mime.includes('pdf')) return 'picture_as_pdf'
+  if (mime.startsWith('image/')) return 'image'
+  if (mime.includes('json') || mime.includes('text')) return 'code'
+  return 'attach_file'
 }
 
 function copyMessage(content: string) {
@@ -1048,8 +1348,6 @@ async function regenerate(index: number) {
       await sendChat(content, userMsg.image || '', session)
     } else if (mode.value === 'notes') {
       await sendNotes(content, userMsg.image || '', session)
-    } else {
-      await sendMcp(content, session)
     }
   } catch (e: any) {
     setError(sid, e.message || String(e))
@@ -1116,7 +1414,7 @@ async function toggleTool(serverId: string, toolName: string) {
   refreshTools().catch(() => {})
 }
 async function refreshTools() {
-  if (mode.value === 'mcp') { try { allTools.value = await getAllToolsFlat() } catch { allTools.value = [] } }
+  try { allTools.value = await getAllToolsFlat() } catch { allTools.value = [] }
 }
 async function toggleServer(id: string) {
   const server = servers.value.find(s => s.id === id)
@@ -1196,6 +1494,91 @@ async function addOrUpdateServer() {
   } catch (e: any) { showToast(e?.message || 'Failed', false) }
 }
 
+async function downloadMessage(content: string) {
+  try {
+    const { save } = await import('@tauri-apps/plugin-dialog')
+    const { writeTextFile } = await import('@tauri-apps/plugin-fs')
+    const date = new Date().toISOString().slice(0, 10)
+    const path = await save({
+      defaultPath: `output-${date}.md`,
+      filters: [
+        { name: 'Markdown', extensions: ['md'] },
+        { name: 'Text', extensions: ['txt'] },
+      ],
+    })
+    if (path) {
+      await writeTextFile(path, content)
+      showToast('已保存', true)
+    }
+  } catch (e: any) {
+    showToast(e?.message || '保存失败', false)
+  }
+}
+
+async function downloadFile(file: import('@/types').MsgFile) {
+  try {
+    const { save } = await import('@tauri-apps/plugin-dialog')
+    const ext = file.name.includes('.') ? file.name.split('.').pop()! : guessExtFromMime(file.mimeType)
+    const filters = buildFileFilters(file.mimeType, ext)
+    const path = await save({ defaultPath: file.name, filters })
+    if (!path) return
+    if (file.encoding === 'base64') {
+      const { writeFile } = await import('@tauri-apps/plugin-fs')
+      const binary = base64ToUint8Array(file.data)
+      await writeFile(path, binary)
+    } else {
+      const { writeTextFile } = await import('@tauri-apps/plugin-fs')
+      await writeTextFile(path, file.data)
+    }
+    showToast('已保存', true)
+  } catch (e: any) {
+    showToast(e?.message || '保存失败', false)
+  }
+}
+
+function guessExtFromMime(mime: string): string {
+  const map: Record<string, string> = {
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+    'application/vnd.ms-excel': 'xls',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+    'application/pdf': 'pdf',
+    'text/csv': 'csv',
+    'text/plain': 'txt',
+    'application/json': 'json',
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/svg+xml': 'svg',
+  }
+  return map[mime] || 'bin'
+}
+
+function buildFileFilters(mime: string, ext: string) {
+  const extFilters: Record<string, { name: string; extensions: string[] }> = {
+    xlsx: { name: 'Excel 工作簿', extensions: ['xlsx'] },
+    xls: { name: 'Excel 工作簿', extensions: ['xls', 'xlsx'] },
+    docx: { name: 'Word 文档', extensions: ['docx'] },
+    pptx: { name: 'PowerPoint 演示', extensions: ['pptx'] },
+    pdf: { name: 'PDF 文件', extensions: ['pdf'] },
+    csv: { name: 'CSV 表格', extensions: ['csv'] },
+    json: { name: 'JSON 文件', extensions: ['json'] },
+    png: { name: '图片', extensions: ['png'] },
+    jpg: { name: '图片', extensions: ['jpg', 'jpeg'] },
+    svg: { name: 'SVG 图片', extensions: ['svg'] },
+  }
+  const specific = extFilters[ext]
+  return specific
+    ? [specific, { name: '所有文件', extensions: ['*'] }]
+    : [{ name: '所有文件', extensions: ['*'] }]
+}
+
+function base64ToUint8Array(b64: string): Uint8Array {
+  const binary = atob(b64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return bytes
+}
+
 // Toast
 const toast = ref<{ msg: string; ok: boolean } | null>(null)
 let toastTimer: ReturnType<typeof setTimeout> | null = null
@@ -1219,12 +1602,11 @@ onMounted(async () => {
     await loadSessions()
   } catch {}
   await loadAllNotes()
+  await loadSkills()
   // Load servers + tools in the background — don't block UI on slow/unreachable MCP servers
   loadServers().catch(() => {})
+  refreshTools().catch(() => {})
   await loadUsage()
-  if (mode.value === 'mcp') {
-    try { allTools.value = await getAllToolsFlat() } catch { allTools.value = [] }
-  }
   document.addEventListener('paste', onGlobalPaste)
   document.addEventListener('click', onDocumentClick)
 })
@@ -1233,9 +1615,10 @@ onActivated(() => {
   // 每次激活都重读 AI 配置 —— 用户可能刚从设置页保存了 endpoint / apiKey。
   // loadAiConfig 只读 app_settings 单行 KV，耗时可忽略。
   loadAiConfig().then(c => { aiConfig.value = c; historyLoaded.value = true }).catch(() => {})
-  // 后台异步刷新笔记 / MCP。不 await：切换回 AI 页立即显示会话；数据回来后再无缝更新。
+  // 后台异步刷新笔记 / MCP / Skills。不 await：切换回 AI 页立即显示会话；数据回来后再无缝更新。
   loadAllNotes(true).catch(() => {})
   loadServers().catch(() => {})
+  loadSkills().catch(() => {})
 })
 
 // 切换页面时刷新保存，避免 keep-alive 下未保存的内容丢失

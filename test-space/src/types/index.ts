@@ -95,7 +95,14 @@ export interface NoteLink {
 
 // ── AI Session Types ────────────────────────────────────────
 
-export type ChatMode = 'chat' | 'notes' | 'mcp'
+export type ChatMode = 'chat' | 'notes'
+
+export interface MsgFile {
+  name: string
+  mimeType: string
+  data: string
+  encoding: 'base64' | 'text'
+}
 
 export interface ChatMsg {
   role: 'user' | 'assistant'
@@ -105,6 +112,7 @@ export interface ChatMsg {
   fileName?: string
   fileContent?: string
   toolCalls?: { toolName: string; serverName: string }[]
+  files?: MsgFile[]
 }
 
 export interface AiSession {
@@ -112,6 +120,19 @@ export interface AiSession {
   title: string
   mode: ChatMode
   messages: ChatMsg[]
+  createdAt: string
+  updatedAt: string
+  systemPrompt?: string
+  skillId?: string
+  /** undefined = all enabled servers; [] = no MCP; ['id',...] = specific servers */
+  enabledServerIds?: string[]
+}
+
+export interface AiSkill {
+  id: string
+  name: string
+  description?: string
+  systemPrompt: string
   createdAt: string
   updatedAt: string
 }
