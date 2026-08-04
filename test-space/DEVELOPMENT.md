@@ -67,6 +67,7 @@ Cursor for Testing — 非传统测试管理平台，而是桌面客户端和效
   pinia ^2.3.1                    — 状态管理
   vue ^3.5.13                     — 核心框架
   vue-router ^4.5.0               — 路由
+  tauri-plugin-wallpaper ^3.0.0   — 便签窗口置顶 + Win+D 防护（Windows 专用）
 
 开发依赖:
   @tauri-apps/api ^2.2.0         — Tauri 前端 API
@@ -498,6 +499,16 @@ Workspace 页面已在 Phase 9 中移除，路由 redirect 改为 `/case-space`�
   - **影响范围验证**：`<main>` 添加 `flex flex-col` 后，所有子路由页面变为 flex 项。经逐页验证发现 `h-full` 在 flex 列上下文中存在首次渲染不稳定的问题：
     - **受影响页面**（根 div `h-full` → `flex-1 min-h-0`）：NotesSpacePage（编辑器无法滚动）、ScriptSpacePage（分页器不显示）、DeviceSpacePage、SettingsPage、ApiSpacePage
     - **不受影响页面**：CaseSpaceLayout（根 div 无高度类）、通过 CaseSpaceLayout 嵌套的子页面（CaseSpacePage/CaseEditorPage/FieldRulesPage，其 `h-full` 解析于 CaseSpaceLayout 的 auto 高度，行为不变）
+- **桌面便签（Phase 74）**：笔记可固定到桌面成为独立便签窗口
+  - **入口**：编辑器工具栏 `push_pin` 按钮（已固定高亮）+ 列表行 hover 图标按钮
+  - **窗口**：无边框、圆角、非透明（`transparent:true` 用于圆角裁剪，背景由 CSS 实色填充）、不默认置顶，label `sticky-<noteId>`，skipTaskbar；复用 `useNoteEditor` composable
+  - **标题栏**：显示态整行文字可拖动（`data-tauri-drag-region` 加在最内层 `<span>`，Tauri v2 要求），hover 显示铅笔按钮进入编辑模式
+  - **置顶按钮**：`keep` 图标，点击调 `pin()`（同时设置 HWND_TOPMOST + Win+D 钩子），再次点击调 `unpin()` 全部还原；默认不置顶
+  - **新建便签按钮**：`add` 图标，在根目录创建空笔记并固定到桌面，fire-and-forget 开窗，通知主窗口刷新列表
+  - **关闭语义**：关闭便签 = 取消固定并移除（清 `sticky_notes` 记录 + 销毁窗口），笔记本身保留；✕ 按钮和 Alt+F4 两条路径均兜底保存未提交改动
+  - **同步**：last-write-wins——保存成功 `emitTo` 对方窗口（`notes:note-updated` 带 updatedAt），`setContent(content, false)` 只应用不触发保存（防事件回环）；删除笔记广播 `notes:note-deleted` 便签自毁；便签关闭 emit `sticky:closed` 通知主窗口更新固定标记
+  - **位置持久化**：`onMoved`/`onResized` 300ms 防抖写物理像素坐标，启动时 `restoreStickyWindows()` 并行重建所有便签窗口（越界坐标回退居中）
+  - **窗口管理**：`src/services/stickyWindow.ts`（ensure/restore/unpinAndClose），创建后 `setShadow(false)` 关闭 DWM 系统阴影
 
 ### 4.9 Script Space (`src/views/script-space/ScriptSpacePage.vue`)
 
@@ -1052,6 +1063,7 @@ interface AppBackup {
 | `note_links` | 笔记双向链接 | id, source_note_id, target_note_id |
 | `scripts` | 脚本文件 | id, name, type, content, created_at, updated_at |
 | `note_ai_memories` | AI 长期记忆 | id, content, created_at, updated_at |
+| `sticky_notes` | 桌面便签（Phase 74） | note_id(PK), pos_x, pos_y, width, height, pinned_at, updated_at（物理像素坐标） |
 
 ### 9.3 权限配置
 
@@ -1061,6 +1073,9 @@ interface AppBackup {
 - `"http:default"` — HTTP 请求权限（scope: `https://tms.zeasn.com/api/TestSpace/*`）
 - `"core:webview:allow-create-webview-window"` — 弹出独立镜像窗口
 - `windows: ["main", "mirror-*"]` — 允许 main 窗口和 `mirror-*` 模式窗口
+- `windows: "sticky-*"`（Phase 74）— 桌面便签窗口白名单
+- `core:window:allow-set-always-on-top` / `allow-set-position` / `allow-set-size` / `allow-destroy` / `allow-outer-position` / `allow-outer-size` / `allow-show` / `allow-set-focus` / `allow-is-visible`（Phase 74）— 便签窗口定位/置顶/销毁
+- `"wallpaper:default"`（Phase 74）— `tauri-plugin-wallpaper` pin 模式（Win+D 防护）
 
 `src-tauri/tauri.conf.json` 已配置 `fs.scope: ["**"]`（允许任意路径）。
 
@@ -5525,3 +5540,65 @@ start explorer.exe
 | `src-tauri/icons/icon.ico` | 重新生成 | 由 `tauri icon` 命令自动生成 |
 | `src-tauri/icons/*.png` | 重新生成 | 全平台图标由 `tauri icon` 命令自动生成 |
 | `src-tauri/windows/hooks.nsh` | 修改 | `POSTINSTALL` 改为轻量 `SHChangeNotify`，移除强制重启 Explorer 逻辑 |
+
+---
+
+## Phase 74 — 笔记固定到桌面成为便签（已完成 ✅）
+
+### 74.1 功能概述
+
+笔记可固定到桌面成为独立便签窗口：无边框、圆角、实色暖色背景（与软件主界面一致）、可拖动/缩放；默认不置顶，点击置顶按钮后显示在所有窗口之上并挂 Win+D 防护钩子；关闭便签 = 取消固定并移除，笔记保留在应用内。支持从便签直接新建便签、编辑标题。
+
+### 74.2 产品决策
+
+| 决策 | 选择 | 理由 |
+|------|------|------|
+| 编辑能力 | 完整编辑（复用 TipTap） | 与市面便签应用一致，改动实时同步回主窗口 |
+| 关闭行为 | 取消固定并移除 | 符合系统便签与多数第三方便签习惯 |
+| 置顶模式 | 用户手动触发，默认不置顶 | `pin()` 同时绑定 HWND_TOPMOST + Win+D 钩子两者不可分离，默认置顶体验差 |
+| 背景样式 | 实色暖色渐变（非透明） | `transparent:true` 仅用于圆角裁剪，背景用 CSS 渐变填充，比纯透明更有纸质感 |
+
+### 74.3 实现方案
+
+- **数据模型**：独立表 `sticky_notes`，字段 `note_id(PK), pos_x, pos_y, width, height, pinned_at, updated_at`（含 ALTER TABLE 迁移兼容旧库）；坐标全程物理像素（多显示器安全）；取消固定 = DELETE，无残留。
+- **窗口配置**（`src/services/stickyWindow.ts`）：`transparent:true`（圆角裁剪用）、`decorations:false`、`shadow:false` + `tauri://created` 后调 `win.setShadow(false)`（DWM 系统阴影双重关闭）；根 div `rounded-2xl overflow-hidden` 裁剪圆角；背景色 CSS 实色渐变不透明。
+- **窗口生命周期**：`ensureStickyWindow`（`getByLabel` 防重复、`visible:false` 防闪屏、`availableMonitors()` 越界校验）/ `restoreStickyWindows`（`Promise.all` 并行重建 + 孤儿记录清理）/ `unpinAndClose`（先清记录再 `destroy`）。
+- **便签页面**（`src/views/note-space/StickyNote.vue` + 顶层路由 `/sticky`）：
+  - **标题栏交互**：显示态文字 `<span>` 加 `data-tauri-drag-region`（Tauri v2 只对最内层点击元素生效）；hover 显示铅笔按钮，点击进入编辑模式（`<input>` + 确认按钮），失焦/Enter/Escape 保存退出
+  - **置顶按钮**（`keep` 图标）：激活时调 `pin()`（HWND_TOPMOST + Win+D 钩子），再次点击调 `unpin()` 全部还原；默认不调 `pin()`
+  - **新建便签按钮**（`add` 图标）：根目录创建空笔记 → `pinNoteToDesktop` → fire-and-forget 开窗 → `emitTo("main", "notes:note-created")` 通知主窗口刷新列表；新建便签自动聚焦标题输入框
+  - **自动保存**：1.5s 防抖；`onMoved`/`onResized` 300ms 防抖存位置；不写版本快照
+  - **关闭路径**：✕ 按钮和 Alt+F4 均先兜底保存未提交改动，再 emit `sticky:closed`，再清记录销毁窗口
+- **同步机制**（last-write-wins）：保存成功 `emitTo` 对方窗口（`notes:note-updated` 带 updatedAt + sourceLabel）；接收方校验 `updatedAt > lastSavedAt` 且本地无未保存改动才应用，`setContent(content, false)` 防回环；主窗口删除笔记广播 `notes:note-deleted` 便签自毁；便签关闭广播 `sticky:closed` 主窗口移除固定标记；便签新建广播 `notes:note-created` 主窗口刷新列表。
+- **性能优化**：`loadNoteList()`（只含元数据）代替 `loadNotes()`（含正文）建 titleMap 且后台异步；事件监听 `Promise.all` 并行注册；`restoreStickyWindows` 改为 `Promise.all` 并行开窗；`ensureStickyWindow` fire-and-forget 不阻塞固定按钮响应。
+- **启动恢复**：`App.vue` 仅 `label === 'main'` 时执行，fire-and-forget 不阻塞首屏。
+- **备份**：`AppBackup.version` 1.9 → 2.0，新增可选 `stickyNotes` 数组；`importAllData` 全量恢复还原便签位置；`importAllDataIncremental`（云增量）刻意不还原便签（本地窗口状态原则）。
+
+### 74.4 变更文件
+
+| 文件 | 修改类型 | 说明 |
+|------|----------|------|
+| `src/services/database.ts` | 修改 | `sticky_notes` 迁移（含 updated_at）+ CRUD + deleteNote 级联 + 备份三件套（version 2.0） |
+| `src/services/stickyWindow.ts` | 新建 | 便签窗口生命周期；restoreStickyWindows 并行化；创建后 setShadow(false) |
+| `src/composables/useNoteEditor.ts` | 新建 | TipTap 编辑器统一配置（主窗口/便签共用） |
+| `src/views/note-space/StickyNote.vue` | 新建 | 便签页面（标题编辑模式、置顶/新建按钮、双向同步、兜底保存） |
+| `src/views/note-space/NotesSpacePage.vue` | 修改 | 固定入口按钮 + 同步监听（note-updated/note-created/sticky:closed）+ useNoteEditor 切换 |
+| `src/router/index.ts` | 修改 | 顶层路由 `/sticky` |
+| `src/App.vue` | 修改 | 主窗口启动恢复便签 |
+| `src/composables/useI18n.ts` | 修改 | pin/unpin/alwaysOnTop/newStickyNote/editTitle 中英文文案 |
+| `src-tauri/capabilities/default.json` | 修改 | `sticky-*` 白名单 + 9 项窗口权限 + `wallpaper:default` |
+| `src-tauri/Cargo.toml` | 修改 | `tauri-plugin-wallpaper = "3"` |
+| `src-tauri/src/lib.rs` | 修改 | 注册 wallpaper 插件 |
+| `package.json` | 修改 | `tauri-plugin-wallpaper ^3.0.0` |
+
+### 74.5 已知技术约束
+
+- **`data-tauri-drag-region`**：Tauri v2 只对被点击的最内层元素生效，标题文字 `<span>` 需直接加该属性，父 div 上加无效。
+- **`pin()` 与置顶不可分离**：`tauri-plugin-wallpaper` 的 `pin()` 同时绑定 HWND_TOPMOST 和 Win+D 钩子；`unpin()` 才能彻底还原 z-order，中途不能单独修改。
+- **DWM 系统阴影**：`shadow:false` 构造选项在 Windows 不可靠，需在 `tauri://created` 后调用 `win.setShadow(false)` 才能真正关闭；CSS `box-shadow` 超出窗口边界会被系统矩形裁剪，便签不使用 CSS 阴影。
+- **`setContent` 第二参数**：TipTap v2 为 `boolean`（传 `false` 不触发 update 事件），非选项对象。
+
+### 74.6 验证
+
+- 类型检查（vue-tsc）✅ / 前端构建（vite）✅
+- 功能：固定→便签出现圆角无边框实色背景；双窗互编互刷；拖动后重启位置还原；置顶按钮开关正常（可取消）；新建便签聚焦标题；关闭=取消固定且主窗口标记同步；删除笔记便签自毁；备份 1.9 旧档导入不报错

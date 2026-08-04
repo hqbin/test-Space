@@ -2,7 +2,7 @@
   <div class="flex flex-1 min-h-0 -mx-margin-page overflow-hidden pb-4 box-border select-none">
     <!-- Left: Search + File Tree -->
     <div class="flex-shrink-0 flex flex-col w-64 ml-3 overflow-hidden rounded-xl bg-white/10 backdrop-blur-[60px] border border-white/50">
-      <div class="p-3 border-b border-glass-border-light/50">
+      <div class="p-3">
         <div class="glass-input flex items-center gap-2 px-3 py-2 rounded-lg">
           <span class="material-symbols-outlined text-[14px] text-on-surface-variant" :class="searching ? 'animate-spin' : ''">{{ searching ? 'progress_activity' : 'search' }}</span>
           <input             v-model="searchQuery"
@@ -16,7 +16,7 @@
           </button>
         </div>
       </div>
-      <div class="px-3 py-1.5 border-b border-glass-border-light/50 flex justify-between items-center">
+      <div class="px-3 py-1.5 flex justify-between items-center">
         <span class="font-label-md text-label-md text-on-surface font-semibold text-[12px]">{{ t('notes.directory') }}</span>
         <div class="flex gap-1">
           <button class="glass-button !border-0 px-1.5 py-0.5 select-none" :title="t('notes.export')" @click="showExportDialog = true">
@@ -34,8 +34,10 @@
           </button>
         </div>
       </div>
+      <!-- 目录下方渐隐分隔线 -->
+      <div class="fade-border-b mx-0"></div>
       <!-- Space selector -->
-      <div class="px-3 py-2 border-b border-glass-border-light/30">
+      <div class="px-3 py-2 fade-border-b">
         <div class="folio mb-1 opacity-70">Space</div>
         <div class="relative" ref="spaceDropdownRef">
           <button class="w-full list-hover flex items-baseline justify-between gap-1 px-2 py-1 rounded-md text-left select-none" @click="showSpaceDropdown = !showSpaceDropdown">
@@ -110,6 +112,9 @@
               <span class="material-symbols-outlined text-[13px] text-secondary">description</span>
               <span class="text-[11px] leading-tight flex-1 truncate" v-html="highlightText(note.title || t('notes.untitled'))"></span>
               <span class="material-symbols-outlined text-[12px] text-secondary">star</span>
+              <button class="glass-button !border-0 px-1.5 py-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.pinToDesktop')" @mousedown.stop @click.stop="togglePin(note.id)">
+                <span class="material-symbols-outlined text-[11px]" :class="pinnedNoteIds.has(note.id) ? 'text-secondary' : ''">push_pin</span>
+              </button>
               <button class="glass-button !border-0 px-1.5 py-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.delete')" @mousedown.stop @click.stop="confirmDeleteNote(note)">
                 <span class="material-symbols-outlined text-[11px]">delete</span>
               </button>
@@ -162,6 +167,9 @@
                   <span class="material-symbols-outlined text-[13px] text-secondary">description</span>
                   <span class="text-[11px] leading-tight flex-1 truncate" v-html="highlightText(note.title || t('notes.untitled'))"></span>
                   <span v-if="note.isFavorite" class="material-symbols-outlined text-[12px] text-secondary">star</span>
+                  <button class="glass-button !border-0 px-1.5 py-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.pinToDesktop')" @mousedown.stop @click.stop="togglePin(note.id)">
+                    <span class="material-symbols-outlined text-[11px]" :class="pinnedNoteIds.has(note.id) ? 'text-secondary' : ''">push_pin</span>
+                  </button>
                   <button class="glass-button !border-0 px-1.5 py-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.delete')" @mousedown.stop @click.stop="confirmDeleteNote(note)">
                     <span class="material-symbols-outlined text-[11px]">delete</span>
                   </button>
@@ -189,6 +197,9 @@
             >
               <span class="material-symbols-outlined text-[13px] text-secondary">description</span>
               <span class="text-[11px] leading-tight flex-1 truncate" v-html="highlightText(note.title || t('notes.untitled'))"></span>
+              <button class="glass-button !border-0 px-1.5 py-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.pinToDesktop')" @mousedown.stop @click.stop="togglePin(note.id)">
+                <span class="material-symbols-outlined text-[11px]" :class="pinnedNoteIds.has(note.id) ? 'text-secondary' : ''">push_pin</span>
+              </button>
               <button class="glass-button !border-0 px-1.5 py-0.5 opacity-0 group-hover:opacity-100 rounded select-none" :title="t('notes.delete')" @mousedown.stop @click.stop="confirmDeleteNote(note)">
                 <span class="material-symbols-outlined text-[11px]">delete</span>
               </button>
@@ -245,7 +256,7 @@
         </div>
       </div>
       <div v-else class="flex-1 min-w-0 min-h-0 glass-panel rounded-xl flex flex-col">
-        <div class="sticky top-0 z-10 bg-white/60 backdrop-blur-md border-b border-glass-border-light/30 px-4 py-2 flex items-center gap-2">
+        <div class="sticky top-0 z-10 bg-white/60 backdrop-blur-md fade-border-b px-4 py-2 flex items-center gap-2">
           <input             v-model="noteTitle"
             :placeholder="t('notes.noteTitle')"
             class="flex-1 bg-transparent border-none outline-none font-headline-sm text-headline-sm text-on-surface font-semibold select-text"
@@ -254,6 +265,9 @@
           <div class="flex items-center gap-1">
             <button class="toolbar-btn !p-1 select-none" :class="{ 'toolbar-active': currentNoteData?.isFavorite }" :title="t('notes.favorites')" @click="toggleFavorite">
               <span class="material-symbols-outlined text-[20px]">{{ currentNoteData?.isFavorite ? 'star' : 'star_border' }}</span>
+            </button>
+            <button class="toolbar-btn !p-1 select-none" :class="{ 'toolbar-active': isCurrentPinned }" :title="isCurrentPinned ? t('notes.unpinFromDesktop') : t('notes.pinToDesktop')" @click="togglePin(selectedNoteId || '')">
+              <span class="material-symbols-outlined text-[20px]">push_pin</span>
             </button>
             <div class="relative" ref="exportMenuRef">
               <button class="toolbar-btn !p-1 select-none" :title="t('notes.exportMd')" @click="showExportMenu = !showExportMenu">
@@ -277,7 +291,7 @@
             </span>
           </div>
         </div>
-        <div class="bg-white/40 backdrop-blur-md border-b border-glass-border-light/30 px-4 py-2 flex items-center gap-1 flex-wrap">
+        <div class="bg-white/40 backdrop-blur-md fade-border-b px-4 py-2 flex items-center gap-1 flex-wrap">
           <button class="toolbar-btn select-none" :class="{ 'toolbar-active': editor?.isActive('bold') }" @click="editor?.chain().focus().toggleBold().run()" title="Bold">
             <span class="material-symbols-outlined text-[20px]">format_bold</span>
           </button>
@@ -349,7 +363,7 @@
           </button>
         </div>
         <div class="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar" ref="editorScrollRef">
-          <div class="max-w-[850px] mx-auto py-8 px-6 min-h-full border border-glass-border-light/30 rounded-lg bg-white/30" ref="editorRef" @click.capture="handleEditorLinkClick">
+          <div class="max-w-[850px] mx-auto pt-5 pb-8 px-6 min-h-full bg-white/30" ref="editorRef" @click.capture="handleEditorLinkClick">
             <editor-content :editor="editor" class="prose-editor" />
           </div>
         </div>
@@ -382,7 +396,7 @@
     <Teleport to="body">
       <div v-if="showToc" class="fixed inset-0 z-20" @click.self="showToc = false">
         <div class="absolute right-0 top-0 bottom-0 w-72 flex flex-col bg-white/70 backdrop-blur-[20px] border-l border-white/40 overflow-hidden shadow-2xl animate-toc-in">
-          <div class="p-4 border-b border-white/20 flex items-center justify-between">
+          <div class="p-4 flex items-center justify-between">
             <span class="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-2">
               <span class="material-symbols-outlined text-[18px]">toc</span>
               Table of Contents
@@ -495,7 +509,7 @@
     <Teleport to="body">
       <div v-if="showBacklinks" class="fixed inset-0 z-20" @click.self="showBacklinks = false">
         <div class="absolute right-0 top-0 bottom-0 w-72 flex flex-col bg-white/70 backdrop-blur-[20px] border-l border-white/40 overflow-hidden shadow-2xl animate-toc-in">
-          <div class="p-4 border-b border-white/20 flex items-center justify-between">
+          <div class="p-4 flex items-center justify-between">
             <span class="font-label-md text-label-md text-on-surface font-semibold flex items-center gap-2">
               <span class="material-symbols-outlined text-[18px]">link</span>
               {{ t('notes.backlinks') }}
@@ -716,15 +730,10 @@
 defineOptions({ name: 'NotesSpacePage' })
 import { ref, computed, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from "vue";
 import { useRouter, useRoute } from "vue-router";
-import { useEditor, EditorContent, Extension } from "@tiptap/vue-3";
-import StarterKit from "@tiptap/starter-kit";
-import Underline from "@tiptap/extension-underline";
-import Image from "@tiptap/extension-image";
-import Placeholder from "@tiptap/extension-placeholder";
-import Typography from "@tiptap/extension-typography";
-import Color from "@tiptap/extension-color";
-import TextStyle from "@tiptap/extension-text-style";
-import { WikiNoteLink, NoteLinkExtension, NOTE_LINK_PREFIX } from "@/extensions/wikiNoteLink";
+import { EditorContent, Extension } from "@tiptap/vue-3";
+import { NOTE_LINK_PREFIX } from "@/extensions/wikiNoteLink";
+import { emit, emitTo, listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { ensureStickyWindow, unpinAndClose } from "@/services/stickyWindow";
 // NoteAiPanel is now global in AppLayout.vue — no local import needed
 import { loadAiConfig, type AiConfig } from "@/services/aiSettings";
 import { getNotePlainText, htmlToPlainText } from "@/services/noteAi";
@@ -738,6 +747,7 @@ import type { NoteSpace, NoteFolder, NoteItem, NoteVersion } from "@/types";
 import { Plugin, PluginKey } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
 import { useI18n } from "@/composables/useI18n";
+import { useNoteEditor } from "@/composables/useNoteEditor";
 const { t } = useI18n();
 const router = useRouter();
 const route = useRoute();
@@ -1758,6 +1768,7 @@ async function selectNote(note: NoteItem) {
   await nextTick()
   lastEditorContent.value = editor.value?.getHTML() ?? note.content ?? ""
   saved.value = true
+  lastSavedAt = note.updatedAt || ""
 
   // Scroll to heading anchor if requested (e.g. from AI assistant note link)
   if (_pendingHeadingAnchor) {
@@ -1818,10 +1829,24 @@ async function saveCurrentNote() {
     note.contentJson = JSON.stringify(editor.value.getJSON())
   }
   await db.saveNote(note)
+  lastSavedAt = new Date().toISOString()
   cappedCacheSet(_contentCache, note.id, note.content)
   cappedCacheSetParsed(_contentJsonCache, note.id, note.contentJson || "")
   await syncNoteLinksFromContent(selectedNoteId.value, note.content)
   saved.value = true
+  // 已固定的笔记 → 定向通知便签窗口刷新（目标窗口不存在时静默丢弃）
+  if (pinnedNoteIds.value.has(note.id)) {
+    try {
+      await emitTo(`sticky-${note.id}`, "notes:note-updated", {
+        noteId: note.id,
+        title: note.title,
+        content: note.content,
+        contentJson: note.contentJson,
+        updatedAt: lastSavedAt,
+        sourceLabel: "main",
+      })
+    } catch {}
+  }
 }
 
 // ── Search ────────────────────────────────────────────────────
@@ -1892,10 +1917,17 @@ async function doDeleteNote() {
     if (editor.value) editor.value.commands.setContent("")
   }
   deleteNoteTarget.value = null
+  // 若该笔记固定在桌面，同步移除固定状态并通知便签窗口自毁
+  if (pinnedNoteIds.value.has(id)) {
+    pinnedNoteIds.value.delete(id)
+    pinnedNoteIds.value = new Set(pinnedNoteIds.value)
+  }
   // 异步执行数据库删除，不阻塞 UI
   db.deleteNote(id).catch(e => {
     console.error('Failed to delete note:', e)
   })
+  // 广播删除事件：便签窗口收到后自动关闭
+  emit("notes:note-deleted", { noteId: id }).catch(() => {})
 }
 
 // ── Favorite ──────────────────────────────────────────────────
@@ -1905,6 +1937,44 @@ async function toggleFavorite() {
   const nowFav = await db.toggleNoteFavorite(selectedNoteId.value)
   const note = notes.value.find(n => n.id === selectedNoteId.value)
   if (note) note.isFavorite = nowFav
+}
+
+// ── Pin to Desktop (sticky note) ──────────────────────────────
+
+const pinnedNoteIds = ref<Set<string>>(new Set())
+const isCurrentPinned = computed(() => selectedNoteId.value ? pinnedNoteIds.value.has(selectedNoteId.value) : false)
+// 主窗口最后一次保存/加载笔记的时间（ISO），用于与便签窗口的 last-write-wins 冲突比较
+let lastSavedAt = ""
+let unlistenSticky: UnlistenFn[] = []
+
+async function refreshPinnedNotes() {
+  try {
+    const list = await db.loadStickyNotes()
+    pinnedNoteIds.value = new Set(list.map(s => s.noteId))
+  } catch {}
+}
+
+async function togglePin(noteId: string) {
+  if (!noteId) return
+  if (pinnedNoteIds.value.has(noteId)) {
+    // 取消固定：移除便签窗口并清记录（unpinAndClose 内部先清记录再 destroy）
+    pinnedNoteIds.value.delete(noteId)
+    pinnedNoteIds.value = new Set(pinnedNoteIds.value)
+    showToast(t('notes.unpinnedToast'), 'success')
+    await unpinAndClose(noteId)
+  } else {
+    try {
+      await db.pinNoteToDesktop(noteId)
+      pinnedNoteIds.value.add(noteId)
+      pinnedNoteIds.value = new Set(pinnedNoteIds.value)
+      showToast(t('notes.pinnedToast'), 'success')
+      // fire-and-forget — 不阻塞 UI，窗口在后台创建完成后自动出现
+      ensureStickyWindow(noteId).catch(e => console.error('[sticky] open failed:', e))
+    } catch (e) {
+      console.error('Failed to pin note:', e)
+      showToast(t('notes.pinFailToast'), 'error')
+    }
+  }
 }
 
 // ── Auto Save (1.5s debounce, real-time) ──────────────────────
@@ -2420,80 +2490,17 @@ const presetTextColors = [
 
 // ── Editor ────────────────────────────────────────────────────
 
-const editor = useEditor({
-  content: "",
-  extensions: [
-    StarterKit.configure({
-      heading: { levels: [1, 2, 3] },
-    }),
-    Underline,
-    NoteLinkExtension,
-    WikiNoteLink.configure({
-      resolveNoteId: resolveNoteIdByTitle,
-    }),
-    Image.configure({ inline: true, allowBase64: true }),
-    Placeholder.configure({ placeholder: "Start writing..." }),
-    Typography,
-    TextStyle,
-    Color,
-    SearchHighlightExt,
-  ],
-  onUpdate: () => {
-    const html = editor.value?.getHTML() ?? ""
+const { editor } = useNoteEditor({
+  resolveNoteId: resolveNoteIdByTitle,
+  onOpenNoteLink: openInternalNoteLink,
+  extraExtensions: [SearchHighlightExt],
+  onUpdate: (html) => {
     lastEditorContent.value = html
     if (currentNoteData.value) {
       currentNoteData.value.content = html
     }
     saved.value = false
     triggerSave()
-  },
-  editorProps: {
-    attributes: {
-      class: "outline-none min-h-[300px]",
-    },
-    handleClick: (_view, _pos, event) => {
-      const target = event.target as HTMLElement
-      const anchor = target.closest('a')
-      if (anchor) {
-        const href = anchor.getAttribute('href') || ''
-        if (href.startsWith(NOTE_LINK_PREFIX)) {
-          event.preventDefault()
-          openInternalNoteLink(href)
-          return true
-        }
-      }
-      return false
-    },
-    clipboardTextSerializer: (slice) => {
-      // Avoid extra blank lines when copying multi-line content out of the editor.
-      let text = slice.content.textBetween(0, slice.content.size, "\n", "\n")
-      // Normalize problematic invisible whitespace that breaks SQL/scripts when pasted elsewhere.
-      text = text
-        .replace(/\r\n/g, "\n")
-        .replace(/[\u00A0\u202F\u2007]/g, " ")
-        .replace(/[\u200B-\u200D\uFEFF]/g, "")
-      return text
-    },
-    handlePaste: (_view, event) => {
-      const items = event.clipboardData?.items
-      if (!items) return false
-      for (const item of items) {
-        if (item.type.startsWith('image/')) {
-          const file = item.getAsFile()
-          if (file) {
-            const reader = new FileReader()
-            reader.onload = () => {
-              if (typeof reader.result === 'string') {
-                editor.value?.chain().focus().setImage({ src: reader.result }).run()
-              }
-            }
-            reader.readAsDataURL(file)
-            return true
-          }
-        }
-      }
-      return false
-    },
   },
 })
 
@@ -2575,6 +2582,34 @@ onMounted(async () => {
   _isUnmounted = false
   await loadData()
   document.addEventListener('click', onDocumentClick, true)
+  await refreshPinnedNotes()
+
+  // 便签窗口保存后 → 刷新编辑器与列表（sticky 定向 emitTo("main")，不会与自身事件串扰）
+  unlistenSticky.push(await listen("notes:note-updated", (e) => {
+    const p = e.payload as { noteId?: string; title?: string; content?: string; contentJson?: string; updatedAt?: string; sourceLabel?: string }
+    if (!p || !p.noteId || p.sourceLabel === "main") return
+    handleExternalNoteUpdate(p)
+  }))
+  // 便签窗口点击笔记链接 → 主窗口打开该笔记
+  unlistenSticky.push(await listen("notes:open-note", (e) => {
+    const id = (e.payload as { noteId?: string })?.noteId
+    if (id) openNoteById(id)
+  }))
+  // 便签窗口关闭（✕ 或 Alt+F4）→ 主窗口移除固定标记
+  unlistenSticky.push(await listen("sticky:closed", (e) => {
+    const id = (e.payload as { noteId?: string })?.noteId
+    if (!id) return
+    pinnedNoteIds.value.delete(id)
+    pinnedNoteIds.value = new Set(pinnedNoteIds.value)
+  }))
+  // 便签窗口新建便签 → 主窗口刷新笔记列表和固定状态
+  unlistenSticky.push(await listen("notes:note-created", async () => {
+    try {
+      notes.value = await db.loadNoteList()
+      rebuildTitleMap()
+      await refreshPinnedNotes()
+    } catch {}
+  }))
 
   // Handle route query params (e.g., note link click from AI page)
   if (route.query.noteId) {
@@ -2590,6 +2625,33 @@ onMounted(async () => {
     tocCollapsed.value = new Set()
   })
 })
+
+// 便签窗口保存后的内容同步（last-write-wins：本地有未保存改动时本地优先）
+function handleExternalNoteUpdate(p: { noteId?: string; title?: string; content?: string; contentJson?: string; updatedAt?: string }) {
+  const listItem = notes.value.find(n => n.id === p.noteId)
+  if (listItem && p.title) listItem.title = p.title
+  if (listItem && p.updatedAt) listItem.updatedAt = p.updatedAt
+  if (selectedNoteId.value !== p.noteId || !editor.value) return
+  if (!saved.value) return                       // 本地有未保存改动 → 本地优先
+  if (p.updatedAt && lastSavedAt && p.updatedAt <= lastSavedAt) return  // 旧事件丢弃
+  // emitUpdate:false —— 远端内容只应用不触发本地保存，防止保存事件回环
+  try {
+    if (p.contentJson) {
+      const parsed = JSON.parse(p.contentJson)
+      if (parsed && typeof parsed === "object") {
+        editor.value.commands.setContent(parsed, false)
+        saved.value = true
+        lastSavedAt = p.updatedAt || ""
+        return
+      }
+    }
+  } catch {}
+  if (p.content !== undefined) {
+    editor.value.commands.setContent(p.content, false)
+    saved.value = true
+    lastSavedAt = p.updatedAt || ""
+  }
+}
 
 onActivated(() => {
   editor.value?.commands.focus()
@@ -2624,6 +2686,8 @@ onBeforeUnmount(() => {
   _isUnmounted = true
   _pendingNoteId = null
   document.removeEventListener('click', onDocumentClick, true)
+  unlistenSticky.forEach(u => { try { u() } catch {} })
+  unlistenSticky = []
   if (!saved.value && selectedNoteId.value && lastEditorContent.value !== null) {
     const note = currentNoteData.value
     if (note) {
@@ -2641,6 +2705,14 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* 两端渐隐分隔线，统一用于目录、Space、标题栏、工具栏 */
+.fade-border-b {
+  border-bottom: 1px solid transparent;
+  border-image: linear-gradient(to right, transparent 5%, rgba(0,0,0,0.09) 20%, rgba(0,0,0,0.09) 80%, transparent 95%) 1;
+}
+html.dark .fade-border-b {
+  border-image: linear-gradient(to right, transparent 5%, rgba(255,255,255,0.12) 20%, rgba(255,255,255,0.12) 80%, transparent 95%) 1;
+}
 :deep(.ProseMirror) {
   outline: none;
   min-height: 300px;

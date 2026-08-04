@@ -83,7 +83,7 @@ checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
 name = "app"
-version = "1.6.30"
+version = "1.6.31"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -114,6 +114,7 @@ dependencies = [
  "tauri-plugin-shell",
  "tauri-plugin-single-instance",
  "tauri-plugin-sql",
+ "tauri-plugin-wallpaper",
  "tokio",
  "uuid",
  "x509-parser",
@@ -4182,7 +4183,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5445,6 +5446,19 @@ dependencies = [
  "time",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "tauri-plugin-wallpaper"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4a6a40fadb7ddf9d821cc28f4f8c43ab8a8e8d0cd0cad4837a8bf83098e3b2f"
+dependencies = [
+ "serde",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.18",
+ "windows",
 ]
 
 [[package]]

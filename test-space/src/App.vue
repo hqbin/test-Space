@@ -7,6 +7,7 @@ import { onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useI18n } from "@/composables/useI18n";
+import { restoreStickyWindows } from "@/services/stickyWindow";
 
 const { initLanguage } = useI18n();
 
@@ -38,6 +39,11 @@ onMounted(async () => {
     await appWindow.setShadow(false);
     await appWindow.setIcon("icons/32x32.png");
   } catch {}
+  // 启动恢复桌面便签：只由主窗口触发（sticky/mirror 窗口再执行会递归开窗），
+  // fire-and-forget 不阻塞首屏渲染
+  if (getCurrentWindow().label === "main") {
+    restoreStickyWindows().catch((e) => console.error("[sticky] restore failed:", e));
+  }
 });
 
 onUnmounted(() => {

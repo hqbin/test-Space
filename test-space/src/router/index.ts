@@ -9,6 +9,11 @@ const router = createRouter({
       component: () => import("@/views/device-space/StandaloneMirror.vue"),
     },
     {
+      path: "/sticky",
+      name: "sticky-note",
+      component: () => import("@/views/note-space/StickyNote.vue"),
+    },
+    {
       path: "/",
       component: () => import("@/layouts/AppLayout.vue"),
       children: [

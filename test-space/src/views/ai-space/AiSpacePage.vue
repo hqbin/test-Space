@@ -4,7 +4,7 @@
     <div v-if="sessions.length > 0"
       class="flex-shrink-0 flex flex-col w-56 ml-3 overflow-hidden rounded-xl bg-white/10 backdrop-blur-[60px] border border-white/50"
     >
-      <div class="p-2 border-b border-glass-border-light/50 flex items-center gap-1">
+      <div class="p-2 fade-border-b flex items-center gap-1">
         <div class="relative flex-1" ref="modeDropdownRef">
           <button class="w-full flex items-center justify-between gap-1 px-2 py-1.5 rounded-md text-[12px] glass-hover cursor-pointer transition-colors text-on-surface-variant select-none" @click="toggleModeDropdown">
             <span class="material-symbols-outlined text-[14px]">{{ currentTabIcon }}</span>
@@ -1284,6 +1284,13 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.fade-border-b {
+  border-bottom: 1px solid transparent;
+  border-image: linear-gradient(to right, transparent 5%, rgba(0,0,0,0.09) 20%, rgba(0,0,0,0.09) 80%, transparent 95%) 1;
+}
+html.dark .fade-border-b {
+  border-image: linear-gradient(to right, transparent 5%, rgba(255,255,255,0.12) 20%, rgba(255,255,255,0.12) 80%, transparent 95%) 1;
+}
 /* AI 会话侧栏条目：默认灰字，hover 墨色叠层可见；活跃态浅蓝紫底 + 左侧朱砂条 */
 .ai-session-item {
   color: rgba(28, 27, 31, 0.68);

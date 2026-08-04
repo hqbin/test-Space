@@ -111,6 +111,18 @@ async function migrateInternal(d: Database) {
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_note_versions_note ON note_versions(note_id)`)
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_note_links_source ON note_links(source_note_id)`)
   await d.execute(`CREATE INDEX IF NOT EXISTS idx_note_links_target ON note_links(target_note_id)`)
+  // Desktop sticky notes — one row per note pinned to the desktop (window state, not note content).
+  // Coordinates are physical pixels (absolute screen coords, multi-monitor safe).
+  await d.execute(`CREATE TABLE IF NOT EXISTS sticky_notes (
+    note_id TEXT PRIMARY KEY,
+    pos_x INTEGER NOT NULL,
+    pos_y INTEGER NOT NULL,
+    width INTEGER NOT NULL,
+    height INTEGER NOT NULL,
+    pinned_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`)
+  try { await d.execute(`ALTER TABLE sticky_notes ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''`) } catch {}
   await d.execute(`CREATE TABLE IF NOT EXISTS note_ai_memories (
     id TEXT PRIMARY KEY,
     content TEXT NOT NULL,
@@ -590,6 +602,7 @@ export async function deleteNote(id: string) {
   const d = await getDb()
   await d.execute('DELETE FROM note_versions WHERE note_id = ?', [id])
   await d.execute('DELETE FROM note_links WHERE source_note_id = ? OR target_note_id = ?', [id, id])
+  await d.execute('DELETE FROM sticky_notes WHERE note_id = ?', [id])
   await d.execute('DELETE FROM notes WHERE id = ?', [id])
   try { await d.execute('DELETE FROM notes_fts WHERE note_id = ?', [id]) } catch {}
 }
@@ -601,6 +614,61 @@ export async function toggleNoteFavorite(id: string): Promise<boolean> {
   const newVal = rows[0].is_favorite ? 0 : 1
   await d.execute('UPDATE notes SET is_favorite = ?, updated_at = ? WHERE id = ?', [newVal, new Date().toISOString(), id])
   return !!newVal
+}
+
+// ── Desktop sticky notes ────────────────────────────────────
+// One row per note pinned to the desktop. Position/size are physical pixels.
+// Unpinning deletes the row — no residue in the notes table itself.
+
+export async function loadStickyNotes(): Promise<StickyNote[]> {
+  const d = await getDb()
+  return d.select<StickyNote[]>(
+    'SELECT note_id as noteId, pos_x as posX, pos_y as posY, width, height, pinned_at as pinnedAt, updated_at as updatedAt FROM sticky_notes ORDER BY pinned_at ASC'
+  )
+}
+
+export async function getStickyNote(noteId: string): Promise<StickyNote | null> {
+  const d = await getDb()
+  const rows = await d.select<StickyNote[]>(
+    'SELECT note_id as noteId, pos_x as posX, pos_y as posY, width, height, pinned_at as pinnedAt, updated_at as updatedAt FROM sticky_notes WHERE note_id = ?',
+    [noteId]
+  )
+  return rows.length > 0 ? rows[0] : null
+}
+
+export async function pinNoteToDesktop(noteId: string, pos?: { posX?: number; posY?: number; width?: number; height?: number }): Promise<StickyNote> {
+  const d = await getDb()
+  const now = new Date().toISOString()
+  // Re-pinning keeps the previous position (and a fresh pinned_at); a first-time pin
+  // defaults to 0,0 which the caller treats as "not positioned yet" → center on screen.
+  const existing = await getStickyNote(noteId)
+  const posX = pos?.posX ?? existing?.posX ?? 0
+  const posY = pos?.posY ?? existing?.posY ?? 0
+  const width = pos?.width ?? existing?.width ?? 360
+  const height = pos?.height ?? existing?.height ?? 420
+  await d.execute(
+    `INSERT INTO sticky_notes (note_id, pos_x, pos_y, width, height, pinned_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(note_id) DO UPDATE SET
+       pos_x = excluded.pos_x, pos_y = excluded.pos_y,
+       width = excluded.width, height = excluded.height,
+       pinned_at = excluded.pinned_at, updated_at = excluded.updated_at`,
+    [noteId, posX, posY, width, height, now, now]
+  )
+  return { noteId, posX, posY, width, height, pinnedAt: now, updatedAt: now }
+}
+
+export async function updateStickyPosition(noteId: string, posX: number, posY: number, width: number, height: number) {
+  const d = await getDb()
+  await d.execute(
+    'UPDATE sticky_notes SET pos_x = ?, pos_y = ?, width = ?, height = ?, updated_at = ? WHERE note_id = ?',
+    [posX, posY, width, height, new Date().toISOString(), noteId]
+  )
+}
+
+export async function unpinNoteFromDesktop(noteId: string) {
+  const d = await getDb()
+  await d.execute('DELETE FROM sticky_notes WHERE note_id = ?', [noteId])
 }
 
 function buildFtsQuery(query: string): string {
@@ -871,6 +939,16 @@ export async function loadProxyRules(): Promise<ApiRewriteRule[]> {
   return rows.length > 0 ? safeJsonParse<ApiRewriteRule[]>(rows[0].value, []) : []
 }
 
+export interface StickyNote {
+  noteId: string
+  posX: number
+  posY: number
+  width: number
+  height: number
+  pinnedAt: string
+  updatedAt: string
+}
+
 export interface AppBackup {
   version: string
   exportedAt: string
@@ -891,6 +969,7 @@ export interface AppBackup {
   apiTestResults?: ApiTestResult[]
   perfSessions?: PerfSessionBackup[]
   mcpServers?: import('@/types').McpServerConfig[]
+  stickyNotes?: StickyNote[]
 }
 
 export interface PerfSessionBackup {
@@ -969,6 +1048,8 @@ export async function exportAllData(onProgress?: ProgressCallback): Promise<AppB
   )
   emit('读取代理规则')
   const proxyRules = await loadProxyRules()
+  emit('读取桌面便签')
+  const stickyNotes = await loadStickyNotes()
   emit('读取接口测试')
   const apiTestGroups = await loadApiTestGroups()
   await _yieldToMain()
@@ -991,7 +1072,7 @@ export async function exportAllData(onProgress?: ProgressCallback): Promise<AppB
      FROM api_test_results`
   )
   const backup: AppBackup = {
-    version: '1.9',
+    version: '2.0',
     exportedAt: new Date().toISOString(),
     settings,
     inputHistory,
@@ -1010,6 +1091,7 @@ export async function exportAllData(onProgress?: ProgressCallback): Promise<AppB
     apiTestResults: apiTestResults.length > 0 ? apiTestResults : undefined,
     perfSessions: undefined,
     mcpServers: undefined,
+    stickyNotes: stickyNotes.length > 0 ? stickyNotes : undefined,
   }
   emit('读取性能会话')
   try {
@@ -1031,7 +1113,7 @@ export async function exportAllData(onProgress?: ProgressCallback): Promise<AppB
 function validateBackup(backup: any): string | null {
   if (!backup || typeof backup !== 'object') return '备份数据格式无效'
   if (!backup.version) return '备份文件缺少版本号，可能是旧格式或损坏文件'
-  const tables = ['settings', 'inputHistory', 'logSessions', 'noteSpaces', 'noteFolders', 'notes', 'noteVersions', 'noteLinks', 'scripts', 'aiMemories', 'apiTestGroups', 'apiTestCases', 'apiTestReports', 'apiTestResults', 'perfSessions', 'mcpServers']
+  const tables = ['settings', 'inputHistory', 'logSessions', 'noteSpaces', 'noteFolders', 'notes', 'noteVersions', 'noteLinks', 'scripts', 'aiMemories', 'apiTestGroups', 'apiTestCases', 'apiTestReports', 'apiTestResults', 'perfSessions', 'mcpServers', 'stickyNotes']
   for (const t of tables) {
     if (backup[t] !== undefined && !Array.isArray(backup[t]) && typeof backup[t] !== 'object') {
       return `字段 "${t}" 类型无效`
@@ -1523,7 +1605,7 @@ export async function importAllData(backup: AppBackup, onProgress?: ProgressCall
     emit('清理旧数据')
     const deletes = [
       'app_settings', 'input_history', 'log_sessions',
-      'note_folders', 'notes', 'notes_fts', 'note_versions', 'note_links', 'scripts', 'note_ai_memories',
+      'note_folders', 'notes', 'notes_fts', 'note_versions', 'note_links', 'scripts', 'note_ai_memories', 'sticky_notes',
       'api_test_groups', 'api_test_cases', 'api_test_reports', 'api_test_results', 'perf_sessions',
     ]
     for (let i = 0; i < deletes.length; i++) {
@@ -1548,6 +1630,8 @@ export async function importAllData(backup: AppBackup, onProgress?: ProgressCall
       ['api_test_reports', 'id, name, description, total_cases, passed_cases, failed_cases, total_duration, started_at, completed_at, status, created_at', backup.apiTestReports || [], (r: any) => [r.id, r.name, r.description ?? '', r.totalCases ?? r.total_cases ?? 0, r.passedCases ?? r.passed_cases ?? 0, r.failedCases ?? r.failed_cases ?? 0, r.totalDuration ?? r.total_duration ?? 0, r.startedAt ?? r.started_at, r.completedAt ?? r.completed_at ?? null, r.status, r.createdAt ?? r.created_at]],
       ['api_test_results', 'id, report_id, case_id, passed, status_code, response_body, response_headers, duration, error_message, assertion_results, started_at, completed_at', backup.apiTestResults || [], (r: any) => [r.id, r.reportId ?? r.report_id, r.caseId ?? r.case_id, r.passed ? 1 : 0, r.statusCode ?? r.status_code ?? null, r.responseBody ?? r.response_body ?? null, r.responseHeaders ?? r.response_headers ? JSON.stringify(r.responseHeaders ?? r.response_headers) : null, r.duration ?? null, r.errorMessage ?? r.error_message ?? null, r.assertionResults ?? r.assertion_results ? JSON.stringify(r.assertionResults ?? r.assertion_results) : null, r.startedAt ?? r.started_at, r.completedAt ?? r.completed_at]],
       ['perf_sessions', 'id, name, device_serial, started_at, ended_at, interval_ms, data, created_at', backup.perfSessions || [], (s: any) => [s.id, s.name, s.device_serial, s.started_at, s.ended_at, s.interval_ms, s.data, s.created_at]],
+      // Desktop sticky notes — physical pixel coords; defaults keep the window usable if the field is missing.
+      ['sticky_notes', 'note_id, pos_x, pos_y, width, height, pinned_at, updated_at', backup.stickyNotes || [], (s: any) => [s.noteId ?? s.note_id, s.posX ?? s.pos_x ?? 0, s.posY ?? s.pos_y ?? 0, s.width ?? 360, s.height ?? 420, s.pinnedAt ?? s.pinned_at ?? new Date().toISOString(), s.updatedAt ?? s.updated_at ?? s.pinnedAt ?? s.pinned_at ?? new Date().toISOString()]],
     ]
     for (const [table, cols, items, toParams] of inserts) {
       if (!Array.isArray(items) || items.length === 0) continue
