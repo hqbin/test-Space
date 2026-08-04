@@ -5437,34 +5437,69 @@ onUnmounted(() => { deviceEventUnlisten?.(); });
 
 > **注意**：源文件必须有真正的透明通道（四角 alpha=0），棋盘格是查看器的透明表示，不是像素颜色。Stitch 等工具导出的 PNG 会将透明区域烘焙为灰色实底，需在 Figma / PS 中重新导出并保留 alpha 通道。
 
-#### 73.3 NSIS 安装后图标缓存刷新
+#### 73.3 NSIS 安装钩子（hooks.nsh）
 
-**Bug 修复（v1.6.30+）**：之前 `SHChangeNotify` 通知的 exe 路径使用了 `${PRODUCTNAME}.exe`（= `TestSpace.exe`），但 Tauri 打包后实际二进制文件名是 `${MAINBINARYNAME}.exe`（= `app.exe`）。Shell 收到通知后找不到 `TestSpace.exe` 这个文件，图标缓存从未被真正失效，导致覆盖安装后旧图标残留（表现为直角方块）。
+`src-tauri/windows/hooks.nsh` 包含三个钩子宏，解决图标缓存刷新和快捷方式管理两类问题。
 
-当前 `POSTINSTALL` 钩子采用三步刷新策略：
+**Bug 1 — 图标缓存不刷新（v1.6.25 引入）**：`SHChangeNotify` 通知路径使用了 `${PRODUCTNAME}.exe`（= `TestSpace.exe`），但实际二进制是 `${MAINBINARYNAME}.exe`（= `app.exe`），Shell 找不到文件所以缓存从未失效。
+
+**Bug 2 — 覆盖安装路径不回填（v1.6.25 引入）**：`PREINSTALL` 钩子结尾 `SetShellVarContext current` 把安装器的 SHCTX 从 HKLM（"所有用户"模式）改回了 HKCU，导致后续注册表全部写入 HKCU，下次覆盖安装从 HKLM 读旧路径时为空。
+
+**当前实现**：
 
 ```nsis
-!macro NSIS_HOOK_POSTINSTALL
-  ; 1. 通知 exe 图标变更（路径必须用 MAINBINARYNAME，不是 PRODUCTNAME）
-  System::Call "shell32::SHChangeNotify(i 0x2000, i 0x1005, t '$INSTDIR\${MAINBINARYNAME}.exe', i 0)"
-  ; 2. 通知桌面快捷方式变更（当前用户 + 所有用户）
-  System::Call "shell32::SHChangeNotify(i 0x2000, i 0x1005, t '$DESKTOP\${PRODUCTNAME}.lnk', i 0)"
-  SetShellVarContext all
-  System::Call "shell32::SHChangeNotify(i 0x2000, i 0x1005, t '$DESKTOP\${PRODUCTNAME}.lnk', i 0)"
+!macro NSIS_HOOK_PREINSTALL
+  ; 删除两种上下文的快捷方式（防重复）
   SetShellVarContext current
-  ; 3. 全局广播兜底 + ie4uinit 强制重载图标资源
+  Delete "$DESKTOP\${PRODUCTNAME}.lnk"
+  Delete "$SMPROGRAMS\${PRODUCTNAME}.lnk"
+  SetShellVarContext all
+  Delete "$DESKTOP\${PRODUCTNAME}.lnk"
+  Delete "$SMPROGRAMS\${PRODUCTNAME}.lnk"
+  ; 必须恢复 MULTIUSER_INIT 设置的上下文，否则后续注册表写入位置错误
+  ${If} $MultiUser.InstallMode == "AllUsers"
+    SetShellVarContext all
+  ${Else}
+    SetShellVarContext current
+  ${EndIf}
+!macroend
+
+!macro NSIS_HOOK_POSTINSTALL
+  ; 强制重建快捷方式（覆盖安装时 Tauri 跳过重建，图标缓存不刷新）
+  Delete "$DESKTOP\${PRODUCTNAME}.lnk"
+  CreateShortcut "$DESKTOP\${PRODUCTNAME}.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+  !insertmacro SetLnkAppUserModelId "$DESKTOP\${PRODUCTNAME}.lnk"
+  Delete "$SMPROGRAMS\${PRODUCTNAME}.lnk"
+  CreateShortcut "$SMPROGRAMS\${PRODUCTNAME}.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+  !insertmacro SetLnkAppUserModelId "$SMPROGRAMS\${PRODUCTNAME}.lnk"
+  ; 通知 Shell + 全局广播 + ie4uinit 三重保障
+  System::Call "shell32::SHChangeNotify(i 0x2000, i 0x1005, t '$INSTDIR\${MAINBINARYNAME}.exe', i 0)"
+  System::Call "shell32::SHChangeNotify(i 0x2000, i 0x1005, t '$DESKTOP\${PRODUCTNAME}.lnk', i 0)"
   System::Call "shell32::SHChangeNotify(i 0x8000000, i 0x1000, i 0, i 0)"
   nsExec::Exec '"$WINDIR\system32\ie4uinit.exe" -show'
 !macroend
+
+!macro NSIS_HOOK_PREUNINSTALL
+  ; 卸载前删除所有快捷方式并恢复上下文
+  SetShellVarContext current
+  Delete "$DESKTOP\${PRODUCTNAME}.lnk"
+  Delete "$SMPROGRAMS\${PRODUCTNAME}.lnk"
+  SetShellVarContext all
+  Delete "$DESKTOP\${PRODUCTNAME}.lnk"
+  Delete "$SMPROGRAMS\${PRODUCTNAME}.lnk"
+  ${If} $MultiUser.InstallMode == "AllUsers"
+    SetShellVarContext all
+  ${Else}
+    SetShellVarContext current
+  ${EndIf}
+!macroend
 ```
 
-**设计原则**：
-- 不杀 Explorer（避免黑屏），市面上成熟应用（Chrome、VS Code 等）均不在安装器中强制重启 Explorer
-- `SHChangeNotify(SHCNE_UPDATEITEM)` 精确失效 exe 和 .lnk 的缓存条目
-- `ie4uinit.exe -show` 作为补充，强制 Shell 重新加载所有图标资源（用户无感知）
-- 极少数旧缓存条目在用户下次注销重新登录时自动更新
-
-**重要**：`MAINBINARYNAME` 由 Tauri 在 `installer.nsi` 中定义，值来自 `Cargo.toml` 的 `[[bin]] name` 字段（当前为 `app`），与 `PRODUCTNAME`（来自 `tauri.conf.json` 的 `productName`，当前为 `TestSpace`）不同。如果将来修改 bin name 需同步验证此处路径。
+**设计要点**：
+- 切换 `SetShellVarContext` 后必须恢复到 `$MultiUser.InstallMode` 对应的上下文（`installMode="both"` 是运行时决定，不能用编译时宏）
+- POSTINSTALL 强制删除+重建快捷方式（而非依赖 SHChangeNotify），确保 Shell 从 exe 重新读取图标
+- `SetLnkAppUserModelId` 保证卸载器能正确识别并删除快捷方式
+- `MAINBINARYNAME`（来自 `Cargo.toml` 的 `[[bin]] name`，当前 `app`）≠ `PRODUCTNAME`（来自 `tauri.conf.json` 的 `productName`，当前 `TestSpace`）
 
 #### 73.4 Windows 图标缓存说明
 
