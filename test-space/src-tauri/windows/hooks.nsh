@@ -16,18 +16,36 @@
 !macroend
 
 !macro NSIS_HOOK_POSTINSTALL
-  ; 先通知 exe 本身图标已变更，失效 Shell 对该 exe 的图标缓存条目
-  ; SHCNE_UPDATEITEM=0x2000, SHCNF_PATHW|SHCNF_FLUSH=0x1005
-  System::Call "shell32::SHChangeNotify(i 0x2000, i 0x1005, t '$INSTDIR\${PRODUCTNAME}.exe', i 0)"
+  ; --- 强制重建桌面快捷方式（覆盖安装时 Tauri 会跳过重建，导致图标缓存不刷新）---
+  ; 先删除再创建，Shell 必须重新从 exe 读取图标
+  Delete "$DESKTOP\${PRODUCTNAME}.lnk"
+  CreateShortcut "$DESKTOP\${PRODUCTNAME}.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+  !insertmacro SetLnkAppUserModelId "$DESKTOP\${PRODUCTNAME}.lnk"
 
-  ; 再通知桌面快捷方式变更，Shell 会重新解析 .lnk → 重新从 exe 读取图标
+  ; 开始菜单快捷方式同理
+  Delete "$SMPROGRAMS\${PRODUCTNAME}.lnk"
+  CreateShortcut "$SMPROGRAMS\${PRODUCTNAME}.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+  !insertmacro SetLnkAppUserModelId "$SMPROGRAMS\${PRODUCTNAME}.lnk"
+
+  ; 通知 Shell exe 文件已更新（失效图标缓存条目）
+  System::Call "shell32::SHChangeNotify(i 0x2000, i 0x1005, t '$INSTDIR\${MAINBINARYNAME}.exe', i 0)"
+
+  ; 通知桌面快捷方式变更
   System::Call "shell32::SHChangeNotify(i 0x2000, i 0x1005, t '$DESKTOP\${PRODUCTNAME}.lnk', i 0)"
 
-  ; 刷新所有用户桌面快捷方式（perMachine 安装模式）
-  SetShellVarContext all
-  System::Call "shell32::SHChangeNotify(i 0x2000, i 0x1005, t '$DESKTOP\${PRODUCTNAME}.lnk', i 0)"
-  SetShellVarContext current
-
-  ; 全局广播（同步），兜底清除其他残留缓存
+  ; 全局广播兜底
   System::Call "shell32::SHChangeNotify(i 0x8000000, i 0x1000, i 0, i 0)"
+
+  ; 强制 Shell 重新加载图标资源
+  nsExec::Exec '"$WINDIR\system32\ie4uinit.exe" -show'
+!macroend
+
+!macro NSIS_HOOK_PREUNINSTALL
+  ; 确保卸载时删除所有快捷方式（两种上下文都处理）
+  Delete "$DESKTOP\${PRODUCTNAME}.lnk"
+  Delete "$SMPROGRAMS\${PRODUCTNAME}.lnk"
+  SetShellVarContext all
+  Delete "$DESKTOP\${PRODUCTNAME}.lnk"
+  Delete "$SMPROGRAMS\${PRODUCTNAME}.lnk"
+  SetShellVarContext current
 !macroend

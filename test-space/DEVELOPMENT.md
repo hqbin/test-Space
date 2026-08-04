@@ -5439,18 +5439,32 @@ onUnmounted(() => { deviceEventUnlisten?.(); });
 
 #### 73.3 NSIS 安装后图标缓存刷新
 
-将 `POSTINSTALL` 钩子从"杀 Explorer + 删缓存 + 重启 Explorer"改为轻量的 `SHChangeNotify` 通知：
+**Bug 修复（v1.6.30+）**：之前 `SHChangeNotify` 通知的 exe 路径使用了 `${PRODUCTNAME}.exe`（= `TestSpace.exe`），但 Tauri 打包后实际二进制文件名是 `${MAINBINARYNAME}.exe`（= `app.exe`）。Shell 收到通知后找不到 `TestSpace.exe` 这个文件，图标缓存从未被真正失效，导致覆盖安装后旧图标残留（表现为直角方块）。
+
+当前 `POSTINSTALL` 钩子采用三步刷新策略：
 
 ```nsis
 !macro NSIS_HOOK_POSTINSTALL
-  System::Call "shell32::SHChangeNotify(i 0x8000000, i 0, i 0, i 0)"
+  ; 1. 通知 exe 图标变更（路径必须用 MAINBINARYNAME，不是 PRODUCTNAME）
+  System::Call "shell32::SHChangeNotify(i 0x2000, i 0x1005, t '$INSTDIR\${MAINBINARYNAME}.exe', i 0)"
+  ; 2. 通知桌面快捷方式变更（当前用户 + 所有用户）
+  System::Call "shell32::SHChangeNotify(i 0x2000, i 0x1005, t '$DESKTOP\${PRODUCTNAME}.lnk', i 0)"
+  SetShellVarContext all
+  System::Call "shell32::SHChangeNotify(i 0x2000, i 0x1005, t '$DESKTOP\${PRODUCTNAME}.lnk', i 0)"
+  SetShellVarContext current
+  ; 3. 全局广播兜底 + ie4uinit 强制重载图标资源
+  System::Call "shell32::SHChangeNotify(i 0x8000000, i 0x1000, i 0, i 0)"
+  nsExec::Exec '"$WINDIR\system32\ie4uinit.exe" -show'
 !macroend
 ```
 
-**原因**：
-- 杀 Explorer 会导致安装完成时屏幕短暂黑屏，用户体验差
-- 市面上成熟应用（Chrome、VS Code 等）均不在安装器中强制重启 Explorer
-- `SHChangeNotify` 在绝大多数情况下可触发图标刷新；极少数旧缓存条目在用户下次注销重新登录时自动更新
+**设计原则**：
+- 不杀 Explorer（避免黑屏），市面上成熟应用（Chrome、VS Code 等）均不在安装器中强制重启 Explorer
+- `SHChangeNotify(SHCNE_UPDATEITEM)` 精确失效 exe 和 .lnk 的缓存条目
+- `ie4uinit.exe -show` 作为补充，强制 Shell 重新加载所有图标资源（用户无感知）
+- 极少数旧缓存条目在用户下次注销重新登录时自动更新
+
+**重要**：`MAINBINARYNAME` 由 Tauri 在 `installer.nsi` 中定义，值来自 `Cargo.toml` 的 `[[bin]] name` 字段（当前为 `app`），与 `PRODUCTNAME`（来自 `tauri.conf.json` 的 `productName`，当前为 `TestSpace`）不同。如果将来修改 bin name 需同步验证此处路径。
 
 #### 73.4 Windows 图标缓存说明
 
