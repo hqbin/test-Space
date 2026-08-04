@@ -164,6 +164,7 @@ import {
   extractMemories,
 } from '@/services/noteAi'
 import { callScriptAi, type ScriptAiResult } from '@/services/scriptAi'
+import { useTokenUsage } from '@/stores/useTokenUsage'
 import { parseAnswerNoteLinks } from '@/utils/parseNoteLinks'
 import { useI18n } from '@/composables/useI18n'
 import { getSetting, setSetting, loadAiMemories, saveAiMemory, type AiMemory } from '@/services/database'
@@ -189,6 +190,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const { addUsage } = useTokenUsage()
 
 const open = ref(false)
 const input = ref('')
@@ -342,6 +344,7 @@ async function sendNotes(question: string) {
     .map(m => ({ role: m.role, content: m.content }))
 
   const result = await chatWithNotes(props.aiConfig, question, props.notes, history, memories.value)
+  addUsage(result.usage)
   messages.value.push({ role: 'assistant', content: result.answer })
 }
 
@@ -371,6 +374,7 @@ async function sendScript(question: string) {
 
   // Auto-apply immediately — no manual button needed
   emit('applyScript', result)
+  addUsage(result.usage)
 }
 
 // ── Memory extraction (notes mode) ──────────────────────────

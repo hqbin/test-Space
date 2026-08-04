@@ -14,6 +14,7 @@ export interface ScriptAiResult {
   code: string
   /** Short human-readable summary of what was done */
   description: string
+  usage?: { promptTokens: number; completionTokens: number; totalTokens: number }
 }
 
 export interface ScriptAiRequest {
@@ -301,7 +302,15 @@ export async function callScriptAi(req: ScriptAiRequest): Promise<ScriptAiResult
       const json = await callApi(req.config, messages)
       const raw: string = json.choices?.[0]?.message?.content || json.choices?.[0]?.text || ''
       if (!raw.trim()) throw new Error('AI returned an empty response')
-      return parseResult(raw, req.scriptType)
+      const result = parseResult(raw, req.scriptType)
+      if (json.usage) {
+        result.usage = {
+          promptTokens: json.usage.prompt_tokens ?? 0,
+          completionTokens: json.usage.completion_tokens ?? 0,
+          totalTokens: json.usage.total_tokens ?? 0,
+        }
+      }
+      return result
     } catch (e: any) {
       lastError = e
       // Only retry on transient server errors, not on auth/quota/bad-request errors

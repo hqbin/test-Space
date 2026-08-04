@@ -968,7 +968,6 @@ export interface AppBackup {
   apiTestReports?: ApiTestReport[]
   apiTestResults?: ApiTestResult[]
   perfSessions?: PerfSessionBackup[]
-  mcpServers?: import('@/types').McpServerConfig[]
   stickyNotes?: StickyNote[]
 }
 
@@ -1090,21 +1089,12 @@ export async function exportAllData(onProgress?: ProgressCallback): Promise<AppB
     apiTestReports: apiTestReports.length > 0 ? apiTestReports : undefined,
     apiTestResults: apiTestResults.length > 0 ? apiTestResults : undefined,
     perfSessions: undefined,
-    mcpServers: undefined,
     stickyNotes: stickyNotes.length > 0 ? stickyNotes : undefined,
   }
   emit('读取性能会话')
   try {
     const ps = await d.select<PerfSessionBackup[]>('SELECT * FROM perf_sessions ORDER BY created_at DESC')
     if (ps.length > 0) backup.perfSessions = ps
-  } catch {}
-  emit('读取 MCP 配置')
-  try {
-    const raw = await getSetting('mcp_server_configs')
-    if (raw) {
-      const parsed = JSON.parse(raw) as import('@/types').McpServerConfig[]
-      if (Array.isArray(parsed) && parsed.length > 0) backup.mcpServers = parsed
-    }
   } catch {}
   emit('完成')
   return backup
@@ -1113,7 +1103,7 @@ export async function exportAllData(onProgress?: ProgressCallback): Promise<AppB
 function validateBackup(backup: any): string | null {
   if (!backup || typeof backup !== 'object') return '备份数据格式无效'
   if (!backup.version) return '备份文件缺少版本号，可能是旧格式或损坏文件'
-  const tables = ['settings', 'inputHistory', 'logSessions', 'noteSpaces', 'noteFolders', 'notes', 'noteVersions', 'noteLinks', 'scripts', 'aiMemories', 'apiTestGroups', 'apiTestCases', 'apiTestReports', 'apiTestResults', 'perfSessions', 'mcpServers', 'stickyNotes']
+  const tables = ['settings', 'inputHistory', 'logSessions', 'noteSpaces', 'noteFolders', 'notes', 'noteVersions', 'noteLinks', 'scripts', 'aiMemories', 'apiTestGroups', 'apiTestCases', 'apiTestReports', 'apiTestResults', 'perfSessions', 'stickyNotes']
   for (const t of tables) {
     if (backup[t] !== undefined && !Array.isArray(backup[t]) && typeof backup[t] !== 'object') {
       return `字段 "${t}" 类型无效`
@@ -1707,17 +1697,6 @@ export async function importAllData(backup: AppBackup, onProgress?: ProgressCall
         )
       } catch (e: any) {
         failures.push(`INSERT proxy_rules: ${e.message || e}`)
-      }
-    }
-    // Restore MCP server configs
-    if (backup.mcpServers && backup.mcpServers.length > 0) {
-      try {
-        await d.execute(
-          'INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)',
-          ['mcp_server_configs', JSON.stringify(backup.mcpServers)]
-        )
-      } catch (e: any) {
-        failures.push(`INSERT mcp_server_configs: ${e.message || e}`)
       }
     }
     if (failures.length > 0) {

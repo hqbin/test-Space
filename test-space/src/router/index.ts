@@ -44,11 +44,6 @@ const router = createRouter({
           component: () => import("@/views/script-space/ScriptSpacePage.vue"),
         },
         {
-          path: "ai-space",
-          name: "ai-space",
-          component: () => import("@/views/ai-space/AiSpacePage.vue"),
-        },
-        {
           path: "settings",
           name: "settings",
           component: () => import("@/views/settings/SettingsPage.vue"),

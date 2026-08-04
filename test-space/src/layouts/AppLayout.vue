@@ -7,7 +7,7 @@
     <TitleBar />
     <main class="px-margin-page pt-3 box-border flex-1 overflow-y-auto overflow-x-hidden min-h-0 flex flex-col">
       <router-view v-slot="{ Component }">
-        <keep-alive :include="['NotesSpacePage', 'ScriptSpacePage', 'DeviceSpacePage', 'ApiSpacePage', 'AiSpacePage', 'SettingsPage', 'PerfMonitorPage']">
+        <keep-alive :include="['NotesSpacePage', 'ScriptSpacePage', 'DeviceSpacePage', 'ApiSpacePage', 'SettingsPage', 'PerfMonitorPage']">
           <component :is="Component" :ref="onPageRef" />
         </keep-alive>
       </router-view>
@@ -84,13 +84,6 @@ const bgStyle = computed(() => {
     return {
       background:
         `radial-gradient(circle at 50% 0%, #F5F1E9 0%, ${paper} 55%, #EEE9DE 100%)`,
-    }
-  }
-  if (path.startsWith('/ai-space')) {
-    return {
-      background:
-        `radial-gradient(circle at 20% 30%, rgba(194,78,58,0.05) 0%, transparent 42%), ` +
-        `radial-gradient(circle at 80% 70%, rgba(30,58,95,0.05) 0%, transparent 42%), ${paper}`,
     }
   }
   if (path.startsWith('/script-space')) {
