@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "TestSpace",
-  "version": "1.6.25",
+  "version": "1.6.30",
   "identifier": "com.testspace.app",
   "build": {
     "frontendDist": "../dist",
@@ -15,8 +15,6 @@
         "title": "TestSpace",
         "width": 1100,
         "height": 680,
-        "minWidth": 1100,
-        "minHeight": 680,
         "resizable": true,
         "fullscreen": false,
         "center": true,

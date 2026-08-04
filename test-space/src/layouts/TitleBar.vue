@@ -1,12 +1,12 @@
 <template>
   <div class="h-12 shrink-0 flex items-center bg-glass-surface/60 backdrop-blur-[30px] border-b border-glass-border-light title-bar px-4">
     <!-- 杂志刊头 -->
-    <div class="flex items-center gap-3 h-full select-none shrink-0 pr-2">
-      <div class="flex items-baseline gap-1.5">
-        <span class="font-editorial italic text-[18px] leading-none text-ink tracking-tight">Test</span>
-        <span class="font-editorial italic text-[18px] leading-none text-rust tracking-tight">Space</span>
+    <div data-tauri-drag-region class="flex items-center gap-3 h-full select-none shrink-0 pr-2">
+      <div data-tauri-drag-region class="flex items-baseline gap-1.5">
+        <span data-tauri-drag-region class="font-editorial italic text-[18px] leading-none text-ink tracking-tight">Test</span>
+        <span data-tauri-drag-region class="font-editorial italic text-[18px] leading-none text-rust tracking-tight">Space</span>
       </div>
-      <span class="folio hidden md:inline">— vol.1 · iss.15</span>
+      <span data-tauri-drag-region class="folio hidden md:inline">— vol.1 · iss.15</span>
     </div>
 
     <span class="h-4 w-px bg-hairline-strong mx-2 shrink-0"></span>

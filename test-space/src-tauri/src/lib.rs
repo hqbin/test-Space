@@ -803,6 +803,7 @@ pub fn run() {
             adb::start_device_tracker(app.handle().clone());
 
             if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_min_size(None::<tauri::LogicalSize<f64>>);
                 // 根据主显示器分辨率计算初始窗口大小
                 //   宽度：屏幕 78%，clamp 到 [1100, 1800]
                 //   高度：屏幕 82%，clamp 到 [680, 1200]
