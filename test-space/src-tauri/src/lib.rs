@@ -1,5 +1,4 @@
 mod adb;
-mod mcp_sse;
 mod mirror;
 mod proxy;
 mod script_exec;
@@ -788,7 +787,7 @@ pub fn run() {
         .manage(LogcatState::default())
         .manage(ScriptManager::new())
         .manage(proxy::ProxyState::new())
-        .manage(mcp_sse::SseState::default())
+
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -947,9 +946,6 @@ pub fn run() {
             proxy::proxy_install_cert,
             proxy::proxy_replay,
             proxy::proxy_run_test,
-            mcp_sse::mcp_sse_init,
-            mcp_sse::mcp_sse_call,
-            mcp_sse::mcp_sse_close,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

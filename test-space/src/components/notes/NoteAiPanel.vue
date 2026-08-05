@@ -208,6 +208,11 @@ interface ChatMsg {
 }
 
 const messages = ref<ChatMsg[]>([])
+const notesMessages = ref<ChatMsg[]>([])
+const scriptMessages = ref<ChatMsg[]>([])
+const historyKey = computed(() =>
+  props.mode === 'script' ? 'ai_chat_history_script' : 'ai_chat_history'
+)
 const memories = ref<AiMemory[]>([])
 const historyLoaded = ref(false)
 
@@ -271,16 +276,33 @@ onMounted(async () => {
   document.addEventListener('pointerdown', onDocumentPointerDown, true)
   try {
     memories.value = await loadAiMemories()
-    const raw = await getSetting('ai_chat_history')
-    if (raw) {
-      const parsed = JSON.parse(raw) as ChatMsg[]
-      if (Array.isArray(parsed)) messages.value = parsed
+    const [rawNotes, rawScript] = await Promise.all([
+      getSetting('ai_chat_history'),
+      getSetting('ai_chat_history_script'),
+    ])
+    if (rawNotes) {
+      const parsed = JSON.parse(rawNotes) as ChatMsg[]
+      if (Array.isArray(parsed)) notesMessages.value = parsed
     }
+    if (rawScript) {
+      const parsed = JSON.parse(rawScript) as ChatMsg[]
+      if (Array.isArray(parsed)) scriptMessages.value = parsed
+    }
+    messages.value = props.mode === 'script' ? scriptMessages.value : notesMessages.value
   } catch {}
   historyLoaded.value = true
 })
 
 const MAX_HISTORY_MESSAGES = 50
+
+// Swap message caches when mode changes (notes ↔ script independent histories)
+watch(() => props.mode, (newMode, oldMode) => {
+  if (oldMode === 'script') scriptMessages.value = [...messages.value]
+  else notesMessages.value = [...messages.value]
+  messages.value = newMode === 'script' ? scriptMessages.value : notesMessages.value
+  input.value = ''
+  error.value = ''
+})
 
 let saveHistoryDebounce: ReturnType<typeof setTimeout> | null = null
 watch(messages, () => {
@@ -292,7 +314,7 @@ watch(messages, () => {
       role: m.role,
       content: m.content,
     }))
-    setSetting('ai_chat_history', JSON.stringify(toSave)).catch(() => {})
+    setSetting(historyKey.value, JSON.stringify(toSave)).catch(() => {})
   }, 300)
 }, { deep: true })
 
