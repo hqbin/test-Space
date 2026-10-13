@@ -86,12 +86,10 @@ interface NavItem {
 const navItems: NavItem[] = [
   { path: "/device-space", labelKey: "nav.device", icon: "developer_board" },
   { path: "/notes-space", labelKey: "nav.notes", icon: "description" },
-  { path: "/api-space", labelKey: "nav.api", icon: "api" },
   { path: "/script-space", labelKey: "nav.scripts", icon: "code" },
 ];
 
 function isActive(path: string) {
-  if (path === "/api-space") return route.path.startsWith(path);
   return route.path === path;
 }
 

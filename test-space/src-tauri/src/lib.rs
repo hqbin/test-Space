@@ -649,9 +649,42 @@ async fn adb_logcat_buffer_resize(serial: String, size_mb: u32) -> Result<String
 
 #[tauri::command]
 async fn adb_bugreport(serial: String, save_path: String) -> Result<String, String> {
-    tokio::task::spawn_blocking(move || {
-        adb::bugreport(&serial, &save_path)
-    }).await.map_err(|e| e.to_string())?
+    // bugreport can take several minutes; use a 10-minute timeout
+    tokio::time::timeout(
+        Duration::from_secs(600),
+        tokio::task::spawn_blocking(move || adb::bugreport(&serial, &save_path))
+    ).await
+        .map_err(|_| "ADB bugreport timed out (10 minutes)".to_string())?
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn open_path(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        // Use `cmd /c start` which calls ShellExecuteEx — same as Python os.startfile.
+        // Unlike `explorer.exe <path>`, this activates an already-open Explorer window
+        // for the same path instead of opening a new one.
+        let mut cmd = std::process::Command::new("cmd");
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        cmd.args(["/c", "start", "", &path]);
+        cmd.spawn().map_err(|e| format!("Failed to open path: {}", e))?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open path: {}", e))?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open path: {}", e))?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -912,6 +945,7 @@ pub fn run() {
             adb_start_server,
             adb_start_screenrecord,
             create_zip,
+            open_path,
             adb_list_directory,
             adb_get_app_info,
             serial_list_ports,

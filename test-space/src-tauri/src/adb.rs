@@ -538,14 +538,42 @@ pub fn logcat_buffer_resize(serial: &str, size_mb: u32) -> Result<String, String
 }
 
 pub fn bugreport(serial: &str, save_path: &str) -> Result<String, String> {
-    let output = adb_cmd()
+    let (tx, rx) = mpsc::channel();
+    let child = adb_cmd()
         .args(["-s", serial, "bugreport", save_path])
-        .output()
-        .map_err(|e| format!("ADB bugreport failed: {}", e))?;
-    if output.status.success() {
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("ADB bugreport failed to start: {}", e))?;
+    thread::spawn(move || { let _ = tx.send(child.wait_with_output()); });
+    let output = rx
+        .recv_timeout(Duration::from_secs(300))
+        .map_err(|_| "ADB bugreport timed out (300s)".to_string())?
+        .map_err(|e| format!("ADB bugreport error: {}", e))?;
+    // Modern adb writes zip directly to save_path; check first
+    if std::path::Path::new(save_path).exists()
+        && std::fs::metadata(save_path).map(|m| m.len() > 0).unwrap_or(false)
+    {
+        return Ok(save_path.to_string());
+    }
+    let stdout = output.stdout;
+    // Older adb writes ZIP bytes to stdout
+    if stdout.len() >= 2 && stdout[0] == b'P' && stdout[1] == b'K' {
+        std::fs::write(save_path, &stdout)
+            .map_err(|e| format!("Failed to write bugreport zip: {}", e))?;
+        return Ok(save_path.to_string());
+    }
+    // Some adb versions output text on success
+    if !stdout.is_empty() && output.status.success() {
+        let txt_path = save_path.replace(".zip", ".txt");
+        let _ = std::fs::write(&txt_path, &stdout);
+        return Ok(txt_path);
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    if stderr.is_empty() {
         Ok(save_path.to_string())
     } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
+        Err(stderr)
     }
 }
 

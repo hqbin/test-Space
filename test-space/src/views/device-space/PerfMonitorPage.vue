@@ -1052,8 +1052,10 @@ function formatDuration(seconds: number): string {
 async function exportReport() {
   isExporting.value = true
   try {
-    const dir = await open({ directory: true, multiple: false, title: '选择导出目录' })
-    if (!dir) return
+    const { documentDir, join } = await import('@tauri-apps/api/path')
+    const docDir = await documentDir()
+    const dir = (await join(docDir, 'TestSpace')).replace(/\\/g, '/')
+    try { await mkdir(dir, { recursive: true }) } catch {}
 
     // Flush in-memory CSV buffers so parsePerfCsv sees the latest data
     await flushCsvBuffers()
@@ -2265,10 +2267,12 @@ async function startPolling() {
   clearHistory()
   pollErrorCount = 0
 
-  // 1. Let user choose save directory
-  const chosenDir = await open({ directory: true, multiple: false, recursive: true, title: '选择日志保存目录' })
-  if (!chosenDir) return
-  const normDir = chosenDir.replace(/\\/g, '/')
+  // 1. Auto-generate save directory (Documents/TestSpace/)
+  const { documentDir, join } = await import('@tauri-apps/api/path')
+  const docDir = await documentDir()
+  const baseDir = await join(docDir, 'TestSpace')
+  try { await mkdir(baseDir, { recursive: true }) } catch {}
+  const normDir = baseDir.replace(/\\/g, '/')
 
   // 2. adb root first to get full data access
   try {
@@ -2345,6 +2349,8 @@ async function stopPolling() {
     // Auto export report to session dir
     if (sessionLogDir.value) {
       await autoExportReport(sessionLogDir.value)
+      // 自动打开目录（复用已打开的窗口）
+      try { await invoke('open_path', { path: sessionLogDir.value.replace(/\/$/, '') }) } catch {}
     }
   } catch (e: any) {
     showToast('导出失败: ' + (e?.message ?? String(e)), true)

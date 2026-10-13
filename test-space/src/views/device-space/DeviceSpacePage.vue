@@ -129,8 +129,9 @@
           </div>
           <hr class="border-outline-variant/30 my-1">
           <div class="flex flex-wrap gap-2">
-            <button class="bg-white/30 border border-outline-variant/30 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 transition-all backdrop-blur-sm select-none" @click="takeScreenshot" :disabled="!selectedDevice">
-              <span class="material-symbols-outlined text-[14px] text-on-surface-variant">image</span> {{ t('device.screenshot') }}
+            <button class="bg-white/30 border border-outline-variant/30 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 transition-all backdrop-blur-sm select-none" @click="takeScreenshot" :disabled="!selectedDevice || screenshotLoading">
+              <span v-if="screenshotLoading" class="w-3 h-3 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
+              <span v-else class="material-symbols-outlined text-[14px] text-on-surface-variant">image</span> {{ t('device.screenshot') }}
             </button>
             <button class="bg-white/30 border border-outline-variant/30 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 transition-all backdrop-blur-sm select-none"
               :class="isRecording ? 'bg-error/10 text-error border border-error/20' : ''"
@@ -236,6 +237,10 @@
                 </div>
                 <button class="bg-white/30 border border-outline-variant/30 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 transition-all backdrop-blur-sm select-none" :disabled="!selectedDevice" @click="queryAppPath">
                   <span class="material-symbols-outlined text-[14px]">folder_open</span> {{ t('device.path') }}
+                </button>
+                <button class="bg-white/30 border border-outline-variant/30 px-2 py-1 rounded-xl flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 transition-all backdrop-blur-sm select-none" :disabled="!selectedDevice || adServiceLoading" @click="queryAdService">
+                  <span v-if="adServiceLoading" class="w-3 h-3 border-2 border-secondary border-t-transparent rounded-full animate-spin"></span>
+                  <span v-else class="material-symbols-outlined text-[14px]">manage_search</span> ADService
                 </button>
                 <div v-if="totalPages > 1" class="flex items-center gap-2 text-sm text-on-surface bg-white/30 border border-outline-variant/30 rounded-xl px-3 py-1 ml-auto backdrop-blur-sm">
                   <button class="hover:bg-secondary/10 hover:border-secondary/30 rounded-full p-0.5 transition-all disabled:opacity-50 select-none" :disabled="appPage <= 1" @click="appPage = Math.max(1, appPage - 1); nextTick(loadVisibleAppVersions)">
@@ -988,6 +993,23 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useAdb, type DeviceProperties } from "@/composables/useAdb";
 import { useI18n } from "@/composables/useI18n";
 
+function formatTimestamp(): string {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+}
+async function getAutoSaveDir(_category: string): Promise<string> {
+  const { documentDir, join } = await import('@tauri-apps/api/path');
+  const { mkdir } = await import('@tauri-apps/plugin-fs');
+  const docDir = await documentDir();
+  const dir = await join(docDir, 'TestSpace');
+  try { await mkdir(dir, { recursive: true }); } catch {}
+  return dir;
+}
+async function openSaveDirectory(dirPath: string): Promise<void> {
+  try { await invoke('open_path', { path: dirPath }); } catch {}
+}
+
 const { t } = useI18n();
 // preview dialog & drag-drop keys will be in useI18n.ts
 
@@ -1162,6 +1184,8 @@ async function loadTextHistory() {
 // ── APK Install ──
 const reinstallApk = ref(false);
 const loadingForeground = ref(false);
+const adServiceLoading = ref(false);
+const screenshotLoading = ref(false);
 const releaseAppsLoading = ref(false);
 const apkDialogOpen = ref(false);
 const apkDragOver = ref(false);
@@ -1367,8 +1391,6 @@ async function executeCustomCommand(fullCmd: string) {
   appendCmdExec(`${t('device.exitStatus')}: ${ok ? t('device.success') : t('device.failed')}`);
   cmdExec.value.running = false;
   scheduleCmdExecClose();
-  if (ok) showToast(t('device.cmdSuccess'));
-  else showToast(t('device.someCmdsFailed'), "error");
 }
 
 // ── File Manager (tree view) ──
@@ -1727,15 +1749,17 @@ async function prepareLogCapture() {
   logPrepActive.value = true;
   try {
     logPrepMessage.value = t("device.executingAdbRoot");
-    await adbRoot(selectedDevice.value.serial);
+    // root 可能导致设备短暂断连，忽略错误并等待重连
+    try {
+      await adbRoot(selectedDevice.value.serial);
+      await new Promise(r => setTimeout(r, 2000));
+    } catch {}
     await yieldToUI();
     logPrepMessage.value = t("device.expandingLogBuffer");
-    await logcatBufferResize(selectedDevice.value.serial, 64);
+    // 扩大缓冲区失败不影响采集流程
+    try { await logcatBufferResize(selectedDevice.value.serial, 64); } catch {}
     await yieldToUI();
     return true;
-  } catch (e: any) {
-    showToast(`${t('device.operationFailed')}: ${e}`, "error");
-    return false;
   } finally {
     logPrepActive.value = false;
   }
@@ -1948,6 +1972,16 @@ async function connectToDevice() {
   try {
     const addr = connectAddress.value.trim();
     const r = await connectDevice(addr);
+    // adb connect only succeeds with "connected to" or "already connected to"
+    const trimmed = r.trim().toLowerCase();
+    const isSuccess = trimmed.startsWith("connected to") || trimmed.startsWith("already connected to");
+    if (!isSuccess) {
+      showCmdExec(t("device.connectingDevice"), `adb connect ${addr}`);
+      appendCmdExec(r);
+      finishCmdExec(t("device.connectFail"));
+      showToast(`${t("device.connectFail")}: ${r.trim()}`, "error");
+      return;
+    }
     await addInputHistory('connect_ip', addr);
     connectAddress.value = "";
     await scanDevices();
@@ -1981,7 +2015,6 @@ async function restartAdbServer() {
     appendCmdExec(t("device.adbStarted"));
     await scanDevices();
     finishCmdExec(t("device.adbRestarted"));
-    showToast(t("device.adbRestarted"));
   } catch (e: any) { finishCmdExec(t('device.restartFailedWith', { e: String(e) })); showToast(t("device.adbRestartFailed"), "error"); }
 }
 function clearDeviceState() {
@@ -2031,7 +2064,6 @@ async function rootDevice() {
     const r = await adbRoot(selectedDevice.value.serial);
     appendCmdExec(r);
     finishCmdExec(t("device.rootDone"));
-    showToast(t("device.rootDone"));
   } catch (e: any) { finishCmdExec(t('device.rootFailedWith', { e: String(e) })); showToast(t('device.rootFailedWith', { e: String(e) }), "error"); }
 }
 async function remountDevice() {
@@ -2042,7 +2074,6 @@ async function remountDevice() {
     const r = await adbRemount(selectedDevice.value.serial);
     appendCmdExec(r);
     finishCmdExec(t("device.remountDone"));
-    showToast(t("device.remountDone"));
   } catch (e: any) { finishCmdExec(t('device.remountFailedWith', { e: String(e) })); showToast(t('device.remountFailedWith', { e: String(e) }), "error"); }
 }
 async function sendKey(keycode: string) {
@@ -2060,7 +2091,6 @@ async function sendText() {
     textHistory.value = [text, ...textHistory.value.filter(h => h !== text)].slice(0, 15);
     appendCmdExec(t('device.textSentWith', { text }));
     finishCmdExec(t("device.textSent"));
-    showToast(t("device.textSent"));
   } catch { finishCmdExec(t("device.sendFailed")); showToast(t("device.sendFailed"), "error"); }
 }
 
@@ -2336,21 +2366,23 @@ async function copyVersionInfo(pkg: string) {
 }
 async function downloadApk(pkg: string) {
   if (!selectedDevice.value) return;
-  showCmdExec(t("device.downloadApkTitle"), `adb shell dumpsys package ${pkg} | grep path:`);
+  showCmdExec(t("device.downloadApkTitle"), `adb shell pm path ${pkg}`);
   try {
     appendCmdExec(t("device.queryingApkPath"));
-    const info = await getAppInfo(selectedDevice.value.serial, pkg);
-    const pathMatch = info.match(/path:?\s*(\S+)/);
+    const pmOut = await shell(selectedDevice.value.serial, `pm path ${sanitizeShellArg(pkg)}`);
+    const pathMatch = pmOut.match(/^package:(.+)$/m);
     if (!pathMatch) { finishCmdExec(t("device.apkPathNotFound")); showToast(t("device.apkPathNotFound"), "error"); return; }
-    appendCmdExec(`${t("device.apkPathKey")}: ${pathMatch[1]}`);
-    const { save } = await import("@tauri-apps/plugin-dialog");
-    const dest = await save({ defaultPath: `${pkg}.apk`, filters: [{ name: "APK", extensions: ["apk"] }] });
-    if (!dest) { closeCmdExec(); return; }
+    const apkPath = pathMatch[1].trim();
+    appendCmdExec(`${t("device.apkPathKey")}: ${apkPath}`);
+    const dir = await getAutoSaveDir('');
+    const { join } = await import('@tauri-apps/api/path');
+    const dest = await join(dir, `${pkg}_${formatTimestamp()}.apk`);
     appendCmdExec(t("device.pullingApk"));
-    await pullFile(selectedDevice.value.serial, pathMatch[1], dest);
+    await pullFile(selectedDevice.value.serial, apkPath, dest);
     appendCmdExec(t("device.savedTo", { path: dest }));
     finishCmdExec(t("device.apkDownloadDone"));
-    showToast(t("device.apkDownloaded"));
+    showToast(`APK 已保存: ${pkg}.apk`);
+    await openSaveDirectory(dir);
   } catch { finishCmdExec(t("device.downloadFailed")); showToast(t("device.downloadFailed"), "error"); }
 }
 
@@ -2429,6 +2461,35 @@ async function copySectionApps(section: 'system' | 'major') {
   await copyToClipboard(lines.join('\n'));
   showToast(t('device.copied'));
 }
+async function queryAdService() {
+  if (!selectedDevice.value) return;
+  adServiceLoading.value = true;
+  try {
+    const out = await shell(selectedDevice.value.serial, "pm list packages -3");
+    let result = "";
+    if (out.includes("com.ad.socketserver")) {
+      result += "检测到设备中有安装 ADServices: com.ad.socketserver\n";
+      try {
+        const vout = await shell(selectedDevice.value.serial, "dumpsys package com.ad.socketserver | grep version");
+        result += "版本信息:\n" + vout.trim();
+      } catch {}
+    } else if (out.includes("com.android.media.module.services")) {
+      result += "检测到设备中有安装 ADServices: com.android.media.module.services\n";
+      try {
+        const vout = await shell(selectedDevice.value.serial, "dumpsys package com.android.media.module.services | grep version");
+        result += "版本信息:\n" + vout.trim();
+      } catch {}
+    } else {
+      result = "没有检测到设备中有 ADServices";
+    }
+    resultDialog.value = { show: true, title: "ADService 查询结果", content: result };
+  } catch (e: any) {
+    showToast(`ADService 查询失败: ${e}`, "error");
+  } finally {
+    adServiceLoading.value = false;
+  }
+}
+
 async function queryAppPath() {
   if (!selectedDevice.value) return;
   if (!queryPackageName.value.trim()) {
@@ -2474,10 +2535,27 @@ async function queryInfo(type: string) {
       if (entries.length === 0) entries.push({ key: t("device.macAddress"), value: t("device.macInfoNotFound") });
     } else if (type === "whaleos") {
       title = t("device.firmwareInfoTitle");
-      const tvKeys = ["ro.product.model", "ro.product.tv.rcu", "ro.product.tv.deviceType", "ro.vendor.product.version",
-        "ro.vendor.zeasn.firmwareID", "persist.sys.cur_country", "persist.sys.cur_language", "ro.boot.pid", "ro.boot.mac"];
-      const results = await Promise.all(tvKeys.map(k => shell(serial, `getprop ${k}`).catch(() => "")));
-      entries = tvKeys.map((key, i) => ({ key, value: results[i].trim() || "" })).filter(e => e.value !== "");
+      const tvKeys = [
+        // OSA keys
+        "ro.product.model", "ro.product.tv.rcu", "ro.product.tv.deviceType", "ro.vendor.product.version",
+        "ro.vendor.zeasn.firmwareID", "persist.sys.cur_country", "persist.sys.cur_language", "ro.boot.pid", "ro.boot.mac",
+        // 固件信息 keys
+        "ro.build.display.id", "ro.tv.default.country", "ro.build.description",
+        // DP信息 keys
+        "ro.product.devicetype", "ro.devicetype.zeasn", "mtk.zeasn.devicetype", "ro.jview.devicetyp",
+        "ro.build.product", "persist.zvt.devicetype", "ro.tcl.client.type",
+        "ro.zeasn.devicetype", "ro.Zeasn.devicetype", "ro.vendor.zeasn.devicetype", "ro.newlink.cusname",
+        "ro.wwt.product.name", "ro.product.device", "ro.stellamore.devicetype", "ro.htc.devicetype",
+        "persist.Zeasn.devicetype", "ro.zoc.devicetype", "ro.country.zeasn", "ro.jixin.devicetype",
+        "ro.talents.zeasn.devicetype", "ro.sl.devicetype", "ro.lc.zeasn.devicetype", "ro.cnd.devicetype",
+        "ro.product.mode", "persist.zeasn.devicetype", "ro.jixin.device_type",
+        "ro.yhksn.devicetype", "ro.odm.changhong.devicetype", "ro.cvte.customer", "ro.fanghua.devicetype",
+        // 额外key
+        "ro.whaletv.devicetype",
+      ];
+      const uniqueKeys = [...new Set(tvKeys)];
+      const results = await Promise.all(uniqueKeys.map(k => shell(serial, `getprop ${k}`).catch(() => "")));
+      entries = uniqueKeys.map((key, i) => ({ key, value: results[i].trim() || "" })).filter(e => e.value !== "");
     } else if (type === "aosp") {
       title = t("device.aospFirmwareInfo");
       const aospKeys = ["ro.product.model", "ro.build.display.id", "ro.build.description", "ro.vendor.product.version",
@@ -2621,9 +2699,6 @@ async function toggleLogcat() {
     const session = { id: `logcat_${Date.now()}`, type: 'logcat' as const, deviceSerial: selectedDevice.value.serial, status: 'running' as const, startedAt: new Date().toISOString() };
     await saveLogSession(session);
     scheduleLogcatTimer();
-    showCmdExec(t("device.realtimeLogsTitle"), "adb logcat");
-    appendCmdExec(t("device.logCollectStarted"));
-    finishCmdExec(t("device.logCollectStarted"));
     showToast(t("device.logCollectStarted"));
   }
 }
@@ -2641,13 +2716,14 @@ async function stopLogcatCapture() {
   if (serial) {
     try {
       const raw = await logcat(serial, "all", 0);
-      const { save } = await import("@tauri-apps/plugin-dialog");
-      const dest = await save({ defaultPath: `logcat_${Date.now()}.txt`, filters: [{ name: "Text", extensions: ["txt"] }] });
-      if (dest) {
-        const { writeTextFile } = await import("@tauri-apps/plugin-fs");
-        await writeTextFile(dest, raw);
-        showToast(t("device.logSaved"));
-      }
+      const dir = await getAutoSaveDir('Logs');
+      const { join } = await import('@tauri-apps/api/path');
+      const { writeTextFile } = await import('@tauri-apps/plugin-fs');
+      const filename = `logcat_${formatTimestamp()}.txt`;
+      const dest = await join(dir, filename);
+      await writeTextFile(dest, raw);
+      showToast(`日志已保存: ${filename}`);
+      await openSaveDirectory(dir);
     } catch {}
   }
   logcatBuffer.value = [];
@@ -2656,7 +2732,6 @@ async function stopLogcatCapture() {
     for (const s of sessions) { if (s.type === 'logcat') await removeLogSession(s.id); }
   } catch {}
   if (!serial) showToast(t("device.deviceDisconnected"), "error");
-  else showToast(t("device.logCollectStopped"));
 }
 
 async function toggleDiagnostic() {
@@ -2674,9 +2749,6 @@ async function toggleDiagnostic() {
     const session = { id: `diag_${Date.now()}`, type: 'diagnostic' as const, deviceSerial: selectedDevice.value.serial, status: 'running' as const, startedAt: new Date().toISOString() };
     await saveLogSession(session);
     scheduleDiagTimer();
-    showCmdExec(t("device.diagnostics"));
-    appendCmdExec(t("device.diagStarted"));
-    finishCmdExec(t("device.diagCollectStarted"));
     showToast(t("device.diagCollectStarted"));
   }
 }
@@ -2774,17 +2846,16 @@ async function stopDiagnosticCapture() {
     await yieldToUI();
 
     // Prompt user for save location
-    const { save } = await import("@tauri-apps/plugin-dialog");
-    const dest = await save({ defaultPath: `diagnostic_${Date.now()}.zip`, filters: [{ name: "ZIP Archive", extensions: ["zip"] }] });
-    if (dest) {
-      appendCmdExec(t("device.generatingZip"));
-      await createZip(files, dest);
-      appendCmdExec(t("device.diagSaved", { path: dest }));
-      finishCmdExec(t("device.diagGenerated"));
-      showToast(t("device.diagLogSaved"));
-    } else {
-      closeCmdExec();
-    }
+    const dir = await getAutoSaveDir('Diagnostics');
+    const { join } = await import('@tauri-apps/api/path');
+    const filename = `diagnostic_${formatTimestamp()}.zip`;
+    const dest = await join(dir, filename);
+    appendCmdExec(t("device.generatingZip"));
+    await createZip(files, dest);
+    appendCmdExec(t("device.diagSaved", { path: dest }));
+    finishCmdExec(t("device.diagGenerated"));
+    showToast(`诊断包已保存: ${filename}`);
+    await openSaveDirectory(dir);
   } catch (e: any) {
     finishCmdExec(`${t("device.saveFail")}: ${e}`);
     showToast(t("device.saveFail"), "error");
@@ -2881,12 +2952,14 @@ async function stopBootLogcatCapture() {
   if (serial) {
     try {
       const raw = await logcat(serial, "all", 0);
-      const { save } = await import("@tauri-apps/plugin-dialog");
-      const dest = await save({ defaultPath: `boot_logcat_${Date.now()}.txt`, filters: [{ name: "Text", extensions: ["txt"] }] });
-      if (dest) {
-        const { writeTextFile } = await import("@tauri-apps/plugin-fs");
-        await writeTextFile(dest, raw);
-      }
+      const dir = await getAutoSaveDir('Logs');
+      const { join } = await import('@tauri-apps/api/path');
+      const { writeTextFile } = await import('@tauri-apps/plugin-fs');
+      const filename = `boot_logcat_${formatTimestamp()}.txt`;
+      const dest = await join(dir, filename);
+      await writeTextFile(dest, raw);
+      showToast(`开机日志已保存: ${filename}`);
+      await openSaveDirectory(dir);
     } catch {}
   }
   bootLogcatBuffer.value = [];
@@ -2894,32 +2967,31 @@ async function stopBootLogcatCapture() {
     const sessions = await getRunningLogSessions();
     for (const s of sessions) { if (s.type === 'boot_logcat') await removeLogSession(s.id); }
   } catch {}
-  showToast(t("device.bootLogStopped"));
 }
 
 async function clearLogcatLogs() {
   if (!selectedDevice.value) return;
-    showCmdExec(t("device.clearLogsTitle"), "adb logcat -c");
   try {
     await logcatClear(selectedDevice.value.serial);
-    appendCmdExec(t("device.logsCleared"));
-    finishCmdExec(t("device.logsCleared"));
     showToast(t("device.logsCleared"));
-  } catch { finishCmdExec(t("device.clearLogsFailed")); showToast(t("device.clearLogsFailed"), "error"); }
+  } catch { showToast(t("device.clearLogsFailed"), "error"); }
 }
 
 async function generateBugreport() {
   if (!selectedDevice.value) return;
   showCmdExec(t("device.genBugreport"), "adb bugreport");
   try {
-    const { save } = await import("@tauri-apps/plugin-dialog");
-    const dest = await save({ defaultPath: `bugreport_${Date.now()}.zip`, filters: [{ name: "Bugreport ZIP", extensions: ["zip"] }] });
-    if (!dest) { closeCmdExec(); return; }
+    const dir = await getAutoSaveDir('Bugreports');
+    const { join } = await import('@tauri-apps/api/path');
+    const filename = `bugreport_${formatTimestamp()}.zip`;
+    const dest = await join(dir, filename);
     appendCmdExec(t("device.generatingBugreport"));
+    appendCmdExec("正在收集 Bugreport，可能需要 1-5 分钟，请耐心等待...");
     await bugreport(selectedDevice.value.serial, dest);
     appendCmdExec(t("device.bugreportSaved", { path: dest }));
     finishCmdExec(t("device.bugreportGenerated"));
-    showToast(t("device.bugreportGenerated"));
+    showToast(`Bugreport 已保存: ${filename}`);
+    await openSaveDirectory(dir);
   } catch (e: any) { finishCmdExec(t('device.bugreportFailedWith', { e: String(e) })); showToast(t('device.bugreportFailedWith', { e: String(e) }), "error"); }
 }
 
@@ -3104,14 +3176,25 @@ async function stopMirror() {
 
 async function takeScreenshot() {
   if (!selectedDevice.value) return;
+  screenshotLoading.value = true;
   try {
-    showCmdExec(t("device.screenshotAction"), "adb screencap -p");
-    appendCmdExec(t("device.takingScreenshot"));
+    showToast(t("device.takingScreenshot"), "loading");
     const dataUrl = await screenshot(selectedDevice.value.serial, "");
-    screenshotDataUrl.value = dataUrl;
-    showScreenshotPreview.value = true;
-    finishCmdExec(t("device.screenshotCaptured"));
-  } catch (e: any) { finishCmdExec(); showToast(t('device.screenshotFailedWith', { e: String(e) }), "error"); }
+    hideToast();
+    const dir = await getAutoSaveDir('Screenshots');
+    const { join } = await import('@tauri-apps/api/path');
+    const { writeFile } = await import('@tauri-apps/plugin-fs');
+    const filename = `screenshot_${formatTimestamp()}.png`;
+    const dest = await join(dir, filename);
+    const base64Data = dataUrl.replace(/^data:image\/png;base64,/, "");
+    const binaryString = atob(base64Data);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+    await writeFile(dest, bytes);
+    showToast(`截图已保存: ${filename}`);
+    await openSaveDirectory(dir);
+  } catch (e: any) { hideToast(); showToast(t('device.screenshotFailedWith', { e: String(e) }), "error"); }
+  finally { screenshotLoading.value = false; }
 }
 async function saveScreenshot() {
   if (!screenshotDataUrl.value) return;
@@ -3144,19 +3227,18 @@ async function toggleRecording() {
       await new Promise(r => setTimeout(r, 500));
       await shell(selectedDevice.value.serial, "pkill -9 screenrecord").catch(() => {});
       await new Promise(r => setTimeout(r, 1000));
-      const { save } = await import("@tauri-apps/plugin-dialog");
-      const dest = await save({ defaultPath: `recording_${Date.now()}.mp4`, filters: [{ name: "MP4 Video", extensions: ["mp4"] }] });
-      if (dest) {
-        appendCmdExec(t("device.pullingRecording"));
-        await pullFile(selectedDevice.value.serial, recordingFilename.value, dest);
-        appendCmdExec(t("device.cleaningDeviceFiles"));
-        await shell(selectedDevice.value.serial, `rm ${sanitizeShellArg(recordingFilename.value)}`).catch(() => {});
-        appendCmdExec(t("device.screenrecSaved") + ": " + dest);
-        finishCmdExec(t("device.screenrecSaved"));
-        showToast(t("device.screenrecSaved"));
-      } else {
-        closeCmdExec();
-      }
+      const dir = await getAutoSaveDir('Recordings');
+      const { join } = await import('@tauri-apps/api/path');
+      const filename = `recording_${formatTimestamp()}.mp4`;
+      const dest = await join(dir, filename);
+      appendCmdExec(t("device.pullingRecording"));
+      await pullFile(selectedDevice.value.serial, recordingFilename.value, dest);
+      appendCmdExec(t("device.cleaningDeviceFiles"));
+      await shell(selectedDevice.value.serial, `rm ${sanitizeShellArg(recordingFilename.value)}`).catch(() => {});
+      appendCmdExec(t("device.screenrecSaved") + ": " + dest);
+      finishCmdExec(t("device.screenrecSaved"));
+      showToast(`录屏已保存: ${filename}`);
+      await openSaveDirectory(dir);
     } catch (e: any) { finishCmdExec(`${t("device.screenrecFail")}: ${e}`); showToast(`${t("device.screenrecFail")}: ${e}`, "error"); }
     isRecording.value = false;
     recordingFilename.value = "";

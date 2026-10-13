@@ -158,8 +158,6 @@ D:\TestSpace\test-space/
 │       ├── device-space/
 │       │   ├── DeviceSpacePage.vue     # 设备空间（设备列表 + 遥测 + Logcat + ADB 工具）
 │       │   └── StandaloneMirror.vue    # 独立屏幕镜像窗口（无侧栏，/mirror 路由）
-│       ├── api-space/
-│       │   └── ApiSpacePage.vue        # API 空间（MITM 代理 + 请求捕获 + 断点调试 + 重写规则）
 │       ├── note-space/
 │       │   └── NotesSpacePage.vue      # 笔记空间（文件树 + 富文本编辑器 + 上下文面板）
 │       ├── script-space/
@@ -204,7 +202,6 @@ D:\TestSpace\test-space/
 | `/` | `AppLayout.vue` | 嵌套子路由，默认 redirect 到 `/device-space` |
 | `/device-space` | `DeviceSpacePage.vue` | 设备空间 |
 | `/mirror` | `StandaloneMirror.vue` | 独立屏幕镜像窗口（无侧栏） |
-| `/api-space` | `ApiSpacePage.vue` | API 空间（MITM 代理 + 请求捕获 + 断点调试） |
 | `/notes-space` | `NotesSpacePage.vue` | 笔记空间 |
 | `/script-space` | `ScriptSpacePage.vue` | 脚本空间 |
 | `/settings` | `SettingsPage.vue` | 设置 |
@@ -221,7 +218,7 @@ D:\TestSpace\test-space/
   - `overflow-y-auto`：纵向溢出时由 `<main>` 整体滚动（备用策略）
   - `overflow-x-hidden`：防止子页面的 `-mx-margin-page` 负边距产生水平滚动条
   - `min-h-0`：允许 flex 项收缩
-- **`<keep-alive>`**：`router-view` 包裹 `keep-alive`，缓存 `NotesSpacePage` / `ScriptSpacePage` / `DeviceSpacePage` / `ApiSpacePage` / `SettingsPage`，切换路由时组件不销毁重建，消除切换卡顿感。每个被缓存的页面组件必须通过 `defineOptions({ name: 'ComponentName' })` 声明 name 以匹配 keep-alive 的 `:include` 列表。
+- **`<keep-alive>`**：`router-view` 包裹 `keep-alive`，缓存 `NotesSpacePage` / `ScriptSpacePage` / `DeviceSpacePage` / `SettingsPage`，切换路由时组件不销毁重建，消除切换卡顿感。每个被缓存的页面组件必须通过 `defineOptions({ name: 'ComponentName' })` 声明 name 以匹配 keep-alive 的 `:include` 列表。
 - 每个 Space 有不同的背景径向渐变（通过 `route.path` 判断）
 
 **背景渐变方案**：
@@ -242,7 +239,7 @@ D:\TestSpace\test-space/
 - `fixed` 定位，不占页面空间，不影响页面内容
 
 **导航项**（按用户使用频率排序）：
-Device → Notes → API → Scripts → Settings（Settings 固定在右侧）
+Device → Notes → Scripts → Settings（Settings 固定在右侧，API Space 页面已移除）
 
 **云端同步快捷按钮**（Settings 右侧，`sync` 图标）：
 - 点击执行与设置页「备份到云端」相同的流程（`syncBackupToCloud()`）
@@ -344,47 +341,43 @@ Workspace 页面已在 Phase 9 中移除，路由 redirect 改为 `/case-space`�
 
 **实现（Phase 7 — 完整重写为双分页布局 + Phase 8 交互优化 + Phase 19 文件管理器恢复与 UI/UX 全面优化）**：
 - **连接栏**（上移，`flex-nowrap overflow-hidden`）：Tab 切换 + IP 输入（`min-w-[160px]`）+ Connect 按钮（`shrink-0`）+ 设备选择下拉 + Scan 按钮
+- **设备连接检测**：`connectToDevice()` 正向匹配返回值（仅 `connected to` / `already connected to` 视为成功），其他输出（`cannot connect to`、`error:` 等）均报失败 Toast，防止误报
 - **设备选择下拉框**：自定义 `<Teleport to="body">` 下拉面板（匹配应用搜索历史样式），`fixed` 定位 + `getBoundingClientRect()` 坐标计算，避免 `glass-panel` 的 `backdrop-filter` 裁剪
 - **设备连接持久化**：`selectDevice()` 写入 `localStorage('last_device_serial')`；`scanDevices()` 完成后恢复上次选中设备；断开当前设备时清除
 - **设备列表自动刷新**：5s 轮询 `listDevices()`，所有 timeout/id 在 `onUnmounted` 清理
 - **双分页布局**（`:tabs="['常用命令', '其他命令']"`）：
   - **分页一：常用命令**
+    - **设备信息查询**：
+      - 基础信息、MAC 信息、存储信息、Key 检查（HDCP/Widevine/Dolby）
+      - **固件信息**（`whaleos` 类型）：查询 OSA keys + 固件 keys + DP keys + `ro.whaletv.devicetype` 共 40+ 个 key，并发查询，只显示有值的条目，去重
     - **日志采集（Logcat）**：
-      - 采集前**必须**执行 `prepareLogCapture()`：`adb root` → `adb logcat -G 64M`
-      - 实时轮询 `adb -b all -t 1000`，日志缓冲区最多 500 条（圆形缓冲区）
-      - 级别筛选（Verbose/Debug/Info/Warning/Error）+ 关键字搜索
-      - 开始/停止按钮
-  - **日志采集（Diagnostic）**：
-    - 一次性采集：计时显示采集时长，stop 时一次性收集 logcat + getprop + dumpsys + free + df + ps
-    - 前置于 `prepareLogCapture()`（adb root + 扩大缓冲区）
-    - **日志采集（Bugreport）**：
-      - 调用 `adb bugreport`（Rust 后端 `adb_bugreport` 命令）
-      - 前置于 `prepareLogCapture()`
-    - **屏幕镜像**：双模式渲染 — 优先 scrcpy-server（adb push → forward → start_server → 服务器参数 `max_size=... video_bit_rate=... max_fps=... raw_stream=true send_device_meta=false send_codec_meta=false`），Rust 端读取原始 H264 Annex B 字节流，解析 NAL unit（`find_nal_start` 检测起始码），提取 SPS/PPS（NAL type 7/8），构建 avcC 后转换为 AVCC 格式（4 字节长度前缀），通过 `Channel<Vec<u8>>` 直接投递每帧原始字节（配置消息用 `0xFF` 标记，帧消息用 `0x00/0x01` 标记 key flag）。前端 WebCodecs VideoDecoder 直接在 Channel `onmessage` 中解码渲染，无队列、无 rAF 轮询、无 `adb_mirror_poll_frame` 命令。若 scrcpy-server push 失败（设备无 root/remount）自动降级为 `adb exec-out screencap -p` 轮询 + canvas.drawImage。所有逻辑在单个 Rust 阻塞线程中顺序执行（先试 scrcpy，失败则切 legacy），lib.rs 层 3 次重试（间隔 2s）减少首次降级。Canvas 点击/触摸支持：`input tap`（点击）、`input swipe`（拖拽 >10px）、右键 = `keyevent BACK`。坐标映射使用 `object-contain` letterbox + 设备物理分辨率（通过 `adb shell wm size` 查询）两级缩放。独立弹出窗口模式（`/mirror` 路由，无侧栏）。质量模式切换（smooth: 960/3Mbps/15fps vs quality: 1080/5Mbps/24fps）
-    - **截图 + 录屏**：截图预览、录制/停止。录屏启动通过 Rust 异步 spawn 执行（不阻塞 UI），停止时 `pkill -SIGINT screenrecord` 后拉取文件
-    - **ADB Shell**：命令输入 + 执行，输入历史走 SQLite `input_history` 表
-    - **命令执行反馈浮窗**：长耗时操作（Root、Remount、重启、Bugreport 等）点击后在页面顶部弹出玻璃态浮动面板，显示实时执行状态和结果。所有命令执行完毕 3 秒自动关闭；鼠标悬停暂停计时，移出后恢复。快捷指令完成后不自动关闭，显示关闭按钮手动关闭
-    - **执行输出面板**：ADB Shell 命令执行后在底部实时显示输出结果，支持清除输出内容
+      - 采集前执行 `prepareLogCapture()`：`adb root`（失败静默忽略，等待 2s 重连）→ `adb logcat -G 64M`（失败也不阻断采集）
+      - 停止后自动保存到 `Documents/TestSpace/logcat_YYYYMMDD_HHMMSS.txt`，保存完成后自动打开目录
+    - **日志采集（Diagnostic）**：
+      - 一次性采集：logcat + getprop + dumpsys + free + df + ps + ANR traces，打包为 ZIP
+      - 停止后自动保存到 `Documents/TestSpace/diagnostic_YYYYMMDD_HHMMSS.zip`，保存完成后自动打开目录
+    - **开机日志（Boot Logcat）**：重启设备并等待重连，采集完整开机过程日志
+      - 停止后自动保存到 `Documents/TestSpace/boot_logcat_YYYYMMDD_HHMMSS.txt`，保存完成后自动打开目录
+    - **Bugreport**：
+      - 调用 `adb bugreport`（Rust 后端 `adb_bugreport`，10 分钟外层超时 + 内层 300s mpsc 超时）
+      - Rust 端三重兜底：现代 adb 直接写文件 → 旧版 adb stdout ZIP 字节 → 文本兜底
+      - 自动保存到 `Documents/TestSpace/bugreport_YYYYMMDD_HHMMSS.zip`，保存完成后自动打开目录
+    - **截图**：截图按钮带 spinner（`screenshotLoading`），截图期间禁用重复点击；自动保存到 `Documents/TestSpace/screenshot_YYYYMMDD_HHMMSS.png`，保存完成后自动打开目录，不再弹预览窗口
+    - **录屏**：启动/停止，停止后自动保存到 `Documents/TestSpace/recording_YYYYMMDD_HHMMSS.mp4`，保存完成后自动打开目录
+    - **自动保存目录统一**：所有文件（截图/录屏/日志/诊断包/开机日志/Bugreport/APK）统一保存到 `Documents/TestSpace/`，不分子文件夹，方便全选拖拽。通过 `getAutoSaveDir()` 辅助函数创建并返回目录，`openSaveDirectory()` 调用 Rust `open_path` 命令
+  - **快捷操作去重**：Root/Remount/发送文字/重启 ADB 等操作结果仅在 cmdExec 浮窗中显示，不再同时弹 Toast
+  - **快捷指令执行**：`executeCustomCommand()` 不再弹 Toast，仅通过顶部 cmdExec 浮窗显示结果
   - **分页二：其他命令**
-    - **APK Manager**：安装（文件选择器）+ 卸载 + 已安装应用列表（按 web-adb-tool 规则排序 + 14 条分页 + 并行批量加载版本号（每批 4 个 `Promise.all`）+ 复制包名/版本 + 查询 APK 路径）
-    - **File Manager**：Push/Pull 文件、目录列表（文件夹优先字母排序）、`..` 返回上级（`arrow_back` 图标）、文件预览（图片/视频/音频 + 缩放控件 + 鼠标滚轮缩放）、拖放上传（Tauri 原生 `onDragDropEvent`，遮罩 `absolute` 固定覆盖不随滚动消失）、文件编辑（Teleport 对话框）
-    - **危险操作**（重装/remount）：点击触发确认弹窗（Teleport 红色警告）
-    - **Custom Commands**（已迁移至 SQLite `app_settings` 表，key: `adb_custom_commands`，JSON 数组持久化命令名称、命令内容和排序）
-    - **快捷指令**（右侧栏）：用户自定义的 ADB 命令按钮，点击即执行。通过管理弹窗增删改，支持拖拽上下箭头调整按钮顺序，顺序持久化到 SQLite `app_settings` 表（key: `adb_custom_commands`），主界面按钮顺序自动跟随
-    - **密钥检查**（快捷指令下方）：点击「检查密钥」按钮检测机顶盒各种 key 的烧写情况，依次检测 HDCP 1.4、HDCP 2.2、MGKID、Widevine、Dolby 五项。检测流程：先执行 `adb root`，等待设备重连（轮询 `echo ok`，100ms 间隔，最多 30 次），然后依次执行各检测命令（顺序执行，避免 TEE 资源冲突）。检测结果以弹窗形式展示，每项显示支持/不支持状态（绿色/红色）+ 命令原始输出（可展开查看）。检测逻辑：HDCP 1.4/2.2/MGKID 使用 `tee_provision -qt 0x31/0x32/0xa2`，判断输出包含 `provisioned` 且不包含 `not provisioned`；Widevine 使用 `drminfo -d`，过滤含 `systemId` 的行，匹配 `systemId[=\s]+\d{5}`；Dolby 使用 `dolby_fw_dolbyms12`，判断输出包含 `exits!` 和 `done!`。支持时显示绿色文字（如"检测到设备支持HDCP1.4"），不支持时显示红色文字 + 警告信息（如"检测到设备不支持HDCP1.4    警告: HDCP1.4未烧写将导致无法播放受保护的高清内容"）。Dolby 支持时额外查询 `dumpsys media.audio_flinger --hal` 获取版本号（匹配 `build ms12 version:\s*(\d+)`，版本映射：2→2.4.2，3→2.8.2），原始输出仅显示匹配行。
-    - **遥控器**（右侧面板）：方向键/确认/返回/主页/音量键，响应式 4 级尺寸（`lg:`/`xl:`/`2xl:` 断点）
-- **输入历史**：`text_input`、`app_search`、`connect_ip`、`remote_path` 四种 key 通过 `addInputHistory()` / `getInputHistory()` 走 SQLite `input_history` 表，每 key 最多 20 条。`remote_path` 在 `navigateToPath()`/`navigateToDir()` 中保存
-- **历史下拉不透明**：文本历史、远程路径历史、应用搜索历史下拉均使用 `bg-white border shadow-lg` 不透明样式（非 `glass-panel`）
-- **连接对话框**（Teleport）：玻璃面板浮层 + USB/TCP/IP 切换 + IP 输入 + 连接按钮
-- **文件预览系统**：`previewDialog` + `loadPreviewContent(name)` 支持图片（JPEG/PNG/GIF/WebP/BMP/SVG/ICO）、视频（WebM/OGG/MP4/MOV/AVI/MKV）、音频（FLAC/MP3/WAV/OGG/AAC/M4A/WMA），缩放 0.25x–5x + 鼠标滚轮缩放 + 百分比显示；大文件（>10MB）弹窗确认后常显 loading 提示；不支持的文件类型（apk/exe/so/bin/zip 等）直接 toast 提示
-- **文件右键菜单**：Copy Path（复制完整远程路径到剪贴板）+ Download + Edit（仅文件）+ Delete（二次确认）
-- **文件夹下载**：直接 `adb pull`，不再设备端压缩；通过 `open({ directory: true })` 选择本地目录
-- **大文件编辑保护**：`wc -c` 前置检测 > 5MB 弹窗确认，加载期间常显 loading 提示
-- **confirmThen 重构**：返回 `Promise<boolean>`，支持 await 检查用户确认/取消；大文件（>10MB）弹窗确认后常显 loading 提示；不支持的文件类型（apk/exe/so/bin/zip 等）直接 toast 提示
-- **文件右键菜单**：Copy Path（复制完整远程路径到剪贴板）+ Download + Edit（仅文件）+ Delete（二次确认）
-- **文件夹下载**：直接 `adb pull`，不再设备端压缩；通过 `open({ directory: true })` 选择本地目录
-- **大文件编辑保护**：`wc -c` 前置检测 > 5MB 弹窗确认，加载期间常显 loading 提示
-- **confirmThen 重构**：返回 `Promise<boolean>`，支持 await 检查用户确认/取消
+    - **APK Manager**：安装（文件选择器）+ 卸载 + 已安装应用列表（按 web-adb-tool 规则排序 + 14 条分页 + 并行批量加载版本号 + 复制包名/版本）
+      - **路径查询**：使用 `pm path <pkg>`（固定格式 `package:/path/...`），不再用 `dumpsys package | grep path:` 防止误匹配
+      - **下载 APK**：改用 `pm path` 获取路径，自动保存到 `Documents/TestSpace/<pkg>_YYYYMMDD_HHMMSS.apk`，保存后自动打开目录
+      - **ADService 查询**：路径按钮旁新增 ADService 按钮（`adServiceLoading` spinner），检测 `com.ad.socketserver` 或 `com.android.media.module.services`，结果直接弹 resultDialog，不显示 cmdExec 过程面板
+    - **File Manager**：Push/Pull 文件、目录列表、文件预览、文件编辑
+    - **快捷指令**（右侧栏）：用户自定义的 ADB 命令按钮
+    - **密钥检查**：HDCP 1.4/2.2、MGKID、Widevine、Dolby 五项检测
+    - **遥控器**（右侧面板）：方向键/确认/返回/主页/音量键
+- **Rust 新增命令**：`open_path`（Windows: `cmd /c start`，macOS: `open`，Linux: `xdg-open`，复用已打开的 Explorer 窗口而非重复开新窗口）
+- **输入历史**：`text_input`、`app_search`、`connect_ip`、`remote_path` 四种 key 通过 SQLite `input_history` 表持久化
 - **全局 `select-none` / `select-text`**：所有按钮/标题/根 div 使用 `select-none`，所有 input/textarea/pre 使用 `select-text`
 
 #### 4.7.2 性能监控（`PerfMonitorPage.vue`）
@@ -401,9 +394,8 @@ Workspace 页面已在 Phase 9 中移除，路由 redirect 改为 `/case-space`�
   - **Top N 应用内存**：首两条线为 Free RAM（绿色，`memAvailKb`）和 Swap Free（蓝色，`swapFreeKb`），其后为按最新 PSS 排序的前 N 个应用的 PSS 曲线。右侧 legend 竖排滚动，显示实时数值 `(xxxM)`，超长包名在 220px 内自动换行（`overflow: 'breakAll'`）
   - **Top N 应用 CPU 使用率**：按最新 CPU 排序的前 N 个进程曲线，legend 显示实时数值 `(xx.x%)`
   - 两项图表共享：点击选中单个 series、再次点击恢复全部、emphasis 高亮、`replaceMerge` 增量更新、`bucketingDownsample`（最多 600 点）
-- **开启/停止采集**：`startPolling()` 创建采集目录、初始化流式文件、启动 logcat 和定时器；`stopPolling()` 停止定时器、完成日志采集、自动执行 `autoExportReport()`
-- **保存/加载会话**：序列化全部 store 状态为 JSON（文件名时间戳），通过原生对话框保存和加载
-- **手动导出报告**（`exportReport()`）：
+- **开启/停止采集**：`startPolling()` 自动使用 `Documents/TestSpace/` 作为根目录（不再弹选择框），创建按时间戳命名的会话子目录，初始化流式文件，启动 logcat 和定时器；`stopPolling()` 停止定时器、完成日志采集、自动执行 `autoExportReport()`，导出完成后调用 `open_path` 自动打开会话目录
+- **手动导出报告**（`exportReport()`）：自动保存到 `Documents/TestSpace/`，不再弹目录选择框
   - HTML 报告（`perf_report.html`，`max-width: 1400px`）：
     - 采集信息 + 汇总统计卡片
     - 整体评估（`buildOverallAssessment()`：CPU 趋势、内存趋势、内存泄漏检测、CPU 持续高占用等 6~8 条规则）
