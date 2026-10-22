@@ -157,6 +157,8 @@ D:\TestSpace\test-space/
   │   └── views/                          # 页面视图
 │       ├── device-space/
 │       │   ├── DeviceSpacePage.vue     # 设备空间（设备列表 + 遥测 + Logcat + ADB 工具）
+│       │   ├── PerfMonitorPage.vue     # 性能监控（CPU/内存/进程趋势 + 报告导出）
+│       │   ├── MemStressPage.vue       # 内存压力测试（stress-ng 部署 + 内存/LMK 监控）
 │       │   └── StandaloneMirror.vue    # 独立屏幕镜像窗口（无侧栏，/mirror 路由）
 │       ├── note-space/
 │       │   └── NotesSpacePage.vue      # 笔记空间（文件树 + 富文本编辑器 + 上下文面板）
@@ -201,6 +203,8 @@ D:\TestSpace\test-space/
 |------|------|------|
 | `/` | `AppLayout.vue` | 嵌套子路由，默认 redirect 到 `/device-space` |
 | `/device-space` | `DeviceSpacePage.vue` | 设备空间 |
+| `/device-space/perf-monitor` | `PerfMonitorPage.vue` | 性能监控 |
+| `/device-space/mem-stress` | `MemStressPage.vue` | 内存压力测试 |
 | `/mirror` | `StandaloneMirror.vue` | 独立屏幕镜像窗口（无侧栏） |
 | `/notes-space` | `NotesSpacePage.vue` | 笔记空间 |
 | `/script-space` | `ScriptSpacePage.vue` | 脚本空间 |
@@ -350,6 +354,7 @@ Workspace 页面已在 Phase 9 中移除，路由 redirect 改为 `/case-space`�
     - **设备信息查询**：
       - 基础信息、MAC 信息、存储信息、Key 检查（HDCP/Widevine/Dolby）
       - **固件信息**（`whaleos` 类型）：查询 OSA keys + 固件 keys + DP keys + `ro.whaletv.devicetype` 共 40+ 个 key，并发查询，只显示有值的条目，去重
+    - **工具入口**：设备操作区按钮跳转 `/device-space/perf-monitor`（性能监控）与 `/device-space/mem-stress`（内存压力，紧挨性能监控右侧）
     - **日志采集（Logcat）**：
       - 采集前执行 `prepareLogCapture()`：`adb root`（失败静默忽略，等待 2s 重连）→ `adb logcat -G 64M`（失败也不阻断采集）
       - 停止后自动保存到 `Documents/TestSpace/logcat_YYYYMMDD_HHMMSS.txt`，保存完成后自动打开目录
@@ -428,6 +433,20 @@ Workspace 页面已在 Phase 9 中移除，路由 redirect 改为 `/case-space`�
   - **Reflow 时序**：ECharts 初始化从裸 `render()` 改为 `setTimeout(render, 50)`，确保浏览器在 charts-container `display:block` 后完成 layout reflow，容器尺寸不为 0
   - **Tooltip**：修复 `if (!selected) return ''` 导致未选中单条折线时 tooltip 全空的问题，改为无选中时显示全部系列值
   - **Legend 防递归**：`selectSeries` 中 `dispatchAction({ type: 'legendSelect' })` 会触发 `legendselectchanged` 事件 → 递归循环，新增 `legendGuard` 标志阻止重入
+
+#### 4.7.3 内存压力测试（`MemStressPage.vue`）
+
+**实现**：通过 stress-ng 主动制造内存压力，实时观察 MemAvailable 变化与 LMK 查杀行为。
+
+- **入口与路由**：设备空间快捷操作区「内存压力」按钮（性能监控右侧）→ `/device-space/mem-stress`，keep-alive 缓存
+- **环境部署**：`getprop ro.product.cpu.abi` 检测架构 → ABI 映射 `armeabi-v7a/armeabi → stress-ng-armv7a`、`arm64-v8a/aarch64 → stress-ng-arm64`、`x86_64 → stress-ng-x86_64` → `adb push` 到 `/data/local/tmp/stress-ng` → `chmod 755` → `--version` 校验；设备已有可用版本时跳过重复推送，支持手动重新部署
+  - 二进制随安装包分发：`src-tauri/bin/stress-ng-*` + `tauri.conf.json` 的 `bundle.resources`；Rust `stress_ng_binary_path` 依次解析 `resource_dir/bin`、`cwd/bin`、`cwd/src-tauri/bin`，兼容打包版本与 `tauri dev`
+- **实时内存**：每 2s 采样 `MemTotal / MemAvailable / MemFree`，单行展示总内存、可用、已用、使用率（不使用图表）
+- **压力参数（单行）**：总内存、进程数、时长 + 开始/停止按钮 + 运行进度。实测当前 stress-ng 的 `--vm-bytes` 为所有 worker 的**合计**分配量，因此界面「总内存」直接传入，不再按进程数换算
+- **启动/停止**：`setsid ./stress-ng --vm N --vm-bytes XM --vm-keep --timeout Ym --metrics --stressor-time --oomable --log-file /data/local/tmp/memtest.log -Y /data/local/tmp/memtest.yaml >/data/local/tmp/memtest.out 2>&1 </dev/null &`，PID 写入 `stress-ng.pid`；停止先 `kill -TERM`，残留再 `pkill -KILL` 兜底；运行中每 2s `pidof stress-ng` 检测提前退出
+- **应用进程查询**：`pm list packages -3` + `pm list packages | grep -Ei 'zeasn|whaletv'` + LMK 日志发现的包名；每 3s `ps -A -o PID,NAME`（不支持时回退 `ps -A`）刷新运行状态；列表展示运行中 / 未运行 / 被查杀 + PID，支持包名过滤与单包查询
+- **LMK 查杀事件**：每 3s 执行 `logcat -d -v time -t 300 -s lowmemorykiller lmkd`，旧→新追加并自动滚动到底部（上翻时显示「最新」按钮），包名高亮。仅 `Kill '<pkg>'` 真实查杀动作计入「被查杀」，`whitelist / not kill / skip / suppress` 等语句忽略；清空事件同时重置查杀状态
+- **日志导出**：压测结束后可将 `/data/local/tmp/memtest.log` 拉取到 `Documents/TestSpace/memtest_<时间戳>.log` 并打开目录
 
 ### 4.8 Notes Space (`src/views/note-space/NotesSpacePage.vue`)
 
@@ -664,6 +683,7 @@ Workspace 页面已在 Phase 9 中移除，路由 redirect 改为 `/case-space`�
 | `adb_input_keyevent/text/tap/swipe` | `input_keyevent/text/tap/swipe` | 输入操作 | `adb shell input` |
 | `adb_get_display_size` | `get_display_size(serial)` | 获取设备屏幕分辨率 | `adb shell wm size` |
 | `adb_kill_server` / `adb_start_server` | `kill_server` / `start_server` | ADB 服务管理 | `adb kill-server/start-server` |
+| `stress_ng_binary_path` | `stress_ng_binary_path(app, abi)` | 按设备 ABI 定位随安装包分发的 stress-ng 二进制（`resource_dir/bin` → `cwd/bin` → `cwd/src-tauri/bin`） | `bin/stress-ng-armv7a|arm64|x86_64` |
 
 ### 5.2 串口模块 (`src-tauri/src/serial_port.rs`)
 
@@ -5539,3 +5559,190 @@ start explorer.exe
 
 - 类型检查（vue-tsc）✅ / 前端构建（vite）✅
 - 功能：固定→便签出现圆角无边框实色背景；双窗互编互刷；拖动后重启位置还原；置顶按钮开关正常（可取消）；新建便签聚焦标题；关闭=取消固定且主窗口标记同步；删除笔记便签自毁；备份 1.9 旧档导入不报错
+
+## Phase 75 — 内存压力测试（stress-ng）（已完成 ✅）
+
+**背景**：设备空间已有性能监控，但缺少主动制造内存压力的能力。大量 Android TV 设备为 armeabi-v7a（已在 h736 真机确认 `ro.product.cpu.abi=armeabi-v7a`），需要一键部署对应架构的 stress-ng，并实时观察系统内存与 LMK 查杀行为。
+
+### 75.1 功能设计
+
+- **入口**：设备空间「常用命令」页快捷操作区新增「内存压力」按钮（`memory` 图标），跳转 `/device-space/mem-stress`，与性能监控一致使用独立路由 + keep-alive。
+- **自动部署（4 步可视化）**：
+  1. `getprop ro.product.cpu.abi`（为空时回退 `ro.product.cpu.abilist` 首项）。
+  2. ABI 映射：`armeabi-v7a/armeabi → stress-ng-armv7a`、`arm64-v8a/aarch64 → stress-ng-arm64`、`x86_64 → stress-ng-x86_64`；其它架构明确提示不支持。
+  3. `adb push` 到 `/data/local/tmp/stress-ng` → `chmod 755`。
+  4. `/data/local/tmp/stress-ng --version` 校验，版本号展示在页面。
+  - 设备上已存在可执行的 stress-ng 且版本校验通过时跳过推送（二进制 5~12MB，避免每次进入页面重复传输）；「重新部署」按钮可强制覆盖。
+  - 二进制随安装包分发：`src-tauri/bin/stress-ng-*` + `tauri.conf.json` 的 `bundle.resources`；Rust 命令 `stress_ng_binary_path` 依次解析 `resource_dir/bin`、`cwd/bin`、`cwd/src-tauri/bin`，同时兼容打包版本与 `tauri dev`。
+- **实时内存**：前端每 2s 执行 `grep -E '^(MemTotal|MemAvailable|MemFree|SwapTotal|SwapFree):' /proc/meminfo`，计算总内存 / 可用 / 已用 / 使用率，ECharts 曲线保留最近 450 个采样点。采用单次采样轮询而不是设备端 `while true` 常驻循环，避免页面切换后残留 adb shell 子进程，也便于暂停与恢复。
+- **LMK 事件**：每 3s 执行 `logcat -d -v time -t 300 -s lowmemorykiller lmkd 2>/dev/null | tail -n 200`，按行去重后倒序展示（最多 300 条）；含 kill 关键字的行红色高亮并统计查杀次数。同时兼容旧内核 `lowmemorykiller` 与新内核 `lmkd` 标签。
+- **启停压力**：
+  - 启动：`cd /data/local/tmp; rm -f memtest.*; setsid ./stress-ng --vm N --vm-bytes XM --vm-keep --timeout Ym --metrics --stressor-time --oomable --log-file /data/local/tmp/memtest.log -Y /data/local/tmp/memtest.yaml >/data/local/tmp/memtest.out 2>&1 </dev/null & echo $! > /data/local/tmp/stress-ng.pid`
+  - 参数可调：单进程内存（MB，32–8192）、进程数（1–8）、时长（1–60 分钟）；实时显示总占用估算，超过物理内存时红色提示可能立即触发 LMK。
+  - 停止：先对记录的 PID `kill -TERM`，1.2s 后仍存活则 `pkill -KILL -f "stress-ng --vm"` 兜底；启动/停止期间按钮显示进行态。
+  - 运行中每 2s `pidof stress-ng` 检测：进程提前消失（被 LMK 杀掉或异常退出）自动结束并提示；达到设定时长自动结束。剩余时间与进度条实时更新。
+  - `--timeout` 在设备端兜底，即使关闭应用压力也会按时结束。
+  - 空闲时切走页面暂停采样；压测中继续采样，避免漏掉 LMK 查杀记录。
+- **导出日志**：压测结束后可将 `/data/local/tmp/memtest.log` 拉取到 `Documents/TestSpace/memtest_<时间戳>.log` 并打开目录，包含 stress-ng metrics 汇总（bogo ops / CPU / RSS）。
+
+### 75.2 文件变更
+
+| 文件 | 修改类型 | 说明 |
+|------|----------|------|
+| `src/views/device-space/MemStressPage.vue` | 新建 | 内存压测页面（自动部署、内存曲线、LMK 事件、参数启停、日志导出） |
+| `src/router/index.ts` | 修改 | 新增 `/device-space/mem-stress` 路由 |
+| `src/layouts/AppLayout.vue` | 修改 | keep-alive include 增加 `MemStressPage` |
+| `src/views/device-space/DeviceSpacePage.vue` | 修改 | 快捷操作区新增「内存压力」入口 + `goMemStress()` |
+| `src/composables/useI18n.ts` | 修改 | `device.memStress` 与 `memStress.*` 中英文文案 |
+| `src-tauri/src/lib.rs` | 修改 | 新增 `stress_ng_binary_path` 命令并注册 |
+| `src-tauri/tauri.conf.json` | 修改 | `resources` 增加三个架构的 stress-ng 二进制 |
+| `src-tauri/bin/stress-ng-{armv7a,arm64,x86_64}` | 新增 | 随安装包分发的 stress-ng 二进制 |
+
+### 75.3 验证
+
+- `npm run build`（vue-tsc + vite）✅
+- `cargo check` ✅
+- 真机（h736，armeabi-v7a）验证：
+  - push / chmod / `--version` ✅ → `stress-ng, version 0.19.00 (clang 18.0.3, armv7l Linux 5.15.189)`
+  - 后台启动命令返回耗时 0.11s；PID 文件与 `pidof stress-ng` 一致；10s 后自动退出并生成含 metrics 的 memtest.log
+  - meminfo 采样与 logcat 查询命令均正常返回
+
+## Phase 76 — 内存压测页面布局重构 + 应用进程监控（已完成 ✅）
+
+**背景**：Phase 75 首版页面采用折线图 + 固定高度底部面板，实际使用中发现：图表并非必要；全屏时 LMK 面板不随窗口放大；参数区与启动按钮分散；缺少应用维度的查杀确认；LMK 日志不会自动滚动到最新；`--vm-bytes` 的展示语义与用户预期不符；设备页入口按钮常驻高亮，看起来像选中态。本阶段针对性重构。
+
+### 76.1 布局调整
+
+页面自上而下改为四段，全部随窗口宽度自适应、纵向按需伸展：
+
+1. **顶部栏**：返回、设备、ABI、部署状态、重新部署、导出日志。
+2. **压力参数（单行）**：总内存占用、进程数、时长、单进程换算提示、超限警告，开始/停止按钮与运行进度（剩余时间 + 进度条）都在同一行。
+3. **实时内存（单行）**：采样状态 + 总内存 / 可用 / 已用 / 使用率，移除 ECharts 折线与历史点缓存。
+4. **底部左右分栏（`flex-1 min-h-0`）**：左侧应用进程列表，右侧 LMK 查杀事件；窗口放大或全屏时两栏同步拉伸，列表区域获得更多可视行数。
+
+### 76.2 应用进程监控（新增）
+
+- 应用列表来源：`pm list packages -3`（第三方应用；为空时回退 `pm list packages`），并合并 LMK 日志中出现的被查杀包名（覆盖系统应用）。
+- 运行状态来源：每 3s 执行 `ps -A -o PID,NAME`（不支持时回退 `ps -A`），按「进程名等于包名或以 `包名:` 开头」匹配 PID。
+- 列表展示：状态圆点 + 包名 + 状态徽标（运行中 / 未运行 / 被查杀）+ PID；排序为「被查杀 → 运行中 → 未运行」，被查杀包名红色显示。
+- 单应用查询：输入框支持模糊过滤；回车或点「查询」时，已安装包直接过滤列表定位，未安装包额外执行 `ps -A -o PID,NAME | grep -F <包名>` 查询进程，结果以独立卡片展示；包名做字符白名单校验，避免命令注入。
+- 被查杀状态独立保存：清空 LMK 事件只清空日志显示，不清除应用的「被查杀」标记，便于压测后继续核对。
+
+### 76.3 LMK 事件展示优化
+
+- 事件改为「旧 → 新」追加，新消息在底部；列表容器挂 ref，数据更新后 `nextTick` 自动滚动到底部。
+- 用户向上翻阅时暂停自动滚动，并显示「最新」悬浮按钮，点击回到底部。
+- 每条日志解析出包名片段（形如 `com.foo.bar`）并用朱砂色加粗高亮，其余文本保持等宽字体。
+- 「清空事件」会把设备当前 logcat 缓冲区内容标记为已读，避免下一轮轮询立即把旧事件重新灌入。
+
+### 76.4 `--vm-bytes` 语义修正
+
+stress-ng 官方文档明确 `--vm-bytes` 是**每个 vm worker** 的分配量，实际占用 = `--vm-bytes × --vm 数量`。为符合界面「填总内存」的直觉：
+
+- 输入框改为「总内存占用 (MB)」，不再乘以进程数。
+- 启动时按 `单进程 = round(总内存 / 进程数)` 换算后传给 `--vm-bytes`，并在参数行展示「单进程约 X MB」。
+- 超限提示改为「设置的占用已超过物理内存」，直接比较总内存与设备 MemTotal。
+
+### 76.5 其他修复
+
+- 移除 `echarts` 依赖与图表初始化/ resize / dispose 逻辑，页面更轻。
+- 设备空间「内存压力」入口按钮改为与 Reboot / Root / Remount 相同的 `bg-white/30 + outline-variant` 样式，不再常驻高亮。
+
+### 76.6 文件变更
+
+| 文件 | 修改类型 | 说明 |
+|------|----------|------|
+| `src/views/device-space/MemStressPage.vue` | 重构 | 四段式布局、移除图表、应用进程列表与单包查询、LMK 自动滚动与包名高亮、总内存语义 |
+| `src/views/device-space/DeviceSpacePage.vue` | 修改 | 内存压力入口按钮样式统一 |
+| `src/composables/useI18n.ts` | 修改 | 新增总内存 / 单进程换算 / 应用进程 / 查询 / 最新等中英文文案，移除旧单进程内存与预计占用 |
+
+### 76.7 验证
+
+- `npm run build`（vue-tsc + vite）✅
+- 真机（h736，armeabi-v7a）命令复核：
+  - `pm list packages -3` 输出可正确解析
+  - `ps -A -o PID,NAME` 输出格式与解析逻辑一致（含 `PID NAME` 表头跳过）
+  - `ps -A -o PID,NAME | grep -F 'com.android.systemui'` 可定位单个应用进程
+  - meminfo 采样与 logcat 查询命令正常返回
+
+## Phase 77 — 内存压测入口位置与品牌应用列表补全（已完成 ✅）
+
+- **入口位置**：设备操作区信息按钮网格在 `sm` 及以上改为 4 列，「内存压力」紧挨「性能监控」右侧同一行；超窄窗口保持 3 列，避免按钮文字挤压换行。
+- **品牌应用纳入**：应用进程列表在 `pm list packages -3` 的基础上，额外执行 `pm list packages | grep -Ei 'zeasn|whaletv'` 并合并结果，确保预装的 zeasn / whaletv 应用（通常属于系统包）能在列表中查看活跃状态与查杀状态；LMK 日志中发现的包名仍会继续合并。
+- **验证**：`npx vue-tsc --noEmit` ✅；真机 `pm list packages | grep -Ei 'zeasn|whale'` 返回 `com.whaletv.eco.service`、`com.whaletv.launcher`，可正确进入应用列表。
+
+## Phase 78 — `--vm-bytes` 语义纠正 + 应用列表刷新修复（已完成 ✅）
+
+**问题现象**：可用内存约 1215MB，压力参数填写总内存 1024MB、进程数 2，启动后可用内存仍有约 696MB（仅下降约 519MB）；应用进程卡片点击刷新没有明显重置效果。
+
+### 78.1 `--vm-bytes` 实测结论
+
+对设备上的 stress-ng 0.19.00 实测（h736，MemTotal 约 1978MB，zram SwapTotal 约 1483MB）：
+
+| 启动参数 | 每个 worker 的 VmRSS | 实际合计 | MemAvailable 变化 |
+|----------|---------------------|----------|-------------------|
+| `--vm 1 --vm-bytes 256M` | 约 257MB | 约 256MB | — |
+| `--vm 2 --vm-bytes 256M` | 约 129MB × 2 | 约 256MB | — |
+| `--vm 2 --vm-bytes 512M` | 约 257MB × 2 | 约 514MB | 1237MB → 708MB（下降约 529MB） |
+| `--vm 2 --vm-bytes 1024M` | 约 510MB + 525MB | 约 1024MB | 1237MB → 263MB（下降约 974MB） |
+
+测试期间 `SwapFree` 基本不变，排除「被 zram 压缩换出」的解释。结论：**当前 stress-ng 的 `--vm-bytes` 是全部 vm worker 的合计分配量**（上游 master 帮助文本亦为 “allocate N bytes in total across vm workers”），设备二进制 `--help` 里残留的 “per worker” 描述与实际行为不符。
+
+Phase 76 曾按 “per worker” 将 1024MB 除以 2 后传入 512M，导致实际只占用约 512MB，正是可用内存只下降约 519MB 的原因。
+
+**修复**：界面「总内存占用」直接作为 `--vm-bytes` 传入，不再除以进程数；移除「单进程约 X MB」提示与 `memStress.perWorker` 文案。1024MB + 2 进程现在会真实占用约 1GB。
+
+### 78.2 应用进程刷新修复
+
+- 点击刷新时先清空应用列表、查询框和单包查询结果，再重新拉取第三方应用 + zeasn/whaletv 预装应用 + LMK 已查杀包名。
+- 刷新完成后立即执行一次进程列表采集，避免状态还是旧的；拉取失败则恢复原列表。
+- 刷新成功弹出「应用列表已刷新」Toast，给出明确反馈。
+- 刷新不再保留旧的已安装包并集（仅保留本次会话的 LMK 查杀记录），列表会真正重置。
+
+### 78.3 文件变更
+
+| 文件 | 修改类型 | 说明 |
+|------|----------|------|
+| `src/views/device-space/MemStressPage.vue` | 修改 | 移除总量→单进程换算，总内存直接传 `--vm-bytes`；应用列表强制刷新逻辑 + 即时进程采集 + Toast |
+| `src/composables/useI18n.ts` | 修改 | 移除 `memStress.perWorker`，新增 `memStress.appsRefreshed` |
+
+### 78.4 验证
+
+- 真机实测 `--vm 2 --vm-bytes 1024M` 两个 worker VmRSS 分别约 510MB / 525MB，合计约 1GB；MemAvailable 从 1237MB 降至 263MB，与设置值吻合。
+- `npx vue-tsc --noEmit` / `npm run build` ✅
+
+## Phase 79 — LMK 查杀判定误报修复（已完成 ✅）
+
+**问题现象**：`com.whaletv.eco.service` 在日志中明确是白名单（`found task com.whaletv.eco.service:photo in whitelist, not kill`），但应用进程列表仍显示「被查杀」。
+
+### 79.1 根因
+
+旧逻辑用 `/kill/i` 判断查杀行，白名单语句里含有 `not kill`，因此被误判；随后 `extractKilledPkg` 又从该行提取了任意形如包名的字符串，导致白名单应用被加入 `killedPkgs`。此外 `clearLmk` 只清空日志显示，不清除查杀集合，误判会一直残留。
+
+### 79.2 修复
+
+- 只匹配「Kill 动词 + 紧跟包名」的真实查杀行：`/\bKill(?:ing|ed)?\s+['"]?([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)/i`，如 `Kill 'com.android.providers.tv' (8290)`。
+- 白名单/跳过类语句直接排除：`whitelist|not kill|not killing|skip|suppress|avoid|ignore`。
+- 包名只取 Kill 动词后的对象，并自动去掉 `:process` 后缀（如 `com.android.vending:background` → `com.android.vending`）。
+- `killCount`、行高亮与查杀集合统一使用该判定；白名单行仍保留在日志中，但不再标红、不再计入查杀次数。
+- `clearLmk()` 同时重置 `killedPkgs`，避免历史误判残留。
+
+### 79.3 实测验证（真实日志行）
+
+| 日志行 | 解析结果 |
+|--------|----------|
+| `W/LowmemoryKiller( 195): found task com.whaletv.eco.service:photo in whitelist, not kill` | 排除（非查杀） |
+| `I/LowmemoryKiller( 195): Kill 'com.android.providers.tv' (8290), uid 10046...` | 查杀 `com.android.providers.tv` |
+| `I/lowmemorykiller( 195): Kill 'com.android.vending:background' (5387), uid 10069...` | 查杀 `com.android.vending` |
+| `W/lowmemorykiller( 195): ... process 7275 might have been killed` | 非查杀（无 Kill 动作） |
+
+### 79.4 文件变更
+
+| 文件 | 修改类型 | 说明 |
+|------|----------|------|
+| `src/views/device-space/MemStressPage.vue` | 修改 | LMK 查杀行判定与包名提取重写；非查杀行不高亮；清空事件同时重置查杀状态 |
+
+### 79.5 验证
+
+- 正则已用真机日志样本逐条校验，白名单行被排除，真实 Kill 行正确提取包名。
+- `npm run build`（vue-tsc + vite）✅

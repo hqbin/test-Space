@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "TestSpace",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "identifier": "com.testspace.app",
   "build": {
     "frontendDist": "../dist",
@@ -34,7 +34,10 @@
       "msi"
     ],
     "resources": [
-      "bin/scrcpy-server"
+      "bin/scrcpy-server",
+      "bin/stress-ng-armv7a",
+      "bin/stress-ng-arm64",
+      "bin/stress-ng-x86_64"
     ],
     "icon": [
       "icons/32x32.png",

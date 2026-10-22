@@ -66,7 +66,7 @@
           <h3 class="flex items-center gap-2 font-label-md text-label-md text-on-surface select-none">
             <span class="material-symbols-outlined text-[16px] text-on-surface-variant">settings_remote</span> {{ t('device.deviceOps') }}
           </h3>
-          <div class="grid grid-cols-3 gap-3">
+          <div class="grid grid-cols-3 sm:grid-cols-4 gap-3">
             <button class="bg-white/30 border border-outline-variant/30 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 transition-all text-sm text-on-surface backdrop-blur-sm select-none"
               :disabled="!selectedDevice || !!infoLoading" @click="queryInfo('basic')">
               <span v-if="infoLoading === 'basic'" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
@@ -95,6 +95,10 @@
             <button class="bg-white/30 border border-outline-variant/30 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 transition-all text-sm text-on-surface backdrop-blur-sm col-span-1 select-none"
               :disabled="!selectedDevice" @click="goPerfMonitor">
               <span class="material-symbols-outlined text-[16px] text-on-surface-variant">monitoring</span> {{ t('device.perfMonitor') }}
+            </button>
+            <button class="bg-white/30 border border-outline-variant/30 py-1.5 px-3 rounded-xl font-caption text-caption flex items-center justify-center gap-2 hover:bg-secondary/10 hover:border-secondary/30 transition-all text-sm text-on-surface backdrop-blur-sm col-span-1 select-none"
+              :disabled="!selectedDevice" @click="goMemStress">
+              <span class="material-symbols-outlined text-[16px] text-on-surface-variant">memory</span> {{ t('device.memStress') }}
             </button>
           </div>
           <hr class="border-outline-variant/30 my-1">
@@ -3262,6 +3266,9 @@ async function toggleRecording() {
 const router = useRouter()
 function goPerfMonitor() {
   router.push('/device-space/perf-monitor')
+}
+function goMemStress() {
+  router.push('/device-space/mem-stress')
 }
 
 // ── Output Panel ──

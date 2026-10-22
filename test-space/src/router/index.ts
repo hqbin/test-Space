@@ -29,6 +29,11 @@ const router = createRouter({
           component: () => import("@/views/device-space/PerfMonitorPage.vue"),
         },
         {
+          path: "device-space/mem-stress",
+          name: "mem-stress",
+          component: () => import("@/views/device-space/MemStressPage.vue"),
+        },
+        {
           path: "notes-space",
           name: "notes-space",
           component: () => import("@/views/note-space/NotesSpacePage.vue"),

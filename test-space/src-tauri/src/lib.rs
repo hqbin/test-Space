@@ -640,6 +640,38 @@ async fn perf_get_snapshot(serial: String, watch_app: Option<String>) -> Result<
     }).await.map_err(|e| e.to_string())?
 }
 
+/// 根据设备 ABI 定位随安装包分发的 stress-ng 二进制。
+/// 打包后位于 resource_dir/bin，开发模式下回退到仓库的 src-tauri/bin。
+#[tauri::command]
+fn stress_ng_binary_path(app: tauri::AppHandle, abi: String) -> Result<String, String> {
+    let name = match abi.as_str() {
+        "armeabi-v7a" | "armeabi" => "stress-ng-armv7a",
+        "arm64-v8a" | "aarch64" => "stress-ng-arm64",
+        "x86_64" => "stress-ng-x86_64",
+        other => return Err(format!("Unsupported ABI: {}", other)),
+    };
+
+    let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+    if let Ok(dir) = app.path().resource_dir() {
+        candidates.push(dir.join("bin").join(name));
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        candidates.push(cwd.join("bin").join(name));
+        candidates.push(cwd.join("src-tauri").join("bin").join(name));
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            candidates.push(parent.join("bin").join(name));
+        }
+    }
+
+    candidates
+        .into_iter()
+        .find(|p| p.is_file())
+        .map(|p| p.to_string_lossy().to_string())
+        .ok_or_else(|| format!("Bundled stress-ng binary not found: {}", name))
+}
+
 #[tauri::command]
 async fn adb_logcat_buffer_resize(serial: String, size_mb: u32) -> Result<String, String> {
     tokio::task::spawn_blocking(move || {
@@ -939,6 +971,7 @@ pub fn run() {
             adb_logcat_diag,
             adb_check_anr_tombstones,
             perf_get_snapshot,
+            stress_ng_binary_path,
             adb_logcat_buffer_resize,
             adb_bugreport,
             adb_kill_server,
