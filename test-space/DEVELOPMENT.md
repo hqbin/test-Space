@@ -434,6 +434,43 @@ Workspace 页面已在 Phase 9 中移除，路由 redirect 改为 `/case-space`�
   - **Tooltip**：修复 `if (!selected) return ''` 导致未选中单条折线时 tooltip 全空的问题，改为无选中时显示全部系列值
   - **Legend 防递归**：`selectSeries` 中 `dispatchAction({ type: 'legendSelect' })` 会触发 `legendselectchanged` 事件 → 递归循环，新增 `legendGuard` 标志阻止重入
 
+#### 4.7.4 日志分析（`LogAnalysisPanel.vue`）
+
+**实现（Phase 26 — 实时 logcat 流解析 + 16 模块状态面板）**：
+
+- **入口**：设备空间第三个 Tab「日志分析」（`troubleshoot` 图标），与常用命令/其他命令并列
+- **架构**：纯前端实现，复用已有 `adb_shell` Tauri 命令；`useLogAnalysis.ts` composable 负责轮询与解析，`LogAnalysisPanel.vue` 负责 UI
+- **轮询策略**：每 2 秒执行 `logcat -d -v time -b main,system,crash -t N`，首次拉 500 行历史，后续每次 150 行；基于行内容去重（前 110 字符 hash），避免重复触发；去重集合超 4000 条时自动回收一半
+- **模块匹配**：每行日志依次尝试 16 个模块的规则列表（regex + status + summary），命中第一条规则后停止；summary 支持函数形式以从正则捕获组中提取动态内容（如版本号、错误码、耗时）
+- **16 个可监控模块**（来自 WhaleLauncher + WhaletvEcoService APK 反编译分析）：
+
+| 模块 | 关键 TAG / 模式示例 |
+|------|-------------------|
+| 广告 SDK | `ZeasnAdSDK initialized` / `init error` / `onAdLoaded` / `adInitBean is null` |
+| Banner 展示 | `Banner data fetch api success/failed` / `Banner shown status` / `mHomeBanner onclick` |
+| OTA / 静默安装 | `newVersionName=` / `upgrade:download onSuccess/failed` / `onInstallSuccess/Failed` |
+| TOU 用户协议 | `requestTouUpdate start` / `TOU state=` / `requestTouData empty, fallback to cache` |
+| 网络状态 | `onAvailable` / `onLost` / `network restored` / `NetworkCallback` |
+| 开机流程 | `BOOT_COMPLETED` / `BootReceiver` / `LauncherActivity onCreate` |
+| 推荐内容 | `filterRecommendData bannerList` / `HomeFeed success/fail` / `Discovery content fetch` |
+| 埋点上报 | `TrackConfig init` / `analytics event sent` / `adsdkversion=` |
+| 屏保 / 休眠 | `DreamService start/stop` / `screen off/on` |
+| 语音 / Alexa | `alexaFlag=` / `Alexa config update` / `Alexa support true/false` |
+| Firebase 崩溃 | `Crashlytics initialized` / `crash report` / `NDK crash` |
+| 远程配置 | `TokenAppConfig success/fail` / `RemoteConfig activated/fetch` |
+| 用户 / 账号 | `userId bind` / `AccountManager login success/fail` |
+| 应用安装管理 | `getSilentInstallObserver isSuccessful=` / `XAPK 安装` / `UpgradeDownloadManager` |
+| 视频播放 | `ExoPlayer STATE_READY/BUFFERING/ENDED/error` / `MediaPlayer error` |
+| 权限 / GDPR | `permission granted/denied` / `gdpr consent true/false` / `consent status` |
+
+- **模块状态**：每个模块维护 `status`（ok/error/warning/info/unknown）、`summary`（最新一句话结论）、`lastUpdated`（时间戳）、`eventCount`（命中次数）
+- **UI 布局**：左侧 400px 模块卡片列表（状态色条 + 图标 + 摘要 + 时间），右侧弹性事件流（时间 + 模块标签 + 摘要）；点击模块卡片可过滤事件流
+- **接口监控响应体采集**（Phase 27 新增）：`HttpCtx` 状态机新增 `resp_body` 阶段；`<-- 200` 响应首行暂存状态码和耗时（`pendingResponseStatus`/`pendingDurationMs`），继续收集响应 headers（空行后切 `resp_body`）和响应 body，直到 `<-- END HTTP` 才 emit 并重置上下文；响应体限制 8KB 防止大 JSON 占用内存；`ApiRequest.responseBody` 在详情弹窗中格式化展示（JSON pretty-print）
+- **事件流关键词搜索**（Phase 27 新增）：全部视图过滤栏新增搜索输入框，`filteredEvents` computed 在状态过滤基础上叠加文本匹配（同时检索 `event.summary` 和 `event.raw`，大小写不敏感）
+- **过滤器**：全部 / 正常 / 异常 / 警告 / 信息 四档过滤按钮 + 关键词搜索框（可组合使用）
+- **新增文件**：`src/composables/useLogAnalysis.ts`、`src/views/device-space/LogAnalysisPanel.vue`
+- **修改文件**：`src/views/device-space/DeviceSpacePage.vue`（tabs 数组加第三项 + import LogAnalysisPanel）
+
 #### 4.7.3 内存压力测试（`MemStressPage.vue`）
 
 **实现**：通过 stress-ng 主动制造内存压力，实时观察 MemAvailable 变化与 LMK 查杀行为。

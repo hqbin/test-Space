@@ -6,6 +6,7 @@ test-space/src-tauri/target/
 
 # Build output
 test-space/dist/
+dist/
 
 # Python bytecode
 *.pyc

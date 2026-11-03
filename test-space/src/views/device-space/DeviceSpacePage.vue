@@ -508,6 +508,9 @@
       </div>
     </div>
 
+    <!-- Tab 3: 日志分析 -->
+    <LogAnalysisPanel v-show="activeTab === 'loganalysis'" :serial="selectedDevice?.serial" />
+
     <!-- Device Dropdown (teleported to body to escape glass-panel backdrop-filter) -->
     <Teleport to="body">
       <div v-if="showDeviceDropdown" class="fixed inset-0 z-50" @click="showDeviceDropdown = false"></div>
@@ -990,6 +993,7 @@
 <script setup lang="ts">
 defineOptions({ name: 'DeviceSpacePage' })
 import { ref, computed, watch, onMounted, onUnmounted, onActivated, onDeactivated, nextTick } from "vue";
+import LogAnalysisPanel from "@/views/device-space/LogAnalysisPanel.vue";
 import { useRouter } from "vue-router";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -1066,6 +1070,7 @@ async function copyToClipboard(text: string) {
 const tabs = computed(() => [
   { key: 'common', label: t('device.commonCommands'), icon: 'dashboard' },
   { key: 'other', label: t('device.otherCommands'), icon: 'more_horiz' },
+  { key: 'loganalysis', label: '日志分析', icon: 'troubleshoot' },
 ]);
 const activeTab = ref('common');
 
@@ -2104,11 +2109,7 @@ async function refreshPackageList() {
   pkgLoading.value = true;
   try {
     const raw = await listPackages(selectedDevice.value.serial, showThirdParty.value);
-    const oldVersionMap = new Map(apps.value.map(a => [a.package_name, { vn: a.version_name, vc: a.version_code }]));
-    apps.value = raw.map((pkg: string) => {
-      const old = oldVersionMap.get(pkg);
-      return { package_name: pkg, version_name: old?.vn, version_code: old?.vc };
-    });
+    apps.value = raw.map((pkg: string) => ({ package_name: pkg }));
     appPage.value = 1;
     loadedVersions.value = new Set();
     showToast(t('device.loadedApps', { count: String(apps.value.length) }));
