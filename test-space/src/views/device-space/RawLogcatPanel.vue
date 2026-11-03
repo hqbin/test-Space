@@ -27,14 +27,15 @@
         </span>
       </div>
 
-      <!-- 虚拟滚动容器 -->
-      <div v-else
-        ref="scrollContainerRef"
-        class="flex-1 overflow-y-auto custom-scrollbar relative"
-        @scroll="onScroll">
+      <!-- 虚拟滚动外层：relative 基准锁定可视区，悬浮按钮不随内容滚动 -->
+      <div v-else class="flex-1 min-h-0 relative">
+        <div
+          ref="scrollContainerRef"
+          class="h-full overflow-y-auto custom-scrollbar"
+          @scroll="onScroll">
 
-        <div :style="{ height: filteredLines.length * ROW_H + 'px', position: 'relative' }">
-          <div :style="{ position: 'absolute', top: visibleStart * ROW_H + 'px', left: 0, right: 0 }">
+          <div :style="{ height: filteredLines.length * ROW_H + 'px', position: 'relative' }">
+            <div :style="{ position: 'absolute', top: visibleStart * ROW_H + 'px', left: 0, right: 0 }">
             <div v-for="item in visibleItems" :key="item.id"
               class="group flex items-center gap-1 px-2 border-b border-outline-variant/5 hover:bg-white/10 transition-colors cursor-pointer"
               :class="[
@@ -84,9 +85,10 @@
               </button>
             </div>
           </div>
+          </div>
         </div>
 
-        <!-- 自动滚动浮动按钮 -->
+        <!-- 自动滚动浮动按钮：fixed 在外层 relative 容器右下角，不随内容滚动 -->
         <button v-if="!autoScroll"
           class="absolute bottom-3 right-4 glass-button rounded-full p-1.5 shadow-md select-none z-10"
           title="滚动到底部"
@@ -95,6 +97,21 @@
         </button>
       </div>
     </div>
+
+    <!-- 行详情弹窗 -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div v-if="toastVisible"
+          class="fixed bottom-8 left-1/2 -translate-x-1/2 z-[9999] glass-panel rounded-full px-5 py-2.5 flex items-center gap-2 select-none pointer-events-none">
+          <span class="material-symbols-outlined text-[18px]"
+            :class="toastOk ? 'text-success-indicator' : 'text-error'"
+            :style="{ fontVariationSettings: `'FILL' 1` }">
+            {{ toastOk ? 'check_circle' : 'error' }}
+          </span>
+          <span class="font-body-md text-body-md text-on-surface">{{ toastMsg }}</span>
+        </div>
+      </Transition>
+    </Teleport>
 
     <!-- 行详情弹窗 -->
     <Teleport to="body">
@@ -174,11 +191,14 @@ const scrollTop = ref(0)
 const containerHeight = ref(600)
 const scrollContainerRef = ref<HTMLElement | null>(null)
 const autoScroll = ref(true)
+let _scrollingToBottom = false  // 程序性滚动期间屏蔽 onScroll 的 autoScroll 判断
 
 function onScroll(e: Event) {
   const el = e.target as HTMLElement
   scrollTop.value = el.scrollTop
   containerHeight.value = el.clientHeight
+  // 程序性滚动期间只跳过 autoScroll 判断，scrollTop 仍需同步给虚拟滚动
+  if (_scrollingToBottom) return
   const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
   autoScroll.value = distFromBottom <= ROW_H * 3
 }
@@ -195,11 +215,16 @@ onMounted(() => {
 })
 onUnmounted(() => { resizeObs?.disconnect() })
 
-// 切换回来时重新测高，避免 v-show 隐藏期间 clientHeight=0
+// 切换回来时同步重读 scrollTop + containerHeight，再按需滚到底部
+// 避免 v-show 隐藏期间 clientHeight=0 导致虚拟滚动渲染区间为空
 watch(() => props.active, (val) => {
   if (val) {
     nextTick(() => {
-      if (scrollContainerRef.value) containerHeight.value = scrollContainerRef.value.clientHeight
+      const el = scrollContainerRef.value
+      if (!el) return
+      containerHeight.value = el.clientHeight
+      scrollTop.value = el.scrollTop
+      if (autoScroll.value) scrollToBottom()
     })
   }
 })
@@ -213,10 +238,15 @@ const visibleItems = computed(() => props.filteredLines.slice(visibleStart.value
 
 function scrollToBottom() {
   const el = scrollContainerRef.value
-  if (el) { el.scrollTop = el.scrollHeight; autoScroll.value = true }
+  if (!el) return
+  _scrollingToBottom = true
+  el.scrollTop = el.scrollHeight
+  autoScroll.value = true
+  // 等滚动事件结束后再解锁，requestAnimationFrame 确保在下一帧之后
+  requestAnimationFrame(() => { _scrollingToBottom = false })
 }
 
-watch(() => props.filteredLines.length, async () => {
+watch(() => props.filteredLines, async () => {
   if (!autoScroll.value) return
   await nextTick()
   scrollToBottom()
@@ -274,20 +304,40 @@ function jumpToMatch(dir: 1 | -1) {
 
 // ── 导出（供父组件通过 expose 调用） ──
 async function exportLog() {
-  const { documentDir, join } = await import('@tauri-apps/api/path')
-  const { mkdir, writeTextFile } = await import('@tauri-apps/plugin-fs')
-  const { invoke } = await import('@tauri-apps/api/core')
-  const docDir = await documentDir()
-  const dir = await join(docDir, 'TestSpace', 'Logs')
-  try { await mkdir(dir, { recursive: true }) } catch {}
-  const now = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
-  const ts = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
-  const filename = `logcat_${ts}.txt`
-  const dest = await join(dir, filename)
-  const content = props.filteredLines.map(l => l.raw).join('\n')
-  await writeTextFile(dest, content)
-  try { await invoke('open_path', { path: dir }) } catch {}
+  if (props.filteredLines.length === 0) {
+    _toast('没有日志可导出', false)
+    return
+  }
+  try {
+    const { documentDir, join } = await import('@tauri-apps/api/path')
+    const { mkdir, writeTextFile } = await import('@tauri-apps/plugin-fs')
+    const { invoke } = await import('@tauri-apps/api/core')
+    const docDir = await documentDir()
+    const dir = await join(docDir, 'TestSpace', 'Logs')
+    await mkdir(dir, { recursive: true })
+    const now = new Date()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const ts = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+    const filename = `logcat_${ts}.txt`
+    const dest = await join(dir, filename)
+    const content = props.filteredLines.map(l => l.raw).join('\n')
+    await writeTextFile(dest, content)
+    _toast(`已保存 ${filename}`, true)
+    try { await invoke('open_path', { path: dir }) } catch {}
+  } catch (e) {
+    _toast(`导出失败: ${String(e)}`, false)
+  }
+}
+
+// 简单 toast（不依赖父组件）
+const toastMsg = ref('')
+const toastOk = ref(true)
+const toastVisible = ref(false)
+let _toastTimer: number | null = null
+function _toast(msg: string, ok: boolean) {
+  toastMsg.value = msg; toastOk.value = ok; toastVisible.value = true
+  if (_toastTimer) clearTimeout(_toastTimer)
+  _toastTimer = window.setTimeout(() => { toastVisible.value = false }, 3000)
 }
 
 defineExpose({ jumpBookmark, jumpToMatch, exportLog })

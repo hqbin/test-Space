@@ -1,8 +1,10 @@
-import { ref, onUnmounted, type Ref } from 'vue'
+import { ref, computed, onUnmounted, type Ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
-const MAX_LINES = 8000
+const MAX_LINES = 10000
 const HISTORY_KEY = 'rawlogcat_search_history'
+const TAG_HISTORY_KEY = 'rawlogcat_tag_history'
 const MAX_HISTORY = 20
 
 export type LogLevel = 'V' | 'D' | 'I' | 'W' | 'E' | 'F' | '?'
@@ -50,9 +52,7 @@ export function addSearchHistory(query: string) {
   if (!query.trim()) return
   const history = getSearchHistory().filter(h => h !== query)
   history.unshift(query)
-  try {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, MAX_HISTORY)))
-  } catch {}
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, MAX_HISTORY))) } catch {}
 }
 
 export function removeSearchHistory(query: string) {
@@ -64,122 +64,140 @@ export function clearSearchHistory() {
   try { localStorage.removeItem(HISTORY_KEY) } catch {}
 }
 
+export function getTagHistory(): string[] {
+  try {
+    const raw = localStorage.getItem(TAG_HISTORY_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
+}
+
+export function addTagHistory(query: string) {
+  if (!query.trim()) return
+  const history = getTagHistory().filter(h => h !== query)
+  history.unshift(query)
+  try { localStorage.setItem(TAG_HISTORY_KEY, JSON.stringify(history.slice(0, MAX_HISTORY))) } catch {}
+}
+
+export function removeTagHistory(query: string) {
+  const history = getTagHistory().filter(h => h !== query)
+  try { localStorage.setItem(TAG_HISTORY_KEY, JSON.stringify(history)) } catch {}
+}
+
+export function clearTagHistory() {
+  try { localStorage.removeItem(TAG_HISTORY_KEY) } catch {}
+}
+
 // ── Composable ──
 
 export function useRawLogcat(serial: Ref<string | null | undefined>) {
   const status = ref<LogcatStatus>('idle')
-  const lines = ref<RawLogLine[]>([])
+  // 内部裸数组，不进 Vue 响应式，直接 push/splice
+  const _linesRaw: RawLogLine[] = []
+  // 整数信号：每次有新数据就 +1，驱动 computed 重跑
+  const _tick = ref(0)
+  // 对外暴露：computed 依赖 _tick，每次返回浅拷贝（只复制指针）
+  const lines = computed<RawLogLine[]>(() => { _tick.value; return _linesRaw.slice() })
   const bookmarkedIds = ref<Set<number>>(new Set())
 
-  let pollTimer: number | null = null
   let lineIdCounter = 0
-  let lastTimestamp = ''
-  let isPolling = false
-  let clearGen = 0  // 每次 clear 递增，让飞行中的旧 poll 结果失效
+  let clearGen = 0
+  let unlisten: UnlistenFn | null = null
+  let pauseBuffer: string[] = []  // 暂停时缓存行，resume 后补入
 
-  function parseAndAppend(output: string, gen: number) {
-    // 如果 clear 在飞行中被调用过，这批结果作废
+  function appendLines(rawLines: string[], gen: number) {
     if (gen !== clearGen) return
-
-    const rawLines = output.split('\n')
-    const parsed: RawLogLine[] = []
-
+    let hasNew = false
     for (const raw of rawLines) {
       const trimmed = raw.trim()
       if (!trimmed || trimmed.startsWith('-----')) continue
       const line = parseLine(trimmed, ++lineIdCounter)
-      if (line) parsed.push(line)
+      if (!line) continue
+      _linesRaw.push(line)
+      hasNew = true
     }
-
-    if (parsed.length === 0) return
-
-    const last = parsed[parsed.length - 1]
-    if (last) lastTimestamp = `${last.date} ${last.time}`
-
-    lines.value.push(...parsed)
-    if (lines.value.length > MAX_LINES) {
-      const evicted = lines.value.splice(0, lines.value.length - MAX_LINES)
-      // 淘汰的行同步清掉书签，避免书签定位到不存在的行
+    if (!hasNew) return
+    if (_linesRaw.length > MAX_LINES) {
+      const evicted = _linesRaw.splice(0, _linesRaw.length - MAX_LINES)
       if (bookmarkedIds.value.size > 0) {
         const evictedIds = new Set(evicted.map(l => l.id))
         const cleaned = new Set([...bookmarkedIds.value].filter(id => !evictedIds.has(id)))
         if (cleaned.size !== bookmarkedIds.value.size) bookmarkedIds.value = cleaned
       }
     }
+    _tick.value++
   }
 
-  async function doPoll(isFirst: boolean) {
-    if (!serial.value || status.value !== 'running') return
-    if (isPolling && !isFirst) {
-      if (status.value === 'running') pollTimer = window.setTimeout(() => doPoll(false), 300)
-      return
-    }
-    isPolling = true
-    const gen = clearGen
-    try {
-      let cmd: string
-      if (isFirst) {
-        // 首次只取最近 800 行，避免首屏卡顿
-        cmd = 'logcat -d -v threadtime -b main,system,crash -t 800'
-      } else if (lastTimestamp) {
-        // 不加 -t 限制，取 lastTimestamp 之后的所有行，确保无遗漏
-        cmd = `logcat -d -v threadtime -b main,system,crash -T "${lastTimestamp}"`
-      } else {
-        cmd = 'logcat -d -v threadtime -b main,system,crash -t 800'
-      }
-      const output = await invoke<string>('adb_shell', { serial: serial.value, command: cmd })
-      parseAndAppend(output, gen)
-    } catch { /* silent */ } finally {
-      isPolling = false
-    }
-    // 只有当前 gen 仍有效时才继续调度，避免 clear 后旧 poll 链续活
-    if (gen === clearGen && status.value === 'running') pollTimer = window.setTimeout(() => doPoll(false), 800)
-  }
-
-  function start() {
+  async function start() {
     if (!serial.value) return
+    await stop()
     clearGen++
-    lines.value = []
+    const gen = clearGen
+    _linesRaw.length = 0
+    _tick.value++
     bookmarkedIds.value = new Set()
     lineIdCounter = 0
-    lastTimestamp = ''
-    isPolling = false
-    if (pollTimer !== null) { clearTimeout(pollTimer); pollTimer = null }
+    pauseBuffer = []
+
+    const eventName = `logcat://lines:${serial.value}`
+    unlisten = await listen<{ serial: string; lines: string[] }>(eventName, (e) => {
+      if (status.value === 'paused') {
+        pauseBuffer.push(...e.payload.lines)
+        return
+      }
+      appendLines(e.payload.lines, gen)
+    })
+
+    await invoke('logcat_stream_start', { serial: serial.value })
     status.value = 'running'
-    doPoll(true)
+  }
+
+  async function stop() {
+    const s = serial.value
+    status.value = 'idle'
+    if (unlisten) { unlisten(); unlisten = null }
+    pauseBuffer = []
+    if (s) {
+      try { await invoke('logcat_stream_stop', { serial: s }) } catch {}
+    }
   }
 
   function pause() {
     if (status.value !== 'running') return
     status.value = 'paused'
-    if (pollTimer !== null) { clearTimeout(pollTimer); pollTimer = null }
   }
 
   function resume() {
     if (status.value !== 'paused') return
     status.value = 'running'
-    doPoll(false)
-  }
-
-  function stop() {
-    status.value = 'idle'
-    if (pollTimer !== null) { clearTimeout(pollTimer); pollTimer = null }
+    if (pauseBuffer.length > 0) {
+      appendLines(pauseBuffer, clearGen)
+      pauseBuffer = []
+    }
   }
 
   function clear() {
     clearGen++
-    isPolling = false
-    lines.value = []
+    _linesRaw.length = 0
+    pauseBuffer = []
+    _tick.value++
     bookmarkedIds.value = new Set()
     lineIdCounter = 0
-    lastTimestamp = ''
   }
 
-  // 清空后立即触发一次拉取，不等 800ms timer
-  function refresh() {
-    if (status.value !== 'running') return
-    if (pollTimer !== null) { clearTimeout(pollTimer); pollTimer = null }
-    doPoll(false)
+  // 清空设备日志后重启流
+  async function refresh() {
+    if (!serial.value || status.value === 'idle') return
+    const s = serial.value
+    clear()
+    if (unlisten) { unlisten(); unlisten = null }
+    try { await invoke('logcat_stream_stop', { serial: s }) } catch {}
+    const gen = clearGen
+    const eventName = `logcat://lines:${s}`
+    unlisten = await listen<{ serial: string; lines: string[] }>(eventName, (e) => {
+      if (status.value === 'paused') { pauseBuffer.push(...e.payload.lines); return }
+      appendLines(e.payload.lines, gen)
+    })
+    await invoke('logcat_stream_start', { serial: s })
   }
 
   function toggleBookmark(id: number) {
@@ -189,7 +207,7 @@ export function useRawLogcat(serial: Ref<string | null | undefined>) {
     bookmarkedIds.value = s
   }
 
-  onUnmounted(stop)
+  onUnmounted(() => { stop() })
 
   return { status, lines, bookmarkedIds, start, pause, resume, stop, clear, refresh, toggleBookmark }
 }

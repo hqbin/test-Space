@@ -52,6 +52,20 @@ struct LogcatDiag {
     exit_reason: String,
 }
 
+// ── 流式 logcat（用于 UI 实时展示，零轮询，持久 ADB 进程逐行推事件） ──
+struct LogcatStreamChild {
+    stop_flag: Arc<AtomicBool>,
+}
+
+#[derive(Default)]
+struct LogcatStreamState(Mutex<HashMap<String, LogcatStreamChild>>);
+
+#[derive(Serialize, Clone)]
+struct LogcatStreamPayload {
+    serial: String,
+    lines: Vec<String>,
+}
+
 static NEXT_MIRROR_PORT: AtomicU16 = AtomicU16::new(27183);
 
 #[tauri::command]
@@ -672,6 +686,96 @@ fn stress_ng_binary_path(app: tauri::AppHandle, abi: String) -> Result<String, S
         .ok_or_else(|| format!("Bundled stress-ng binary not found: {}", name))
 }
 
+/// 启动持久 logcat 流：adb logcat 进程保持运行，每 50ms 批量 emit 一次
+/// "logcat://lines:{serial}" 事件，payload 为 LogcatStreamPayload。
+/// 前端用 listen() 接收，零轮询，零漏行。
+#[tauri::command]
+async fn logcat_stream_start(
+    serial: String,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, LogcatStreamState>,
+) -> Result<(), String> {
+    // 如果已有旧流则先停掉
+    if let Some(old) = state.0.lock().unwrap().remove(&serial) {
+        old.stop_flag.store(true, Ordering::Relaxed);
+    }
+
+    let stop_flag = Arc::new(AtomicBool::new(false));
+    let stop_flag_c = stop_flag.clone();
+    let serial_c = serial.clone();
+
+    let mut cmd = std::process::Command::new("adb");
+    #[cfg(target_os = "windows")]
+    { cmd.creation_flags(0x08000000); }
+    let mut child = cmd
+        .args(["-s", &serial, "logcat", "-v", "threadtime", "-b", "main,system,crash"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| format!("logcat stream spawn failed: {}", e))?;
+
+    let stdout = child.stdout.take().ok_or("stdout missing")?;
+
+    std::thread::spawn(move || {
+        let mut reader = std::io::BufReader::with_capacity(64 * 1024, stdout);
+        let mut raw = Vec::<u8>::with_capacity(4096);
+        let mut batch: Vec<String> = Vec::with_capacity(256);
+        let mut last_emit = std::time::Instant::now();
+
+        loop {
+            if stop_flag_c.load(Ordering::Relaxed) { break; }
+
+            raw.clear();
+            match reader.read_until(b'\n', &mut raw) {
+                Ok(0) => break,  // ADB process exited
+                Ok(_) => {}
+                Err(_) => break,
+            }
+
+            let line = String::from_utf8_lossy(&raw).trim_end_matches('\n').trim_end_matches('\r').to_string();
+            if !line.is_empty() {
+                batch.push(line);
+            }
+
+            // 每 50ms 或攒够 200 行就 emit 一次，平衡实时性和开销
+            let now = std::time::Instant::now();
+            if batch.len() >= 200 || (now.duration_since(last_emit).as_millis() >= 50 && !batch.is_empty()) {
+                let payload = LogcatStreamPayload { serial: serial_c.clone(), lines: std::mem::take(&mut batch) };
+                let event = format!("logcat://lines:{}", serial_c);
+                let _ = app.emit(&event, payload);
+                last_emit = now;
+            }
+        }
+
+        // 退出前 flush 剩余
+        if !batch.is_empty() {
+            let payload = LogcatStreamPayload { serial: serial_c.clone(), lines: batch };
+            let event = format!("logcat://lines:{}", serial_c);
+            let _ = app.emit(&event, payload);
+        }
+    });
+
+    // child 移入 state 以便 stop 时 kill
+    // 注意：child.stdout 已被 take，这里只保留 child 用于 kill
+    state.0.lock().unwrap().insert(serial, LogcatStreamChild { stop_flag });
+    // child 在线程里通过 stdout EOF 自然结束，不需要额外 join
+    // 但需要 wait 避免僵尸进程 — spawn detached thread 来 wait
+    std::thread::spawn(move || { let _ = child.wait(); });
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn logcat_stream_stop(
+    serial: String,
+    state: tauri::State<'_, LogcatStreamState>,
+) -> Result<(), String> {
+    if let Some(entry) = state.0.lock().unwrap().remove(&serial) {
+        entry.stop_flag.store(true, Ordering::Relaxed);
+    }
+    Ok(())
+}
+
 #[tauri::command]
 async fn adb_logcat_buffer_resize(serial: String, size_mb: u32) -> Result<String, String> {
     tokio::task::spawn_blocking(move || {
@@ -850,6 +954,7 @@ pub fn run() {
         })
         .manage(MirrorState(Mutex::new(HashMap::new())))
         .manage(LogcatState::default())
+        .manage(LogcatStreamState::default())
         .manage(ScriptManager::new())
         .manage(proxy::ProxyState::new())
 
@@ -981,6 +1086,8 @@ pub fn run() {
             open_path,
             adb_list_directory,
             adb_get_app_info,
+            logcat_stream_start,
+            logcat_stream_stop,
             serial_list_ports,
             serial_connect,
             serial_disconnect,

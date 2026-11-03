@@ -73,9 +73,15 @@
         <div class="h-4 w-[1px] bg-glass-border-dark shrink-0"></div>
 
         <!-- Tag 过滤 -->
-        <input v-model="logcatTagFilter"
+        <input
+          ref="logcatTagInputRef"
+          v-model="logcatTagFilter"
           class="bg-white/40 border border-outline-variant/40 rounded-lg px-2.5 py-1 font-caption text-[11px] text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none focus:ring-1 focus:ring-secondary/30 select-text w-28"
-          placeholder="TAG，如 WhaleTv" title="按日志 TAG 过滤，TAG 显示在 L 右侧" />
+          placeholder="TAG，如 WhaleTv" title="按日志 TAG 过滤，TAG 显示在 L 右侧"
+          @focus="onLogcatTagFocus"
+          @blur="onLogcatTagBlur"
+          @keydown.enter="commitLogcatTag"
+          @keydown.escape="logcatShowTagHistory = false" />
 
         <!-- 搜索框（Teleport 解决下拉层级） -->
         <div class="flex items-center gap-1">
@@ -165,6 +171,31 @@
             <span class="font-caption text-[11px] text-on-surface flex-1 truncate select-none">{{ item }}</span>
             <button class="opacity-0 group-hover:opacity-100 transition-opacity glass-hover rounded p-0.5"
               @mousedown.prevent="removeLogcatHistoryItem(item)">
+              <span class="material-symbols-outlined text-[11px] text-on-surface-variant/50">close</span>
+            </button>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- TAG 历史下拉（Teleport 避免被遮挡） -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div v-if="logcatShowTagHistory && logcatTagHistory.length > 0 && logcatTagHistoryRect"
+          class="fixed z-[9999] glass-panel rounded-xl shadow-lg py-1 min-w-[160px] max-h-48 overflow-y-auto custom-scrollbar"
+          :style="{ top: logcatTagHistoryRect.top + 'px', left: logcatTagHistoryRect.left + 'px', width: logcatTagHistoryRect.width + 'px' }">
+          <div class="flex items-center justify-between px-3 py-1 border-b border-outline-variant/10">
+            <span class="font-caption text-[10px] text-on-surface-variant/50 select-none">TAG 历史</span>
+            <button class="glass-hover rounded px-1 py-0.5 text-[9px] text-on-surface-variant/50 select-none"
+              @mousedown.prevent="clearTagHistoryStore(); logcatTagHistory = []">清空</button>
+          </div>
+          <div v-for="item in logcatTagHistory" :key="item"
+            class="flex items-center gap-2 px-3 py-1.5 hover:bg-white/20 cursor-pointer group"
+            @mousedown.prevent="applyLogcatTagHistory(item)">
+            <span class="material-symbols-outlined text-[12px] text-on-surface-variant/40">history</span>
+            <span class="font-caption text-[11px] text-on-surface flex-1 truncate select-none">{{ item }}</span>
+            <button class="opacity-0 group-hover:opacity-100 transition-opacity glass-hover rounded p-0.5"
+              @mousedown.prevent="removeLogcatTagHistoryItem(item)">
               <span class="material-symbols-outlined text-[11px] text-on-surface-variant/50">close</span>
             </button>
           </div>
@@ -577,7 +608,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, type Ref } from 'vue'
 import { useLogAnalysis, MODULE_ORDER, type ModuleStatus, type ApiRequest } from '@/composables/useLogAnalysis'
-import { useRawLogcat, ALL_LEVELS, getSearchHistory, addSearchHistory, removeSearchHistory, clearSearchHistory as clearHistoryStore, type LogLevel } from '@/composables/useRawLogcat'
+import { useRawLogcat, ALL_LEVELS, getSearchHistory, addSearchHistory, removeSearchHistory, clearSearchHistory as clearHistoryStore, getTagHistory, addTagHistory, removeTagHistory, clearTagHistory as clearTagHistoryStore, type LogLevel } from '@/composables/useRawLogcat'
 import RawLogcatPanel from './RawLogcatPanel.vue'
 
 const props = defineProps<{ serial: string | null | undefined; showPopout?: boolean }>()
@@ -587,7 +618,16 @@ const { isRunning, totalEvents, modules, events, apiRequests, start: startAnalys
 const { status: logcatStatus, lines: logcatLines, bookmarkedIds: logcatBookmarkedIds, start: logcatStart, pause: logcatPause, resume: logcatResume, stop: logcatStop, clear: logcatClear, refresh: logcatRefresh, toggleBookmark: logcatToggleBookmark } = useRawLogcat(serialRef)
 
 // 开始/停止同时控制两个子系统（错开 300ms 避免同时打两个 adb 命令卡顿）
-function start() { startAnalysis(); setTimeout(() => { if (logcatStatus.value === 'idle') logcatStart() }, 300) }
+// 先注册分析监听（立即设 isRunning=true，按钮立即响应），再启动 ADB 流
+async function start() {
+  try {
+    await startAnalysis()   // 同步设 isRunning=true + 注册事件监听
+    await logcatStart()     // 启动持久 ADB 进程开始推事件
+  } catch (e) {
+    stopAnalysis()
+    console.error('logcat start failed:', e)
+  }
+}
 function stop() { stopAnalysis(); logcatStop() }
 function clearAll() { clear(); logcatClear() }
 
@@ -622,6 +662,11 @@ const logcatSearchHistory = ref<string[]>(getSearchHistory())
 const logcatShowHistory = ref(false)
 const logcatSearchInputRef = ref<HTMLInputElement | null>(null)
 const logcatHistoryRect = ref<{ top: number; left: number; width: number } | null>(null)
+
+const logcatTagHistory = ref<string[]>(getTagHistory())
+const logcatShowTagHistory = ref(false)
+const logcatTagInputRef = ref<HTMLInputElement | null>(null)
+const logcatTagHistoryRect = ref<{ top: number; left: number; width: number } | null>(null)
 const rawLogcatPanelRef = ref<InstanceType<typeof RawLogcatPanel> | null>(null)
 
 const logcatRegexError = computed(() => {
@@ -682,7 +727,35 @@ function onLogcatSearchFocus() {
   }
   logcatShowHistory.value = true
 }
-function onLogcatSearchBlur() { setTimeout(() => { logcatShowHistory.value = false }, 150) }
+function onLogcatSearchBlur() {
+  // blur 时也保存，防止用户没按 Enter 就切走导致历史丢失
+  const q = logcatSearchQuery.value.trim()
+  if (q) { addSearchHistory(q); logcatSearchHistory.value = getSearchHistory() }
+  setTimeout(() => { logcatShowHistory.value = false }, 150)
+}
+
+// ── TAG 历史 ──
+function commitLogcatTag() {
+  const t = logcatTagFilter.value.trim()
+  if (t) { addTagHistory(t); logcatTagHistory.value = getTagHistory() }
+  logcatShowTagHistory.value = false
+}
+function applyLogcatTagHistory(item: string) { logcatTagFilter.value = item; logcatShowTagHistory.value = false }
+function removeLogcatTagHistoryItem(item: string) { removeTagHistory(item); logcatTagHistory.value = getTagHistory() }
+function onLogcatTagFocus() {
+  const el = logcatTagInputRef.value
+  if (el) {
+    const rect = el.getBoundingClientRect()
+    logcatTagHistoryRect.value = { top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 160) }
+  }
+  logcatShowTagHistory.value = true
+}
+function onLogcatTagBlur() {
+  // blur 时保存，防止用户没按 Enter 就切走
+  const t = logcatTagFilter.value.trim()
+  if (t) { addTagHistory(t); logcatTagHistory.value = getTagHistory() }
+  setTimeout(() => { logcatShowTagHistory.value = false }, 150)
+}
 
 watch(logcatContextLines, (val) => {
   try { localStorage.setItem('logcat_context_lines', String(Number(val) || 0)) } catch {}
@@ -702,8 +775,8 @@ async function clearDeviceLog() {
     showDeviceClearToast(false, '清空失败，请检查设备连接')
   } finally {
     clearingDevice.value = false
-    // 设备 logcat -c 执行完再拉新日志，避免拉到旧缓冲区内容
-    logcatRefresh()
+    // 设备 logcat -c 执行完再重启流，避免拉到旧缓冲区内容
+    await logcatRefresh()
   }
 }
 

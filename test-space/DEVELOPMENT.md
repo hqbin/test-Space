@@ -439,16 +439,17 @@ Workspace 页面已在 Phase 9 中移除，路由 redirect 改为 `/case-space`�
 **实现（Phase 26 — 实时 logcat 流解析 + 模块状态面板）**：
 
 - **入口**：设备空间第三个 Tab「日志分析」（`troubleshoot` 图标），控制栏右侧有独立窗口按钮（`open_in_new`），点击弹出 1280×800 原生窗口（路由 `/log-analysis?serial=`）
-- **架构**：纯前端实现，复用已有 `adb_shell` Tauri 命令；`useLogAnalysis.ts` 负责模块解析，`useRawLogcat.ts` 负责原始日志采集，`LogAnalysisPanel.vue` 统一管理两套子系统的启动/停止/清空
-- **控制栏联动**：点击「开始」同时启动模块分析和原始日志（延迟 300ms 错开 ADB 命令防卡顿），「停止」同时停止两者；「清空日志」先清空面板数据并立即触发新一轮拉取（不等设备命令返回），再后台执行 `logcat -c`
-- **轮询策略（模块分析）**：每 500ms 执行 `logcat -d -v time -b main,system,crash`，基于 `-T lastTimestamp` 增量拉取，不限行数；基于行内容去重（前 120 字符 hash），去重集合超 6000 条时自动回收一半；事件缓冲上限 600 条，接口记录上限 300 条
+- **架构（Phase 29 升级）**：Rust 侧持久流式 ADB 进程 + 前端 `listen()` 接收，彻底取代原有轮询方案；`useLogAnalysis.ts` 负责模块解析，`useRawLogcat.ts` 负责原始日志，两者共享同一条 `logcat://lines:{serial}` 事件流，单个 ADB 进程
+- **控制栏联动**：点击「开始」先启动 `startAnalysis()`（立即设 `isRunning=true`），再 `logcatStart()` 启动 ADB 进程；「停止」同时停止两者；「清空日志」先清空面板、执行 `logcat -c`，再调用 `refresh()` 重启流
+- **Rust 流式采集（`logcat_stream_start`）**：后台线程启动 `adb -s {serial} logcat -v threadtime -b main,system,crash`，逐行读取 stdout，每 50ms 或攒够 200 行批量 `emit("logcat://lines:{serial}")`，进程退出时 flush 剩余行；`logcat_stream_stop` 设置 stop flag 并等待进程自然退出
+- **前端事件接收（`useRawLogcat.ts`）**：`listen()` 注册事件监听，暂停时行数缓存到 `pauseBuffer`，resume 后补入；`_linesRaw` 内部裸数组 + `_tick` 整数信号驱动 computed 更新，避免大数组响应式开销；缓冲上限 10000 行
 - **模块匹配**：每行日志依次尝试 11 个模块的规则列表（regex + status + summary），命中第一条规则后停止；summary 支持函数形式以从正则捕获组中提取动态内容
 - **11 个可监控模块**（Banner、推荐内容、远程配置、Firebase 崩溃、权限/GDPR 已移除）：
 
 | 模块 | 关键 TAG / 模式示例 |
 |------|-------------------|
 | 开机流程 | `BOOT_COMPLETED` / `SYS_LAUNCHER_BOOT_FIRST_FRAME_COMPLETE` / `recordBootTime cost=` |
-| 广告 SDK | `ZeasnAdSDK initialized` / `onAdLoaded` / `adInitBean is null` / `WhaleOSADpClient` |
+| 广告 SDK | `ad sdk加载步骤` / `ZeasnAdSDK initialized` / `onAdLoaded` / `adInitBean is null` |
 | OTA / 静默安装 | `newVersionName=` / `upgrade:download onSuccess/failed` / `onInstallSuccess/Failed` |
 | TOU 用户协议 | `requestTouUpdate start` / `TOU state=` / `requestTouData empty, fallback to cache` |
 | 埋点上报 | `Zeasn_db insert/save` / `Zeasn_http send/success` / `ZeasnTrackerSdk init` |
@@ -468,16 +469,15 @@ Workspace 页面已在 Phase 9 中移除，路由 redirect 改为 `/case-space`�
 **Phase 28 — 原始日志面板（`RawLogcatPanel.vue` + `useRawLogcat.ts`）**：
 
 - **入口**：左侧模块列表顶部「原始日志」卡片，切换后控制栏自动显示 logcat 专属控件
-- **采集**：`useRawLogcat.ts` composable，`logcat -d -v threadtime`（含 PID/TID 字段），每 800ms 增量轮询，缓冲上限 8000 行；支持 start / pause / resume / stop / clear / refresh；缓冲区淘汰时同步清除对应书签 ID
-- **清空竞态保护**：内部维护 `clearGen` 计数器，每次 `clear()` / `start()` 时递增；`doPoll` 在发起请求前快照当前 `gen`，结果返回时若 `gen !== clearGen` 则丢弃，poll 链也不再续活，彻底防止清空后旧缓冲区数据回填
-- **虚拟滚动**：只渲染可视区 ±20 行，8000 条不卡顿；行高固定 28px；`containerHeight` 在每次 scroll 事件和 `active` prop 切换时实时读取 `clientHeight`，避免 `v-show` 隐藏期间高度为 0 导致计算错误
-- **控件（集成在顶部控制栏）**：Level 多选（V/D/I/W/E/F，至少保留一个）、TAG 模糊过滤、搜索框（支持正则切换、记录历史至 localStorage，下拉用 `Teleport to="body"` 解决层级遮挡）、上下 X 行上下文展开（localStorage 持久化用户偏好）、书签上下导航、条数统计、导出、全屏
-- **搜索跳转**：Enter 循环跳转匹配行，用 `currentMatchCount` 计数器追踪位置；新日志进来时用 `currentMatchId` 重新定位计数器，不打断连续跳转；当前匹配行黄色背景高亮
-- **行交互**：点击任意行弹出详情窗（完整 Message + PID/TID/时间戳/原始行 + 一键复制）；HTTP 相关行自动识别并蓝色高亮显示 HTTP 标签；书签图标悬停可见，加书签后常驻显示
-- **自动滚动**：运行时自动滚到底；用户向上翻阅时暂停，滚到底 3 行内恢复；未自动滚动时右下角浮现「回到底部」按钮
-- **导出**：自动保存到 `Documents/TestSpace/Logs/logcat_时间戳.txt`，保存后自动打开文件夹（与常用命令页逻辑一致）
+- **采集（Phase 29 升级为流式）**：复用 `logcat_stream_start` 的持久 ADB 进程，`useRawLogcat.ts` 通过 `listen("logcat://lines:{serial}")` 接收批量行；支持 start / pause（行缓存到 `pauseBuffer`）/ resume / stop / clear / refresh（重启流）；`clearGen` 保护飞行中的旧事件
+- **虚拟滚动**：只渲染可视区 ±20 行，10000 条不卡顿；行高固定 28px；切换 tab 时同步重读 `scrollTop` + `containerHeight`，消除切回时的空白现象；程序性滚动期间 `_scrollingToBottom` 标志只跳过 `autoScroll` 判断，`scrollTop.value` 始终更新
+- **控件（集成在顶部控制栏）**：Level 多选（V/D/I/W/E/F，至少保留一个）、TAG 模糊过滤（含历史记录，`rawlogcat_tag_history`）、搜索框（支持正则切换、历史记录 `rawlogcat_search_history`，blur 时也保存，下拉用 `Teleport to="body"` 解决层级遮挡）、上下 X 行上下文展开（localStorage 持久化用户偏好）、书签上下导航、条数统计、导出、全屏
+- **搜索跳转**：Enter 循环跳转匹配行；新日志进来时用 `currentMatchId` 重新定位计数器
+- **行交互**：点击任意行弹出详情窗；HTTP 相关行蓝色高亮；书签悬停可见
+- **自动滚动**：运行时自动滚到底；用户向上翻阅时暂停，滚到底 3 行内恢复；未自动滚动时右下角浮现「回到底部」按钮（`position: absolute` 相对外层 wrapper，不随内容滚动）
+- **导出**：保存到 `Documents/TestSpace/Logs/logcat_时间戳.txt`，成功/失败均有 toast 提示，保存后自动打开文件夹
 - **全屏**：仅隐藏左侧模块列表，控制栏始终保留
-- **独立窗口**：`StandaloneLogAnalysis.vue`，路由 `/log-analysis?serial=`，背景色与主窗口一致（`#F1EDE4` + device-space 双色径向渐变），使用系统原生装饰窗
+- **独立窗口**：`StandaloneLogAnalysis.vue`，路由 `/log-analysis?serial=`；capabilities 已加入 `log-analysis-*` 窗口权限
 
 **新增文件**：`src/composables/useRawLogcat.ts`、`src/views/device-space/RawLogcatPanel.vue`、`src/views/device-space/StandaloneLogAnalysis.vue`
 

@@ -122,6 +122,12 @@ const MODULE_DEFS: Record<string, ModuleDef> = {
     name: '广告 SDK',
     icon: 'ad_units',
     patterns: [
+      // SDK 加载步骤（宽松匹配，覆盖"ad sdk加载步骤"各种格式）
+      { regex: /ad\s*sdk.*加载步骤[：:\s]*(.{0,100})/i, status: 'info', summary: m => `Ad SDK 加载步骤: ${m[1]?.trim().substring(0, 80) || ''}` },
+      { regex: /加载步骤.*ad\s*sdk/i, status: 'info', summary: '广告 SDK 加载步骤' },
+      { regex: /loadAdStep[=:\s]+(.+)/i, status: 'info', summary: m => `Ad SDK 加载步骤: ${m[1]?.trim().substring(0, 80)}` },
+      { regex: /AdLoadStep[=:\s]+(.+)/i, status: 'info', summary: m => `Ad SDK 加载步骤: ${m[1]?.trim().substring(0, 80)}` },
+      { regex: /adStep[=:\s]+(.+)/i, status: 'info', summary: m => `广告加载阶段: ${m[1]?.trim().substring(0, 60)}` },
       // SDK 初始化
       { regex: /ZeasnAdSDK initialized/, status: 'ok', summary: 'Ad SDK 初始化成功' },
       { regex: /ZeasnAdSDK\.init\s+error[:\s]+(.+)/, status: 'error', summary: m => `Ad SDK 初始化失败: ${m[1]?.trim()}` },
@@ -158,9 +164,7 @@ const MODULE_DEFS: Record<string, ModuleDef> = {
       { regex: /getAdvertisingId.*fail|AdvertisingId.*error/i, status: 'error', summary: '获取广告 ID 失败' },
       { regex: /adId[=:\s]+([^\s,}\n]{3,40})/i, status: 'info', summary: m => `广告 ID: ${m[1]?.trim()}` },
       { regex: /vastAd\b|VastCreativeType/i, status: 'info', summary: 'VAST 广告事件' },
-      { regex: /WhaleOSADpClient.*requestParams\s*=\s*(.{0,120})/i, status: 'info', summary: m => `广告请求参数: ${m[1]?.trim().substring(0, 100)}` },
       { regex: /WhaleOSADpClient.*cpuSerial\s*==\s*(.+)/i, status: 'info', summary: m => `广告 cpuSerial: ${m[1]?.trim()}` },
-      { regex: /WhaleOSADpClient.*deviceKey\s*==\s*(.+)/i, status: 'info', summary: m => `广告 deviceKey: ${m[1]?.trim().substring(0, 40)}` },
       { regex: /loadAd after release/i, status: 'warning', summary: '广告资源释放后再次加载' },
     ],
   },
@@ -569,13 +573,12 @@ export function useLogAnalysis(serial: Ref<string | null | undefined>) {
   const events = ref<LogEvent[]>([])
   const apiRequests = ref<ApiRequest[]>([])
 
-  let pollTimer: number | null = null
-  let apiPollTimer: number | null = null
   let eventIdCounter = 0
   let apiIdCounter = 0
   const seenEventHashes = new Set<string>()
   const seenApiKeys = new Set<string>()
   let httpCtx: HttpCtx | null = null
+  let unlisten: (() => void) | null = null
 
   function initModules() {
     const result: Record<string, ModuleState> = {}
@@ -624,7 +627,6 @@ export function useLogAnalysis(serial: Ref<string | null | undefined>) {
     const time = parseLogTime(line)
     const body = extractBody(line)
 
-    // WhaleOSADpClient 广告单行
     const adMatch = line.match(WHALE_AD_LINE)
     if (adMatch) {
       const apiKey = `${time.substring(3, 18)}|AD|${adMatch[1]}`
@@ -644,7 +646,6 @@ export function useLogAnalysis(serial: Ref<string | null | undefined>) {
       return
     }
 
-    // RequestLeoApi 推荐
     const leoMatch = line.match(LEO_TOPIC_LINE)
     if (leoMatch) {
       const apiKey = `${time.substring(3, 18)}|LEO|${leoMatch[1].trim().substring(0, 30)}`
@@ -664,7 +665,6 @@ export function useLogAnalysis(serial: Ref<string | null | undefined>) {
       return
     }
 
-    // RequestLeoApi 响应码补充
     const leoResp = line.match(LEO_RESP_LINE)
     if (leoResp) {
       const idx = apiRequests.value.findIndex(a => a.moduleKey === 'recommend' && a.responseStatus === null)
@@ -672,10 +672,8 @@ export function useLogAnalysis(serial: Ref<string | null | undefined>) {
       return
     }
 
-    // OkHttp --> 请求开始
     const reqMatch = body.match(OKHTTP_REQ_LINE) || line.match(OKHTTP_REQ_LINE)
     if (reqMatch) {
-      // 上一个请求上下文未被 END HTTP 关闭时，用已暂存的状态码 emit
       if (httpCtx) emitApi(httpCtx, httpCtx.pendingResponseStatus, httpCtx.pendingDurationMs)
       const rawUrl = reqMatch[2].replace(/[,;)\s]+$/, '')
       const { domain, path, queryParams } = parseUrlInfo(rawUrl)
@@ -688,7 +686,6 @@ export function useLogAnalysis(serial: Ref<string | null | undefined>) {
       return
     }
 
-    // OkHttp <-- 响应首行：暂存状态码和耗时，切换到 resp_headers 阶段继续收集响应体
     const respMatch = body.match(OKHTTP_RESP_LINE) || line.match(OKHTTP_RESP_LINE)
     if (respMatch && httpCtx) {
       httpCtx.rawLines.push(line)
@@ -698,7 +695,6 @@ export function useLogAnalysis(serial: Ref<string | null | undefined>) {
       return
     }
 
-    // OkHttp <-- END HTTP：响应结束，emit 并重置上下文
     if (/<-- END HTTP/i.test(body) && httpCtx) {
       httpCtx.rawLines.push(line)
       emitApi(httpCtx, httpCtx.pendingResponseStatus, httpCtx.pendingDurationMs)
@@ -706,38 +702,30 @@ export function useLogAnalysis(serial: Ref<string | null | undefined>) {
       return
     }
 
-    // 收集 headers/body（httpCtx 上下文中）
     if (httpCtx) {
       httpCtx.rawLines.push(line)
       if (body.trim() === '') {
-        // 空行：headers 结束，切换到对应 body 阶段
         if (httpCtx.phase === 'req_headers') httpCtx.phase = 'req_body'
         else if (httpCtx.phase === 'resp_headers') httpCtx.phase = 'resp_body'
         return
       }
       const headerMatch = body.match(HEADER_LINE)
       if (headerMatch) {
-        if (httpCtx.phase === 'req_headers') {
-          httpCtx.requestHeaders.push({ key: headerMatch[1], value: headerMatch[2] })
-        } else if (httpCtx.phase === 'resp_headers') {
-          httpCtx.responseHeaders.push({ key: headerMatch[1], value: headerMatch[2] })
-        }
+        if (httpCtx.phase === 'req_headers') httpCtx.requestHeaders.push({ key: headerMatch[1], value: headerMatch[2] })
+        else if (httpCtx.phase === 'resp_headers') httpCtx.responseHeaders.push({ key: headerMatch[1], value: headerMatch[2] })
         return
       }
-      // req_body 阶段：收集所有非 header 内容（JSON / URL 编码表单 / 纯文本）
       if (httpCtx.phase === 'req_body' && body.trim().length > 0) {
-        const trimmed = body.trim()
-        httpCtx.requestBody = httpCtx.requestBody.length === 0 ? trimmed : httpCtx.requestBody + '\n' + trimmed
+        const t = body.trim()
+        httpCtx.requestBody = httpCtx.requestBody.length === 0 ? t : httpCtx.requestBody + '\n' + t
       }
-      // resp_body 阶段：收集响应体（限制 8KB，避免大 JSON 占用过多内存）
       if (httpCtx.phase === 'resp_body' && body.trim().length > 0 && httpCtx.responseBody.length < 8000) {
-        const trimmed = body.trim()
-        httpCtx.responseBody = httpCtx.responseBody.length === 0 ? trimmed : httpCtx.responseBody + '\n' + trimmed
+        const t = body.trim()
+        httpCtx.responseBody = httpCtx.responseBody.length === 0 ? t : httpCtx.responseBody + '\n' + t
       }
       return
     }
 
-    // 兜底：含业务域名 URL 的普通日志行，直接提取接口记录
     const urlMatch = line.match(/(https?:\/\/[a-zA-Z0-9][-a-zA-Z0-9.]*\.(?:zeasn|whaletv)[^\s"'<>]{0,300})/i)
     if (urlMatch) {
       const rawUrl = urlMatch[1].replace(/[,;)"'\s]+$/, '')
@@ -755,12 +743,54 @@ export function useLogAnalysis(serial: Ref<string | null | undefined>) {
           requestHeaders: [], requestBody: '',
           responseStatus: statusMatch ? Number(statusMatch[1]) : null,
           responseHeaders: [], responseBody: '',
-          durationMs: '', raw: line,
-          moduleKey, moduleName,
+          durationMs: '', raw: line, moduleKey, moduleName,
         })
         if (apiRequests.value.length > 300) apiRequests.value.splice(250)
         if (moduleKey && modules.value[moduleKey]) modules.value[moduleKey].apiCount++
       }
+    }
+  }
+
+  function processLines(lines: string[]) {
+    const newEvents: LogEvent[] = []
+    const newApis: ApiRequest[] = []
+    const modUpdates = new Map<string, { status: ModuleStatus; summary: string; time: string }>()
+
+    const origApiRequests = apiRequests.value
+    apiRequests.value = newApis as typeof apiRequests.value
+
+    for (const line of lines) {
+      const isHttpTag = HTTP_TAG_PATTERN.test(line)
+        || /-->\s*(GET|POST|PUT|DELETE|PATCH)/i.test(line)
+        || /<--\s*\d{3}/i.test(line)
+
+      if (isHttpTag || httpCtx !== null) {
+        processHttpLine(line)
+      }
+
+      matchEventLine(line, newEvents, modUpdates)
+    }
+
+    apiRequests.value = origApiRequests
+    if (newApis.length > 0) {
+      apiRequests.value.unshift(...newApis)
+      if (apiRequests.value.length > 300) apiRequests.value.splice(250)
+    }
+
+    for (const [key, upd] of modUpdates) {
+      const mod = modules.value[key]
+      if (mod) {
+        mod.status = upd.status
+        mod.summary = upd.summary
+        mod.lastUpdated = upd.time
+        mod.eventCount += newEvents.filter(e => e.moduleKey === key).length
+      }
+    }
+
+    if (newEvents.length > 0) {
+      events.value.unshift(...newEvents)
+      if (events.value.length > 600) events.value.splice(500)
+      totalEvents.value += newEvents.length
     }
   }
 
@@ -787,108 +817,35 @@ export function useLogAnalysis(serial: Ref<string | null | undefined>) {
     }
   }
 
-  let lastTimestamp = ''
-  let lastLineCount = 0
-  let isPolling = false   // 防并发：上次轮询未完成时跳过
-
-  async function doPoll(isFirst: boolean) {
-    if (!serial.value || !isRunning.value) return
-    if (isPolling && !isFirst) {
-      // 上次还没跑完，延后重试
-      if (isRunning.value) pollTimer = window.setTimeout(() => doPoll(false), 300)
-      return
-    }
-    isPolling = true
-    try {
-      let cmd: string
-      if (isFirst) {
-        cmd = 'logcat -d -v time -b main,system,crash'
-      } else if (lastTimestamp) {
-        cmd = `logcat -d -v time -b main,system,crash -T "${lastTimestamp}" -t 200`
-      } else {
-        cmd = 'logcat -d -v time -b main,system,crash -t 200'
-      }
-
-      const output = await invoke<string>('adb_shell', { serial: serial.value, command: cmd })
-      const lines = output.split('\n')
-      lastLineCount = lines.length
-
-      // 攒批：本次轮询的所有新事件和接口先收集到临时数组
-      const newEvents: LogEvent[] = []
-      const newApis: ApiRequest[] = []
-      const modUpdates = new Map<string, { status: ModuleStatus; summary: string; time: string }>()
-
-      // 保存原来的 apiRequests.value 引用，让 processHttpLine 写入临时数组
-      const origApiRequests = apiRequests.value
-      apiRequests.value = newApis as typeof apiRequests.value
-
-      for (const line of lines) {
-        const t = parseLogTime(line)
-        if (t) lastTimestamp = t
-
-        const isHttpTag = HTTP_TAG_PATTERN.test(line)
-          || /-->\s*(GET|POST|PUT|DELETE|PATCH)/i.test(line)
-          || /<--\s*\d{3}/i.test(line)
-
-        if (isHttpTag || httpCtx !== null) {
-          processHttpLine(line)
-        }
-
-        matchEventLine(line, newEvents, modUpdates)
-      }
-
-      // 还原 apiRequests 并批量前插
-      apiRequests.value = origApiRequests
-      if (newApis.length > 0) {
-        apiRequests.value.unshift(...newApis)
-        if (apiRequests.value.length > 300) apiRequests.value.splice(250)
-      }
-
-      // 批量更新模块状态
-      for (const [key, upd] of modUpdates) {
-        const mod = modules.value[key]
-        if (mod) {
-          mod.status = upd.status
-          mod.summary = upd.summary
-          mod.lastUpdated = upd.time
-          mod.eventCount += newEvents.filter(e => e.moduleKey === key).length
-        }
-      }
-
-      // 批量前插事件
-      if (newEvents.length > 0) {
-        events.value.unshift(...newEvents)
-        if (events.value.length > 600) events.value.splice(500)
-        totalEvents.value += newEvents.length
-      }
-    } catch { /* 静默忽略 */ } finally {
-      isPolling = false
-    }
-    if (isRunning.value) pollTimer = window.setTimeout(() => doPoll(false), 500)
-  }
-
-  function getModuleApis(moduleKey: string): ApiRequest[] {
-    return apiRequests.value.filter(a => a.moduleKey === moduleKey)
-  }
-
-  function start() {
+  async function start() {
     if (!serial.value || isRunning.value) return
     isRunning.value = true
     events.value = []; apiRequests.value = []; totalEvents.value = 0
-    seenEventHashes.clear(); seenApiKeys.clear(); httpCtx = null; lastTimestamp = ''
-    initModules(); doPoll(true)
+    seenEventHashes.clear(); seenApiKeys.clear(); httpCtx = null
+    initModules()
+
+    const { listen } = await import('@tauri-apps/api/event')
+    const eventName = `logcat://lines:${serial.value}`
+    unlisten = await listen<{ serial: string; lines: string[] }>(eventName, (e) => {
+      if (!isRunning.value) return
+      processLines(e.payload.lines)
+    })
   }
 
   function stop() {
-    isRunning.value = false; httpCtx = null; lastTimestamp = ''
-    if (pollTimer !== null) { clearTimeout(pollTimer); pollTimer = null }
-    if (apiPollTimer !== null) { clearTimeout(apiPollTimer); apiPollTimer = null }
+    isRunning.value = false
+    httpCtx = null
+    if (unlisten) { unlisten(); unlisten = null }
   }
 
   function clear() {
     events.value = []; apiRequests.value = []; totalEvents.value = 0
-    seenEventHashes.clear(); seenApiKeys.clear(); httpCtx = null; lastTimestamp = ''
+    seenEventHashes.clear(); seenApiKeys.clear(); httpCtx = null
     initModules()
+  }
+
+  function getModuleApis(moduleKey: string): ApiRequest[] {
+    return apiRequests.value.filter(a => a.moduleKey === moduleKey)
   }
 
   onUnmounted(stop)
