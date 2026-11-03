@@ -509,7 +509,7 @@
     </div>
 
     <!-- Tab 3: 日志分析 -->
-    <LogAnalysisPanel v-show="activeTab === 'loganalysis'" :serial="selectedDevice?.serial" />
+    <LogAnalysisPanel v-show="activeTab === 'loganalysis'" :serial="selectedDevice?.serial" :show-popout="true" @popout="logAnalysisPopout" />
 
     <!-- Device Dropdown (teleported to body to escape glass-panel backdrop-filter) -->
     <Teleport to="body">
@@ -1871,6 +1871,30 @@ async function handleMirrorRightClick() {
   await invoke("adb_input_keyevent", { serial: selectedDevice.value.serial, keycode: "BACK" });
 }
 
+async function logAnalysisPopout() {
+  if (!selectedDevice.value) return
+  const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow')
+  const serial = selectedDevice.value.serial
+  const label = `log-analysis-${serial.replace(/[^a-zA-Z0-9_-]/g, '_')}`
+  const existing = await WebviewWindow.getByLabel(label)
+  if (existing) {
+    try { await existing.show() } catch {}
+    try { await existing.setFocus() } catch {}
+    return
+  }
+  const win = new WebviewWindow(label, {
+    url: `/log-analysis?serial=${encodeURIComponent(serial)}`,
+    title: `日志分析 - ${serial}`,
+    width: 1280,
+    height: 800,
+    minWidth: 900,
+    minHeight: 600,
+    decorations: true,
+    transparent: false,
+  })
+  win.once('tauri://error', (e) => { console.error('[log-analysis] popout failed:', e) })
+}
+
 async function mirrorPopout() {
   const { invoke } = await import("@tauri-apps/api/core");
   const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
@@ -1933,6 +1957,7 @@ async function scanDevices(silent = false) {
       status: d.status === "device" ? "online" as const : "offline" as const, os: d.android_version || "Android",
     }));
     if (selectedDevice.value && !devices.value.some(d => d.serial === selectedDevice.value!.serial)) {
+      if (isMirroring.value) stopMirror();
       selectedDevice.value = null;
       apps.value = [];
       deviceProps.value = null;
@@ -1959,6 +1984,9 @@ async function loadConnectIpHistory() {
   connectIpHistory.value = entries.map(e => e.value);
 }
 function selectDevice(device: DeviceItem) {
+  if (isMirroring.value && selectedDevice.value?.serial !== device.serial) {
+    stopMirror();
+  }
   selectedDevice.value = device;
   localStorage.setItem('last_device_serial', device.serial);
   deviceProps.value = null;
@@ -2003,6 +2031,9 @@ async function connectToDevice() {
 }
 async function disconnectDeviceHandler(serial: string) {
   try {
+    if (selectedDevice.value?.serial === serial && isMirroring.value) {
+      await stopMirror();
+    }
     await disconnectDevice(serial);
     devices.value = devices.value.filter(d => d.serial !== serial);
     if (selectedDevice.value?.serial === serial) {
@@ -2026,7 +2057,8 @@ async function restartAdbServer() {
     finishCmdExec(t("device.adbRestarted"));
   } catch (e: any) { finishCmdExec(t('device.restartFailedWith', { e: String(e) })); showToast(t("device.adbRestartFailed"), "error"); }
 }
-function clearDeviceState() {
+async function clearDeviceState() {
+  if (isMirroring.value) await stopMirror();
   apps.value = [];
   deviceProps.value = null;
   selectedDevice.value = null;
@@ -2040,7 +2072,7 @@ async function rebootDevice() {
     await reboot(selectedDevice.value.serial);
     finishCmdExec(t("device.restarting"));
     showToast(t("device.rebootSent"));
-    clearDeviceState();
+    await clearDeviceState();
   } catch { finishCmdExec(t("device.rebootFailed")); showToast(t("device.rebootFailed"), "error"); }
 }
 async function rebootToRecovery() {
@@ -2051,7 +2083,7 @@ async function rebootToRecovery() {
     await rebootRecovery(selectedDevice.value.serial);
     finishCmdExec(t("device.rebootingToRecovery"));
     showToast(t("device.rebootingToRecovery"));
-    clearDeviceState();
+    await clearDeviceState();
   } catch { finishCmdExec(t("device.operationFailed")); showToast(t("device.operationFailed"), "error"); }
 }
 async function rebootToBootloader() {
@@ -2062,7 +2094,7 @@ async function rebootToBootloader() {
     await rebootBootloader(selectedDevice.value.serial);
     finishCmdExec(t("device.rebootingToBootloader"));
     showToast(t("device.rebootingToBootloader"));
-    clearDeviceState();
+    await clearDeviceState();
   } catch { finishCmdExec(t("device.operationFailed")); showToast(t("device.operationFailed"), "error"); }
 }
 async function rootDevice() {
@@ -3163,12 +3195,13 @@ async function startMirror() {
 async function stopMirror() {
   console.log("[mirror] stopMirror called");
   const serial = selectedDevice.value?.serial;
-  if (!serial) return;
-  try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    await invoke("adb_mirror_stop", { serial });
-    console.log("[mirror] adb_mirror_stop called");
-  } catch (e) { console.error("[mirror] stop error:", e); }
+  if (serial) {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("adb_mirror_stop", { serial });
+      console.log("[mirror] adb_mirror_stop called");
+    } catch (e) { console.error("[mirror] stop error:", e); }
+  }
   for (const u of mirrorUnlisten) { u(); }
   mirrorUnlisten = [];
   mirrorCtx = null;
@@ -3291,6 +3324,7 @@ function applyDeviceListPayload(list: Array<{ serial: string; model: string; sta
     os: d.android_version || 'Android',
   }));
   if (selectedDevice.value && !devices.value.some(d => d.serial === selectedDevice.value!.serial)) {
+    if (isMirroring.value) stopMirror();
     selectedDevice.value = null;
     apps.value = [];
     deviceProps.value = null;

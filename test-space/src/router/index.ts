@@ -9,6 +9,11 @@ const router = createRouter({
       component: () => import("@/views/device-space/StandaloneMirror.vue"),
     },
     {
+      path: "/log-analysis",
+      name: "standalone-log-analysis",
+      component: () => import("@/views/device-space/StandaloneLogAnalysis.vue"),
+    },
+    {
       path: "/sticky",
       name: "sticky-note",
       component: () => import("@/views/note-space/StickyNote.vue"),

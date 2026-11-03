@@ -61,9 +61,9 @@ interface ModuleDef {
 }
 
 export const MODULE_ORDER = [
-  'boot', 'ad', 'ota', 'tou', 'analytics', 'banner',
-  'recommend', 'alexa', 'screensaver', 'network',
-  'account', 'appInstall', 'player', 'remoteConfig', 'firebase', 'permission',
+  'boot', 'ad', 'ota', 'tou', 'analytics',
+  'alexa', 'screensaver', 'network',
+  'account', 'appInstall', 'player',
 ]
 
 // 域名 → 模块映射（只匹配核心域名，不依赖 acc-/dev-/prod- 等环境前缀）

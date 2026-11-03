@@ -1,6 +1,6 @@
 <template>
   <div class="flex flex-col gap-3 flex-1 min-h-0 overflow-hidden pb-3">
-    <!-- 控制栏 -->
+    <!-- 控制栏（全屏时始终保留） -->
     <div class="glass-panel rounded-xl px-4 py-2.5 flex items-center gap-3 shrink-0 flex-wrap">
       <button
         class="glass-button px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-label-md text-label-md select-none"
@@ -11,16 +11,8 @@
           :style="{ fontVariationSettings: `'FILL' ${isRunning ? 1 : 0}` }">
           {{ isRunning ? 'stop_circle' : 'play_circle' }}
         </span>
-        <span class="text-[12px] font-semibold">{{ isRunning ? '停止分析' : '开始分析' }}</span>
+        <span class="text-[12px] font-semibold">{{ isRunning ? '停止' : '开始' }}</span>
         <span v-if="isRunning" class="w-2 h-2 rounded-full bg-error animate-pulse ml-0.5"></span>
-      </button>
-
-      <button
-        class="glass-button px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-label-md text-label-md select-none"
-        :disabled="!isRunning && totalEvents === 0"
-        @click="clear">
-        <span class="material-symbols-outlined text-[15px]">clear_all</span>
-        <span class="text-[12px] font-semibold">清空面板</span>
       </button>
 
       <button
@@ -29,44 +21,14 @@
         @click="clearDeviceLog">
         <span v-if="clearingDevice" class="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
         <span v-else class="material-symbols-outlined text-[15px]">delete_sweep</span>
-        <span class="text-[12px] font-semibold">清空设备日志</span>
+        <span class="text-[12px] font-semibold">清空日志</span>
       </button>
 
-      <div class="h-4 w-[1px] bg-glass-border-dark shrink-0"></div>
+      <!-- 事件流搜索（仅在全局视图下显示） -->
+      <input v-if="activeView === 'all'" v-model="eventSearch"
+        class="ml-auto bg-white/40 border border-outline-variant/40 rounded-lg px-3 py-1 font-caption text-[11px] text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none focus:ring-1 focus:ring-secondary/30 select-text w-36"
+        placeholder="搜索事件…" />
 
-      <div class="flex items-center gap-3 font-caption text-caption text-on-surface-variant select-none flex-wrap">
-        <span class="flex items-center gap-1">
-          <span class="material-symbols-outlined text-[13px]">event_note</span>
-          {{ totalEvents }} 条事件
-        </span>
-        <span class="flex items-center gap-1">
-          <span class="material-symbols-outlined text-[13px]">http</span>
-          {{ apiRequests.length }} 个接口
-        </span>
-        <span class="flex items-center gap-1.5">
-          <span class="w-1.5 h-1.5 rounded-full" :class="okCount > 0 ? 'bg-success-indicator' : 'bg-outline-variant/40'"></span>{{ okCount }} 正常
-          <span class="w-1.5 h-1.5 rounded-full ml-1" :class="errorCount > 0 ? 'bg-error' : 'bg-outline-variant/40'"></span>{{ errorCount }} 异常
-          <span class="w-1.5 h-1.5 rounded-full ml-1" :class="warnCount > 0 ? 'bg-yellow-400' : 'bg-outline-variant/40'"></span>{{ warnCount }} 警告
-        </span>
-      </div>
-
-      <!-- 事件流过滤（仅在全局视图下显示） -->
-      <div v-if="activeView === 'all'" class="ml-auto flex items-center gap-2 flex-wrap">
-        <input v-model="eventSearch"
-          class="bg-white/40 border border-outline-variant/40 rounded-lg px-3 py-1 font-caption text-[11px] text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none focus:ring-1 focus:ring-secondary/30 select-text w-36"
-          placeholder="搜索事件…" />
-        <div class="h-3 w-[1px] bg-glass-border-dark shrink-0"></div>
-        <span class="font-caption text-[11px] text-on-surface-variant/60 select-none flex items-center gap-1">
-          <span class="material-symbols-outlined text-[12px]">filter_list</span>筛选
-        </span>
-        <button v-for="f in filters" :key="f.key"
-          class="glass-hover rounded-md px-2 py-0.5 flex items-center gap-1 select-none"
-          :class="activeFilter === f.key ? 'glass-active font-semibold' : 'text-on-surface-variant'"
-          @click="activeFilter = f.key">
-          <span class="w-1.5 h-1.5 rounded-full shrink-0" :class="f.dotClass"></span>
-          <span class="text-[11px]">{{ f.label }}</span>
-        </button>
-      </div>
       <!-- 接口面板搜索过滤 -->
       <div v-else-if="activeView === 'api'" class="ml-auto flex items-center gap-2 flex-wrap">
         <input v-model="apiSearch"
@@ -79,7 +41,136 @@
             @click="apiMethodFilter = apiMethodFilter === m ? null : m">{{ m }}</button>
         </div>
       </div>
+
+      <!-- 原始日志控件 -->
+      <template v-else-if="activeView === 'logcat'">
+        <div class="h-4 w-[1px] bg-glass-border-dark shrink-0"></div>
+
+        <!-- 暂停 / 继续 -->
+        <button v-if="logcatStatus === 'running'"
+          class="glass-button px-2.5 py-1.5 rounded-lg flex items-center gap-1 select-none"
+          @click="logcatPause()">
+          <span class="material-symbols-outlined text-[14px]">pause</span>
+          <span class="text-[11px] font-semibold">暂停</span>
+        </button>
+        <button v-else-if="logcatStatus === 'paused'"
+          class="glass-button px-2.5 py-1.5 rounded-lg flex items-center gap-1 select-none text-secondary"
+          @click="logcatResume()">
+          <span class="material-symbols-outlined text-[14px]">play_arrow</span>
+          <span class="text-[11px] font-semibold">继续</span>
+        </button>
+
+        <div class="h-4 w-[1px] bg-glass-border-dark shrink-0"></div>
+
+        <!-- Level 多选 -->
+        <div class="flex items-center gap-1">
+          <button v-for="lv in ALL_LEVELS" :key="lv"
+            class="text-[10px] font-mono px-1.5 py-0.5 rounded select-none transition-colors font-semibold"
+            :class="logcatLevelFilters.has(lv) ? logcatLevelActiveClass(lv) : 'bg-outline-variant/15 text-on-surface-variant/50 hover:bg-outline-variant/25'"
+            @click="toggleLogcatLevel(lv)">{{ lv }}</button>
+        </div>
+
+        <div class="h-4 w-[1px] bg-glass-border-dark shrink-0"></div>
+
+        <!-- Tag 过滤 -->
+        <input v-model="logcatTagFilter"
+          class="bg-white/40 border border-outline-variant/40 rounded-lg px-2.5 py-1 font-caption text-[11px] text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none focus:ring-1 focus:ring-secondary/30 select-text w-28"
+          placeholder="TAG，如 WhaleTv" title="按日志 TAG 过滤，TAG 显示在 L 右侧" />
+
+        <!-- 搜索框（Teleport 解决下拉层级） -->
+        <div class="flex items-center gap-1">
+          <button class="glass-hover rounded p-0.5 select-none"
+            :class="logcatUseRegex ? 'text-secondary' : 'text-on-surface-variant/50'"
+            title="正则搜索" @click="logcatUseRegex = !logcatUseRegex">
+            <span class="font-mono text-[10px] font-bold px-0.5">.*</span>
+          </button>
+          <input
+            ref="logcatSearchInputRef"
+            v-model="logcatSearchQuery"
+            class="bg-white/40 border border-outline-variant/40 rounded-lg px-2.5 py-1 font-caption text-[11px] text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none focus:ring-1 focus:ring-secondary/30 select-text w-36"
+            :class="logcatRegexError ? 'ring-1 ring-error border-error/50' : ''"
+            placeholder="搜索日志…"
+            @focus="onLogcatSearchFocus"
+            @blur="onLogcatSearchBlur"
+            @keydown.enter="commitLogcatSearch"
+            @keydown.escape="logcatShowHistory = false" />
+          <span v-if="logcatSearchQuery" class="font-caption text-[10px] text-on-surface-variant/50 select-none shrink-0 whitespace-nowrap">
+            {{ filteredLogcatLines.length }} 条
+          </span>
+        </div>
+
+        <!-- 上下文行（仅搜索时显示，内联） -->
+        <div v-if="logcatSearchQuery" class="flex items-center gap-1 shrink-0">
+          <span class="font-caption text-[10px] text-on-surface-variant/50 select-none whitespace-nowrap">上下</span>
+          <input v-model="logcatContextLines"
+            type="text" inputmode="numeric" pattern="[0-9]*"
+            class="bg-white/40 border border-outline-variant/40 rounded-lg px-1.5 py-1 font-mono text-[11px] text-on-surface focus:outline-none focus:ring-1 focus:ring-secondary/30 w-10 text-center select-text"
+            title="搜索结果上下各保留 N 行上下文" />
+          <span class="font-caption text-[10px] text-on-surface-variant/50 select-none whitespace-nowrap">行</span>
+        </div>
+
+        <!-- 书签导航 -->
+        <div v-if="logcatBookmarkedIds.size > 0" class="flex items-center gap-1">
+          <div class="h-4 w-[1px] bg-glass-border-dark shrink-0"></div>
+          <span class="font-caption text-[10px] text-on-surface-variant/50 select-none">{{ logcatBookmarkedIds.size }} 书签</span>
+          <button class="glass-hover rounded p-0.5" title="上一书签" @click="rawLogcatPanelRef?.jumpBookmark(-1)">
+            <span class="material-symbols-outlined text-[13px]">arrow_upward</span>
+          </button>
+          <button class="glass-hover rounded p-0.5" title="下一书签" @click="rawLogcatPanelRef?.jumpBookmark(1)">
+            <span class="material-symbols-outlined text-[13px]">arrow_downward</span>
+          </button>
+        </div>
+
+        <!-- 右侧工具 -->
+        <div class="ml-auto flex items-center gap-2">
+          <span class="font-caption text-[10px] text-on-surface-variant/50 select-none">{{ logcatLines.length.toLocaleString() }} 条</span>
+          <button class="glass-hover rounded p-0.5 select-none" title="导出过滤后日志" @click="rawLogcatPanelRef?.exportLog()">
+            <span class="material-symbols-outlined text-[14px]">download</span>
+          </button>
+          <button class="glass-hover rounded p-0.5 select-none"
+            :title="logcatFullscreen ? '退出全屏' : '全屏'"
+            @click="logcatFullscreen = !logcatFullscreen">
+            <span class="material-symbols-outlined text-[14px]">{{ logcatFullscreen ? 'fullscreen_exit' : 'fullscreen' }}</span>
+          </button>
+        </div>
+      </template>
+
+      <div v-else class="ml-auto"></div>
+
+      <!-- 独立窗口按钮（最右） -->
+      <button
+        v-if="showPopout"
+        class="glass-button p-1.5 rounded-lg flex items-center select-none"
+        title="在独立窗口中打开"
+        @click="emit('popout')">
+        <span class="material-symbols-outlined text-[15px]">open_in_new</span>
+      </button>
     </div>
+
+    <!-- 搜索历史下拉（Teleport 避免被遮挡） -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div v-if="logcatShowHistory && logcatSearchHistory.length > 0 && logcatHistoryRect"
+          class="fixed z-[9999] glass-panel rounded-xl shadow-lg py-1 min-w-[200px] max-h-48 overflow-y-auto custom-scrollbar"
+          :style="{ top: logcatHistoryRect.top + 'px', left: logcatHistoryRect.left + 'px', width: logcatHistoryRect.width + 'px' }">
+          <div class="flex items-center justify-between px-3 py-1 border-b border-outline-variant/10">
+            <span class="font-caption text-[10px] text-on-surface-variant/50 select-none">搜索历史</span>
+            <button class="glass-hover rounded px-1 py-0.5 text-[9px] text-on-surface-variant/50 select-none"
+              @mousedown.prevent="clearHistoryStore(); logcatSearchHistory = []">清空</button>
+          </div>
+          <div v-for="item in logcatSearchHistory" :key="item"
+            class="flex items-center gap-2 px-3 py-1.5 hover:bg-white/20 cursor-pointer group"
+            @mousedown.prevent="applyLogcatHistory(item)">
+            <span class="material-symbols-outlined text-[12px] text-on-surface-variant/40">history</span>
+            <span class="font-caption text-[11px] text-on-surface flex-1 truncate select-none">{{ item }}</span>
+            <button class="opacity-0 group-hover:opacity-100 transition-opacity glass-hover rounded p-0.5"
+              @mousedown.prevent="removeLogcatHistoryItem(item)">
+              <span class="material-symbols-outlined text-[11px] text-on-surface-variant/50">close</span>
+            </button>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
 
     <!-- 设备清空结果提示 -->
     <Transition name="fade">
@@ -98,7 +189,8 @@
     <div class="flex gap-3 flex-1 min-h-0 overflow-hidden">
 
       <!-- 左：模块列表 -->
-      <div class="w-[380px] shrink-0 overflow-y-auto custom-scrollbar flex flex-col gap-1.5 pr-1">
+      <div v-show="!(activeView === 'logcat' && logcatFullscreen)"
+        class="w-[260px] shrink-0 overflow-y-auto custom-scrollbar flex flex-col gap-1.5 pr-1">
 
         <!-- 接口监控特殊卡片（最顶部） -->
         <div
@@ -124,6 +216,25 @@
           </div>
           <div class="w-2 h-2 rounded-full shrink-0 flex-shrink-0"
             :class="activeView === 'api' ? 'bg-secondary' : (apiRequests.length > 0 ? 'bg-secondary/50' : 'bg-outline-variant/30')"></div>
+        </div>
+
+        <!-- 原始日志卡片 -->
+        <div
+          class="glass-panel rounded-xl px-3 py-2.5 flex items-center gap-2.5 shrink-0 cursor-pointer transition-all glass-hover"
+          :class="activeView === 'logcat' ? 'ring-1 ring-secondary/50' : ''"
+          @click="selectView('logcat')">
+          <div class="w-[3px] self-stretch rounded-full shrink-0 bg-on-surface-variant/20"></div>
+          <span class="material-symbols-outlined text-[15px] shrink-0 text-on-surface-variant/60">terminal</span>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-1.5">
+              <span class="font-label-md text-[11px] font-semibold text-on-surface select-none">原始日志</span>
+            </div>
+            <p class="font-caption text-[10px] mt-0.5 select-none line-clamp-1 text-on-surface-variant">
+              实时 Logcat 输出，支持搜索/过滤
+            </p>
+          </div>
+          <div class="w-2 h-2 rounded-full shrink-0"
+            :class="activeView === 'logcat' ? 'bg-secondary' : 'bg-outline-variant/30'"></div>
         </div>
 
         <!-- 分隔线 -->
@@ -310,8 +421,25 @@
           </div>
         </template>
 
+        <!-- ④ 原始日志视图（v-show 保持挂载，避免 ResizeObserver 失效导致底部空白） -->
+        <RawLogcatPanel
+          v-show="activeView === 'logcat'"
+          ref="rawLogcatPanelRef"
+          :serial="serial"
+          :fullscreen="logcatFullscreen"
+          :status="logcatStatus"
+          :filtered-lines="filteredLogcatLines"
+          :bookmarked-ids="logcatBookmarkedIds"
+          :search-query="logcatSearchQuery"
+          :use-regex="logcatUseRegex"
+          :regex-error="logcatRegexError"
+          :active="activeView === 'logcat'"
+          class="flex-1 min-h-0"
+          @update:fullscreen="logcatFullscreen = $event"
+          @toggle-bookmark="logcatToggleBookmark($event)" />
+
         <!-- ③ 全部事件流（默认） -->
-        <template v-else>
+        <template v-if="activeView === 'all'">
           <div class="px-3 py-2 flex items-center gap-2 shrink-0 border-b border-outline-variant/15">
             <span class="material-symbols-outlined text-[14px] text-on-surface-variant">receipt_long</span>
             <span class="font-label-md text-[11px] font-semibold text-on-surface select-none">实时事件流</span>
@@ -447,19 +575,28 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, type Ref } from 'vue'
+import { ref, computed, watch, nextTick, type Ref } from 'vue'
 import { useLogAnalysis, MODULE_ORDER, type ModuleStatus, type ApiRequest } from '@/composables/useLogAnalysis'
+import { useRawLogcat, ALL_LEVELS, getSearchHistory, addSearchHistory, removeSearchHistory, clearSearchHistory as clearHistoryStore, type LogLevel } from '@/composables/useRawLogcat'
+import RawLogcatPanel from './RawLogcatPanel.vue'
 
-const props = defineProps<{ serial: string | null | undefined }>()
-
+const props = defineProps<{ serial: string | null | undefined; showPopout?: boolean }>()
+const emit = defineEmits<{ popout: [] }>()
 const serialRef = computed(() => props.serial) as Ref<string | null | undefined>
-const { isRunning, totalEvents, modules, events, apiRequests, start, stop, clear, getModuleApis } = useLogAnalysis(serialRef)
+const { isRunning, totalEvents, modules, events, apiRequests, start: startAnalysis, stop: stopAnalysis, clear, getModuleApis } = useLogAnalysis(serialRef)
+const { status: logcatStatus, lines: logcatLines, bookmarkedIds: logcatBookmarkedIds, start: logcatStart, pause: logcatPause, resume: logcatResume, stop: logcatStop, clear: logcatClear, refresh: logcatRefresh, toggleBookmark: logcatToggleBookmark } = useRawLogcat(serialRef)
+
+// 开始/停止同时控制两个子系统（错开 300ms 避免同时打两个 adb 命令卡顿）
+function start() { startAnalysis(); setTimeout(() => { if (logcatStatus.value === 'idle') logcatStart() }, 300) }
+function stop() { stopAnalysis(); logcatStop() }
+function clearAll() { clear(); logcatClear() }
 
 watch(() => props.serial, (val, old) => { if (val !== old && isRunning.value) stop() })
 
 // ── 视图状态 ──
-// activeView: 'all' | 'api' | 'module'
-const activeView = ref<'all' | 'api' | 'module'>('all')
+// activeView: 'all' | 'api' | 'module' | 'logcat'
+const activeView = ref<'all' | 'api' | 'module' | 'logcat'>('all')
+const logcatFullscreen = ref(false)
 const activeModuleKey = ref<string | null>(null)
 const expandedRaw = ref<number | null>(null)
 const moduleApiExpanded = ref(true)
@@ -473,17 +610,100 @@ const clearingDevice = ref(false)
 const deviceClearToast = ref<{ show: boolean; ok: boolean; msg: string }>({ show: false, ok: true, msg: '' })
 let deviceClearToastTimer: number | null = null
 
+// ── Logcat 控件状态（放在控制栏） ──
+const logcatLevelFilters = ref<Set<LogLevel>>(new Set(ALL_LEVELS))
+const logcatTagFilter = ref('')
+const logcatSearchQuery = ref('')
+const logcatUseRegex = ref(false)
+const logcatContextLines = ref<number | string>(
+  Number(localStorage.getItem('logcat_context_lines') ?? '0') || 0
+)
+const logcatSearchHistory = ref<string[]>(getSearchHistory())
+const logcatShowHistory = ref(false)
+const logcatSearchInputRef = ref<HTMLInputElement | null>(null)
+const logcatHistoryRect = ref<{ top: number; left: number; width: number } | null>(null)
+const rawLogcatPanelRef = ref<InstanceType<typeof RawLogcatPanel> | null>(null)
+
+const logcatRegexError = computed(() => {
+  if (!logcatUseRegex.value || !logcatSearchQuery.value) return false
+  try { new RegExp(logcatSearchQuery.value, 'i'); return false } catch { return true }
+})
+
+const filteredLogcatLines = computed(() => {
+  let list = logcatLines.value
+  if (logcatLevelFilters.value.size < 6) list = list.filter(l => logcatLevelFilters.value.has(l.level))
+  const tag = logcatTagFilter.value.trim().toLowerCase()
+  if (tag) list = list.filter(l => l.tag.toLowerCase().includes(tag))
+  const q = logcatSearchQuery.value.trim()
+  if (!q || logcatRegexError.value) return list
+  let matchTest: (l: typeof list[0]) => boolean
+  if (logcatUseRegex.value) {
+    try { const re = new RegExp(q, 'i'); matchTest = l => re.test(l.message) || re.test(l.tag) }
+    catch { return list }
+  } else {
+    const ql = q.toLowerCase()
+    matchTest = l => l.message.toLowerCase().includes(ql) || l.tag.toLowerCase().includes(ql)
+  }
+  const ctx = Number(logcatContextLines.value) || 0
+  if (ctx <= 0) return list.filter(matchTest)
+  const included = new Set<number>()
+  for (let i = 0; i < list.length; i++) {
+    if (matchTest(list[i])) {
+      const s = Math.max(0, i - ctx), e = Math.min(list.length - 1, i + ctx)
+      for (let j = s; j <= e; j++) included.add(j)
+    }
+  }
+  return list.filter((_, i) => included.has(i))
+})
+
+function toggleLogcatLevel(lv: LogLevel) {
+  const s = new Set(logcatLevelFilters.value)
+  if (s.has(lv)) { if (s.size > 1) s.delete(lv) } else s.add(lv)
+  logcatLevelFilters.value = s
+}
+function logcatLevelActiveClass(lv: LogLevel): string {
+  const map: Record<LogLevel, string> = { V: 'bg-on-surface-variant/20 text-on-surface-variant', D: 'bg-secondary/20 text-secondary', I: 'bg-success-indicator/20 text-green-700', W: 'bg-yellow-400/30 text-yellow-700', E: 'bg-error/20 text-error', F: 'bg-purple-500/20 text-purple-700', '?': 'bg-outline-variant/20 text-on-surface-variant' }
+  return map[lv] ?? 'bg-outline-variant/20 text-on-surface-variant'
+}
+function commitLogcatSearch() {
+  const q = logcatSearchQuery.value.trim()
+  if (q) { addSearchHistory(q); logcatSearchHistory.value = getSearchHistory() }
+  logcatShowHistory.value = false
+  // Enter 跳转到下一条匹配行
+  rawLogcatPanelRef.value?.jumpToMatch(1)
+}
+function applyLogcatHistory(item: string) { logcatSearchQuery.value = item; logcatShowHistory.value = false }
+function removeLogcatHistoryItem(item: string) { removeSearchHistory(item); logcatSearchHistory.value = getSearchHistory() }
+function onLogcatSearchFocus() {
+  const el = logcatSearchInputRef.value
+  if (el) {
+    const rect = el.getBoundingClientRect()
+    logcatHistoryRect.value = { top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 200) }
+  }
+  logcatShowHistory.value = true
+}
+function onLogcatSearchBlur() { setTimeout(() => { logcatShowHistory.value = false }, 150) }
+
+watch(logcatContextLines, (val) => {
+  try { localStorage.setItem('logcat_context_lines', String(Number(val) || 0)) } catch {}
+})
+
 async function clearDeviceLog() {
   if (!props.serial || clearingDevice.value) return
   clearingDevice.value = true
+  // 先清空 UI 和搜索框，让用户立即看到空界面
+  clearAll()
+  logcatSearchQuery.value = ''
   try {
     const { invoke } = await import('@tauri-apps/api/core')
     await invoke('adb_shell', { serial: props.serial, command: 'logcat -c' })
-    showDeviceClearToast(true, '设备日志已清空')
+    showDeviceClearToast(true, '日志已清空')
   } catch {
     showDeviceClearToast(false, '清空失败，请检查设备连接')
   } finally {
     clearingDevice.value = false
+    // 设备 logcat -c 执行完再拉新日志，避免拉到旧缓冲区内容
+    logcatRefresh()
   }
 }
 
@@ -502,7 +722,7 @@ const filters = [
 ]
 const httpMethods = ['GET', 'POST', 'PUT', 'DELETE']
 
-function selectView(v: 'all' | 'api') {
+function selectView(v: 'all' | 'api' | 'logcat') {
   activeView.value = v
   activeModuleKey.value = null
   expandedRaw.value = null
