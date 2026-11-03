@@ -45,6 +45,10 @@ pause
 exit /b 1
 
 :do_build
+echo  [%BUILD_LABEL%] Cleaning old bundle files...
+if exist "%BUNDLE_DIR%\nsis" rd /s /q "%BUNDLE_DIR%\nsis"
+if exist "%BUNDLE_DIR%\msi"  rd /s /q "%BUNDLE_DIR%\msi"
+echo.
 echo  [%BUILD_LABEL%] Building... this may take a few minutes.
 echo  -----------------------------------------------
 echo.
