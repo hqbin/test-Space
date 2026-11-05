@@ -371,7 +371,7 @@ Workspace 页面已在 Phase 9 中移除，路由 redirect 改为 `/case-space`�
     - **录屏**：启动/停止，停止后自动保存到 `Documents/TestSpace/recording_YYYYMMDD_HHMMSS.mp4`，保存完成后自动打开目录
     - **自动保存目录统一**：所有文件（截图/录屏/日志/诊断包/开机日志/Bugreport/APK）统一保存到 `Documents/TestSpace/`，不分子文件夹，方便全选拖拽。通过 `getAutoSaveDir()` 辅助函数创建并返回目录，`openSaveDirectory()` 调用 Rust `open_path` 命令
   - **快捷操作去重**：Root/Remount/发送文字/重启 ADB 等操作结果仅在 cmdExec 浮窗中显示，不再同时弹 Toast
-  - **快捷指令执行**：`executeCustomCommand()` 不再弹 Toast，仅通过顶部 cmdExec 浮窗显示结果
+  - **快捷指令执行**：`executeCustomCommand()` 不再弹 Toast，仅通过顶部 cmdExec 浮窗显示结果；浮窗不会自动消失，需用户手动点击右上角关闭按钮或点击遮罩关闭
   - **分页二：其他命令**
     - **APK Manager**：安装（文件选择器）+ 卸载 + 已安装应用列表（按 web-adb-tool 规则排序 + 14 条分页 + 并行批量加载版本号 + 复制包名/版本）
       - **路径查询**：使用 `pm path <pkg>`（固定格式 `package:/path/...`），不再用 `dumpsys package | grep path:` 防止误匹配
@@ -441,7 +441,7 @@ Workspace 页面已在 Phase 9 中移除，路由 redirect 改为 `/case-space`�
 - **入口**：设备空间第三个 Tab「日志分析」（`troubleshoot` 图标），控制栏右侧有独立窗口按钮（`open_in_new`），点击弹出 1280×800 原生窗口（路由 `/log-analysis?serial=`）
 - **架构（Phase 29 升级）**：Rust 侧持久流式 ADB 进程 + 前端 `listen()` 接收，彻底取代原有轮询方案；`useLogAnalysis.ts` 负责模块解析，`useRawLogcat.ts` 负责原始日志，两者共享同一条 `logcat://lines:{serial}` 事件流，单个 ADB 进程
 - **控制栏联动**：点击「开始」先启动 `startAnalysis()`（立即设 `isRunning=true`），再 `logcatStart()` 启动 ADB 进程；「停止」同时停止两者；「清空日志」先清空面板、执行 `logcat -c`，再调用 `refresh()` 重启流
-- **Rust 流式采集（`logcat_stream_start`）**：后台线程启动 `adb -s {serial} logcat -v threadtime -b main,system,crash`，逐行读取 stdout，每 50ms 或攒够 200 行批量 `emit("logcat://lines:{serial}")`，进程退出时 flush 剩余行；`logcat_stream_stop` 设置 stop flag 并等待进程自然退出
+- **Rust 流式采集（`logcat_stream_start`）**：后台线程启动 `adb -s {serial} logcat -v threadtime -b main,system,crash`，逐行读取 stdout，每 50ms 或攒够 200 行批量 `emit("logcat://lines:{serial}")`，进程退出时 flush 剩余行；`LogcatStreamChild` 同时持有 `stop_flag` 和 `child` 进程句柄；`logcat_stream_stop` 设置 stop flag 并调用 `child.kill()` 强制终止 ADB 进程，防止进程泄漏导致 `adb devices` 出现 offline 设备
 - **前端事件接收（`useRawLogcat.ts`）**：`listen()` 注册事件监听，暂停时行数缓存到 `pauseBuffer`，resume 后补入；`_linesRaw` 内部裸数组 + `_tick` 整数信号驱动 computed 更新，避免大数组响应式开销；缓冲上限 10000 行
 - **模块匹配**：每行日志依次尝试 11 个模块的规则列表（regex + status + summary），命中第一条规则后停止；summary 支持函数形式以从正则捕获组中提取动态内容
 - **11 个可监控模块**（Banner、推荐内容、远程配置、Firebase 崩溃、权限/GDPR 已移除）：

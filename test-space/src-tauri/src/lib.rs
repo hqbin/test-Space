@@ -55,6 +55,7 @@ struct LogcatDiag {
 // ── 流式 logcat（用于 UI 实时展示，零轮询，持久 ADB 进程逐行推事件） ──
 struct LogcatStreamChild {
     stop_flag: Arc<AtomicBool>,
+    child: std::process::Child,
 }
 
 #[derive(Default)]
@@ -695,9 +696,10 @@ async fn logcat_stream_start(
     app: tauri::AppHandle,
     state: tauri::State<'_, LogcatStreamState>,
 ) -> Result<(), String> {
-    // 如果已有旧流则先停掉
-    if let Some(old) = state.0.lock().unwrap().remove(&serial) {
+    // 如果已有旧流则先停掉并 kill 子进程
+    if let Some(mut old) = state.0.lock().unwrap().remove(&serial) {
         old.stop_flag.store(true, Ordering::Relaxed);
+        let _ = old.child.kill();
     }
 
     let stop_flag = Arc::new(AtomicBool::new(false));
@@ -755,12 +757,8 @@ async fn logcat_stream_start(
         }
     });
 
-    // child 移入 state 以便 stop 时 kill
-    // 注意：child.stdout 已被 take，这里只保留 child 用于 kill
-    state.0.lock().unwrap().insert(serial, LogcatStreamChild { stop_flag });
-    // child 在线程里通过 stdout EOF 自然结束，不需要额外 join
-    // 但需要 wait 避免僵尸进程 — spawn detached thread 来 wait
-    std::thread::spawn(move || { let _ = child.wait(); });
+    // child 存入 state，stop 时可以 kill 进程
+    state.0.lock().unwrap().insert(serial, LogcatStreamChild { stop_flag, child });
 
     Ok(())
 }
@@ -770,8 +768,9 @@ async fn logcat_stream_stop(
     serial: String,
     state: tauri::State<'_, LogcatStreamState>,
 ) -> Result<(), String> {
-    if let Some(entry) = state.0.lock().unwrap().remove(&serial) {
+    if let Some(mut entry) = state.0.lock().unwrap().remove(&serial) {
         entry.stop_flag.store(true, Ordering::Relaxed);
+        let _ = entry.child.kill();
     }
     Ok(())
 }

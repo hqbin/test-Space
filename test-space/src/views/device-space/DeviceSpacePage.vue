@@ -929,20 +929,23 @@
     <!-- Command Execution Dialog -->
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="cmdExec.show" class="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-[420px] max-w-[90vw]" @mouseenter="pauseCmdExecAutoClose" @mouseleave="resumeCmdExecAutoClose">
-          <div class="glass-panel rounded-xl px-4 py-3">
-            <div class="flex items-center justify-between gap-2 mb-1">
-              <div class="flex items-center gap-2 min-w-0">
-                <span v-if="cmdExec.running" class="w-3.5 h-3.5 border-2 border-secondary border-t-transparent rounded-full animate-spin shrink-0"></span>
-                <span v-else class="material-symbols-outlined text-[16px] text-success-indicator shrink-0">check_circle</span>
-                <span class="font-label-md text-label-md text-on-surface font-medium truncate">{{ cmdExec.title }}</span>
+        <div v-if="cmdExec.show" class="fixed inset-0 z-[100] flex items-start justify-center pt-4"
+          @click.self="!cmdExec.running && closeCmdExec()">
+          <div class="w-[420px] max-w-[90vw]">
+            <div class="glass-panel rounded-xl px-4 py-3">
+              <div class="flex items-center justify-between gap-2 mb-1">
+                <div class="flex items-center gap-2 min-w-0">
+                  <span v-if="cmdExec.running" class="w-3.5 h-3.5 border-2 border-secondary border-t-transparent rounded-full animate-spin shrink-0"></span>
+                  <span v-else class="material-symbols-outlined text-[16px] text-success-indicator shrink-0">check_circle</span>
+                  <span class="font-label-md text-label-md text-on-surface font-medium truncate">{{ cmdExec.title }}</span>
+                </div>
+                <button v-if="!cmdExec.running" class="glass-button p-0.5 rounded-full shrink-0 select-none" @click="closeCmdExec">
+                  <span class="material-symbols-outlined text-[14px]">close</span>
+                </button>
               </div>
-              <button v-if="!cmdExec.running" class="glass-button p-0.5 rounded-full shrink-0 select-none" @click="closeCmdExec">
-                <span class="material-symbols-outlined text-[14px]">close</span>
-              </button>
+              <div v-if="cmdExec.command" class="text-green-600/80 font-mono text-[11px] mb-1.5 pb-1.5 border-b border-outline-variant/20">$ {{ cmdExec.command }}</div>
+              <pre class="font-mono text-[11px] text-on-surface-variant max-h-[200px] overflow-y-auto custom-scrollbar whitespace-pre-wrap leading-relaxed select-text">{{ cmdExec.output }}</pre>
             </div>
-            <div v-if="cmdExec.command" class="text-green-600/80 font-mono text-[11px] mb-1.5 pb-1.5 border-b border-outline-variant/20">$ {{ cmdExec.command }}</div>
-            <pre class="font-mono text-[11px] text-on-surface-variant max-h-[200px] overflow-y-auto custom-scrollbar whitespace-pre-wrap leading-relaxed select-text">{{ cmdExec.output }}</pre>
           </div>
         </div>
       </Transition>
@@ -1111,9 +1114,7 @@ function confirmThen(title: string, action?: () => Promise<void>): Promise<boole
 
 // ── Command Execution Dialog ──
 const cmdExec = ref({ show: false, title: "", command: "", output: "", running: false });
-let cmdExecTimeout: ReturnType<typeof setTimeout> | null = null;
 function showCmdExec(title: string, command = "") {
-  if (cmdExecTimeout) clearTimeout(cmdExecTimeout);
   cmdExec.value = { show: true, title, command, output: "", running: true };
 }
 function appendCmdExec(text: string) {
@@ -1122,20 +1123,8 @@ function appendCmdExec(text: string) {
 function finishCmdExec(summary?: string) {
   if (summary) cmdExec.value.output += summary + "\n";
   cmdExec.value.running = false;
-  scheduleCmdExecClose();
-}
-function scheduleCmdExecClose() {
-  if (cmdExecTimeout) clearTimeout(cmdExecTimeout);
-  cmdExecTimeout = setTimeout(() => { cmdExec.value.show = false; }, 3000);
-}
-function pauseCmdExecAutoClose() {
-  if (cmdExecTimeout) { clearTimeout(cmdExecTimeout); cmdExecTimeout = null; }
-}
-function resumeCmdExecAutoClose() {
-  if (!cmdExec.value.running && cmdExec.value.show) scheduleCmdExecClose();
 }
 function closeCmdExec() {
-  if (cmdExecTimeout) clearTimeout(cmdExecTimeout);
   cmdExec.value.show = false;
 }
 
@@ -1399,7 +1388,6 @@ async function executeCustomCommand(fullCmd: string) {
   appendCmdExec(ok ? `─ ${t('device.allCmdsDone')} ─` : `─ ${t('device.someCmdsFailed')} ─`);
   appendCmdExec(`${t('device.exitStatus')}: ${ok ? t('device.success') : t('device.failed')}`);
   cmdExec.value.running = false;
-  scheduleCmdExecClose();
 }
 
 // ── File Manager (tree view) ──
@@ -3394,7 +3382,6 @@ onUnmounted(() => {
   if (diagTimeoutId) clearTimeout(diagTimeoutId);
   if (bootLogcatTimeoutId) clearTimeout(bootLogcatTimeoutId);
   if (autoRefreshId) clearInterval(autoRefreshId);
-  if (cmdExecTimeout) clearTimeout(cmdExecTimeout);
   // Clean up APK temp files
   for (const p of apkTempPaths.value) {
     import("@tauri-apps/plugin-fs").then(m => m.remove(p)).catch(() => {});
