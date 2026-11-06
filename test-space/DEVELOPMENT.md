@@ -165,7 +165,7 @@ D:\TestSpace\test-space/
 │       ├── script-space/
 │       │   └── ScriptSpacePage.vue     # 脚本空间（分类 + 搜索 + 多标签终端）
 │       └── settings/
-│           └── SettingsPage.vue        # 设置页（语言 + 主题 + 数据管理 + 版本）
+│           └── SettingsPage.vue        # 设置页（语言 / 主题 / 弹窗自动消失 + 数据管理 + 版本）
 │
 └── src-tauri/                          # Rust 原生层
     ├── Cargo.toml                      # Rust 依赖
@@ -371,7 +371,7 @@ Workspace 页面已在 Phase 9 中移除，路由 redirect 改为 `/case-space`�
     - **录屏**：启动/停止，停止后自动保存到 `Documents/TestSpace/recording_YYYYMMDD_HHMMSS.mp4`，保存完成后自动打开目录
     - **自动保存目录统一**：所有文件（截图/录屏/日志/诊断包/开机日志/Bugreport/APK）统一保存到 `Documents/TestSpace/`，不分子文件夹，方便全选拖拽。通过 `getAutoSaveDir()` 辅助函数创建并返回目录，`openSaveDirectory()` 调用 Rust `open_path` 命令
   - **快捷操作去重**：Root/Remount/发送文字/重启 ADB 等操作结果仅在 cmdExec 浮窗中显示，不再同时弹 Toast
-  - **快捷指令执行**：`executeCustomCommand()` 不再弹 Toast，仅通过顶部 cmdExec 浮窗显示结果；浮窗不会自动消失，需用户手动点击右上角关闭按钮或点击遮罩关闭
+  - **快捷指令执行**：`executeCustomCommand()` 不再弹 Toast，仅通过顶部 cmdExec 浮窗显示结果；浮窗为顶部通知横幅，不拦截页面点击，命令执行期间可继续点击其他功能；默认在命令完成后 3 秒自动消失（鼠标悬停暂停计时），可在设置页「弹窗自动消失」开关关闭该行为；非执行状态下点击页面空白处或右上角关闭按钮均可关闭
   - **分页二：其他命令**
     - **APK Manager**：安装（文件选择器）+ 卸载 + 已安装应用列表（按 web-adb-tool 规则排序 + 14 条分页 + 并行批量加载版本号 + 复制包名/版本）
       - **路径查询**：使用 `pm path <pkg>`（固定格式 `package:/path/...`），不再用 `dumpsys package | grep path:` 防止误匹配
@@ -1413,7 +1413,7 @@ npm run build
 
 | # | 原则 | 说明 |
 |---|------|------|
-| 11 | **悬停暂停自动关闭** | 所有自动关闭的通知弹窗（命令执行结果等），鼠标悬停时必须暂停关闭计时，移出后恢复 |
+| 11 | **悬停暂停自动关闭** | 所有自动关闭的通知弹窗（命令执行结果等），鼠标悬停时必须暂停关闭计时，移出后恢复；命令执行浮窗的自动消失可在设置页关闭（默认开启，持久化到 `app_settings.cmd_exec_auto_dismiss`） |
 | 12 | **不是全屏 modal** | 命令执行反馈使用顶部通知横幅（非全屏遮罩 modal），不遮挡页面内容 |
 
 ### 11.6 导航与布局
@@ -5800,4 +5800,39 @@ Phase 76 曾按 “per worker” 将 1024MB 除以 2 后传入 512M，导致实�
 ### 79.5 验证
 
 - 正则已用真机日志样本逐条校验，白名单行被排除，真实 Kill 行正确提取包名。
+- `npm run build`（vue-tsc + vite）✅
+
+## Phase 80 — 弹窗自动消失可配置 + 设置页首行布局优化（已完成 ✅）
+
+**需求**：上一版将 cmdExec 浮窗改为「不会自动消失」后，部分用户仍需要自动关闭。改为在设置页提供开关：开启则命令完成后自动消失，关闭则保持手动关闭；默认开启，且需持久化保存。
+
+### 80.1 弹窗自动消失开关
+
+- 新增 `src/composables/useAppSettings.ts`：模块级 `popupAutoDismiss` 全局状态，默认 `true`；启动后首次调用 `loadAppSettings()` 从 SQLite `app_settings` 读取（key：`cmd_exec_auto_dismiss`，缺省视为开启），设备页与设置页共享同一次读取。
+- `DeviceSpacePage.vue` 恢复上一版移除的自动关闭链路：`finishCmdExec()` / `executeCustomCommand()` 完成后调用 `scheduleCmdExecClose()`；开启时 3 秒后隐藏浮窗，鼠标悬停浮窗时暂停计时、移出后重新计时；新命令开始与手动关闭时清除旧计时器。
+- 开关关闭时 `scheduleCmdExecClose()` 直接返回，浮窗保持不自动关闭，仅可通过右上角关闭按钮手动关闭。
+- 浮窗恢复为 `fixed top-4` 顶部横幅，移除上一版的 `fixed inset-0` 全屏透明遮罩：不再拦截页面点击，命令执行期间可直接点击其他功能发起新命令；新命令会替换浮窗内容并清理旧的关闭计时器。
+- 「点击空白处关闭」改为 document 级 `click` 监听：点击浮窗内部或可交互控件（button/input/select 等）不关闭，点击页面空白处关闭；命令执行中不响应空白点击，与旧版遮罩逻辑一致。
+- `SettingsPage.vue` 开关直接绑定全局状态，切换后立即对设备页生效，无需重启。
+- 写入失败时状态回滚，避免界面显示与实际行为不一致。
+
+### 80.2 设置页首行布局
+
+- 语言、主题、弹窗自动消失三项合并为同一行三列（`md:grid-cols-3`，窄窗口自动降为单列），每组标签与控件紧贴排列。
+- 语言 / 主题由按钮组改为自定义下拉菜单，复用「备份数据 / 恢复数据」下拉的视觉：`glass-button` 胶囊触发器 + `bg-white rounded-lg border border-gray-200` 弹出面板、`hover:bg-gray-100` 选项、选中项 `text-secondary font-medium` + check 图标；语言、主题、备份、恢复四个下拉互斥展开。
+- 弹窗开关为自定义 `role="switch"` 切换控件，开启态使用普鲁士蓝轨道 + 纸色圆点，适配深色模式。
+- 新增中英文文案：`settings.popupAutoDismiss`、`settings.popupAutoDismissHint`（悬停提示）。
+
+### 80.3 文件变更
+
+| 文件 | 修改类型 | 说明 |
+|------|----------|------|
+| `src/composables/useAppSettings.ts` | 新增 | 弹窗自动消失全局状态、SQLite 读写、失败回滚 |
+| `src/views/device-space/DeviceSpacePage.vue` | 修改 | 恢复自动关闭计时 + 悬停暂停，受开关控制；移除全屏遮罩，改用 document 点击监听实现空白处关闭；卸载时清理监听与计时器 |
+| `src/views/settings/SettingsPage.vue` | 修改 | 首行三项同排；语言/主题改下拉；新增开关控件 |
+| `src/composables/useI18n.ts` | 修改 | 新增开关相关中英文案 |
+
+### 80.4 验证
+
+- `npx vue-tsc --noEmit` ✅
 - `npm run build`（vue-tsc + vite）✅

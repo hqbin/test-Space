@@ -929,23 +929,22 @@
     <!-- Command Execution Dialog -->
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="cmdExec.show" class="fixed inset-0 z-[100] flex items-start justify-center pt-4"
-          @click.self="!cmdExec.running && closeCmdExec()">
-          <div class="w-[420px] max-w-[90vw]">
-            <div class="glass-panel rounded-xl px-4 py-3">
-              <div class="flex items-center justify-between gap-2 mb-1">
-                <div class="flex items-center gap-2 min-w-0">
-                  <span v-if="cmdExec.running" class="w-3.5 h-3.5 border-2 border-secondary border-t-transparent rounded-full animate-spin shrink-0"></span>
-                  <span v-else class="material-symbols-outlined text-[16px] text-success-indicator shrink-0">check_circle</span>
-                  <span class="font-label-md text-label-md text-on-surface font-medium truncate">{{ cmdExec.title }}</span>
-                </div>
-                <button v-if="!cmdExec.running" class="glass-button p-0.5 rounded-full shrink-0 select-none" @click="closeCmdExec">
-                  <span class="material-symbols-outlined text-[14px]">close</span>
-                </button>
+        <!-- 顶部通知横幅：不使用全屏遮罩，执行期间仍可点击页面其他功能 -->
+        <div v-if="cmdExec.show" data-cmd-exec class="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-[420px] max-w-[90vw]"
+          @mouseenter="pauseCmdExecAutoClose" @mouseleave="resumeCmdExecAutoClose">
+          <div class="glass-panel rounded-xl px-4 py-3">
+            <div class="flex items-center justify-between gap-2 mb-1">
+              <div class="flex items-center gap-2 min-w-0">
+                <span v-if="cmdExec.running" class="w-3.5 h-3.5 border-2 border-secondary border-t-transparent rounded-full animate-spin shrink-0"></span>
+                <span v-else class="material-symbols-outlined text-[16px] text-success-indicator shrink-0">check_circle</span>
+                <span class="font-label-md text-label-md text-on-surface font-medium truncate">{{ cmdExec.title }}</span>
               </div>
-              <div v-if="cmdExec.command" class="text-green-600/80 font-mono text-[11px] mb-1.5 pb-1.5 border-b border-outline-variant/20">$ {{ cmdExec.command }}</div>
-              <pre class="font-mono text-[11px] text-on-surface-variant max-h-[200px] overflow-y-auto custom-scrollbar whitespace-pre-wrap leading-relaxed select-text">{{ cmdExec.output }}</pre>
+              <button v-if="!cmdExec.running" class="glass-button p-0.5 rounded-full shrink-0 select-none" @click="closeCmdExec">
+                <span class="material-symbols-outlined text-[14px]">close</span>
+              </button>
             </div>
+            <div v-if="cmdExec.command" class="text-green-600/80 font-mono text-[11px] mb-1.5 pb-1.5 border-b border-outline-variant/20">$ {{ cmdExec.command }}</div>
+            <pre class="font-mono text-[11px] text-on-surface-variant max-h-[200px] overflow-y-auto custom-scrollbar whitespace-pre-wrap leading-relaxed select-text">{{ cmdExec.output }}</pre>
           </div>
         </div>
       </Transition>
@@ -1029,6 +1028,7 @@ const listenTarget = { target: { kind: 'WebviewWindow' as const, label: appWindo
 
 interface ScriptResult { stdout: string; stderr: string; exit_code: number; }
 import { addInputHistory, getInputHistory, saveLogSession, getRunningLogSessions, removeLogSession, getSetting, setSetting } from "@/services/database";
+import { useAppSettings } from "@/composables/useAppSettings";
 
 const {
   listDevices, shell, installApk, uninstallApk, pushFile, pullFile, reboot, screenshot,
@@ -1113,8 +1113,13 @@ function confirmThen(title: string, action?: () => Promise<void>): Promise<boole
 }
 
 // ── Command Execution Dialog ──
+const { popupAutoDismiss, loadAppSettings } = useAppSettings();
 const cmdExec = ref({ show: false, title: "", command: "", output: "", running: false });
+let cmdExecTimeout: ReturnType<typeof setTimeout> | null = null;
+
 function showCmdExec(title: string, command = "") {
+  // 新命令开始时取消上一条命令尚未触发的自动关闭，避免误关新浮窗
+  if (cmdExecTimeout) { clearTimeout(cmdExecTimeout); cmdExecTimeout = null; }
   cmdExec.value = { show: true, title, command, output: "", running: true };
 }
 function appendCmdExec(text: string) {
@@ -1123,9 +1128,36 @@ function appendCmdExec(text: string) {
 function finishCmdExec(summary?: string) {
   if (summary) cmdExec.value.output += summary + "\n";
   cmdExec.value.running = false;
+  scheduleCmdExecClose();
+}
+// 命令完成后按设置决定是否延时关闭：开启时 3 秒后收起，鼠标悬停期间暂停计时
+function scheduleCmdExecClose() {
+  pauseCmdExecAutoClose();
+  if (!popupAutoDismiss.value) return;
+  cmdExecTimeout = setTimeout(() => {
+    cmdExec.value.show = false;
+    cmdExecTimeout = null;
+  }, 3000);
+}
+function pauseCmdExecAutoClose() {
+  if (cmdExecTimeout) { clearTimeout(cmdExecTimeout); cmdExecTimeout = null; }
+}
+function resumeCmdExecAutoClose() {
+  if (!cmdExec.value.running && cmdExec.value.show) scheduleCmdExecClose();
 }
 function closeCmdExec() {
+  pauseCmdExecAutoClose();
   cmdExec.value.show = false;
+}
+// 点击页面空白处关闭浮窗；不用全屏遮罩，避免拦截其他功能按钮的点击。
+// 运行中、点击浮窗内部、点击可交互控件时都不关闭：控件自身逻辑可能会发起新命令并替换浮窗。
+function handleCmdExecOutsideClick(e: MouseEvent) {
+  if (!cmdExec.value.show || cmdExec.value.running) return;
+  const target = e.target as HTMLElement | null;
+  if (!target) return;
+  if (target.closest('[data-cmd-exec]')) return;
+  if (target.closest('button, a, input, select, textarea, [role="button"], [role="switch"], [contenteditable="true"]')) return;
+  closeCmdExec();
 }
 
 // ── Loading states ──
@@ -1388,6 +1420,7 @@ async function executeCustomCommand(fullCmd: string) {
   appendCmdExec(ok ? `─ ${t('device.allCmdsDone')} ─` : `─ ${t('device.someCmdsFailed')} ─`);
   appendCmdExec(`${t('device.exitStatus')}: ${ok ? t('device.success') : t('device.failed')}`);
   cmdExec.value.running = false;
+  scheduleCmdExecClose();
 }
 
 // ── File Manager (tree view) ──
@@ -3325,6 +3358,8 @@ function applyDeviceListPayload(list: Array<{ serial: string; model: string; sta
 }
 
 onMounted(async () => {
+  void loadAppSettings();
+  document.addEventListener('click', handleCmdExecOutsideClick);
   loadCustomCommands();
   loadTextHistory();
   loadRemotePathHistory();
@@ -3367,7 +3402,9 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', recalcAppPageSize);
+  document.removeEventListener('click', handleCmdExecOutsideClick);
   if ((window as any).__appListResizeObserver) (window as any).__appListResizeObserver.disconnect();
+  pauseCmdExecAutoClose();
   if (deviceEventUnlisten) { deviceEventUnlisten(); deviceEventUnlisten = null; }
   // Don't stop mirror if standalone popout window is active
   if (!mirrorPopoutActive.value) {

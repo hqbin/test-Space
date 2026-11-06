@@ -1,44 +1,105 @@
 <template>
   <div class="flex-1 min-h-0 overflow-y-auto select-none px-margin-page pt-safe-area-top pb-4">
     <div class="glass-panel rounded-xl p-padding-card flex flex-col min-h-0 overflow-hidden">
-      <!-- Language -->
-      <div class="flex items-center justify-between gap-4 min-w-0">
-        <span class="font-body-md text-body-md text-on-surface font-medium shrink-0">{{ t("settings.language") }}</span>
-        <div class="flex gap-2 shrink-0">
-          <button
-            class="glass-button px-4 py-2 rounded-full font-label-md text-label-md select-none"
-            :class="lang === 'zh' ? 'glass-active' : ''"
-            @click="setLanguage('zh')"
-          >{{ t("settings.langZh") }}</button>
-          <button
-            class="glass-button px-4 py-2 rounded-full font-label-md text-label-md select-none"
-            :class="lang === 'en' ? 'glass-active' : ''"
-            @click="setLanguage('en')"
-          >{{ t("settings.langEn") }}</button>
+      <!-- Preferences: Language / Theme / Popup auto-dismiss in one row -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4 items-center min-w-0">
+        <!-- Language -->
+        <div class="flex items-center gap-3 min-w-0">
+          <span class="font-body-md text-body-md text-on-surface font-medium shrink-0">{{ t("settings.language") }}</span>
+          <div class="relative shrink-0">
+            <button
+              type="button"
+              class="glass-button w-[136px] px-4 py-2 rounded-full font-label-md text-label-md flex items-center justify-between gap-2 select-none"
+              @click="toggleLangMenu"
+            >
+              <span class="flex items-center gap-2 min-w-0">
+                <span class="material-symbols-outlined text-[18px] shrink-0">language</span>
+                <span class="truncate">{{ lang === 'zh' ? t('settings.langZh') : t('settings.langEn') }}</span>
+              </span>
+              <span class="material-symbols-outlined text-[16px] shrink-0">arrow_drop_down</span>
+            </button>
+            <div v-if="showLangMenu" class="absolute top-full right-0 mt-1 bg-white rounded-lg z-20 min-w-[140px] border border-gray-200">
+              <div
+                class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 dark:hover:bg-[rgba(232,227,214,0.08)] cursor-pointer flex items-center justify-between gap-3"
+                :class="lang === 'zh' ? 'text-secondary font-medium' : ''"
+                @mousedown="selectLanguage('zh')"
+              >
+                <span>{{ t("settings.langZh") }}</span>
+                <span v-if="lang === 'zh'" class="material-symbols-outlined text-[16px]">check</span>
+              </div>
+              <div
+                class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 dark:hover:bg-[rgba(232,227,214,0.08)] cursor-pointer flex items-center justify-between gap-3"
+                :class="lang === 'en' ? 'text-secondary font-medium' : ''"
+                @mousedown="selectLanguage('en')"
+              >
+                <span>{{ t("settings.langEn") }}</span>
+                <span v-if="lang === 'en'" class="material-symbols-outlined text-[16px]">check</span>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div class="border-t border-glass-border-light/30 my-5"></div>
+        <!-- Appearance -->
+        <div class="flex items-center gap-3 min-w-0">
+          <span class="font-body-md text-body-md text-on-surface font-medium shrink-0">{{ t("settings.theme") }}</span>
+          <div class="relative shrink-0">
+            <button
+              type="button"
+              class="glass-button w-[136px] px-4 py-2 rounded-full font-label-md text-label-md flex items-center justify-between gap-2 select-none"
+              @click="toggleThemeMenu"
+            >
+              <span class="flex items-center gap-2 min-w-0">
+                <span class="material-symbols-outlined text-[18px] shrink-0">{{ theme === 'light' ? 'light_mode' : 'dark_mode' }}</span>
+                <span class="truncate">{{ theme === 'light' ? t('settings.themeLight') : t('settings.themeDark') }}</span>
+              </span>
+              <span class="material-symbols-outlined text-[16px] shrink-0">arrow_drop_down</span>
+            </button>
+            <div v-if="showThemeMenu" class="absolute top-full right-0 mt-1 bg-white rounded-lg z-20 min-w-[140px] border border-gray-200">
+              <div
+                class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 dark:hover:bg-[rgba(232,227,214,0.08)] cursor-pointer flex items-center justify-between gap-3"
+                :class="theme === 'light' ? 'text-secondary font-medium' : ''"
+                @mousedown="selectTheme('light')"
+              >
+                <span class="flex items-center gap-2">
+                  <span class="material-symbols-outlined text-[18px]">light_mode</span>
+                  {{ t("settings.themeLight") }}
+                </span>
+                <span v-if="theme === 'light'" class="material-symbols-outlined text-[16px]">check</span>
+              </div>
+              <div
+                class="px-4 py-2 font-body-md text-body-md text-on-surface hover:bg-gray-100 dark:hover:bg-[rgba(232,227,214,0.08)] cursor-pointer flex items-center justify-between gap-3"
+                :class="theme === 'dark' ? 'text-secondary font-medium' : ''"
+                @mousedown="selectTheme('dark')"
+              >
+                <span class="flex items-center gap-2">
+                  <span class="material-symbols-outlined text-[18px]">dark_mode</span>
+                  {{ t("settings.themeDark") }}
+                </span>
+                <span v-if="theme === 'dark'" class="material-symbols-outlined text-[16px]">check</span>
+              </div>
+            </div>
+          </div>
+        </div>
 
-      <!-- Appearance -->
-      <div class="flex items-center justify-between gap-4 min-w-0">
-        <span class="font-body-md text-body-md text-on-surface font-medium shrink-0">{{ t("settings.theme") }}</span>
-        <div class="flex flex-wrap gap-2 justify-end">
+        <!-- Popup auto-dismiss -->
+        <div class="flex items-center gap-3 min-w-0">
+          <span class="font-body-md text-body-md text-on-surface font-medium shrink-0">{{ t("settings.popupAutoDismiss") }}</span>
           <button
-            class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-2 select-none"
-            :class="theme === 'light' ? 'glass-active' : ''"
-            @click="setTheme('light')"
+            type="button"
+            role="switch"
+            :aria-checked="popupAutoDismiss"
+            :aria-label="t('settings.popupAutoDismiss')"
+            :title="t('settings.popupAutoDismissHint')"
+            class="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors duration-200 cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary/40 dark:focus-visible:ring-prussian-2/60"
+            :class="popupAutoDismiss
+              ? 'bg-secondary border-secondary dark:bg-prussian-2 dark:border-prussian-2'
+              : 'bg-ink/10 border-glass-border-dark dark:bg-[rgba(232,227,214,0.14)]'"
+            @click="togglePopupAutoDismiss"
           >
-            <span class="material-symbols-outlined text-[18px]">light_mode</span>
-            {{ t("settings.themeLight") }}
-          </button>
-          <button
-            class="glass-button px-4 py-2 rounded-full font-label-md text-label-md flex items-center gap-2 select-none"
-            :class="theme === 'dark' ? 'glass-active' : ''"
-            @click="setTheme('dark')"
-          >
-            <span class="material-symbols-outlined text-[18px]">dark_mode</span>
-            {{ t("settings.themeDark") }}
+            <span
+              class="absolute left-[3px] top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-paper shadow-sm transition-transform duration-200"
+              :class="popupAutoDismiss ? 'translate-x-[22px]' : 'translate-x-0'"
+            ></span>
           </button>
         </div>
       </div>
@@ -100,7 +161,7 @@
             <div class="flex flex-wrap gap-3">
               <!-- Backup dropdown -->
               <div class="relative">
-                <button class="glass-button px-5 py-2.5 rounded-full font-label-md text-label-md flex items-center gap-2 select-none" @click="showBackupMenu = !showBackupMenu; showRestoreMenu = false">
+                <button class="glass-button px-5 py-2.5 rounded-full font-label-md text-label-md flex items-center gap-2 select-none" @click="showBackupMenu = !showBackupMenu; showRestoreMenu = false; showLangMenu = false; showThemeMenu = false">
                   <span class="material-symbols-outlined text-[18px]">upload</span>
                   {{ t("settings.cloudUpload") }}
                   <span class="material-symbols-outlined text-[16px]">arrow_drop_down</span>
@@ -118,7 +179,7 @@
               </div>
               <!-- Restore dropdown -->
               <div class="relative">
-                <button class="glass-button px-5 py-2.5 rounded-full font-label-md text-label-md flex items-center gap-2 select-none" @click="showRestoreMenu = !showRestoreMenu; showBackupMenu = false">
+                <button class="glass-button px-5 py-2.5 rounded-full font-label-md text-label-md flex items-center gap-2 select-none" @click="showRestoreMenu = !showRestoreMenu; showBackupMenu = false; showLangMenu = false; showThemeMenu = false">
                   <span class="material-symbols-outlined text-[18px]">download</span>
                   {{ t("settings.restore") }}
                   <span class="material-symbols-outlined text-[16px]">arrow_drop_down</span>
@@ -396,6 +457,8 @@ import * as cloudApi from "@/services/cloudBackup";
 import * as crypto from "@/services/crypto";
 import { filterOversizedItems } from "@/services/cloudSync";
 import { useI18n } from "@/composables/useI18n";
+import type { Lang } from "@/composables/useI18n";
+import { useAppSettings } from "@/composables/useAppSettings";
 import { getVersion } from "@tauri-apps/api/app";
 import type { AiMemory } from "@/services/database";
 import {
@@ -409,6 +472,11 @@ import { testAiConnection } from "@/services/noteAi";
 import { useTokenUsage } from "@/stores/useTokenUsage";
 
 const { lang, t, setLanguage, initLanguage } = useI18n();
+const { popupAutoDismiss, loadAppSettings, setPopupAutoDismiss } = useAppSettings();
+
+function togglePopupAutoDismiss() {
+  setPopupAutoDismiss(!popupAutoDismiss.value);
+}
 
 const { promptTokens, completionTokens, totalTokens, resetUsage, loadUsage } = useTokenUsage();
 function resetTokenUsage() {
@@ -433,6 +501,34 @@ const deviceIdList = ref<{ id: string; name: string }[]>([]);
 const deviceIdNames = ref<Record<string, string>>({});
 const showBackupMenu = ref(false);
 const showRestoreMenu = ref(false);
+const showLangMenu = ref(false);
+const showThemeMenu = ref(false);
+
+// 四个下拉菜单互斥，同一时间只展开一个
+function toggleLangMenu() {
+  const next = !showLangMenu.value;
+  closeAllMenus();
+  showLangMenu.value = next;
+}
+function toggleThemeMenu() {
+  const next = !showThemeMenu.value;
+  closeAllMenus();
+  showThemeMenu.value = next;
+}
+function closeAllMenus() {
+  showLangMenu.value = false;
+  showThemeMenu.value = false;
+  showBackupMenu.value = false;
+  showRestoreMenu.value = false;
+}
+function selectLanguage(value: Lang) {
+  setLanguage(value);
+  showLangMenu.value = false;
+}
+function selectTheme(value: string) {
+  setTheme(value);
+  showThemeMenu.value = false;
+}
 const cloudBusy = ref(false);
 const showDeviceDropdown = ref(false);
 const isEditingDeviceId = ref(false);
@@ -611,8 +707,7 @@ function handleDeviceIdBlur() {
 function closeMenus(e: MouseEvent) {
   const target = e.target as HTMLElement;
   if (!target.closest('.relative')) {
-    showBackupMenu.value = false;
-    showRestoreMenu.value = false;
+    closeAllMenus();
   }
 }
 
@@ -955,6 +1050,7 @@ watch(showMemoryModal, (v) => {
 
 onMounted(async () => {
   await initLanguage();
+  await loadAppSettings();
   await loadTheme();
   aiConfig.value = await loadAiConfig();
   activeAiProvider.value = aiConfig.value.provider;
