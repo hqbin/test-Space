@@ -12,8 +12,8 @@
 
 use std::fs::File;
 use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
-use std::net::TcpStream;
-use std::process::{Command, Stdio};
+use std::net::{SocketAddr, TcpStream};
+use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -671,77 +671,106 @@ fn kill_server(serial: &str, scid: u32) {
         .output();
 }
 
-// ── Public entry points ──────────────────────────────────────────────────────
+// ── Server launch ────────────────────────────────────────────────────────────
 
-pub fn start(
-    app: tauri::AppHandle,
-    window_label: String,
-    serial: String,
-    out_path: String,
-    jar_path: String,
-    max_size: u16,
-    video_bit_rate: u32,
-    max_fps: u8,
-    port: u16,
-    scid: u32,
-) -> Result<RecorderEntry, String> {
-    if jar_path.is_empty() {
-        return Err("未找到内置 scrcpy-server（应用资源缺失）".to_string());
+/// Tail of the server's stdout/stderr.
+///
+/// Kept so a failed launch can report the device-side reason instead of a bare
+/// "connect timeout" (the server's own diagnostics are the only way to tell a
+/// class-loading failure from a dead socket).
+#[derive(Clone, Default)]
+struct ServerLog(Arc<Mutex<String>>);
+
+impl ServerLog {
+    fn push(&self, chunk: &str) {
+        const KEEP: usize = 1500;
+        let mut log = self.0.lock().unwrap();
+        log.push_str(chunk);
+        if log.len() > KEEP {
+            let mut idx = log.len() - KEEP;
+            while idx < log.len() && !log.is_char_boundary(idx) {
+                idx += 1;
+            }
+            *log = log[idx..].to_string();
+        }
     }
-    with_device_ready(|| push_server(&serial, &jar_path))?;
 
-    let socket_name = format!("scrcpy_{:08x}", scid);
-    remove_forward(&serial, port);
-    with_device_ready(|| set_forward(&serial, port, &socket_name))?;
+    /// Single-line rendering, empty when the server said nothing.
+    fn tail(&self) -> String {
+        self.0
+            .lock()
+            .unwrap()
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect::<Vec<_>>()
+            .join(" | ")
+    }
+}
 
-    let args = format!(
-        "CLASSPATH=/data/local/tmp/scrcpy-server.jar app_process / \
-         com.genymobile.scrcpy.Server 3.3.4 log_level=error \
-         max_size={} video_bit_rate={} max_fps={} \
-         tunnel_forward=true audio=false control=false \
-         send_device_meta=false send_codec_meta=true \
-         stay_awake=true downsize_on_error=true cleanup=true \
-         scid={:08x}",
-        max_size, video_bit_rate, max_fps, scid
-    );
-
+/// Start the server and wait until it hands over the codec meta.
+///
+/// Returns the connected stream (still at 1500 ms read timeout), the child, and
+/// the announced resolution. Errors carry the server log so the UI can show the
+/// real cause.
+fn launch_server(
+    serial: &str,
+    args: &str,
+    port: u16,
+) -> Result<(TcpStream, Child, u32, u32), String> {
     let mut child = adb_cmd()
-        .args(["-s", &serial, "shell", &args])
+        .args(["-s", serial, "shell", args])
+        .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("启动 scrcpy-server 失败: {}", e))?;
 
-    // Drain server output so the pipe never fills up.
-    if let Some(mut err) = child.stderr.take() {
+    let log = ServerLog::default();
+    let mut pipes: Vec<Box<dyn Read + Send>> = Vec::new();
+    if let Some(o) = child.stdout.take() {
+        pipes.push(Box::new(o));
+    }
+    if let Some(e) = child.stderr.take() {
+        pipes.push(Box::new(e));
+    }
+    for mut pipe in pipes {
+        let log = log.clone();
         std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
-            while let Ok(k) = err.read(&mut buf) {
+            while let Ok(k) = pipe.read(&mut buf) {
                 if k == 0 {
                     break;
                 }
+                log.push(&String::from_utf8_lossy(&buf[..k]));
             }
         });
     }
-    if let Some(mut out) = child.stdout.take() {
-        std::thread::spawn(move || {
-            let mut buf = [0u8; 4096];
-            while let Ok(k) = out.read(&mut buf) {
-                if k == 0 {
-                    break;
-                }
-            }
-        });
-    }
+
+    let fail = |child: &mut Child, reason: String| -> String {
+        let _ = child.kill();
+        let _ = child.wait();
+        let tail = log.tail();
+        if tail.is_empty() {
+            reason
+        } else {
+            format!("{}（设备端：{}）", reason, tail)
+        }
+    };
 
     // Connect to the forwarded port (server needs a moment to boot).
     // adb accepts the local TCP connect before the device-side socket exists, so
     // the dummy byte is the real readiness signal: retry until it arrives.
     let addr = format!("127.0.0.1:{}", port);
-    let sa = addr.parse().map_err(|_| format!("无效端口: {}", port))?;
+    let sa: SocketAddr = addr.parse().map_err(|_| format!("无效端口: {}", port))?;
     let deadline = Instant::now() + Duration::from_secs(20);
     let mut stream: Option<TcpStream> = None;
     while Instant::now() < deadline {
+        // A server that already exited will never open its socket — fail fast
+        // with its log instead of burning the full 20 s.
+        if let Ok(Some(status)) = child.try_wait() {
+            return Err(fail(&mut child, format!("scrcpy-server 启动后立即退出（{}）", status)));
+        }
         match TcpStream::connect_timeout(&sa, Duration::from_secs(1)) {
             Ok(mut s) => {
                 s.set_nodelay(true).ok();
@@ -760,37 +789,109 @@ pub fn start(
     }
     let mut stream = match stream {
         Some(s) => s,
-        None => {
-            kill_server(&serial, scid);
-            remove_forward(&serial, port);
-            let _ = child.kill();
-            return Err("连接 scrcpy-server 超时（20s）".to_string());
-        }
+        None => return Err(fail(&mut child, "连接 scrcpy-server 超时（20s）".to_string())),
     };
-
-    let stop = Arc::new(AtomicBool::new(false));
 
     // Codec meta: fourcc(4) + width(4) + height(4)
     let mut header = [0u8; 12];
     if let Err(e) = stream.read_exact(&mut header) {
-        kill_server(&serial, scid);
-        remove_forward(&serial, port);
-        let _ = child.kill();
-        return Err(format!("读取编码信息失败: {}", e));
+        return Err(fail(&mut child, format!("读取编码信息失败: {}", e)));
     }
     let width = u32::from_be_bytes([header[4], header[5], header[6], header[7]]);
     let height = u32::from_be_bytes([header[8], header[9], header[10], header[11]]);
     if width == 0 || height == 0 {
-        kill_server(&serial, scid);
-        remove_forward(&serial, port);
-        let _ = child.kill();
-        return Err("设备返回了无效的分辨率".to_string());
+        return Err(fail(&mut child, "设备返回了无效的分辨率".to_string()));
     }
+
+    Ok((stream, child, width, height))
+}
+
+// ── Public entry points ──────────────────────────────────────────────────────
+
+pub fn start(
+    app: tauri::AppHandle,
+    window_label: String,
+    serial: String,
+    out_path: String,
+    jar_path: String,
+    max_size: u16,
+    video_bit_rate: u32,
+    max_fps: u8,
+    port: u16,
+    scid: u32,
+) -> Result<RecorderEntry, String> {
+    if jar_path.is_empty() {
+        return Err("未找到内置 scrcpy-server（应用资源缺失）".to_string());
+    }
+
+    let socket_name = format!("scrcpy_{:08x}", scid);
+    remove_forward(&serial, port);
+
+    let args = format!(
+        "CLASSPATH=/data/local/tmp/scrcpy-server.jar app_process / \
+         com.genymobile.scrcpy.Server 3.3.4 log_level=error \
+         max_size={} video_bit_rate={} max_fps={} \
+         tunnel_forward=true audio=false control=false \
+         send_device_meta=false send_codec_meta=true \
+         stay_awake=true downsize_on_error=true cleanup=false \
+         scid={:08x}",
+        max_size, video_bit_rate, max_fps, scid
+    );
+
+    // `cleanup=false`: the jar in /data/local/tmp is shared with the mirror, and
+    // `cleanup=true` makes a server delete it on exit. A server finishing its
+    // teardown right after a *previous* session was killed therefore wipes the
+    // jar between our `push` and `app_process` → the new server aborts with
+    // ClassNotFoundException, never opens its socket, and the host only sees a
+    // connect timeout. Keeping the jar removes that race; the push below still
+    // runs every start, so a missing/overwritten copy is repaired anyway.
+    // Three attempts also cover adbd still restarting right after `adb root`
+    // (the shell exec dies with "device offline" instead of opening a socket).
+    let mut last_err = String::new();
+    let mut launched: Option<(TcpStream, Child, u32, u32)> = None;
+    for attempt in 0..3 {
+        if attempt > 0 {
+            std::thread::sleep(Duration::from_millis(600));
+        }
+        if let Err(e) = with_device_ready(|| push_server(&serial, &jar_path)) {
+            last_err = e;
+            continue;
+        }
+        if let Err(e) = with_device_ready(|| set_forward(&serial, port, &socket_name)) {
+            last_err = e;
+            continue;
+        }
+        match launch_server(&serial, &args, port) {
+            Ok(v) => {
+                launched = Some(v);
+                break;
+            }
+            // Retry with a fresh copy: the usual causes are a jar that vanished
+            // after the push, or an adbd that was still coming back.
+            Err(e) => last_err = e,
+        }
+    }
+    let (mut stream, mut child, width, height) = match launched {
+        Some(v) => v,
+        None => {
+            kill_server(&serial, scid);
+            remove_forward(&serial, port);
+            if last_err.contains("Aborted") || last_err.contains("ClassNotFound") {
+                return Err(format!(
+                    "{}（设备端 scrcpy-server.jar 缺失或损坏，已重试 3 次）",
+                    last_err
+                ));
+            }
+            return Err(last_err);
+        }
+    };
 
     // Short timeout from here on so the capture loop stays responsive to `stop`.
     stream
         .set_read_timeout(Some(Duration::from_millis(400)))
         .map_err(|e| e.to_string())?;
+
+    let stop = Arc::new(AtomicBool::new(false));
 
     let muxer = match Mp4Muxer::create(&out_path, width, height) {
         Ok(m) => m,

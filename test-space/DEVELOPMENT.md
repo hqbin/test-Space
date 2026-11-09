@@ -6927,7 +6927,41 @@ SQLSTATE[23000]: Integrity constraint violation: 1048 Column 'day_budget' cannot
 
 ### 94.5 收尾
 
-- Rust 编译通过（由 `npm run tauri dev` 的文件监听增量编译验证：`target/debug/app_lib.dll` 与 `app.exe` 时间戳均晚于最后一次源码改动）。
 - `npx vue-tsc --noEmit` ✅
+- Rust 编译验证：**不要**用 `target/debug/app_lib.dll` 的时间戳判断是否编译成功 —— 该 cdylib 里其实不含 `recorder.rs` 的字符串常量（代码经 staticlib 链进 `app.exe`）。可靠做法是看 `target/debug/app.exe` 里能否找到新加的字符串，或者直接跑 `cargo check`（dev 进程会持有 `target/debug/.cargo-lock`，此时要么停掉 dev，要么换 `--target-dir`）。
 - 真机验证清单：录屏中执行 `adb root` → 提示「录制意外结束，已保存已录部分」→ 再次点录屏能正常开始新会话；`adb remount`（同样会重启 adbd）同理。
+
+### 94.6 返工：94.2 引入了「连接 scrcpy-server 超时（20s）」
+
+**现象**：修完后录屏直接起不来，提示 `连接 scrcpy-server 超时（20s）`。
+
+**根因（94.2 的 `discard()` 踩到了 `cleanup=true` 的副作用）**：
+
+服务端参数里有 `cleanup=true`，含义是 **`scrcpy-server` 退出时删除自己的 jar**（`/data/local/tmp/scrcpy-server.jar`）。而 `discard()` 会在推送 jar **之前**先 `pkill` 掉僵尸会话，被杀的旧进程随后才真正退出并执行 cleanup —— 于是在 `push` 完成、`app_process` 还没起来的窗口里把刚推上去的 jar 删掉，新服务端启动即崩：
+
+```
+Abort message: 'No pending exception expected: java.lang.ClassNotFoundException: com.genymobile.scrcpy.Server'
+```
+
+类都加载不到 → 设备侧 `localabstract:scrcpy_<hex8>` 从未被 accept → 主机侧 `connect` 被 adb 立刻关闭（`read_exact` 返回 EOF）→ 循环重试到 20s 超时。本机 `netstat` 上 27283 端口堆积大量 `TIME_WAIT` 正是这个「连上就被关」的特征；旧代码把服务端 stderr 直接丢弃，所以用户只看到「超时」。
+
+**修法**：
+
+| 位置 | 改动 |
+|---|---|
+| 录制端服务端参数 | `cleanup=true` → **`cleanup=false`**。jar 常驻 `/data/local/tmp`，与其他会话（镜像）共享也不会被谁顺手删掉；每次 start 仍会重新 push，缺了会自动修复 |
+| `recorder.rs::ServerLog` | 新增：把服务端 stdout/stderr 收进 1.5KB 环形缓冲（原来直接读掉丢弃），失败时拼进错误信息 |
+| `recorder.rs::launch_server` | 抽出「spawn + 等 dummy 字节 + 读 codec meta」。连接循环里用 `child.try_wait()` **快速失败**：服务端一开始就退出就立刻带日志报错，不再空等 20s；错误统一附「（设备端：…）」 |
+| `recorder.rs::start` | push + forward + launch 改为**最多 3 次尝试**（间隔 600ms）。可自愈三类问题：jar 在 push 后被删、adbd 刚重启还没就绪、forward 指向已消失的 socket |
+| 同上 | 3 次都失败且日志含 `Aborted` / `ClassNotFound` 时，错误信息补一句「设备端 scrcpy-server.jar 缺失或损坏，已重试 3 次」 |
+
+**排查证据（可复现）**：
+
+1. `cleanup=true` 的服务端退出后，设备上 `/data/local/tmp/scrcpy-server.jar` 确实消失；换成 `cleanup=false` 后退出仍保留。
+2. 手动删掉 jar 再 `app_process …` → 立刻 `Aborted` + tombstone 里 `ClassNotFoundException: com.genymobile.scrcpy.Server`，且 socket 不建立。
+3. jar 存在时同一套参数（含 `cleanup=false`）可正常拿到 `dummy=0x00` → `h264 1920x1080` → config 包 → 关键帧，录制链路本身没问题。
+4. `netstat -ano | findstr 27283` 有大量 `127.0.0.1:27283 TIME_WAIT`，符合「连上即被关」的重试特征。
+
+**教训**：scrcpy-server 的 `cleanup` 是**跨会话、跨模块**的副作用（jar 在 `/data/local/tmp` 只有一份）。任何「先杀旧会话再推 jar」的流程都必须假定旧进程会删文件 —— 要么不启用 cleanup，要么杀完等进程真正退出，要么失败重试（本轮三者都做了，前两条是主因）。
+
 
