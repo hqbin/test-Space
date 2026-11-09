@@ -1,7 +1,7 @@
 <template>
-  <div class="flex flex-col flex-1 min-h-0 -mx-margin-page pb-2 box-border select-none">
+  <div class="flex flex-col flex-1 min-h-0 pb-2 box-border select-none">
     <!-- Toolbar -->
-    <div class="flex items-center gap-3 mb-2 flex-shrink-0 ml-3">
+    <div class="flex items-center gap-3 mb-2 flex-shrink-0">
       <!-- Type dropdown -->
       <div class="relative" ref="typeDropdownRef">
         <button class="glass-button px-3 py-1.5 rounded-full font-caption text-caption font-normal flex items-center gap-1.5 min-w-[80px] select-none" @click="typeDropdownOpen = !typeDropdownOpen">
@@ -41,7 +41,7 @@
 
     <div class="flex-1 flex gap-4 min-h-0">
       <!-- Script library sidebar -->
-      <div class="w-56 flex-shrink-0 ml-3 rounded-xl bg-white/10 backdrop-blur-[60px] border border-white/50 flex flex-col overflow-hidden">
+      <div class="w-56 flex-shrink-0 rounded-xl bg-white/10 backdrop-blur-[60px] border border-white/50 flex flex-col overflow-hidden">
         <div class="px-3 py-2 border-b border-white/10 flex items-center gap-2">
           <span class="text-[13px] text-on-surface font-medium flex-shrink-0">{{ t("nav.scripts") }}</span>
           <div class="flex-1 relative">

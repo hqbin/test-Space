@@ -142,7 +142,7 @@
               :disabled="!selectedDevice || recordingLoading" @click="toggleRecording">
               <span v-if="recordingLoading" class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
               <span v-else class="material-symbols-outlined text-[14px]">{{ isRecording ? 'stop' : 'videocam' }}</span>
-              {{ recordingLoading ? (isRecording ? t('device.stopping') : t('device.starting')) : (isRecording ? t('device.stopRecording') : t('device.screenrec')) }}
+              {{ recordingLoading ? (isRecording ? t('device.stopping') : t('device.starting')) : (isRecording ? `${t('device.stopRecording')} ${recordingElapsed}` : t('device.screenrec')) }}
             </button>
             <button class="bg-white/30 border border-outline-variant/30 px-2.5 py-1 rounded-xl font-caption text-caption flex items-center gap-1 hover:bg-secondary/10 hover:border-secondary/30 transition-all backdrop-blur-sm select-none"
               :disabled="!selectedDevice || logPrepActive" @click="clearLogcatLogs">
@@ -978,14 +978,22 @@
       </Transition>
     </Teleport>
 
-    <!-- Toast -->
+    <!-- Toast: 自动消失受设置页「弹窗自动消失」开关控制；悬停暂停，文本可选中复制，× 手动关闭 -->
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="toast.show" class="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 glass-panel rounded-full px-5 py-2.5 flex items-center gap-2">
+        <div v-if="toast.show" ref="toastRef"
+          class="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 glass-panel rounded-full px-5 py-2.5 flex items-center gap-2 select-text max-w-[80vw]"
+          @mouseenter="pauseToastAutoClose"
+          @mouseleave="resumeToastAutoClose">
           <span v-if="toast.type === 'loading'" class="material-symbols-outlined text-[18px] text-secondary animate-spin">progress_activity</span>
-          <span v-else class="material-symbols-outlined text-[18px]"
+          <span v-else class="material-symbols-outlined text-[18px] shrink-0"
             :class="toast.type === 'error' ? 'text-error' : 'text-success-indicator'">{{ toast.type === 'error' ? 'error' : 'check_circle' }}</span>
-          <span class="font-body-md text-body-md text-on-surface">{{ toast.message }}</span>
+          <span class="font-body-md text-body-md text-on-surface break-words">{{ toast.message }}</span>
+          <button v-if="toast.type !== 'loading'" type="button"
+            class="no-border glass-button -mr-2 ml-1 p-1 rounded-full shrink-0 select-none"
+            :title="t('device.close')" @click.stop="hideToast">
+            <span class="material-symbols-outlined text-[16px]">close</span>
+          </button>
         </div>
       </Transition>
     </Teleport>
@@ -1036,7 +1044,7 @@ const {
   remountDevice: adbRemount, getProperties, inputKeyevent, inputText: adbInputText,
   listPackages, startApp: adbStartApp, stopApp: adbStopApp, clearAppData,
   logcatClear, logcat, getAppInfo, logcatBufferResize, bugreport,
-  startScreenrecord, killServer, startServer, createZip, listDirectory,
+  killServer, startServer, createZip, listDirectory,
 } = useAdb();
 
 // ── AppInfo interface + sortApps (matches web-adb-tool sort order) ──
@@ -1078,19 +1086,61 @@ const tabs = computed(() => [
 const activeTab = ref('common');
 
 // ── Toast ──
+const { popupAutoDismiss, loadAppSettings } = useAppSettings();
+// 通知浮窗（含安装应用的成功/失败提示）：自动消失统一受设置页「弹窗自动消失」开关控制，
+// 开启时 2.5 秒后收起且鼠标悬停暂停计时；关闭时保持常显，需点击右侧 × 手动收起。
+// 浮窗内文本可选中复制，选中期间不自动关闭；loading 类型始终常显，由 hideToast() 手动关闭。
+const TOAST_DURATION = 2500;
 const toast = ref({ show: false, message: "", type: "success" as "success" | "error" | "loading" });
+const toastRef = ref<HTMLElement | null>(null);
 let toastTimer: number | null = null;
+let toastHovered = false;
+
+function clearToastTimer() {
+  if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
+}
+// 浮窗内是否有被选中的文本：用户正在选中/复制提示内容时不得自动关闭
+function hasToastSelection() {
+  const el = toastRef.value;
+  const sel = window.getSelection();
+  if (!el || !sel || sel.isCollapsed || !sel.toString().trim()) return false;
+  return el.contains(sel.anchorNode) || el.contains(sel.focusNode);
+}
+// 按「开关 + 悬停 + 类型 + 文本选中」决定是否启动自动关闭计时；不满足条件时保持常显
+function scheduleToastClose() {
+  clearToastTimer();
+  if (toast.value.type === "loading") return;
+  if (!popupAutoDismiss.value || toastHovered) return;
+  toastTimer = window.setTimeout(() => {
+    toastTimer = null;
+    // 选中/复制期间延后关闭：重新计时，直到选区清除
+    if (hasToastSelection()) { scheduleToastClose(); return; }
+    toast.value.show = false;
+  }, TOAST_DURATION);
+}
 function showToast(message: string, type: "success" | "error" | "loading" = "success") {
   toast.value = { show: true, message, type };
-  if (toastTimer) clearTimeout(toastTimer);
-  if (type !== "loading") {
-    toastTimer = window.setTimeout(() => { toast.value.show = false; }, 2500);
-  }
+  scheduleToastClose();
 }
 function hideToast() {
-  if (toastTimer) clearTimeout(toastTimer);
+  clearToastTimer();
+  // 悬停中手动关闭时浮窗被移除，不会再触发 mouseleave，需同步复位悬停状态，
+  // 否则后续新提示会被误判为「仍悬停」而永不自动关闭
+  toastHovered = false;
   toast.value.show = false;
 }
+function pauseToastAutoClose() {
+  toastHovered = true;
+  clearToastTimer();
+}
+function resumeToastAutoClose() {
+  toastHovered = false;
+  if (toast.value.show) scheduleToastClose();
+}
+// 设置页切换开关后，对当前仍在显示的通知立即生效（无需等下一次提示）
+watch(popupAutoDismiss, () => {
+  if (toast.value.show) scheduleToastClose();
+});
 
 // ── Confirm Dialog ──
 const confirmDialog = ref({ show: false, title: "", onConfirm: () => {}, onCancel: () => {} });
@@ -1113,7 +1163,6 @@ function confirmThen(title: string, action?: () => Promise<void>): Promise<boole
 }
 
 // ── Command Execution Dialog ──
-const { popupAutoDismiss, loadAppSettings } = useAppSettings();
 const cmdExec = ref({ show: false, title: "", command: "", output: "", running: false });
 let cmdExecTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -1952,6 +2001,34 @@ const screenshotDataUrl = ref("");
 const showScreenshotPreview = ref(false);
 const isRecording = ref(false);
 const recordingFilename = ref("");
+// Elapsed time shown on the record button (UI-side timer; the Rust side derives
+// the final duration from the stream PTS).
+const recordingElapsed = ref("");
+let recordingTimerId: ReturnType<typeof setInterval> | null = null;
+let recordingStartedAt = 0;
+function startRecordingTimer() {
+  stopRecordingTimer();
+  recordingStartedAt = Date.now();
+  recordingElapsed.value = "00:00:00";
+  recordingTimerId = setInterval(() => {
+    const s = Math.max(0, Math.floor((Date.now() - recordingStartedAt) / 1000));
+    const hh = String(Math.floor(s / 3600)).padStart(2, "0");
+    const mm = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
+    const ss = String(s % 60).padStart(2, "0");
+    recordingElapsed.value = `${hh}:${mm}:${ss}`;
+  }, 500);
+}
+function stopRecordingTimer() {
+  if (recordingTimerId) { clearInterval(recordingTimerId); recordingTimerId = null; }
+  recordingElapsed.value = "";
+}
+function formatRecDuration(ms: number): string {
+  const s = Math.round(ms / 1000);
+  const hh = String(Math.floor(s / 3600)).padStart(2, "0");
+  const mm = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
+  const ss = String(s % 60).padStart(2, "0");
+  return `${hh}:${mm}:${ss}`;
+}
 
 // ── Device auto-refresh ──
 let autoRefreshId: ReturnType<typeof setInterval> | null = null;
@@ -3277,42 +3354,42 @@ async function takeScreenshotFromMirror() {
 async function toggleRecording() {
   if (!selectedDevice.value) return;
   recordingLoading.value = true;
+  const serial = selectedDevice.value.serial;
   if (isRecording.value) {
     try {
-      showCmdExec(t("device.stopRecordingAction"), "adb shell pkill -SIGINT screenrecord");
+      showCmdExec(t("device.stopRecordingAction"), "scrcpy 视频流 · 停止录制并封装 MP4");
       appendCmdExec(t("device.stoppingRecording"));
-      // Send SIGINT first, then pkill -9 as fallback (matching web-adb-tool)
-      await shell(selectedDevice.value.serial, "pkill -SIGINT screenrecord");
-      await new Promise(r => setTimeout(r, 500));
-      await shell(selectedDevice.value.serial, "pkill -9 screenrecord").catch(() => {});
-      await new Promise(r => setTimeout(r, 1000));
-      const dir = await getAutoSaveDir('Recordings');
-      const { join } = await import('@tauri-apps/api/path');
-      const filename = `recording_${formatTimestamp()}.mp4`;
-      const dest = await join(dir, filename);
-      appendCmdExec(t("device.pullingRecording"));
-      await pullFile(selectedDevice.value.serial, recordingFilename.value, dest);
-      appendCmdExec(t("device.cleaningDeviceFiles"));
-      await shell(selectedDevice.value.serial, `rm ${sanitizeShellArg(recordingFilename.value)}`).catch(() => {});
-      appendCmdExec(t("device.screenrecSaved") + ": " + dest);
+      const summary = await invoke<{
+        path: string; duration_ms: number; frames: number;
+        size_bytes: number; width: number; height: number; interrupted: boolean;
+      }>("adb_record_stop", { serial });
+      appendCmdExec(`时长 ${formatRecDuration(summary.duration_ms)} · ${summary.frames} 帧 · ${(summary.size_bytes / 1048576).toFixed(1)} MB · ${summary.width}x${summary.height}`);
+      appendCmdExec(t("device.screenrecSaved") + ": " + summary.path);
       finishCmdExec(t("device.screenrecSaved"));
-      showToast(`录屏已保存: ${filename}`);
-      await openSaveDirectory(dir);
+      showToast(`${t("device.screenrecSaved")}: ${summary.path.split(/[\\/]/).pop()}`, summary.interrupted ? "error" : "success");
+      const { dirname } = await import("@tauri-apps/api/path");
+      await openSaveDirectory(await dirname(summary.path));
     } catch (e: any) { finishCmdExec(`${t("device.screenrecFail")}: ${e}`); showToast(`${t("device.screenrecFail")}: ${e}`, "error"); }
     isRecording.value = false;
-    recordingFilename.value = "";
+    stopRecordingTimer();
   } else {
     try {
-      const remotePath = `/sdcard/recording_${Date.now()}.mp4`;
-      recordingFilename.value = remotePath;
-      showCmdExec(t("device.startRecordingAction"), `screenrecord ${remotePath}`);
+      const dir = await getAutoSaveDir('Recordings');
+      const { join } = await import("@tauri-apps/api/path");
+      const dest = await join(dir, `recording_${formatTimestamp()}.mp4`);
+      showCmdExec(t("device.startRecordingAction"), t("device.recordingStreamMode"));
       appendCmdExec(t("device.startingRecording"));
-      await startScreenrecord(selectedDevice.value.serial, remotePath, 1280, 720);
+      // scrcpy 视频流录制：不受 screenrecord 的 180s 上限约束
+      const info = await invoke<{ width: number; height: number }>("adb_record_start", { serial, outPath: dest });
       isRecording.value = true;
-      appendCmdExec(t("device.recordingStartedFull"));
+      startRecordingTimer();
+      appendCmdExec(t("device.recordingStartedFull", { size: `${info.width}x${info.height}` }));
       finishCmdExec(t("device.recordingStarted"));
-      showToast(t("device.recordingStartedShort"));
-    } catch { finishCmdExec(t("device.recordingStartFailed")); showToast(t("device.recordingStartFailed"), "error"); }
+      showToast(`${t("device.recordingStartedShort")} ${info.width}x${info.height}`);
+    } catch (e: any) {
+      finishCmdExec(`${t("device.recordingStartFailed")}: ${e}`);
+      showToast(`${t("device.recordingStartFailed")}: ${e}`, "error");
+    }
   }
   recordingLoading.value = false;
 }
@@ -3336,6 +3413,8 @@ function goMemStress() {
  * 保留一个 60s 兜底轮询防 ADB server 意外重启后事件流断裂。
  */
 let deviceEventUnlisten: UnlistenFn | null = null;
+let recordAutoStopUnlisten: UnlistenFn | null = null;
+let recordFailedUnlisten: UnlistenFn | null = null;
 function applyDeviceListPayload(list: Array<{ serial: string; model: string; status: string; android_version?: string }>) {
   const online = list.filter(d => d.status === 'device' || d.status === 'online');
   devices.value = online.map(d => ({
@@ -3371,6 +3450,32 @@ onMounted(async () => {
       (e) => applyDeviceListPayload(e.payload || [])
     );
   } catch (e) { console.warn('subscribe adb://devices-changed failed', e); }
+  // 录制流意外中断（设备拔出 / scrcpy-server 退出）：Rust 已封装好已录部分
+  try {
+    recordAutoStopUnlisten = await listen<{ duration_ms: number; frames: number; path: string }>(
+      'record:auto-stopped',
+      (e) => {
+        const s = e.payload;
+        isRecording.value = false;
+        stopRecordingTimer();
+        const msg = `${t('device.recordingAutoStopped')} · ${formatRecDuration(s?.duration_ms || 0)} · ${s?.frames || 0} 帧`;
+        finishCmdExec(msg);
+        showToast(msg, 'error');
+      }
+    );
+  } catch (e) { console.warn('subscribe record:auto-stopped failed', e); }
+  // 录制在写入任何一帧前就失败（例如 adb root 重启 adbd、设备掉线）：
+  // Rust 端已释放会话，这里同步复位 UI，否则再次点击录屏会被本地状态挡住
+  try {
+    recordFailedUnlisten = await listen<string>('record:failed', (e) => {
+      isRecording.value = false;
+      recordingLoading.value = false;
+      stopRecordingTimer();
+      const msg = `${t('device.recordingStartFailed')}: ${e.payload || ''}`.trim();
+      finishCmdExec(msg);
+      showToast(msg, 'error');
+    });
+  } catch (e) { console.warn('subscribe record:failed failed', e); }
   // 首次快照：走一次静默扫描（Rust 端事件流首帧可能稍晚于挂载）
   const idle = (window as any).requestIdleCallback || ((cb: any) => setTimeout(cb, 200));
   idle(() => scanDevices(true), { timeout: 1500 });
@@ -3405,7 +3510,19 @@ onUnmounted(() => {
   document.removeEventListener('click', handleCmdExecOutsideClick);
   if ((window as any).__appListResizeObserver) (window as any).__appListResizeObserver.disconnect();
   pauseCmdExecAutoClose();
+  clearToastTimer();
   if (deviceEventUnlisten) { deviceEventUnlisten(); deviceEventUnlisten = null; }
+  if (recordAutoStopUnlisten) { recordAutoStopUnlisten(); recordAutoStopUnlisten = null; }
+  if (recordFailedUnlisten) { recordFailedUnlisten(); recordFailedUnlisten = null; }
+  // 离开页面时落盘进行中的录制，避免后台会话泄漏
+  if (isRecording.value) {
+    stopRecordingTimer();
+    const recSerial = selectedDevice.value?.serial;
+    isRecording.value = false;
+    if (recSerial) {
+      import("@tauri-apps/api/core").then(m => m.invoke("adb_record_stop", { serial: recSerial })).catch(() => {});
+    }
+  }
   // Don't stop mirror if standalone popout window is active
   if (!mirrorPopoutActive.value) {
     for (const u of mirrorUnlisten) { u(); }

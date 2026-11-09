@@ -34,3 +34,6 @@ Thumbs.db
 *.dylib
 *.so
 .aider*
+
+# WorkBuddy project data (local only)
+.workbuddy/
