@@ -183,6 +183,94 @@
                 0 0 0 3px rgba(30, 58, 95, 0.12);
   }
 
+  /* 自定义勾选框：原生 input 隐藏，视觉层独立绘制，
+     避免系统 accent 在窄容器里被裁掉一半边框。 */
+  .check-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .check-input:focus-visible + .check-box {
+    box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.20);
+  }
+  .check-input:disabled + .check-box { opacity: 0.5; }
+  .check-box {
+    width: 13px;
+    height: 13px;
+    flex: none;
+    border-radius: 3px;
+    border: 1.5px solid rgba(28, 27, 31, 0.32);
+    background: rgba(255, 253, 247, 0.95);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color .14s ease, border-color .14s ease;
+  }
+  .check-box.is-on {
+    background: #1E3A5F;
+    border-color: #1E3A5F;
+    color: #FFFDF7;
+  }
+  .check-mark { width: 10px; height: 10px; display: block; }
+
+  /* 列表行内的图标操作按钮 */
+  .icon-action {
+    width: 24px;
+    height: 24px;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    color: #3A3833;
+    transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+  }
+  .icon-action:hover {
+    background: rgba(30, 58, 95, 0.10);
+    border-color: rgba(30, 58, 95, 0.28);
+    color: #1E3A5F;
+  }
+  .icon-action.is-danger:hover {
+    background: rgba(194, 78, 58, 0.12);
+    border-color: rgba(194, 78, 58, 0.32);
+    color: #C24E3A;
+  }
+  .icon-action:disabled { opacity: 0.4; cursor: not-allowed; }
+  .icon-action:disabled:hover { background: transparent; border-color: transparent; color: #3A3833; }
+
+  /* 模态面板：实心纸色。glass-panel 是半透明的，弹窗叠在列表上会发灰、
+     文字对比度不稳定，所以弹窗一律用这一档实心表面。 */
+  .solid-panel {
+    background: #FBF7EE;
+    border: 1px solid rgba(28, 27, 31, 0.10);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.55) inset,
+                0 16px 44px rgba(28, 27, 31, 0.18);
+  }
+  /* 面板内的头部 / 表头 / 底栏：同一纸色压暗一档 */
+  .panel-bar {
+    background: #F4EFE3;
+  }
+
+  /* 局部加载遮罩 */
+  .loading-veil {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: rgba(255, 253, 247, 0.62);
+    backdrop-filter: blur(1px);
+    z-index: 5;
+  }
+
   /* 杂志专用辅助类 */
   .eyebrow {
     font-family: "Inter", sans-serif;
@@ -341,6 +429,37 @@ html.dark select option {
   background: #1C1A16;
   color: #E8E3D6;
 }
+
+html.dark .check-box {
+  border-color: rgba(232, 227, 214, 0.38);
+  background: rgba(20, 18, 15, 0.75);
+}
+html.dark .check-box.is-on {
+  background: #E8734F;
+  border-color: #E8734F;
+  color: #1C1A16;
+}
+html.dark .icon-action { color: #CFC9BC; }
+html.dark .icon-action:hover {
+  background: rgba(232, 227, 214, 0.10);
+  border-color: rgba(232, 227, 214, 0.24);
+  color: #FFF8EA;
+}
+html.dark .icon-action.is-danger:hover {
+  background: rgba(194, 78, 58, 0.20);
+  border-color: rgba(232, 141, 108, 0.45);
+  color: #EE9C82;
+}
+html.dark .icon-action:disabled:hover { background: transparent; border-color: transparent; color: #CFC9BC; }
+html.dark .loading-veil { background: rgba(24, 22, 18, 0.66); }
+
+html.dark .solid-panel {
+  background: #221F1A;
+  border-color: rgba(232, 227, 214, 0.13);
+  box-shadow: 0 1px 0 rgba(232, 227, 214, 0.04) inset,
+              0 16px 44px rgba(0, 0, 0, 0.55);
+}
+html.dark .panel-bar { background: #2B2721; }
 
 html.dark .glass-hover:hover {
   background: rgba(232, 227, 214, 0.06) !important;

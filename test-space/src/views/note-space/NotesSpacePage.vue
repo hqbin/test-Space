@@ -1,7 +1,7 @@
 <template>
-  <div class="flex flex-1 min-h-0 -mx-margin-page overflow-hidden pb-4 box-border select-none">
+  <div class="flex flex-1 min-h-0 overflow-hidden pb-4 box-border select-none">
     <!-- Left: Search + File Tree -->
-    <div class="flex-shrink-0 flex flex-col w-64 ml-3 overflow-hidden rounded-xl bg-white/10 backdrop-blur-[60px] border border-white/50">
+    <div class="flex-shrink-0 flex flex-col w-64 overflow-hidden rounded-xl bg-white/10 backdrop-blur-[60px] border border-white/50">
       <div class="p-3">
         <div class="glass-input flex items-center gap-2 px-3 py-2 rounded-lg">
           <span class="material-symbols-outlined text-[14px] text-on-surface-variant" :class="searching ? 'animate-spin' : ''">{{ searching ? 'progress_activity' : 'search' }}</span>

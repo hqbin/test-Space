@@ -86,6 +86,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { path: "/device-space", labelKey: "nav.device", icon: "developer_board" },
   { path: "/notes-space", labelKey: "nav.notes", icon: "description" },
+  { path: "/backend-space", labelKey: "nav.backend", icon: "tune" },
   { path: "/script-space", labelKey: "nav.scripts", icon: "code" },
 ];
 

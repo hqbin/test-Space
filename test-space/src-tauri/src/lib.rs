@@ -1,6 +1,7 @@
 mod adb;
 mod mirror;
 mod proxy;
+mod recorder;
 mod script_exec;
 mod serial_port;
 mod zip_util;
@@ -26,6 +27,12 @@ use chrono::TimeZone;
 
 type MirrorKey = (String, String); // (serial, window_label)
 struct MirrorState(Mutex<HashMap<MirrorKey, (Arc<AtomicBool>, u16)>>);
+
+/// Active screen recordings, keyed by device serial.
+/// Recording is stream-based (scrcpy H.264) rather than `screenrecord`, so it is
+/// not bound by the 180 s platform limit.
+#[derive(Default)]
+struct RecordState(Mutex<HashMap<String, recorder::RecorderEntry>>);
 
 // LogcatChild tracks both the ADB process and reader thread.
 // thread_alive + exit_reason were added pre-Phase-69 (before the UTF-8
@@ -68,6 +75,7 @@ struct LogcatStreamPayload {
 }
 
 static NEXT_MIRROR_PORT: AtomicU16 = AtomicU16::new(27183);
+static NEXT_RECORD_PORT: AtomicU16 = AtomicU16::new(27283);
 
 #[tauri::command]
 fn adb_list_devices() -> Vec<adb::DeviceInfo> {
@@ -266,6 +274,103 @@ fn adb_mirror_stop(serial: String, window: tauri::Window, state: tauri::State<'_
         mirror::remove_forward(&serial, port);
     }
     Ok(())
+}
+
+#[derive(Serialize)]
+struct RecordStarted {
+    width: u32,
+    height: u32,
+}
+
+/// Resolve the bundled scrcpy-server jar (bundle resource dir, with dev fallbacks).
+fn resolve_scrcpy_jar(app: &tauri::AppHandle) -> String {
+    if let Ok(dir) = app.path().resource_dir() {
+        let p = dir.join("bin/scrcpy-server");
+        if p.exists() {
+            return p.to_string_lossy().to_string();
+        }
+    }
+    for cand in ["bin/scrcpy-server", "../bin/scrcpy-server", "src-tauri/bin/scrcpy-server"] {
+        let p = std::path::Path::new(cand);
+        if p.exists() {
+            return p.to_string_lossy().to_string();
+        }
+    }
+    String::new()
+}
+
+/// Start streaming recording. Unlike `screenrecord` there is no time limit.
+#[tauri::command]
+async fn adb_record_start(
+    serial: String,
+    window: tauri::Window,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, RecordState>,
+    out_path: String,
+    max_size: Option<u16>,
+    video_bit_rate: Option<u32>,
+    max_fps: Option<u8>,
+) -> Result<RecordStarted, String> {
+    // A session can end on its own (device reboot, `adb root` / `adb remount`
+    // restarting adbd, scrcpy-server exit) without ever going through
+    // `adb_record_stop`. Its entry stays registered so the UI can still fetch
+    // the summary, but a finished entry must not block a new recording —
+    // otherwise the device answers "该设备正在录制中" forever after an
+    // interrupted recording.
+    let stale = {
+        let mut sessions = state.0.lock().unwrap();
+        match sessions.get(&serial).map(|e| e.done.load(Ordering::Relaxed)) {
+            Some(true) => sessions.remove(&serial),
+            Some(false) => return Err("该设备正在录制中".to_string()),
+            None => None,
+        }
+    };
+    if let Some(finished) = stale {
+        let _ = tokio::task::spawn_blocking(move || recorder::discard(finished)).await;
+    }
+
+    let jar = resolve_scrcpy_jar(&app);
+    let port = NEXT_RECORD_PORT.fetch_add(1, Ordering::Relaxed);
+    let scid = {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.subsec_nanos())
+            .unwrap_or(0);
+        (0x1000_0000u32 ^ nanos ^ ((port as u32) << 16)) & 0x7fff_ffff
+    };
+    let max_size = max_size.unwrap_or(0); // 0 = native resolution
+    let video_bit_rate = video_bit_rate.unwrap_or(8_000_000);
+    // 30fps：录屏用途下观感几乎无损，却能避免 90/120Hz 高刷屏被拉满帧率编码，
+    // 显著降低编码器负载、功耗与发热。传 0 可恢复为跟随屏幕刷新率。
+    let max_fps = max_fps.unwrap_or(30);
+
+    let window_label = window.label().to_string();
+    let app_c = app.clone();
+    let serial_c = serial.clone();
+    let out_c = out_path;
+    let entry = tokio::task::spawn_blocking(move || {
+        recorder::start(app_c, window_label, serial_c, out_c, jar, max_size, video_bit_rate, max_fps, port, scid)
+    })
+        .await
+        .map_err(|e| e.to_string())??;
+
+    let (width, height) = (entry.width, entry.height);
+    state.0.lock().unwrap().insert(serial.clone(), entry);
+    Ok(RecordStarted { width, height })
+}
+
+#[tauri::command]
+async fn adb_record_stop(
+    serial: String,
+    state: tauri::State<'_, RecordState>,
+) -> Result<recorder::RecordSummary, String> {
+    let entry = state.0.lock().unwrap().remove(&serial);
+    match entry {
+        Some(e) => tokio::task::spawn_blocking(move || recorder::stop(e))
+            .await
+            .map_err(|e| e.to_string())?,
+        None => Err("当前没有进行中的录制".to_string()),
+    }
 }
 
 #[tauri::command]
@@ -954,6 +1059,7 @@ pub fn run() {
         .manage(MirrorState(Mutex::new(HashMap::new())))
         .manage(LogcatState::default())
         .manage(LogcatStreamState::default())
+        .manage(RecordState::default())
         .manage(ScriptManager::new())
         .manage(proxy::ProxyState::new())
 
@@ -1044,6 +1150,8 @@ pub fn run() {
             adb_screenshot,
             adb_mirror_start,
             adb_mirror_stop,
+            adb_record_start,
+            adb_record_stop,
             adb_connect,
             adb_disconnect,
             adb_reboot_recovery,

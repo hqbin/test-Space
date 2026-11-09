@@ -44,6 +44,11 @@ const router = createRouter({
           component: () => import("@/views/note-space/NotesSpacePage.vue"),
         },
         {
+          path: "backend-space",
+          name: "backend-space",
+          component: () => import("@/views/backend-space/BackendSpacePage.vue"),
+        },
+        {
           path: "script-space",
           name: "script-space",
           component: () => import("@/views/script-space/ScriptSpacePage.vue"),

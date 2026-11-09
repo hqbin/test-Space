@@ -11,7 +11,7 @@ import { restoreStickyWindows } from "@/services/stickyWindow";
 
 const { initLanguage } = useI18n();
 
-const pages = ["/device-space", "/notes-space", "/api-space", "/script-space", "/settings"];
+const pages = ["/device-space", "/notes-space", "/backend-space", "/script-space", "/settings"];
 
 const router = useRouter();
 

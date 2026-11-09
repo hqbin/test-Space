@@ -14,7 +14,7 @@
 
 ## 一、项目概述
 
-Test Space 是一款面向软件测试工程师的 Windows 桌面工作台，使用 Tauri 2 桌面框架 + Vue 3 前端技术栈构建。它将测试用例设计、测试平台管理、ADB 调试、串口调试、日志分析、脚本执行、知识沉淀整合到一个桌面应用中。
+Test Space 是一款面向软件测试工程师的 Windows 桌面工作台，使用 Tauri 2 桌面框架 + Vue 3 前端技术栈构建。它将测试用例设计、测试平台管理、ADB 调试、串口调试、日志分析、脚本执行、知识沉淀、广告后台快捷配置整合到一个桌面应用中。
 
 ### 产品定位
 
@@ -33,7 +33,7 @@ Cursor for Testing — 非传统测试管理平台，而是桌面客户端和效
 | 状态管理 | **Pinia** | Vue 3 官方状态管理 |
 | 路由 | **Vue Router 4** | SPA 路由管理 |
 | 样式 | **TailwindCSS 3** | 原子化 CSS + 自定义设计 Token |
-| HTTP 客户端 | **@tauri-apps/plugin-http** | Rust 端 reqwest，绕过 CORS（云端备份） |
+| HTTP 客户端 | **@tauri-apps/plugin-http** | Rust 端 reqwest，绕过 CORS（云端备份 / 后台配置 SSP 接口） |
 | 图标 | **Material Symbols Outlined** | Google 可变字体图标 |
 | 字体 | **Inter** | 无衬线字体家族 |
 | 原生层 | **Rust** | ADB 执行、串口通信、脚本执行 |
@@ -134,7 +134,8 @@ D:\TestSpace\test-space/
 │   │   ├── database.ts                   # SQLite 数据库（CRUD + 迁移 + 备份导出导入）
 │   │   ├── crypto.ts                     # AES-256-GCM 加密/解密 + PBKDF2 密钥派生
 │   │   ├── cloudBackup.ts               # 云端备份 HTTP 客户端（Tauri HTTP 插件）
-│   │   └── cloudSync.ts                 # 一键云端同步（exportAllData → 加密 → upload）
+│   │   ├── cloudSync.ts                 # 一键云端同步（exportAllData → 加密 → upload）
+│   │   └── sspApi.ts                    # SSP 广告后台接口客户端（登录/会话/媒体/广告位/订单/Campaign/模板）
 │   │
   │   ├── stores/                         # Pinia 状态管理
 │   │
@@ -162,6 +163,9 @@ D:\TestSpace\test-space/
 │       │   └── StandaloneMirror.vue    # 独立屏幕镜像窗口（无侧栏，/mirror 路由）
 │       ├── note-space/
 │       │   └── NotesSpacePage.vue      # 笔记空间（文件树 + 富文本编辑器 + 上下文面板）
+│       ├── backend-space/              # 后台配置（SSP 广告）
+│       │   ├── BackendSpacePage.vue    # 登录 / 环境切换 / 分页 Tab 容器
+│       │   └── AdConfigTab.vue         # 广告 Tab（列表 / MAC 查询 / 新建 / 模板 / 一键配置 / 计划开关）
 │       ├── script-space/
 │       │   └── ScriptSpacePage.vue     # 脚本空间（分类 + 搜索 + 多标签终端）
 │       └── settings/
@@ -207,6 +211,7 @@ D:\TestSpace\test-space/
 | `/device-space/mem-stress` | `MemStressPage.vue` | 内存压力测试 |
 | `/mirror` | `StandaloneMirror.vue` | 独立屏幕镜像窗口（无侧栏） |
 | `/notes-space` | `NotesSpacePage.vue` | 笔记空间 |
+| `/backend-space` | `BackendSpacePage.vue` | 后台配置（SSP 广告） |
 | `/script-space` | `ScriptSpacePage.vue` | 脚本空间 |
 | `/settings` | `SettingsPage.vue` | 设置 |
 
@@ -222,7 +227,7 @@ D:\TestSpace\test-space/
   - `overflow-y-auto`：纵向溢出时由 `<main>` 整体滚动（备用策略）
   - `overflow-x-hidden`：防止子页面的 `-mx-margin-page` 负边距产生水平滚动条
   - `min-h-0`：允许 flex 项收缩
-- **`<keep-alive>`**：`router-view` 包裹 `keep-alive`，缓存 `NotesSpacePage` / `ScriptSpacePage` / `DeviceSpacePage` / `SettingsPage`，切换路由时组件不销毁重建，消除切换卡顿感。每个被缓存的页面组件必须通过 `defineOptions({ name: 'ComponentName' })` 声明 name 以匹配 keep-alive 的 `:include` 列表。
+- **`<keep-alive>`**：`router-view` 包裹 `keep-alive`，缓存 `NotesSpacePage` / `BackendSpacePage` / `ScriptSpacePage` / `DeviceSpacePage` / `SettingsPage`（以及 `PerfMonitorPage` / `MemStressPage`），切换路由时组件不销毁重建，消除切换卡顿感。每个被缓存的页面组件必须通过 `defineOptions({ name: 'ComponentName' })` 声明 name 以匹配 keep-alive 的 `:include` 列表。
 - 每个 Space 有不同的背景径向渐变（通过 `route.path` 判断）
 
 **背景渐变方案**：
@@ -243,7 +248,7 @@ D:\TestSpace\test-space/
 - `fixed` 定位，不占页面空间，不影响页面内容
 
 **导航项**（按用户使用频率排序）：
-Device → Notes → Scripts → Settings（Settings 固定在右侧，API Space 页面已移除）
+Device → Notes → Backend → Scripts → Settings（Settings 固定在右侧，API Space 页面已移除；Backend 即“后台配置”，图标 `tune`）
 
 **云端同步快捷按钮**（Settings 右侧，`sync` 图标）：
 - 点击执行与设置页「备份到云端」相同的流程（`syncBackupToCloud()`）
@@ -369,6 +374,7 @@ Workspace 页面已在 Phase 9 中移除，路由 redirect 改为 `/case-space`�
       - 自动保存到 `Documents/TestSpace/bugreport_YYYYMMDD_HHMMSS.zip`，保存完成后自动打开目录
     - **截图**：截图按钮带 spinner（`screenshotLoading`），截图期间禁用重复点击；自动保存到 `Documents/TestSpace/screenshot_YYYYMMDD_HHMMSS.png`，保存完成后自动打开目录，不再弹预览窗口
     - **录屏**：启动/停止，停止后自动保存到 `Documents/TestSpace/recording_YYYYMMDD_HHMMSS.mp4`，保存完成后自动打开目录
+      - Phase 87 起改为 **scrcpy 视频流录制**（`recorder.rs`）：独立 `scid` 会话 + 主机端 MP4 封装，**无 180s 时长上限**（旧实现 `screenrecord` 受平台限制最多 3 分钟）；按钮上实时显示已录时长
     - **自动保存目录统一**：所有文件（截图/录屏/日志/诊断包/开机日志/Bugreport/APK）统一保存到 `Documents/TestSpace/`，不分子文件夹，方便全选拖拽。通过 `getAutoSaveDir()` 辅助函数创建并返回目录，`openSaveDirectory()` 调用 Rust `open_path` 命令
   - **快捷操作去重**：Root/Remount/发送文字/重启 ADB 等操作结果仅在 cmdExec 浮窗中显示，不再同时弹 Toast
   - **快捷指令执行**：`executeCustomCommand()` 不再弹 Toast，仅通过顶部 cmdExec 浮窗显示结果；浮窗为顶部通知横幅，不拦截页面点击，命令执行期间可继续点击其他功能；默认在命令完成后 3 秒自动消失（鼠标悬停暂停计时），可在设置页「弹窗自动消失」开关关闭该行为；非执行状态下点击页面空白处或右上角关闭按钮均可关闭
@@ -703,6 +709,223 @@ Workspace 页面已在 Phase 9 中移除，路由 redirect 改为 `/case-space`�
 - **Composable**：`src/composables/useApiProxy.ts` 封装代理控制、事件监听、断点管理、规则 CRUD
 - **i18n**：所有按钮/标签/提示支持中英双语（`api.*` 翻译 key）
 
+### 4.13 后台配置 — SSP 广告 (`src/views/backend-space/` + `src/services/sspApi.ts`)
+
+**定位**：把 ZEASN SSP 广告后台（PHP 页面 + AJAX JSON 接口）的高频操作搬到本地客户端，解决原后台“配置路径长、批量操作繁琐、无法按 MAC 反查”的痛点。核心能力：媒体/广告位联动浏览、按 MAC 反查关联广告、新建/编辑广告（三级广告类型 + Custom engine 定向）、投放/暂停/删除、审核分流、Custom engine 规则管理。
+
+> **安全边界**：ACC / PROD 均可读写（当前 `canWrite` 恒为 true）。历史版本只允许 ACC 写入；若需恢复该限制，在 `BackendSpacePage` 传 `:can-write="env === 'acc'"` 即可。
+
+#### 4.13.1 前期调研与可行性结论
+
+**环境与账号**
+
+| 项目 | 值 |
+|------|------|
+| ACC 环境 | `https://sspportal-acc.zeasn.tv` |
+| 正式环境 | `https://sspportal.zeasn.tv` |
+| 登录页 | `GET /ssp/pages/login`（返回 302，并在响应头下发 `Set-Cookie`） |
+| 登录接口 | `POST /ssp/login/signin`，`application/x-www-form-urlencoded`（`email` / `password`），返回 `{"return_code":0,"return_msg":"ok"}` |
+| 会话 | `PHPSESSID` Cookie；后续所有接口需手动携带 `Cookie: PHPSESSID=...` |
+| 未登录响应 | HTTP 200 + `{"return_code":-1,"return_msg":"未登录"}` |
+
+**可行性结论**：后台是“PHP 渲染页面 + jQuery AJAX 提交”的传统结构，业务状态全在服务端，不依赖浏览器端 JS 上下文，因此用 HTTP 客户端完整复刻是可行的。实现上使用 Tauri `@tauri-apps/plugin-http`（Rust 侧 reqwest，天然绕过 CORS），非 Tauri 环境降级到浏览器原生 `fetch`。
+
+**调研阶段踩坑与结论**
+
+| # | 问题 | 结论 / 处理 |
+|---|------|-------------|
+| 1 | 登录成功但拿不到 Cookie | Tauri plugin-http 默认跟随重定向，`GET /ssp/pages/login` 的 302 中间响应 `Set-Cookie` 被丢弃。修复：该请求传 `maxRedirections: 0`，从 302 响应读取 `set-cookie`（兼容 `headers.getSetCookie()`）；`POST signin` 返回 200，无需禁重定向 |
+| 2 | 新建订单报“素材文件类型错误” | 后台表单由 jQuery `.serialize()` 提交，嵌套对象必须编码为 `material[image_1]=xxx` 形式的表单键，不能把 `material` 作为 JSON 字符串传递。`encodeNested` / `encodeParams` 完整复刻该序列化规则（对象 → `key[k]`、数组 → `key[]`、顶层空串跳过） |
+| 3 | 新建订单报 “The start time should not ahead than today” | 新建时 `begin_date` 必须 ≥ 当天；更新已有订单允许携带历史日期 |
+| 4 | `POST /ssp/order/list` 传 `campid` / `campaign_id` 会超时 | 这两个参数不可用。Campaign → 广告的映射改用 `appid` / `locid` / `target_keyword` 查询，或用本地 `campaignMap`（`campaign/list` 全量结果的 id→name 映射）展示 |
+| 5 | 广告类型字典找不到 | 不在 `var dict` 中，而在 `GET /ssp/pages/orderadd` 内联的 `var adtype = [...]`。按 `indexOf('var adtype')` 定位，再截取到行尾解析 JSON；每个条目含 `key/text/sub_text/id/info`，`info` 中的对象项即该类型的素材字段 |
+| 6 | 平台无素材删除接口 | 只能上传 / 替换素材，无法删除孤立素材文件。测试上传留下的文件会留在平台素材库 |
+
+**ACC 小量验证记录**（测试数据名统一含 `tvgo_test`，验证完成后已全部清理，最终残留 0）
+
+| 验证项 | 结果 |
+|--------|------|
+| 上传素材 → 新建订单 → 修改素材 → 删除 | ✅ 成功 |
+| 新建订单 → 替换 `image_1` → 重新读取确认 → 删除 | ✅ 成功 |
+| 新建 Campaign → pause → play → delete | ✅ 成功 |
+| 完整一键流程：新建 Campaign (#4231) + 两条广告 → 投放 → 删除广告与计划 → 复查 total=0 | ✅ 成功 |
+
+#### 4.13.2 广告后台结构
+
+**数据层级**
+
+```
+Media（产品 / app）
+  └── Zone（loc，广告位）
+        └── Campaign（广告计划）
+              └── Order（Ad，广告）
+                    ├── Material（素材：image_1 / video_1 / duration ...）
+                    ├── Keyword（定向规则关键词，可选）
+                    └── Verify（审核状态）
+```
+
+**实体与接口**
+
+| 实体 | 说明 | 主要接口 | 关键字段 |
+|------|------|----------|----------|
+| Media | 产品/应用，可含多个广告位 | `POST /ssp/app/list`（`name` / `page` / `size`） | `id` / `name` / `ad_zone` / `status`；`id` 同时作为订单的 `target_app` |
+| Zone | 广告位 | `POST /ssp/loc/list`（`appid`） | `id` / `name` / `appid` / `ad_type` / `ad_type_id` / `description` / `screen` |
+| Campaign | 广告计划（订单容器） | `POST /ssp/campaign/list`（`page`；`size` 会被忽略，返回全量）/ `POST /ssp/campaign/add` / `POST /ssp/campaign/opt` | `id` / `name` / `description` / `begin_date` / `end_date` / `advertiserid` / `Demandpartner` / `status` / `adcount` |
+| Order | 广告（素材 + 定向 + 周期） | `POST /ssp/order/list` / `POST /ssp/order/add` / `POST /ssp/order/opt` / `POST /ssp/order/checkopt` | `id` / `name` / `campaign_id` / `ad_type` / `material` / `click_url` / `target_app` / `target_plat` / `locids` / `target_keyword` / `begin_date` / `end_date` / `status` / `verify_status` |
+| Advertiser | 广告主 | `POST /ssp/advertiser/list` | `id` / `name` |
+| Keyword | 定向关键词（MAC / 设备标识等） | `POST /ssp/keyword/list`（过滤参数为 `name` 或 `value`） | `id` / `valuecode` / `valuetext` / `enable` / `matching` / `order_count` |
+| AdType | 广告类型 + 素材字段定义 | `GET /ssp/pages/orderadd` 解析内联 `var adtype` | `key` / `text` / `sub_text` / `id` / `info` |
+| Material | 上传素材文件 | `POST /ssp/order/upload`（multipart：`file` + `plat`） | 返回 `{ file_id, file_path }`；保存订单时服务端把 `file_id` 转为素材 URL |
+
+**写接口要点**
+
+| 接口 | 参数要点 | 返回 |
+|------|----------|------|
+| `POST /ssp/campaign/add` | `Demandpartner` 必填；另需 `name` / `advertiserid` / `begin_date` / `end_date` / `rate` / `target_area_type` / 各类空定向数组 | `return_msg` 即新 Campaign id（字符串，如 `"4231"`） |
+| `POST /ssp/campaign/opt` | `{ id, action: 'play' \| 'pause' \| 'delete' }` | 空 |
+| `POST /ssp/order/add` | `material` 必须是嵌套对象（`material[image_1]=...`）；`campaign_id` / `ad_type` / `name` / `begin_date` / `end_date`；`target_app` 为媒体 id；`target_loc` 为 locid 分号拼接；`target_plat` 默认 `3;;`；`price_mode` 默认 `CPT`；`files` 可省略；`class` 可为空 | 新建/更新成功 |
+| `POST /ssp/order/opt` | `{ id, action: 'play' \| 'pause' \| 'delete' }` | 空 |
+| `POST /ssp/order/checkopt` | `{ id, action: 'play' \| 'reject', memo }`（审核通过/拒绝） | 空 |
+| `POST /ssp/order/selectapps` | `{ camid, adtype }` | 可选媒体列表 |
+| `POST /ssp/order/selectlocs` | `{ appid, adtype }` | 可选广告位列表 |
+
+**状态字段映射**
+
+| 字段 | 值 | 含义 |
+|------|----|------|
+| `status` | `'0'` | 待审核（To be audited） |
+| `status` | `'1'` | 待投放（To be deliveried） |
+| `status` | `'2'` | 已拒绝（Rejected，`verify_reason` 为理由） |
+| `status` | `'3'` | 投放中（In cast） |
+| `status` | `'4'` | 暂停（Pause） |
+| `status` | `'6'` | 停止（Stop） |
+| `status` | `'7'` | 已完成（Finished） |
+| `verify_status` | `'0'` | 初次审核未处理（平台该字段并不代表最终审核结果，判状态请看 `status`） |
+
+> 注意：`order/checklist` 同时返回待审核(`0`)与已拒绝(`2`)；拒绝不会让记录离开审核列表，只有通过(`play`)才会把 `status` 推进到 `3`。
+
+#### 4.13.3 test-space 中的实际实现
+
+**涉及文件**
+
+| 文件 | 职责 |
+|------|------|
+| `src/services/sspApi.ts` | 全部 SSP 接口封装、会话管理（含探活与恢复）、参数编码、字典解析、类型定义 |
+| `src/views/backend-space/BackendSpacePage.vue` | 登录卡片（ACC / PROD 分环境账号）、会话恢复、Tab 容器 |
+| `src/views/backend-space/AdConfigTab.vue` | 广告 Tab 全部业务：媒体/广告位、列表、搜索、MAC 查询、新建/编辑、审核、Custom engine 入口 |
+| `src/components/backend/CustomEngineDialog.vue` | Custom engine（定向规则）管理弹窗：搜索、新建、修改、删除 |
+| `src/components/backend/CheckGrid.vue` | 自绘勾选网格（Assigned media / Assigned zone）：筛选、全选、清空、加载遮罩 |
+| `src/components/SearchSelect.vue` | 可搜索下拉（Campaign / 广告主 / 媒体） |
+| `src/types/backend.ts` | `CheckGridItem` 等后台侧类型 |
+| `src/router/index.ts` | 新增 `/backend-space` 路由（notes-space 与 script-space 之间） |
+| `src/layouts/TitleBar.vue` | 导航项 `nav.backend`（`tune` 图标，Notes 之后、Scripts 之前） |
+| `src/App.vue` | Ctrl+Tab / Ctrl+1..5 页面序列加入 `/backend-space` |
+| `src/layouts/AppLayout.vue` | keep-alive `:include` 加入 `BackendSpacePage` |
+| `src/composables/useI18n.ts` | 新增 `nav.backend` 与约 200 个 `backend.*` 中英翻译键 |
+
+**路由与缓存**：路由 `path: 'backend-space'`、`name: 'backend-space'`，页面 `defineOptions({ name: 'BackendSpacePage' })` 以匹配 keep-alive。登录状态由模块级会话变量维持，`AdConfigTab` 通过 `:key="sessionVersion"` 在登录/退出/切环境时强制重建，避免残留上一会话的数据。
+
+**`sspApi.ts` 接口封装**
+
+| 分类 | 函数 | 说明 |
+|------|------|------|
+| 会话 | `sspLogin(env, email, password)` | 先 GET 登录页（`maxRedirections: 0`）抓 `Set-Cookie`，再 POST signin，最后 `probeSession()` 探活确认 |
+| 会话 | `restoreSspSession()` / `clearSspSession()` / `sspLogout()` / `isSspLoggedIn()` | 读取 `ssp.session_*` 快照并探活恢复；热更新 / 重启不被踢回登录页 |
+| 会话 | `getSspEnv()` / `getLoginUser()` | 模块级会话状态读写 |
+| 账号 | `loadSspCredential(env)` / `saveSspCredential(env, ...)` / `saveSspEnv(env)` / `loadSspPrefs()` | 账号按环境分槽保存（`ssp.acc.*` / `ssp.prod.*`），旧版单份 `ssp.email` 首次读取自动迁移到 ACC |
+| 基础 | `listMedias` / `listZones` / `listOrders` / `getOrder` | app/list、loc/list、order/list、order/list（按 id 取单条） |
+| 分页 | `normalizePage()`（内部） | 平台 `total` 返回字符串，统一转数字后再交给分页控件 |
+| Campaign | `listCampaigns` / `listAdvertisers` / `createCampaign` / `campaignAction` | campaign/list（忽略 size，一次取全量）、advertiser/list、campaign/add、campaign/opt |
+| 广告类型 | `loadOrderMeta()` / `loadAdTypes()` / `loadOrderDict()` / `adTypeLevel1/2/3()` / `materialFieldsOf()` | 一次抓 `orderadd` 同时解析 `var adtype`（三级：text → sub_text → size）与 `var dict`（23 组枚举） |
+| 联动 | `listOrderApps(camid, adtype)` / `listOrderZones(adtype, appIds)` | selectapps / selectlocs；appid 逗号拼接 |
+| 定向规则 | `listKeywords` / `listAllKeywords` / `searchKeywords` / `keywordsByIds` / `saveKeyword` / `createKeyword` / `deleteKeyword` / `invalidateKeywords()` | keyword/list、keyword/add（带 id 即改）、keyword/delete；`keywordsByIds` 未命中会强制重拉 |
+| 新建广告 | `buildNewOrderParams(input)` / `createOrder(input)` | 组装 order/add 参数并提交；`extend_target` 默认 `0`（Custom targeting） |
+| 素材 | `uploadMaterial(file, plat)` / `saveOrderMaterial(order, material)` / `updateOrder(order, patch)` / `parseMaterial(order)` / `materialPreviewUrl(env, path)` | 上传返回 `file_id`；保存时按原记录字段回填（`buildOrderCond`） |
+| 动作 | `updateOrderAction(id, action)` / `verifyOrder(id, action, memo)` | order/opt、order/checkopt（`memo` 空串也要提交） |
+| 审核列表 | `listPendingOrders(params)` | order/checklist，**同时返回待审核(0)与已拒绝(2)** |
+| 本地模板 | `loadTemplates()` / `saveTemplates(list)` | 保留在 API 层（`ssp.templates`），当前编辑器未接入 UI |
+
+**关键类型**
+
+```ts
+export interface NewOrderInput {
+  campaignId: string
+  name: string
+  adType: string
+  material: Record<string, any>
+  clickUrl?: string
+  appIds: string[]
+  locIds: string[]
+  beginDate: string
+  endDate: string
+  keywordId?: string | string[]      // 多个规则用 ';' 拼接
+  extendTarget?: 0 | 1               // 0 = Custom targeting（默认）/ 1 = 继承 Campaign
+  priceMode?: string
+  adClass?: string
+  disableAdflag?: string             // 0 展示广告角标 / 1 不展示
+  external?: string                  // 是否外部广告
+  adFormat?: string                  // external=1 时的外部格式（VAST / Google IMA / whaletvplus / Teads）
+}
+
+export interface NewKeywordInput {
+  id?: string
+  keycode: string
+  keytext: string
+  valuecode: string
+  valuetext: string
+  looklike?: number | string
+  keywordtype?: string               // 1 数字 / 2 字符
+  keywordop?: string                 // 1-9 比较方式
+}
+```
+
+**页面布局（`BackendSpacePage.vue`）**
+
+- **顶部 Tab 条**：只用于切换分页，当前仅“广告”一个 Tab（`campaign` 图标），为后续接入其它平台预留。
+- **未登录态**：主区域居中登录卡片，含环境切换（ACC / PROD）、账号、密码、登录按钮（带 loading）与错误信息。不再有“记住密码”勾选——账号密码始终按环境保存。
+- **已登录态**：不再有独立账号条；环境徽标与登出图标移到 `AdConfigTab` 工具栏最右端，与 Custom engine 同一行。环境徽标可点击，ACC ⇄ PROD 切换会先退出当前会话，再带出目标环境已保存的账号。
+- **偏好回填**：`onMounted` 读 `loadSspPrefs()` → `restoreSspSession()`，会话仍有效则直接进已登录态。
+
+**广告 Tab 功能（`AdConfigTab.vue`）**
+
+| 区域 | 实现逻辑 |
+|------|----------|
+| 左侧产品列 | 宽 322px；`listMedias` 拉取产品（`SearchSelect` 可搜索），广告位名称 `break-words` 完整显示（长名称不再截断）；切换媒体 / 广告位重置页码并 `loadAds()` |
+| 广告列表 | `listOrders({ page, size: 50, appid, name?, locid? })`；列：ID / 名称 / Campaign / 周期 / 审核 / 状态 / 操作；操作为图标按钮（编辑 `edit`、复制 `content_copy`、暂停 `pause_circle`、投放 `play_circle`、删除 `delete`），整页带 loading 遮罩 |
+| 搜索 | 输入即搜（350ms 防抖）+ 清空立即重载；`appliedKeyword` 去重，避免同一关键词重复请求；输入框带 `×` 清除 |
+| MAC 查询 | `searchKeywords(mac)` → 本地按 `valuecode` 过滤 → 取前若干条规则并行查订单 → 合并去重后渲染到列表（`macMode`）；结果头部显示“命中规则 N”标签（`bg-secondary/10 text-secondary`，`title` 列出规则名） |
+| 新建 / 编辑 | Campaign 二选一（选择已有 / 新建：Campaign 名 + 广告主 + Demand partner，`createCampaign` 带 `keepEmpty` 与 `outdoor_flag`）；广告名、起止日期（结束时间有 30天 / 1年 / 长期(9999-12-31) 三个快捷档，`max="9999-12-31"`）、优先级、计价模式、广告角标（显示/隐藏，提示挂在选项下方） |
+| 广告类型 | 与后台一致的**三级联动下拉**，选项全部来自 `var adtype` 字典（非写死）；第三级旁给提示「屏保选 Screensaver，Tile 选 Tile，其他选 Headline」，并附外部广告格式提示（VAST 广告选 VAST；谷歌广告选 Google IMA；WhaleTV+ 选 whaletvplus；Tile 广告选 Teads） |
+| Assigned media / zone | `CheckGrid` 自绘勾选（13px 描边 + SVG 勾，框线不再被裁）；媒体来自 `listOrderApps`，广告位随所选媒体通过 `listOrderZones` 联动刷新，未选媒体时提示“先勾选媒体”；新建首次默认全选 |
+| Custom engine（指定 MAC） | 多选 chips：搜索已有规则、显示已选、可清空；保存时提交 `target_keyword` 为 `;` 拼接，清空全部时提交 `['']`。**选中规则时强制 `extend_target=0`（Custom targeting）**，否则平台会忽略广告级定向 |
+| 提交 | 先校验，成功后 toast 变成带动作的提示：「广告已创建/已保存，需在『审核』中审核通过后才会生效」+「去审核」，停留 9 秒；编辑器底栏常驻同一提示（有校验错误时让位给错误信息） |
+| 审核弹窗 | `listPendingOrders` 后按状态分流：`status=0` 待审核默认显示，`status=2` 已拒绝默认收起（头部「已拒绝 N」胶囊可展开）。已拒绝行显示红色「已拒绝」徽标（`title` 给出理由）且不再显示拒绝按钮（与平台一致）。通过 `verifyOrder(id,'play')`，拒绝带 `memo`；拒绝成功后先就地改状态让行离开主列表，再刷新数据 |
+| Custom engine 管理 | `CustomEngineDialog`（940px 实心弹窗）：列 ID / 参数 / 说明 / MAC 值 / 累计引用 / 操作；支持搜索、新建、修改、删除；删除失败时识别平台返回的 `being used this tags` 并列出真实引用广告 |
+| 错误处理 | 统一 `handleError`：响应含“未登录”时向上 emit `session-expired` 回到登录态；其余错误写入表单错误区 + Toast |
+
+**本地持久化**
+
+| 存储键 | 内容 | 说明 |
+|--------|------|------|
+| `ssp.env` | `acc` / `prod` | 上次选择的环境 |
+| `ssp.acc.email` / `ssp.acc.password` | ACC 账号密码 | 明文保存，切换环境自动带出 |
+| `ssp.prod.email` / `ssp.prod.password` | PROD 账号密码 | 同上 |
+| `ssp.session_env` / `ssp.session_user` / `ssp.session_cookie` | 会话快照 | 热更新 / 重启后探活恢复登录态 |
+| `ssp.templates` | `SspTemplate[]` 的 JSON | 保留的模板数据，当前编辑器未接入 |
+
+均通过 `database.ts` 的 `getSetting` / `setSetting` 写入 `app_settings`，符合项目“数据持久化守则”。旧版 `ssp.email` / `ssp.password` / `ssp.remember_password` 已废弃，仅在首次读取时用于迁移到 ACC 槽。
+
+**已知限制**
+
+- 正式环境可写（`canWrite` 恒为 true）；如后续要求正式环境只读，需在 `BackendSpacePage` 恢复 `env === 'acc'` 的判断。
+- `campaign/list` 的 `size` 被服务端忽略，一次返回全部记录；计划数量极大时本地过滤有性能压力。
+- `order/list` 不支持按 Campaign 过滤（`campid` 会超时），Campaign 只能通过订单的 `campaign_id` 映射展示。
+- 平台 `order/checklist` 会同时返回已拒绝的广告，拒绝后记录不会消失（平台自身行为）；本工具用状态分流解决观感问题。
+- `keyword` 的 `order_count` 只增不减：规则一旦被引用过，即使广告删了也删不掉规则（平台侧同样如此），UI 已改名为“累计引用”并给出可读提示。
+- 平台无素材删除接口，上传后的孤立素材无法回收。
+- 登录密码明文存于 `app_settings` 且随备份上传，若账号安全要求较高，建议后续改为加密存储。
+- 广告类型字典通过解析订单新增页 HTML 得到，若后台页面结构变更需同步调整解析逻辑。
+
 
 ---
 
@@ -956,6 +1179,8 @@ const { lang, t, setLanguage, initLanguage } = useI18n();
 
 **云端同步 Toast key**（`cloudSync.*`）：`ready` / `syncing` / `success` / `fail`（中/英双语，用于导航栏同步按钮顶部 Toast）
 
+**后台配置 key**（`backend.*`）：登录/环境/账号密码、Tab 名称、广告列表与操作、新建广告、模板、一键配置、广告计划等约 70 个键（中/英双语，供 `BackendSpacePage` 与 `AdConfigTab` 使用）
+
 **使用方式**：
 - 模板中：`{{ t('scripts.new') }}` 或 `:placeholder="t('scripts.search')"`
 - 脚本中：`showToast(t('scripts.saveSuccess'))`
@@ -1003,6 +1228,33 @@ API 文档详见 `TestSpace_API.md`。
 - 密钥派生：PBKDF2（主密钥 + 随机 salt，100,000 次迭代，SHA-256）
 - 主密钥：32 字节随机值，存储在本地 SQLite `app_settings` 表（key: `cloud_encryption_key`）
 - 每次加密使用独立 salt 和 IV，确保相同明文产生不同密文
+
+### 8.2 SSP 广告后台 API
+
+环境域名：ACC `https://sspportal-acc.zeasn.tv`；生产 `https://sspportal.zeasn.tv`。全部为 `POST` + `application/x-www-form-urlencoded`（`/ssp/order/upload` 为 multipart），需携带 `Cookie: PHPSESSID=...`。完整调用细节见 4.13 节。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/ssp/pages/login` | 登录页，302 下发 `Set-Cookie`（需 `maxRedirections: 0` 才能捕获） |
+| POST | `/ssp/login/signin` | `email` + `password` 登录 |
+| POST | `/ssp/app/list` | 产品/媒体列表（`name` / `page` / `size`） |
+| POST | `/ssp/loc/list` | 广告位列表（`appid`） |
+| POST | `/ssp/order/list` | 广告列表（`id` / `name` / `appid` / `locid` / `target_keyword` / `page` / `size`；不支持 `campid`） |
+| POST | `/ssp/order/add` | 新建/更新广告（`material` 需嵌套表单编码） |
+| POST | `/ssp/order/opt` | 广告投放/暂停/删除（`id` + `action`） |
+| POST | `/ssp/order/checkopt` | 广告审核通过/拒绝（`id` + `action` + `memo`） |
+| POST | `/ssp/order/upload` | 上传素材（multipart `file` + `plat`），返回 `file_id` / `file_path` |
+| POST | `/ssp/order/selectapps` | 计划可选媒体（`camid` + `adtype`） |
+| POST | `/ssp/order/selectlocs` | 可选广告位（`appid` + `adtype`） |
+| POST | `/ssp/campaign/list` | 计划列表（服务端忽略 `size`，返回全量） |
+| POST | `/ssp/campaign/add` | 新建计划（`Demandpartner` 必填，返回新 id） |
+| POST | `/ssp/campaign/opt` | 计划投放/暂停/删除（`id` + `action`） |
+| POST | `/ssp/advertiser/list` | 广告主列表 |
+| POST | `/ssp/keyword/list` | 定向关键词列表（过滤参数 `name` / `value`） |
+| POST | `/ssp/keyword/add` | 新建定向关键词（`keycode` / `keytext` / `valuecode` / `valuetext` / `looklike` / `keywordtype` / `keywordop`，`id=0`） |
+| GET | `/ssp/pages/orderadd` | 订单新增页，内联 `var adtype` 定义广告类型与素材字段 |
+
+**统一响应**：`{"return_code": 0, "return_msg": ...}`；未登录返回 `return_code: -1` + `return_msg: "未登录"`（HTTP 200）。`parseResponse` 在 `return_code !== 0` 时抛出错误。
 
 ---
 
@@ -1413,7 +1665,7 @@ npm run build
 
 | # | 原则 | 说明 |
 |---|------|------|
-| 11 | **悬停暂停自动关闭** | 所有自动关闭的通知弹窗（命令执行结果等），鼠标悬停时必须暂停关闭计时，移出后恢复；命令执行浮窗的自动消失可在设置页关闭（默认开启，持久化到 `app_settings.cmd_exec_auto_dismiss`） |
+| 11 | **悬停暂停自动关闭** | 所有自动关闭的通知弹窗（命令执行结果、页面级 Toast 如安装/卸载/截图结果等），鼠标悬停时必须暂停关闭计时，移出后恢复；自动消失可在设置页「弹窗自动消失」关闭（默认开启，持久化到 `app_settings.cmd_exec_auto_dismiss`，关闭后需手动关闭） |
 | 12 | **不是全屏 modal** | 命令执行反馈使用顶部通知横幅（非全屏遮罩 modal），不遮挡页面内容 |
 
 ### 11.6 导航与布局
@@ -4644,6 +4896,82 @@ logcat_20260721_113000_20260721_120000.txt  （第三个文件，停止时重命
 
 ---
 
+## Phase 69 — 后台配置：SSP 广告一体化（已完成 ✅）
+
+> 新增“后台配置”分页（Notes 之后、Scripts 之前），首个 Tab 为“广告”。将 SSP 广告后台的常用操作本地化：产品/广告位浏览、广告列表与 MAC 反查、素材在线编辑与上传、新建广告、整套模板、一键配置、广告与计划的投放/暂停/审核/删除。写操作仅 ACC 环境开放，正式环境只读。
+
+### 69.1 调研与设计结论
+
+| # | 结论 |
+|---|------|
+| 1 | 后台为 PHP 页面 + jQuery AJAX JSON 接口，可用 HTTP 客户端完整复刻；使用 Tauri `plugin-http` 绕过 CORS |
+| 2 | 登录需先 `GET /ssp/pages/login`（`maxRedirections: 0`）捕获 302 的 `Set-Cookie`，再 `POST /ssp/login/signin`，后续手动携带 `PHPSESSID` |
+| 3 | `material` 必须按 jQuery 规则编码为 `material[image_1]=...`，不能传 JSON 字符串 |
+| 4 | `campaign/add` 的 `Demandpartner` 必填；成功返回新 Campaign id |
+| 5 | `order/list` 不支持 `campid` / `campaign_id`（会超时），Campaign 名用本地 `campaignMap` 映射 |
+| 6 | 广告类型与素材字段从 `orderadd` 页面内联 `var adtype` 解析 |
+| 7 | 新建订单 `begin_date` 不得早于当天；平台无素材删除接口 |
+
+完整调研记录与数据结构见 4.13 节。
+
+### 69.2 文件变更
+
+| 文件 | 修改类型 | 变更说明 |
+|------|----------|----------|
+| `src/services/sspApi.ts` | 新增 | SSP 接口客户端：登录/会话、参数编码、媒体/广告位/订单/关键词、Campaign/广告主、广告类型解析、素材上传与保存、新建订单、本地模板读写 |
+| `src/views/backend-space/BackendSpacePage.vue` | 新增 | 顶部 Tab 条（当前仅“广告”）、登录卡片（环境/账号/密码/记住密码）、已登录账号条、环境切换自动退出、`session-expired` 处理 |
+| `src/views/backend-space/AdConfigTab.vue` | 新增 | 广告 Tab 全部业务：产品/广告位、广告列表与分页、MAC 查询、详情素材编辑/上传/预览、审核与投放/暂停/删除、新建广告、模板管理、一键配置、广告计划开关 |
+| `src/router/index.ts` | 修改 | notes-space 与 script-space 之间新增 `/backend-space` 路由 |
+| `src/layouts/TitleBar.vue` | 修改 | 新增 `nav.backend` 导航项（`tune` 图标） |
+| `src/layouts/AppLayout.vue` | 修改 | keep-alive `:include` 加入 `BackendSpacePage` |
+| `src/App.vue` | 修改 | Ctrl+Tab / Ctrl+1..5 页面序列加入 `/backend-space` |
+| `src/composables/useI18n.ts` | 修改 | 新增 `nav.backend` 与约 70 个 `backend.*` 中英翻译键 |
+| `DEVELOPMENT.md` | 修改 | 新增 4.13 节（调研 / 后台结构 / 本地实现）、8.2 节（SSP API 汇总）；更新项目结构、路由表、keep-alive、导航顺序与 i18n 说明；新增本 Phase |
+
+### 69.3 功能清单
+
+| 功能 | 状态 |
+|------|------|
+| ACC / 正式环境切换与登录（会话 Cookie 正确捕获） | ✅ |
+| 记住账号密码（本地 SQLite `app_settings`） | ✅ |
+| 产品 → 广告位 → 广告列表（搜索 / 分页） | ✅ |
+| 按 MAC 查询关联广告（keyword → order 反查、去重合并） | ✅ |
+| 广告详情：素材逐项编辑 / 上传 / 预览 / 保存 | ✅ |
+| 审核通过 / 拒绝，投放 / 暂停 / 删除 | ✅ |
+| 新建广告（选择或新建 Campaign、动态素材字段、多广告位、规则关键词） | ✅ |
+| 本地整套模板（新建 / 编辑 / 删除 / 上传素材） | ✅ |
+| 一键配置（模板 → 新 Campaign → 批量创建广告 → 可选投放） | ✅ |
+| 广告计划列表与暂停 / 投放 | ✅ |
+| 写操作仅 ACC（正式环境只读） | ✅ |
+| 未登录 / 会话失效自动回登录态 | ✅ |
+
+### 69.4 验证结果
+
+**ACC 环境实测**（测试数据名均含 `tvgo_test`，完成后全部清理，残留 0）：
+
+| 验证项 | 结果 |
+|--------|------|
+| 上传素材 → 新建订单 → 修改素材 → 删除 | ✅ |
+| 新建订单 → 替换 `image_1` → 读取确认 → 删除 | ✅ |
+| 新建 Campaign → pause → play → delete | ✅ |
+| 一键配置：Campaign #4231 + 两条广告 → 投放 → 删除 → 复查 total=0 | ✅ |
+
+**编译验证**：
+
+| 检查项 | 结果 |
+|--------|------|
+| `npx vue-tsc --noEmit` | ✅ 通过 |
+
+### 69.5 已知限制
+
+- 正式环境只读，写操作仅在 ACC 开放。
+- `campaign/list` 忽略 `pagesize`，一次返回全量；计划数量极大时本地过滤有性能压力。
+- `order/list` 不支持按 Campaign 过滤。
+- 平台无素材删除接口，上传产生的孤立素材无法回收。
+- 登录密码明文存储在 `app_settings` 并随云端备份上传，后续建议加密或排除出备份。
+
+---
+
 ## 二十八、Phase 28 — 补齐 AMM 剩余核心能力（已完成 ✅）
 
 > 补齐与 AMM 对比的三大缺失：进程 PSS 追踪 (dumpsys meminfo -S)、水位线分析图表、ANR/tombstone 自动导出，并将 dmesg 从单次快照升级为增量流式。
@@ -5836,3 +6164,770 @@ Phase 76 曾按 “per worker” 将 1024MB 除以 2 后传入 512M，导致实�
 
 - `npx vue-tsc --noEmit` ✅
 - `npm run build`（vue-tsc + vite）✅
+
+---
+
+## Phase 81 — 后台配置：广告分页交互修复（已完成 ✅）
+
+> 针对广告 Tab 的四个可用性问题做修复：产品选择改为可搜索下拉、广告类型解析健壮化、MAC 查询结果并入主列表、广告主下拉可搜索并支持内联新建定向规则。
+
+### 81.1 产品选择改为可搜索下拉
+
+- 左侧原「产品列表」是一个 214px 宽、带独立滚动区的小块，视觉上很容易被误认为只有一个产品；改为**下拉框 + 搜索**（新增通用组件 `src/components/SearchSelect.vue`），标题栏显示产品总数与刷新按钮。
+- 下拉面板通过 `Teleport to="body"` + `position: fixed` 渲染（避免被 `backdrop-filter` 祖先的 containing block 或 `overflow` 裁切），随窗口滚动/缩放自动跟随，支持输入过滤、回车选中、Esc 关闭、点击外部关闭。
+- 选中产品后 `listZones(appid)` 重新拉取广告位；`loc/list` 若未按 `appid` 过滤（返回了其它产品的广告位），前端按 `appid` 兜底过滤，保证下方只显示当前产品的广告位。
+- 产品一次取 300 条，数量多时仍可通过下拉搜索定位。
+
+### 81.2 广告类型解析健壮化
+
+- 原实现按 `html.indexOf('\n', arrStart)` 截取 `var adtype` 的字面量，只要后台把数组格式化成多行就会 `JSON.parse` 失败，抛「广告类型解析失败」——该错误在新建广告、模板编辑、一键配置三处都会出现，因为都走同一个 `loadAdTypes()`。
+- 改为括号配对截取：从 `var adtype =` 后的 `[` 开始按 `[] {} ()` 计数并跳过字符串与注释，得到完整字面量；解析依次尝试严格 `JSON.parse` → 去注释/尾逗号 → 单引号转双引号 → `new Function` 表达式求值（`tauri.conf.json` 的 `csp` 为 `null`，允许）。
+- 解析失败时打印原始片段到控制台，并区分三种错误：未找到定义（多为会话失效）、定义不完整、解析失败；广告类型数组为空也算失败，不再静默返回空列表。
+- 字典缓存改为按会话生命周期失效：`sspLogin` / `sspLogout` 调用 `invalidateAdTypes()`，切换 ACC/正式环境不会复用上一环境的类型字典。
+- 新建广告的素材区在类型为空时显示「广告类型加载失败」+ 重试按钮（`loadAdTypes(true)` 强制重拉）。
+
+### 81.3 MAC 查询结果并入主列表
+
+- 移除原 MAC 结果独立面板与查询栏里的匹配规则气泡；查询结果直接写入 `orders`，由主表格渲染（`macMode`）。
+- 表格顶部显示结果摘要条：MAC、关联广告数、命中规则数与前两条规则名，右侧「清除结果」。
+- 清空 MAC 输入（`watch(mac)`）或点击「清除结果」都会退出 `macMode` 并 `loadAds()` 恢复当前产品/广告位的普通列表；分页条在 `macMode` 下只显示条数。
+- `loadAds()` 入口统一退出 `macMode`，`refreshList()` 在 `macMode` 下改为重跑 MAC 查询，使在 MAC 结果行上做投放/暂停/审核/改素材后仍停留在结果态。
+- 无命中规则或无关联广告时给出明确 Toast 与空态文案。
+
+### 81.4 广告主可搜索 + 定向规则新建
+
+- 新建广告、模板编辑、一键配置三处的广告主 `<select>` 全部替换为 `SearchSelect`，支持按名称/ID 搜索。
+- 新建广告的「定向规则」区新增 **新建规则** 按钮（仅 ACC 可写），内联展开表单：标签参数 `keycode`（默认 `mac`）、标签说明 `keytext`、规则值 `valuecode`、值说明 `valuetext`、值类型（字符 2 / 数字 1）、匹配方式（精确 0 / 模糊 1）。
+- 字段与后台 `/ssp/pages/keywordadd` 的 `COND` 结构一致，提交 `POST /ssp/keyword/add`（`id=0`）；成功后回查 `keyword/list` 并自动选中新规则，无需再手动搜索。
+- 创建失败时错误只显示在规则表单内（不污染整表单），会话失效仍走 `session-expired`。
+- `keywordValue()` 统一兼容 `valuecode` 为数组或字符串；新增 `keywordLabel()` 兜底展示 `name` / `keytext` / `valuetext`。
+
+### 81.5 文件变更
+
+| 文件 | 修改类型 | 说明 |
+|------|----------|------|
+| `src/components/SearchSelect.vue` | 新增 | 通用可搜索下拉框：Teleport 定位、过滤、键盘操作、外部点击关闭 |
+| `src/types/searchSelect.ts` | 新增 | `SearchSelectOption` 类型（`<script setup>` 不能导出类型） |
+| `src/services/sspApi.ts` | 修改 | `loadAdTypes` 括号配对 + 宽松解析 + 强制重载；`invalidateAdTypes`；`listZones` 按 appid 兜底过滤；新增 `createKeyword` |
+| `src/views/backend-space/AdConfigTab.vue` | 修改 | 产品改下拉；MAC 结果并入主表格；广告主改可搜索下拉；新增定向规则内联创建；类型加载失败重试 |
+| `src/composables/useI18n.ts` | 修改 | 新增 24 个 `backend.*` 中英文案 |
+
+### 81.6 验证
+
+- `npx vue-tsc --noEmit` ✅
+- 广告类型解析逻辑已用本地构造的多行 / 单引号 / 尾逗号字面量验证通过（严格 JSON、宽松 JSON、`new Function` 三级兜底）。
+
+---
+
+## Phase 82 — 对齐《4.2 广告配置方法》：资源预设 / 复制投放 / 正式环境可写（已完成 ✅）
+
+> 依据 `4.2 广告配置方法.docx` 逐条比对后台广告配置能力，补齐「资源预设」「跳转链接构造」「复制已有广告」三项快捷配置能力，并解除正式环境只读限制。
+
+### 82.1 文档流程与实现对照
+
+| 文档步骤 | 实现状态 | 说明 |
+|---|---|---|
+| 1. SaaS 文件管理配置广告 URL（场景 `WhaleOS_10_Launcher`） | 不在本工具范围 | 属机顶盒侧安装配置，工具只负责 AD 后台投放 |
+| 2. DP 后台给设备加 `whale_adsdk_V2` 服务 | 不在本工具范围 | 属 Device Portal |
+| 3. AD 后台 → 复制已有广告 → 编辑 → 提交 | ✅ | 列表新增「复制」按钮（`copyOrder`），一键带出广告类型/素材/跳转链接/广告位/计划 |
+| Ad name / Campaign / Delivery period | ✅ | 新建广告表单 |
+| Click URL（5 种 landing JSON） | ✅ | `LandingInput` 构造器，无需手写 JSON |
+| Ad type（Banner / Aspect Ratio / Spotlight / Video…） | ✅ | 后台 50 个类型改可搜索下拉，并显示该类型要求的尺寸/格式/大小上限 |
+| Ad material（VAST / m3u8 / Google / MP4 / 图片） | ✅ | 素材字段旁的「资源预设」下拉，按字段 `ext` 自动过滤 |
+| Assigned media / Assigned zone | ✅ | 产品可搜索下拉 + 广告位多选 + 广告位关键字筛选 |
+| Custom engine 指定 MAC（大写、英文逗号） | ✅ | 定向规则创建，MAC 自动转大写并把中文逗号/分号/空格归一为英文逗号 |
+| Priority / Pricing model（CPT/CPM/CPC） | ✅ | 新增「计费方式」「优先级」下拉（`price_mode` / `class`） |
+| Count type / Is script ad / 频次控制 / tag target | 未暴露 | 走后台默认值；如需要可再补 |
+
+### 82.2 资源预设库
+
+- 新增 `src/constants/adPresets.ts`，数据全部来自文档第 4、5 节：
+  - **素材预设** 15 条：VAST（SpringServe）、m3u8（SpringServe 测试流）、Google Ad Manager、MP4×5（奔驰 1920×630 / 啤酒 1920×1080 / 11 分钟 ×2 / 125s）、图片×7（1920×630 ×2、1700×360 ×2、其它尺寸 ×3 含 GIF）。
+  - 每条预设带 `accepts`（可匹配的扩展名）与 `note`（尺寸/时长），`presetsForExt(ext)` 按广告类型字段的 `ext` 过滤，避免给图片位推荐视频。
+  - **跳转链接预设** 5 种：`video` / `deeplink` / `app` / `web` / `picture`，含 `buildLanding()` 生成与 `parseLanding()` 反解。
+- 新建广告、模板编辑两处的素材字段都加了预设下拉；选中后同时写入预览 URL 并 Toast 提示。
+
+### 82.3 跳转链接构造器
+
+- 新增 `src/components/LandingInput.vue`：类型下拉 + URL/包名输入 → 实时生成文档要求的 landing JSON；`JSON` 按钮可切到原文编辑，粘贴已有 JSON 会自动反解回表单。
+- 用于新建广告与模板广告；复制广告时能从 `click_url` 反解回填。
+
+### 82.4 复制已有广告
+
+- 列表行新增复制按钮：读取订单详情 → 预填广告名（追加 `COPY`）、广告类型、素材、跳转链接、广告位、Campaign、结束日期（开始日期取当天，避免历史区间）。
+- 复制后仅需改名称即可提交，对应文档「可以直接复制已有广告进行编辑修改」。
+
+### 82.5 正式环境可编辑
+
+- `BackendSpacePage.vue`：`can-write` 由 `env === 'acc'` 改为恒为 `true`，并移除登录页与顶部的「正式环境只读」提示。正式环境与 ACC 行为一致，均可创建/暂停/删除/改素材。
+
+### 82.6 其他顺带修复
+
+- 广告类型下拉由原生 `<select>`（50 项无法搜索）改为 `SearchSelect`，选中后显示尺寸/格式/大小上限。
+- 广告位选择增加关键字筛选与「选中筛选结果」，广告位多时不必逐个勾选。
+- 定向规则表单：`keycode` 含 `mac` 时自动 `toUpperCase()` 并把 `，、；;` 与空格归一为英文逗号，附红字同款提示。
+
+### 82.7 文件变更
+
+| 文件 | 修改类型 | 说明 |
+|------|----------|------|
+| `src/constants/adPresets.ts` | 新增 | 素材预设库 + landing 构造/反解 |
+| `src/components/LandingInput.vue` | 新增 | 跳转链接可视化构造器 |
+| `src/views/backend-space/AdConfigTab.vue` | 修改 | 广告类型可搜索、素材预设、跳转构造、复制广告、广告位筛选、计费/优先级、MAC 归一 |
+| `src/views/backend-space/BackendSpacePage.vue` | 修改 | 解除正式环境只读 |
+| `src/composables/useI18n.ts` | 修改 | 新增 14 个 `backend.*` 中英文案 |
+
+### 82.8 验证
+
+- `npx vue-tsc --noEmit` ✅
+- `npm run build` ✅
+- 登录 ACC 实抓 `/ssp/pages/orderadd` 校验：真实声明为 `var adtype =  [...]`（50 个类型），页面更早处还有 `var adtypelist_js_note1`，确认 81.2 的 `/var\s+adtype\s*=/` 正则不会误命中，解析结果字段（`image_1` / `duration` / `code`）与预设匹配逻辑一致。
+
+---
+
+## Phase 83 — 媒体列表数量核对与分页参数修复（已完成 ✅）
+
+> 用户反馈「左侧产品只有 19 项」，核对后确认数量本身正确（平台侧同为 19），但排查中发现全局分页参数名用错，导致订单列表翻页失效、媒体/广告位/关键词一次拉全量。
+
+### 83.1 数量核对结论：19 项是对的
+
+用 ACC 账号实测同一凭证下的三条路径，结果一致为 19 个：
+
+| 来源 | 结果 |
+|---|---|
+| `POST /ssp/app/list`（我们用的） | `total: 19`，records 19 |
+| `POST /ssp/order/selectapps`（平台新建广告时加载媒体用这个） | 19 条，ID/名称完全一致 |
+| `/ssp/pages/applist` 页面自身 `COND` | `{name:'', outdoor_flag, page:1, size:100}`，同样 19 |
+
+- 该账号（`aoucool.zhang@whaletv.com`）可见媒体为 19 个，全部 `enable=Y`；`outdoor_flag=1` 查询结果为 0，说明这 19 个都是非户外媒体。
+- 正式环境 `sspportal.zeasn.tv` 用同账号登录返回「用户不存在」，因此当前能核对的只有 ACC 环境。
+- 结论：不是取错，也不是权限截断；19 就是该账号的媒体总数。
+
+### 83.2 真正的问题：分页参数应为 `size` 而不是 `pagesize`
+
+实测 `POST /ssp/app/list`、`/ssp/order/list`、`/ssp/keyword/list`：
+
+| 请求体 | 返回 |
+|---|---|
+| `page=1&size=5` | 5 条，`total` 为真实总数 |
+| `page=1&pagesize=5` | 忽略 pagesize，返回全量 |
+| `page=1`（不传） | 忽略 page，返回全量 |
+
+即后端只认 `size` + `page`。原实现全部传 `pagesize`，造成：
+
+- **订单列表**：固定 50 条/页的设定失效，一次拉回全部（实测 appid=24 有 308 条），翻页按钮点了内容不变；
+- **媒体/广告位/关键词/计划/广告主**：一次拉全量，数据量大时明显变慢且无法分页。
+
+修复（`src/services/sspApi.ts`）：
+
+- 新增 `paging()` 归一化函数：把 `pagesize` 映射为 `size` 后发出，兼容所有既有调用点。
+- `listMedias` 改为**逐页拉取 + 按 id 去重**（单页 200，最多 50 页），单页上限受限时也能拿全，不再只显示第一页。
+- `listZones` / `listOrders` / `searchKeywords` / `listCampaigns` / `listAdvertisers` 全部走 `paging()`。
+- 订单列表恢复真实分页（50 条/页，`total` 与翻页生效）。
+
+### 83.3 文案：产品 → 媒体（Media）
+
+平台侧叫 Media，界面统一改为媒体，避免误解：
+
+| key | 中文 | English |
+|---|---|---|
+| `backend.media` | 媒体（Media） | Media |
+| `backend.selectMedia` | 选择媒体（Media） | Select media |
+| `backend.searchMedia` | 搜索媒体名称 / ID | Search media |
+| `backend.refresh` | 重新加载媒体列表 | Reload media list |
+| `backend.mediaTotal` | 共 {n} 个媒体 | {n} media |
+
+- 左侧标题由裸数字改为「共 19 个媒体」，数量取自后端 `total`（`mediaTotal`），而不是本地数组长度，避免再次产生「是不是没取全」的疑问。
+- 代码注释中的「产品」措辞同步清理。
+
+### 83.4 文件变更
+
+| 文件 | 修改类型 | 说明 |
+|------|----------|------|
+| `src/services/sspApi.ts` | 修改 | 新增 `paging()`；`listMedias` 逐页拉全 + 去重；订单等列表改用 `size` |
+| `src/views/backend-space/AdConfigTab.vue` | 修改 | 新增 `mediaTotal` 显示「共 N 个媒体」；注释措辞 |
+| `src/composables/useI18n.ts` | 修改 | 5 个媒体相关文案中英文调整 + 新增 `backend.mediaTotal` |
+
+### 83.5 验证
+
+- `npx vue-tsc --noEmit` ✅
+- `npm run build` ✅（19.05s）
+- 接口实测：`size=10` 分两页返回 10 + 9 = 19 条且无重复；`pagesize=5` 仍返回 19 条（确认旧参数被忽略）。
+
+---
+
+## Phase 84 — 修复「热更新后被踢回登录页 / 重新登录提示未获取到会话」（已完成 ✅）
+
+### 84.1 现象
+
+开发环境下每次改动触发热更新，后台配置页都会退回登录页；此时点登录提示「登录成功但未获取到会话（Cookie）」，必须重启 dev 服务才能再登进去。
+
+### 84.2 根因
+
+两个问题叠加：
+
+1. **登录态只存在 JS 内存**：`sessionId` / `loginUser` / 页面上的 `loggedIn` 都是模块或组件级变量，热更新重建模块即清空，于是被判定为未登录。
+2. **判定登录成功的方式不可靠**：`sspLogin` 只从 `Set-Cookie` 里抓 `PHPSESSID`，抓不到就抛错。但 `@tauri-apps/plugin-http` 默认启用 `cookies` 特性（`tauri-plugin-http` 的默认 feature），内部维护并持久化 Cookie 罐（`app_cache_dir/.cookies`）。
+   - 热更新后 JS 状态没了，但 Cookie 罐里仍带着本域 `PHPSESSID`；
+   - 服务端看到已有会话会直接复用，**不再下发 `Set-Cookie`**；
+   - 于是 `signin` 返回 `return_code: 0`（确实登录成功），但我们抓不到 Cookie → 抛「登录成功但未获取到会话」。
+   - 重启进程时 Cookie 罐从磁盘（dev 下常因进程被 kill 而未保存）重新加载为空，服务端这才重新下发 Cookie，所以「重启就好了」。
+
+### 84.3 修复
+
+`src/services/sspApi.ts`：
+
+- 新增模块级 `loggedIn`，`isSspLoggedIn()` 不再以「有没有 sessionId」为准。
+- 新增 `probeSession()` / `tryProbe()`：调用受保护接口 `/ssp/app/list`（`size=1`）探活。
+  - 首次用显式 Cookie 探；失败则清掉显式 Cookie，交给插件 Cookie 罐再探一次（服务端可能轮换过 session id）。
+  - 未登录时接口返回 `{"return_code":-1,"return_msg":"未登录"}`，据此判定。
+- `sspLogin()`：`signin` 成功后若没抓到 Cookie，**不再直接抛错**，改为探活；探活通过即视为登录成功。
+- 新增会话持久化：`ssp.session_env` / `ssp.session_user` / `ssp.session_cookie` 写入 `app_settings`，登录成功与恢复成功后都会刷新。
+- 新增 `restoreSspSession()`：启动或热更新后读回环境/账号/Cookie，探活通过则直接进入已登录态并刷新有效 Cookie 值。
+- `sspLogout()` 改为异步，连同持久化快照一起清除。
+
+`src/views/backend-space/BackendSpacePage.vue`：
+
+- 挂载时先读偏好，再 `restoreSspSession()`；恢复期间显示 loading，避免闪一下登录卡片。
+- 环境切换由 `watch(env)` 改为显式 `switchEnv()`，避免恢复流程中程序化赋值触发登出。
+- `onSessionExpired` 同时清空持久化会话并重建子组件。
+
+### 84.4 效果
+
+- 热更新 / 页面重载后，只要服务端会话还在，直接回到已登录状态，不再被踢。
+- 即使会话真失效，重新登录也不会再出现「登录成功但未获取到会话」，无需重启 dev 服务。
+
+### 84.5 文件变更
+
+| 文件 | 修改类型 | 说明 |
+|------|----------|------|
+| `src/services/sspApi.ts` | 修改 | 新增 `loggedIn`、`probeSession`、`persistSession`、`clearSspSession`、`restoreSspSession`；`sspLogin` 探活兜底；`sspLogout` 异步清理 |
+| `src/views/backend-space/BackendSpacePage.vue` | 修改 | 启动恢复会话 + loading 过渡态 + 显式环境切换 |
+
+### 84.6 验证
+
+- `npx vue-tsc --noEmit` ✅
+- `npm run build` ✅（15.73s）
+- 接口实测：无 Cookie 调 `/ssp/app/list` 返回 `return_code:-1 / 未登录`（探活可正确识别），带有效 Cookie 返回 `records`。
+
+---
+
+## Phase 85 — 广告列表精简 + 独立审核入口 + 全字段编辑（已完成 ✅）
+
+> 按使用反馈重做后台广告配置页：去掉多余列与入口，把「素材编辑」升级为与平台一致的全字段编辑，并新增 Ad verify → Self ad verification 的审核入口。
+
+### 85.1 列表变化
+
+| 项 | 变化 |
+|---|---|
+| 「审核通过」列 | **移除**，审核改为独立弹窗 |
+| 「状态」列 | **移除** |
+| 「素材」按钮 | 改为 **编辑**（全字段表单） |
+| 广告名称 | 支持点击，直接进入编辑 |
+| 播放/暂停按钮 | 与后台一致：`status` 1/3 显示「暂停」，4 显示「播放」，其余（0 待审核 / 2 驳回 / 6 停止 / 7 结束）不显示 |
+| 「一键配置」「模板」「广告计划」按钮 | **移除**（对应弹窗与逻辑一并删除） |
+| 审核入口 | 工具栏新增「审核」，带待审核数量角标 |
+
+列表列：ID / 广告名（可点） / Campaign / 投放周期 / 操作（编辑、复制、暂停或播放、删除）。
+
+### 85.2 审核弹窗
+
+- 入口：工具栏「审核」，打开即 `POST /ssp/order/checklist` 拉待审核列表（与后台 Ad verify → Self ad verification 同接口）。
+- 每行显示 ID、广告名、Campaign、开始日期、素材预览链接，操作：
+  - **审核通过** → `POST /ssp/order/checkopt` `{ id, action: 'play' }`；
+  - **审核拒绝** → 展开原因输入框，提交 `{ id, action: 'reject', memo }`。
+- 操作后刷新待审核列表与当前广告列表（MAC 结果态下重查 MAC，不跳回媒体列表）。
+
+### 85.3 新建 / 编辑 / 复制广告字段（对齐平台）
+
+统一为一个编辑器弹窗，编辑时回填原记录：
+
+| 字段 | 说明 |
+|---|---|
+| Campaign | 可搜索下拉；新建时可选择「新建 Campaign」（名称 / 广告主 / Demand partner） |
+| Ad name | 广告名称 |
+| Delivery period | 开始 / 结束日期 |
+| Click URL | `LandingInput` 构造 5 种 landing JSON |
+| Ad type | 三项：**Screensaver / Tile（key=Tile1）/ Headline**，附提示「屏保广告选 Screensaver，Tile 广告选 Tile，其他选 Headline」；编辑旧广告若类型不在这三项内会显示「当前类型」 |
+| Ad material | 按所选类型的 `adtype.info` 生成字段（`image_1` + `duration`），支持资源预设、上传、预览 |
+| Ad icon | `disable_adflag`：Display(0) / Do not display(1)，提示「选择 Display 会展示广告角标」 |
+| Is external | `external` 0/1；选「是」出现 Ad Formats 下拉（VAST / Google IMA / whaletvplus / Teads image / Teads video / VPAID / Promo / Companion ads），附对应选择提示 |
+| Assigned media | 媒体多选（可搜索、全选），对应 `target_app` |
+| Assigned zone | 广告位多选（可筛选、全选、选中筛选结果），对应 `target_loc` |
+| Priority | 50 / 100 / 300 / 400（后台 `class` 字典原文） |
+| Pricing model | CPT / CPM / CPC |
+| 指定 MAC | 规则搜索选择 + 内联新建 MAC 规则（自动大写、英文逗号归一） |
+
+复制广告：读取原记录回填，名称加 `COPY`、开始日期重置为当天，改完即可提交。
+
+### 85.4 接口层
+
+`src/services/sspApi.ts`：
+
+- 新增 `listPendingOrders()` → `POST /ssp/order/checklist`。
+- 新增 `updateOrder(order, patch)`：以原记录为底覆盖字段后 `POST /ssp/order/add`（与后台编辑同接口）。
+- `buildOrderCond` 补齐 `cpt_type` / `count_type` / `target_custom` / `target_custom_type`，避免编辑保存时把后台计费方式、自定义定向重置。
+- `NewOrderInput` 增加 `disableAdflag` / `external` / `adFormat`；`buildNewOrderParams` 会写入 `disable_adflag`、`external`，并在 external=1 时把 `ad_format` 合入 material。
+
+### 85.5 文件变更
+
+| 文件 | 修改类型 | 说明 |
+|------|----------|------|
+| `src/views/backend-space/AdConfigTab.vue` | 重写 | 列表精简、审核弹窗、全字段编辑、移除模板/一键配置/广告计划 |
+| `src/services/sspApi.ts` | 修改 | 新增 `listPendingOrders`、`updateOrder`；扩展新建参数；补齐编辑字段 |
+| `src/composables/useI18n.ts` | 修改 | 新增 25 个中英文案（审核、Ad icon、Is external、Assigned media/zone 等） |
+
+### 85.6 验证
+
+- `npx vue-tsc --noEmit` ✅
+- `npm run build` ✅（30.8s）
+- 文案键校验：本页 93 个 `t()` 键中英文均存在 ✅
+- 接口核对：`/ssp/order/checklist` 返回 200（当前账号待审核为 0 条）；状态字典与后台一致（0 待审核 / 1 待投放 / 2 驳回 / 3 投放中 / 4 暂停 / 6 停止 / 7 结束）；优先级字典 50/100/300/400。
+
+---
+
+## Phase 86 — 安装应用成功/失败提示未受「弹窗自动消失」开关控制修复（已完成 ✅）
+
+**问题**：设备页「安装应用」（APK 安装）成功 / 失败时的提示浮窗（Toast）仍固定 2.5 秒自动消失，未读取设置页「弹窗自动消失」开关；同时该浮窗也没有悬停暂停计时。违反 11.5 原则 #11「所有自动关闭的通知弹窗…鼠标悬停时必须暂停关闭计时；自动消失可在设置页关闭」。
+
+**根因**：Phase 80 的开关只接到了 cmdExec 命令浮窗（`scheduleCmdExecClose()` 判断 `popupAutoDismiss`），页面级 Toast 的 `showToast()` 里是写死的 `setTimeout(..., 2500)`，与开关无关。
+
+### 86.1 修复
+
+- `showToast()` 不再直接起计时器，改为统一走 `scheduleToastClose()`：`loading` 类型常显；`popupAutoDismiss` 关闭时保持常显；开启时 2.5 秒后收起（`TOAST_DURATION`）。
+- 补上悬停暂停：浮窗 `@mouseenter` → `pauseToastAutoClose()` 清计时器，`@mouseleave` → `resumeToastAutoClose()` 重新计时。
+- 开关关闭（常显）时提供手动关闭入口：浮窗整体可点击关闭（`cursor-pointer` + `t('device.clickToClose')` 悬停提示），右侧额外显示 close 按钮。
+- `watch(popupAutoDismiss)`：设置页切换开关后，对当前仍显示的提示立即生效（开→立刻起计时，关→清计时保持常显）。
+- `showToast()` 新提示前统一重置计时器与悬停状态，避免旧计时器误关新提示；`onUnmounted` 增加 `clearToastTimer()`。
+- 同一改动作用于设备页所有 Toast（安装结果、复制、截图、卸载结果等），与设置项「弹窗自动消失」的全局语义一致。
+
+### 86.2 文件变更
+
+| 文件 | 修改类型 | 说明 |
+|------|----------|------|
+| `src/views/device-space/DeviceSpacePage.vue` | 修改 | Toast 接入 `popupAutoDismiss` + 悬停暂停 + 点击/按钮手动关闭 + 卸载清理 |
+| `src/composables/useI18n.ts` | 修改 | 新增 `device.clickToClose`（中/英） |
+
+### 86.3 验证
+
+- `npx vue-tsc --noEmit` ✅
+- `npm run build` ✅
+- 行为：开关开 → 安装成功/失败提示 2.5 秒消失、悬停暂停；开关关 → 提示常显，点击浮窗或 close 按钮收起。
+
+---
+
+## Phase 87 — 设备页录屏改 scrcpy 视频流（突破 5 分钟时长）（已完成 ✅，待真机验证）
+
+**问题**：设备页屏幕录制只能录到约 2 分钟，无法达到需求的 5 分钟以上。
+
+**根因排查**：
+
+1. `src-tauri/src/adb.rs::start_screenrecord()` 拼的命令是 `nohup screenrecord --size WxH <file> > /dev/null 2>&1 &`，**未传 `--time-limit`**，走系统默认值。
+2. Android 官方文档：`screenrecord --time-limit` 的「默认值 **和最大值** 均为 180 秒」。即传 `--time-limit 600` 也会被 clamp 回 180，**单次 `screenrecord` 物理上不可能超过 3 分钟**；不同 OEM 默认值可能更低（120s），与「只能录 2 分钟」的现象吻合。
+3. 旧实现还有两处隐患：`pkill -SIGINT` 后仅等 500ms 就 `pkill -9`，moov 未封盘会被 SIGKILL 截断；到达平台上限时进程静默退出，而前端 `isRecording` 仍为 true，用户点停止拉到的是已封盘的截断文件。
+
+**结论**：加参数无解，必须换录制源。改用项目已内置的 `bin/scrcpy-server`（v3.3.4）直录 H.264 流，时长只取决于磁盘。
+
+### 87.1 实现
+
+- **独立会话，不抢镜像 socket**：scrcpy 服务端 `scid` 按 16 进制解析，`scid=-1` → socket `scrcpy`，否则 → `scrcpy_%08x`（`DesktopConnection.getSocketName`）。录制侧生成随机 `scid` + 独立端口（`NEXT_RECORD_PORT`，27283 起），`adb forward tcp:<port> localabstract:scrcpy_<hex8>`，因此**录制与镜像可同时进行**，也不要求用户先开镜像。
+- **不依赖 root**：`app_process` 以 `shell` 身份运行，与 `screenrecord` 同一权限模型。
+- **协议解析**：开 `send_frame_meta`（需 PTS 建时间轴），关 `send_device_meta`/`send_codec_meta` 之外的冗余项；首字节 dummy → 12 字节 codec meta（fourcc+w+h）→ 每帧 12 字节帧头（`PTS | 1<<63 config | 1<<62 keyframe`，后 4 字节包长）→ Annex-B 负载。
+- **主机端 MP4 封装**（`recorder.rs::Mp4Muxer`，零新增依赖）：`ftyp` + `mdat`（样本直接流式落盘，内存恒定）+ 停止时补 `moov`（`stts` 按 PTS 差值、`stss` 关键帧、`stsz`/`stsc`/`stco`），再回填 `mdat` 尺寸。
+- **分辨率以 SPS 为准**：`parse_sps_dimensions()`（含 emulation-prevention 去除、scaling list 跳过、crop 计算），避免设备 `downsize_on_error` 降级或旋转时 `avc1` 头尺寸与码流不一致。
+- **停止语义**：置 stop 标志 → 读循环在 400ms 读超时内退出（不写半帧）→ 封盘 → `pkill -f scid=<hex8>`（只杀本会话，不影响镜像）→ 移除 forward。流意外中断（拔线/服务端退出）时先封盘已录部分，再 emit `record:auto-stopped` 让 UI 复位。
+- **UI**：按钮显示实时时长 `停止 00:12:34`；停止后 cmdExec 浮窗输出时长/帧数/体积/分辨率；离开页面时自动落盘，避免后台会话泄漏。
+- 参数默认：`max_size=0`（原生）、`video_bit_rate=8000000`、**`max_fps=30`**、`stay_awake=true`（避免息屏录成黑帧，服务端失败仅告警不致命）。
+  - `max_fps` 之所以不用 scrcpy 默认的 0（跟随屏幕刷新率）：90/120Hz 高刷机型会被拉满帧率编码，编码负载、功耗与发热翻倍，而录屏观感几乎无收益。30fps 在 1080x1920 下约等于原负载的 1/2～1/4；若确需高帧率可显式传 `maxFps` 覆盖。
+
+### 87.2 文件变更
+
+| 文件 | 修改类型 | 说明 |
+|------|----------|------|
+| `src-tauri/src/recorder.rs` | 新增 | scrcpy 流录制 + SPS 解析 + MP4 封装（约 900 行） |
+| `src-tauri/src/lib.rs` | 修改 | `mod recorder`、`RecordState`、`NEXT_RECORD_PORT`、`adb_record_start`/`adb_record_stop`、`resolve_scrcpy_jar` |
+| `src/views/device-space/DeviceSpacePage.vue` | 修改 | `toggleRecording` 改用新命令、录制计时器、`record:auto-stopped` 订阅、卸载时落盘 |
+| `src/composables/useI18n.ts` | 修改 | 新增 `device.recordingStreamMode`、`device.recordingAutoStopped`；`recordingStartedFull` 改为 `{size}` 占位 |
+
+### 87.3 验证
+
+- `cargo check` ✅（0 warning）
+- `npx vue-tsc --noEmit` ✅ / `npx vite build` ✅
+- MP4 封装离线验证：用 ffmpeg 生成 H.264 喂入封装器 → `ffprobe` 识别 h264/1280x720/90 帧/3.0s，`ffmpeg -f null` 解码 0 错误，关键帧索引正确 ✅
+- SPS 解析验证：720p / 1080x1920 / 640x480 / 1072x1440 / 1366x768 / baseline / high444 / high10 全部与 ffprobe 一致 ✅
+- **待真机验证**：5 分钟以上连续录制、录制与镜像并行、录制中拔线（应保存已录部分并提示）
+
+### 86.4 补充修复：选中文本时浮窗被误关
+
+**问题**：开关关闭后为了提供手动入口，曾把整块浮窗设为可点击关闭（`@click="hideToast"`）。用户拖动鼠标选中提示文本时，`mousedown` + 拖选结束的 `mouseup` 会合成一次 `click`，浮窗在选区形成的瞬间就被关掉，来不及复制。
+
+**修复**：
+
+- 移除整块浮窗的 `@click` 关闭，关闭入口统一收归右侧 `×` 按钮（图标 `close`，`select-none`，避免误选）；点击文本区域等同于普通文本操作，不再触发关闭。
+- 浮窗加 `select-text`（块内默认可选，按钮排除）、`max-w-[80vw]` + `break-words`，长错误信息换行显示不超出窗口。
+- 自动关闭计时器到点时先检查 `hasToastSelection()`：选区非空且落在浮窗内（`anchorNode`/`focusNode` 被浮窗包含）则重新计时而非关闭，直到选区被清除；避免「自动消失开着时选中文本被计时器关掉」。
+- 移除上一步新增的 `device.clickToClose` 文案键（整块点击关闭已废弃）。
+
+**行为汇总**：开关开 → 2.5 秒自动关闭（悬停或文本选中期间不关）；开关关 → 常显，仅 `×` 关闭；两种状态下文本均可选中复制。
+
+### 86.5 验证（补充）
+
+- `npx vue-tsc --noEmit` ✅
+- 手动核对：拖选提示文本 → 浮窗保持显示、可 Ctrl+C；点击 × 才关闭。
+
+---
+
+## Phase 88 — 广告配置页对齐平台：三级广告类型 / 媒体-广告位联动 / Custom engine 管理（已完成 ✅）
+
+> 逐条修复使用反馈的 8 项问题，核心是把「写死的三选项」换成接口驱动的三级下拉，把媒体/广告位/定向规则三块做成和后台一致的联动。
+
+### 88.1 左侧广告位
+
+- 侧栏宽度 `236px → 322px`，广告位名称改为**换行完整显示**（`break-words`），不再 `truncate` 截断；ID 右对齐。
+- 补齐加载态：媒体总数、刷新按钮旋转、广告位区数量旁的 spinner 与「加载中…」占位。
+
+### 88.2 Custom engine 管理（新增）
+
+- 工具栏新增 `Custom engine` 入口，弹窗内完成 **搜索 / 修改 / 删除 / 新建**：
+  - 搜索：带冒号（MAC）走 `value`（按 `valuecode` 模糊匹配），否则走 `name`；服务端分页 50 条/页，可翻页。
+  - 列表列：ID / 参数（keycode）/ 规则值 + 说明（含 `MAC` 标记）/ 引用广告数 / 操作（编辑、删除图标按钮）。
+  - 编辑/新建表单：参数、参数说明、值说明、值类型（Integer/String）、匹配操作符（Equal…Regex not match，数字类型自动收窄选项）、规则值（逗号分隔）；值多个自动转数组存储。
+  - 删除：行内二次确认，展示 id + 说明；删除后清空 keyword 全量缓存并刷新列表。
+- 编辑器内的「指定 MAC」也能一键打开该弹窗（带当前 MAC 作为新建规则的预填值）。
+
+### 88.3 编辑弹窗
+
+| 反馈 | 处理 |
+|---|---|
+| 广告类型应是三个下拉、选项来自接口 | 解析 `orderadd` 页面的 `var adtype`，按 `text`（广告形式）→ `sub_text`（子类）→ `size`（具体类型，值即 `ad_type` key）三级联动；第三级旁给出提示「屏保选 Screensaver，Tile 选 Tile，其他选 Headline」。以 Banner / CTV Native 为例，第三级实测为 Interstitial / Floater / Screensaver / Headline / Tile |
+| duration 不需要 | 素材字段过滤掉 `duration`；提交时按平台默认补 15 秒（编辑时保留原值），不再暴露给用户 |
+| Assigned media 勾选框框线显示不全 | 原生 checkbox 换成自绘 `.check-box`（13px 完整描边 + SVG 勾），input 仅作可聚焦载体（`clip` 隐藏），彻底避免系统 accent 在窄容器内被裁切 |
+| Assigned zone 要随媒体变化 | 改为 `POST /ssp/order/selectlocs { adtype, appid }`：勾选媒体后只拉该媒体 + 该广告类型下的广告位；媒体变化即清空重拉，被剔除的广告位自动取消勾选；未选媒体时提示「先勾选媒体」 |
+| 指定 MAC 应能搜索已配置规则 | 搜索命中 `keyword/list` 的规则（显示 #id / 说明 / 规则值），**多选**加入为 chips；编辑旧广告时把 `target_keyword` 的 id 列表还原成可读名称（全量 keyword 缓存）；提交时以 `;` 拼接 |
+| 投放/暂停/编辑按钮要图标 | 列表操作全部改为 `icon-action` 图标（edit / content_copy / pause_circle / play_circle / delete），保留 `title` 提示，危险操作 hover 变朱砂色 |
+| 缺少 loading | 表格/审核/Custom engine/媒体/广告位网格统一遮罩（`.loading-veil`）、按钮内联 spinner、复制/投放/暂停单行 spinner、广告类型加载提示 |
+
+### 88.4 接口层（`src/services/sspApi.ts`）
+
+- `loadOrderMeta()`：一次抓 `orderadd` 同时解析 `var adtype` 与 `var dict`（ad_format / class / price_mode 等枚举），`loadAdTypes()` / `loadOrderDict()` 为其薄封装；`invalidateAdTypes()` 同时清掉两者。
+- `adTypeLevel1/2/3()`：三级下拉的纯函数，保证「选了大类只出该大类子类、选了子类只出对应类型」。
+- `listOrderApps(camid, adtype)` → `POST /ssp/order/selectapps`（无 adtype 时退回 `app/list`）。
+- `listOrderZones(adtype, appIds)` → `POST /ssp/order/selectlocs`（`appid` 逗号拼接）。
+- Custom engine：`listKeywords()` / `listAllKeywords()` / `keywordsByIds()` / `saveKeyword()`（带 id 即修改）/ `deleteKeyword()`（`/ssp/keyword/delete`）/ `invalidateKeywords()`。
+
+### 88.5 文件变更
+
+| 文件 | 修改类型 | 说明 |
+|------|----------|------|
+| `src/views/backend-space/AdConfigTab.vue` | 重写 | 左栏加宽、三级类型、媒体/广告位联动、MAC 规则多选、图标按钮、全页 loading |
+| `src/components/backend/CheckGrid.vue` | 新增 | 通用勾选网格（筛选 / 全选 / 清空 / 选中筛选结果 / 加载遮罩） |
+| `src/components/backend/CustomEngineDialog.vue` | 新增 | Custom engine 搜索 + 分页 + 编辑 + 删除 |
+| `src/types/backend.ts` | 新增 | `CheckGridItem`（`<script setup>` 内不能导出类型） |
+| `src/services/sspApi.ts` | 修改 | 三级字典、selectapps/selectlocs、keyword CRUD |
+| `src/styles/main.css` | 修改 | `.check-box`/`.check-input`/`.icon-action`/`.loading-veil` 及暗色变体 |
+| `src/composables/useI18n.ts` | 修改 | 新增 30 个中英文案（Custom engine、三级类型标签、联动提示等） |
+
+### 88.6 验证
+
+- `npx vue-tsc --noEmit` ✅ / `npm run build` ✅
+- 文案键校验：本页 136 个 `t()` 键中英文均存在 ✅
+- **接口实测**（把 `sspApi.ts` 打包到 Node + fetch 桩，用 ACC 账号真跑）：
+  - `loadOrderMeta` → 50 个广告类型、23 个字典键；`ad_format` 8 项、`class` 50/100/300/400 与后台一致 ✅
+  - 三级联动：Banner → CTV Native/…，Banner+CTV Native → Interstitial/Floater/Screensaver/Headline/Tile ✅
+  - `listOrderApps('Screensaver')` 5 个媒体、`('Headline')` 4 个（OFF-platform 不适用 Headline）✅
+  - `listOrderZones('Screensaver', ['41','34'])` 3 个广告位，单媒体 1 个，空媒体 0 个 ✅
+  - keyword 搜索 / 全量（692 条）/ 按 id 还原 / 新建 / 修改 / 删除 全链路 ✅（测试规则已删除，无残留）
+
+---
+
+## Phase 89 — 定向规则（Custom engine）真正生效 + 细节打磨（已完成 ✅）
+
+> 关键发现：平台用 `extend_target` 区分「Inherit campaign(1) / Custom targeting(0)」，为 1 时整个广告级定向区（含 Custom engine）不参与投放。我们新建时一直传 `1`，所以「配了 MAC、审核也过了，就是不生效」。
+
+### 89.1 搜索清空不重载
+
+- 广告名搜索改为**输入即搜**（350ms 防抖），清空输入框同样触发重载，不再停在旧结果；回车仍是立即查询。
+- 输入框内加 `×` 清空按钮；用 `appliedKeyword` 记录已生效的搜索词，避免重复请求。
+- MAC 结果态下不打断（MAC 结果与广告名搜索互不干扰）。
+
+### 89.2 「命中规则 N」标签看不清
+
+- 原 `bg-mist text-graphite` 把两个深色叠在一起（mist 是文字色 token，不是背景色）。
+- 改为 `bg-secondary/10 text-secondary`，并在 `title` 里列出命中的规则名。
+
+### 89.3 编辑回显指定 MAC 为空
+
+- `restoreKeywords()`：id → 全量规则匹配 → **缓存未命中时强制重拉一次**（新建规则 / 切环境后缓存会旧）→ 仍匹配不到时用 `target_keyword_text` 或 `#id` 生成**琥珀色占位 chip**。
+- 保证「看起来不会是空的」，且保存时 id 不丢（占位 chip 也参与提交）。
+- 会话重置（登录 / 登出 / 切环境）时一并清空 keyword 全量缓存，避免跨环境 id 错配。
+- 广告级无规则但 Campaign 有规则时，显示说明「沿用 Campaign 层规则（id: …），只能在 Campaign 里改」。
+
+### 89.4 Custom engine 列表
+
+- 「说明」与「规则值」拆成两列，MAC 单独一列（等宽字体、`break-all` + 两行截断、完整值放 `title`）。
+- 弹窗 `860px → 940px`；列宽 `50/104/124/1fr/56/68`。
+
+### 89.5 审核链路（改 MAC → 审核通过）
+
+- 平台 `checkopt` 参数核对为 `{id, action, memo}`（`ssp_pages_ordercheck.js`），与实现一致；`memo` 改为**显式提交空串**（平台 jQuery 表单会带 `memo=`）。
+- 待审核列表新增「定向规则」标签，审核前就能看到该广告的 MAC 规则。
+- 审核通过后重新读一次订单，如果出现「原来有规则、通过后为空」会提示 `verifyKeywordLost`。
+- **根因修复 — `extend_target`**：
+  - `buildNewOrderParams` 默认 `extend_target: 0`（自定义定向），新增 `extendTarget` 入参。
+  - 编辑保存时，若选了 MAC 规则则强制 `extend_target: '0'`；没选规则则保持原值。
+  - 编辑器提示：配了 MAC 会切到「自定义定向」；当前是「继承 Campaign」时也会先提示。
+
+### 89.6 顺带修掉的坑
+
+| 问题 | 修复 |
+|---|---|
+| 新建广告报 `day_budget cannot be null` | 平台表单会提交空串，而我们 `encodeParams` 丢弃空值导致 NULL 入库 → `createOrder` 改为 `keepEmpty` 提交 |
+| 清空全部 MAC 规则后保存无效 | 空数组改为提交 `target_keyword[]=`（`['']`），与平台一致 |
+| 审核接口缺 `memo` 参数 | `apiPost` 增加 `keepEmpty` 开关，审核固定提交 `memo` |
+
+### 89.7 验证（真实 ACC 数据，测试数据已清理）
+
+- `npx vue-tsc --noEmit` ✅ / `npm run build` ✅ / 文案键中英齐全 ✅
+- 改 MAC → 待审核 → 审核通过 → 回读：`13865` 的 `target_keyword` 全程保持 `744`，状态 3 ✅
+- 新建（`createOrder`）带 `['744','742']`：落库 `744;742`，`orderInfo.extend_target = 0`、`target_app/locids` 正常 ✅
+- 继承↔自定义切换：`extend_target` 1 → 0 后 MAC 规则保留 ✅
+- 测试广告 `ZZ_TEST_SPACE_*` 已删除，`13865` 已恢复到测试前的投放状态 ✅
+
+---
+
+## Phase 90 — 弹窗去掉透明色 + 广告配置页全功能实测（已完成 ✅）
+
+> 两件事：把 Custom engine 弹窗改成实心纸色（与项目底色一致），并把广告配置页涉及的每条链路拿真实 ACC 账号跑了一遍。
+
+### 90.1 弹窗实心化
+
+`glass-panel` 是 `rgba(255,253,247,0.72)` + `backdrop-filter`，弹窗盖在列表上会透出下层内容、整体发灰，正文对比度不稳定。新增两档实心表面：
+
+| 类 | 用途 | 亮色 | 暗色 |
+|---|---|---|---|
+| `.solid-panel` | 模态容器 | `#FBF7EE`（surface-container-lowest）+ 1px hairline + 投影 | `#221F1A` |
+| `.panel-bar` | 弹窗头/表头/底栏/表单区 | `#F4EFE3` | `#2B2721` |
+
+应用范围：Custom engine 弹窗（头、表头、分页栏、编辑/新建表单区）、广告编辑器、审核弹窗、二次确认弹窗。页面级的 `glass-panel`（左栏、工具栏、列表容器）保持不变，仍保留毛玻璃层次。
+
+### 90.2 全功能实测（真实 ACC 账号，67 项断言）
+
+测试方式：把 `sspApi.ts` + `adPresets.ts` 用 esbuild 打成 ESM（`@/services/database`、`@tauri-apps/plugin-http` 用桩替换），Node 里用真实账号跑。esbuild 的 `--alias` 对 `@` 前缀会吃掉更长的键，改用 `onResolve` 插件才能正确打桩（踩坑记录）。
+
+| 分组 | 覆盖点 | 结果 |
+|---|---|---|
+| 会话 | 登录、会话持久化/恢复 | ✅ |
+| 媒体 | 19 个媒体、字段完整、名称过滤 | ✅ |
+| 广告位 | 按媒体拉取、归属校验 | ✅ |
+| 广告列表 | 首页、`size` 分页翻页、按名称搜索、无结果、**清空搜索恢复全量**、按媒体/广告位过滤 | ✅ |
+| 广告类型 | 50 个类型 + 23 组字典；每个一级都有二级、每个二级都有三级；三级项归属正确 | ✅ |
+| 媒体/广告位联动 | `selectapps` 按类型出媒体、`selectlocs` 单/多/空媒体（2 / 15 / 0），多媒体 = 各媒体并集 | ✅ |
+| Custom engine | 列表分页 693 条、按值搜索、新建、修改、按 id 还原、不存在的 id 不报错、删除 | ✅ |
+| MAC 查询 | 按规则名/规则值搜到规则 → 关联广告（#744 → #13865） | ✅ |
+| 新建广告 | Campaign / 名称 / 周期 / Click URL / 广告类型 / 素材 / 媒体 / 广告位 / 优先级 / 价格模式 / MAC / `extend_target=0` / 进入待审核 | ✅ |
+| 编辑广告 | 回显 MAC、改名改链接、保留媒体广告位、清空 MAC、保存后回待审核 | ✅ |
+| 复制广告 | 复制后素材与定向一致 | ✅ |
+| 暂停/播放 | 3 → 4 → 3 | ✅ |
+| 审核 | 待审核列表命中、通过 → 投放中、拒绝 → 驳回、审核后 MAC 保留 | ✅ |
+| 删除 | 列表消失、详情为空 | ✅ |
+| 素材 | 图片位只出图片预设（7 条）、视频位不出图片预设、代码位无预设、Landing 构造/反解往返 | ✅ |
+
+### 90.3 实测中发现的问题
+
+1. **`total` 是字符串**：`order/list`、`checklist` 的 `total` 返回 `"12093"`，类型却声明为 `number`，调用方 `total === 0` 之类的比较会失效。新增 `normalizePage()`，`listOrders` / `listPendingOrders` 统一转数字（`listMedias` / `listKeywords` 原本已转换）。
+2. **规则删除被平台陈旧计数拦截**：`keyword/delete` 用 `order_count` 做校验，而这个计数**只增不减**（744 实际 1 条广告、计数 5；748 删掉广告后仍为 2），于是「已无广告引用却删不掉」。处理：
+   - 删除失败且报文含 `being used this tags` 时，先按 `target_keyword` 查出真实引用广告，列出 `#id 名称`；查不到则提示「平台计数未回退」。
+   - 列表该列改名为「累计引用」，并加 `title` 说明只增不减、大于 0 时平台会拦截删除。
+3. **预设断言**：`presetsForExt('m3u8')` 只出 3 条流媒预置（VAST / m3u8 / Google），`jpg` 出 7 条图片预置——符合「视频位不出图片预置」的设计。
+
+### 90.4 文件变更
+
+| 文件 | 修改类型 | 说明 |
+|---|---|---|
+| `src/styles/main.css` | 修改 | 新增 `.solid-panel` / `.panel-bar` 及暗色变体 |
+| `src/components/backend/CustomEngineDialog.vue` | 修改 | 实心面板、删除冲突友好提示、引用列语义 |
+| `src/views/backend-space/AdConfigTab.vue` | 修改 | 三个弹窗改实心面板 + `panel-bar` 头/底栏 |
+| `src/services/sspApi.ts` | 修改 | `normalizePage()` 归一化分页数字 |
+| `src/composables/useI18n.ts` | 修改 | 新增 3 条文案（删除冲突 ×2、引用说明） |
+
+### 90.5 收尾
+
+- `npx vue-tsc --noEmit` ✅ / `npm run build` ✅
+- 测试广告全部删除（`ZZ_*` 残留 0）
+- 遗留：测试规则 `#748`（值 `AA:BB:CC:30:EE:FF`，已改名为 `ZZ_DELETE_ME`）因平台计数卡在 2 无法删除，平台上手动也删不掉，需平台侧清理
+
+## Phase 91 — 布局呼吸感 + Campaign 创建修复 + 日期/账号/审核提示（已完成 ✅）
+
+> 六项反馈：全局贴边、新建 Campaign 建不出来、结束时间选不到 9999、顶栏多余账号、保存后没有审核提示、登录账号需按环境分别保存。
+
+### 91.1 全局留白
+
+1. `AppLayout` 的 `<main>` 由 `px-margin-page pt-3` 改为 `px-margin-page pt-4 pb-2`。
+2. 三个页面原本用 `-mx-margin-page` 抵消主容器的左右内边距（`BackendSpacePage` / `NotesSpacePage` / `ScriptSpacePage`），内容直接贴到窗口边缘；现已全部去掉，并把为抵消而加的 `ml-3` 一并移除，所有页面统一落在 24px 的页边距内。
+3. 广告配置页主栅格 `gap-3 → gap-4`，右列工具栏/查询条/表格之间 `gap-2 → gap-2.5`。
+
+### 91.2 新建 Campaign 失败（根因：`day_budget` 为 NULL）
+
+平台 `campaignadd` 的 COND（见 `app/dsp_pages_campaignadd.js`）会提交 `day_budget: ""`、`total_budget: ""`、`description: ""`。我们的 `apiPost` 默认会丢掉空串，于是这些列以 NULL 入库：
+
+```
+SQLSTATE[23000]: Integrity constraint violation: 1048 Column 'day_budget' cannot be null
+```
+
+修复：`createCampaign` 用 `keepEmpty=true` 提交，并补上后台从 `typeTab` 带入的 `outdoor_flag: 0`。与 `order/add` 是同一类问题（Phase 88 已修过一次）。
+
+### 91.3 结束时间支持 9999
+
+平台日历（`DP.datepicker`）允许任意年份，原生 `<input type="date">` 的日历面板却要一个月一个月往后翻，实际选不到 9999。处理：
+
+- 结束时间右侧加三档快捷值：`30天` / `1年` / `长期(9999-12-31)`，直接落 `v-model`；
+- `input` 补 `max="9999-12-31"`，手动输入年份不被拦；
+- 表单提示补充「结束时间可直接输入年份，9999-12-31 表示长期有效」。
+
+已实测：`end_date=9999-12-31 23:59:59` 平台正常接受。
+
+### 91.4 顶栏收纳
+
+删掉已登录态上方那一行（账号邮箱 + 环境标签 + 退出）。环境标签与退出按钮移到广告配置页工具栏最右端（与 Custom engine 同一行，`ml-auto`）。环境标签可点击，用于 ACC ⇄ PROD 切换（切换会退出当前会话并带出该环境账号）。
+
+### 91.5 审核提示
+
+- 编辑器底栏常驻提示「提交后需在『审核』中通过后才会生效」（有错误时让位给错误信息）。
+- 新建 / 编辑保存成功后 toast 改为带动作按钮的提示：`广告已创建/已保存，需在「审核」中审核通过后才会生效` + 「去审核」按钮，停留 9 秒。
+
+### 91.6 账号按环境持久化
+
+- 存储键改为 `ssp.acc.email` / `ssp.acc.password` / `ssp.prod.email` / `ssp.prod.password`；`ssp.env` 记住上次环境。
+- 旧版本的单份 `ssp.email/password` 首次读取时自动迁移到 ACC 槽。
+- 登录页去掉「记住密码」勾选（改为始终保存），切换 ACC/PROD 时输入框同步换成该环境已保存的账号。
+- 文案：`backend.prod` 由「正式 / Production」改为 `PROD`。
+
+### 91.7 文件变更
+
+| 文件 | 修改类型 | 说明 |
+|---|---|---|
+| `src/layouts/AppLayout.vue` | 修改 | 主容器上下留白 |
+| `src/views/note-space/NotesSpacePage.vue` | 修改 | 去掉 `-mx-margin-page` 与补偿 `ml-3` |
+| `src/views/script-space/ScriptSpacePage.vue` | 修改 | 同上（工具栏 + 侧栏） |
+| `src/views/backend-space/BackendSpacePage.vue` | 重写 | 去顶栏、按环境存取账号、省略 remember |
+| `src/views/backend-space/AdConfigTab.vue` | 修改 | 工具栏右侧环境/登出、结束时间快捷档、审核提示 toast + 底栏提示、间距 |
+| `src/services/sspApi.ts` | 修改 | `createCampaign` 保留空串 + `outdoor_flag`；`loadSspCredential` / `saveSspCredential` / `saveSspEnv` / 新版 `loadSspPrefs` |
+| `src/composables/useI18n.ts` | 修改 | `prod` → PROD，新增 9 条文案 |
+
+### 91.8 收尾
+
+- `npx vue-tsc --noEmit` ✅ / `npm run build` ✅
+- 真实接口复测（ACC）：`createCampaign` 普通有效期 / 9999 有效期均成功返回 id，随后 `campaignAction(id,'delete')` 清理，测试 Campaign 残留 0
+
+## Phase 92 — 提示文案归位与精简（已完成 ✅）
+
+> 三项反馈：广告角标提示要在对应选项下方、去掉结束时间的长提示、去掉登录页切换账号提示。
+
+### 92.1 广告角标提示归位
+
+`adIconHint`（选择 Display 会展示广告角标）原来和 `endDateHint` 拼在同一行、靠 `pl-[112px]` 硬对齐挂在整块字段网格下方，离「广告角标」这组单选框隔了一整行。
+
+改为：「广告角标」单元格内部拆成两行 —— 上行标签 + `显示/隐藏` 单选，下行提示（同样 `pl-[112px]` 与选项左对齐）；字段网格加 `items-start`，避免右列两行把左列（价格模式）垂直居中拉偏。
+
+### 92.2 精简提示
+
+- 删除「结束时间可直接输入年份，9999-12-31 表示长期有效」（`backend.endDateHint`）：快捷档按钮自带的 `title`（`endDateLongHint`）已经说明了长期有效期，字段区不再堆字。
+- 删除登录页密码框下方的「ACC 与 PROD 的账号密码会分别保存，切换环境自动带出对应账号」（`backend.credSavedHint`）。
+- 两条文案对应的中英键一并从 `useI18n.ts` 移除，避免死键。
+
+### 92.3 文件变更
+
+| 文件 | 修改类型 | 说明 |
+|---|---|---|
+| `src/views/backend-space/AdConfigTab.vue` | 修改 | 角标提示移到选项下方、删除独立提示行、网格 `items-start` |
+| `src/views/backend-space/BackendSpacePage.vue` | 修改 | 删除登录页账号保存提示 |
+| `src/composables/useI18n.ts` | 修改 | 移除 `backend.adIconHint` 之外的两条无用键（`credSavedHint` / `endDateHint`） |
+
+### 92.4 收尾
+
+- `npx vue-tsc --noEmit` ✅ / `npm run build` ✅
+- 构建产物浏览器复核：登录页密码框与登录按钮之间不再有灰色说明行，间距回到 14px；广告编辑器部分需 Tauri 会话，按代码结构核对（提示位于单选组正下方、左内边距 112px 与选项对齐）。
+
+## Phase 93 — 待审核弹窗去掉预览 + 拒绝后仍留在列表（已完成 ✅）
+
+### 93.1 去掉预览入口
+
+`AdConfigTab` 审核弹窗里每行的「预览」链接（`<a href=materialUrl>`）已删除，`materialUrl()` 一并移除（编辑器右侧素材字段里的预览链接保留）。行内信息依次是：#id、广告名、campaign、开始时间、定向规则标签、审核状态。
+
+### 93.2 「拒绝不生效」的真相
+
+用 ACC 会话实测（新建 → 拒绝 → 再查列表）：
+
+| 步骤 | `status` | 是否在 `order/checklist` |
+|---|---|---|
+| 新建广告（`TMPSTATUS_*`，#13912） | `0` To be audited | ✅ 在 |
+| `checkopt {action:'reject', memo:'测试拒绝'}` | `2` Rejected，`verify_reason` 写入 | ✅ **仍在** |
+| `checkopt {action:'play'}`（另一条 #13891） | `3` In cast | ❌ 移出 |
+
+也就是说 **拒绝本身是生效的**（状态 0 → 2、理由落库），但平台的 `order/checklist` 本来就同时返回「待审核(0)」和「已拒绝(2)」两类记录 —— 平台自己的 Ad verify 页也只是把状态列显示成 `Rejected(理由)`，并把拒绝按钮隐藏（`ssp_pages_ordercheck.js` 里 `if (status.item == 0)` 才渲染拒绝图标）。我们之前既没有状态列、又始终展示两个按钮，所以看起来「拒绝完还在列表里」。
+
+### 93.3 修法（对齐平台 + 给即时反馈）
+
+- 列表按状态分流：`status=0` → 待审核（默认显示）；`status=2` → 已拒绝（默认收起）。
+- 头部 `待审核 N` 只统计真正待审核的条数，旁边多一颗 `已拒绝 N` 胶囊开关，展开后能看到被拒记录并继续「通过」（平台同样保留这个能力）。
+- 已拒绝行显示红色「已拒绝」徽标，`title` 给出拒绝理由；不再显示「审核拒绝」按钮。
+- 拒绝成功后先把本地这条记录就地标成 `status=2` + `verify_reason`，主列表立刻移出，再拉一次接口对齐；toast 提示「已拒绝，该广告已从待审核列表移出（要放行请展开『已拒绝』）」。
+- 工具栏审核入口的角标同步改为待审核条数。
+
+### 93.4 文件变更
+
+| 文件 | 修改类型 | 说明 |
+|---|---|---|
+| `src/views/backend-space/AdConfigTab.vue` | 修改 | 删预览链接与 `materialUrl`；审核列表按状态分流 + 已拒绝折叠 + 状态徽标 + 拒绝后即时移出 |
+| `src/composables/useI18n.ts` | 修改 | 新增 `verifyRejected` / `verifyRejectedToggleHint` / `verifyRejectedToast`（中英） |
+
+### 93.5 收尾与测试数据
+
+- `npx vue-tsc --noEmit` ✅ / `npm run build` ✅
+- 实测脚本用 esbuild 打桩（`@/services/database` → 内存 stub、`@tauri-apps/plugin-http` → 全局 fetch）+ 真实 ACC Cookie，跑通 `createOrder`（新广告 status=0 且出现在 checklist）→ `checkopt reject`（status=2、理由落库、仍在 checklist）→ 删除。
+- 测试广告 `TMPSTATUS_170892`（#13912）已删除；`#13887` 的拒绝理由已清回空（原状）。详见下方说明：#13891 在验证「通过会移出列表」时被置为 In cast。
+
+## Phase 94 — 录屏被 root 打断后无法重新开始（已完成 ✅）
+
+### 94.1 现象与根因
+
+录屏中设备执行 `adb root`（或 `adb remount`）→ adbd 重启 → 挂在 adbd 下的 `scrcpy-server`（`app_process`，`shell` 身份）随之被杀，`tcp:<port>` → `localabstract:scrcpy_<hex8>` 的 forward 也一并失效 → 采集线程读到 EOF → 正常封盘并 emit `record:auto-stopped`，前端 `isRecording` 复位、已录部分保存。
+
+问题在 **Rust 端的会话表 `RecordState`**：
+
+- `adb_record_start` 判重只做 `contains_key(&serial)`，不看该会话是否已经结束；
+- 只有 `adb_record_stop` 会 `remove`。
+
+自然结束的会话于是变成「僵尸条目」留在表里，之后每次点录屏都在第一行被拒 —— `该设备正在录制中`。与是否存在真实录制无关，重启应用才能清掉。
+
+### 94.2 修法
+
+| 位置 | 改动 |
+|---|---|
+| `lib.rs::adb_record_start` | 判重改为看 `done`：`done=true`（已自然结束）→ `remove` 后正常开新会话；只有 `done=false`（真在录）才返回 `该设备正在录制中` |
+| `recorder.rs::discard` | 新增：立即释放僵尸会话的设备侧资源（`pkill -f scid=<hex8>` + `adb forward --remove`），不等采集线程，也不碰镜像会话 |
+| `recorder.rs` 采集线程收尾 | 先把 `result` / `done` 发布，**再** emit 事件。UI 一看到事件就可能立刻重试，此时 `adb_record_start` 必须已经能看到「已结束」，否则仍是旧竞态 |
+| `recorder.rs` 新增 `record:failed` | 一帧都没写就失败（设备在首帧前掉线 / root 重启 adbd）时，原来不发任何事件，UI 会一直停在录制态。现在显式 emit；并延迟 250ms，避免和 `adb_record_start` 返回后的 `isRecording = true` 抢时序 |
+| `recorder.rs::with_device_ready` | adbd 重启期间 `adb push` / `adb forward` 会返回 `device offline` / `no devices/emulators found`。这类瞬时错误最多重试 15s，而不是立刻把「录屏启动失败」抛给用户 |
+| `DeviceSpacePage.vue` | 订阅 `record:failed`：复位 `isRecording` / `recordingLoading` / 计时器并提示错误；`onUnmounted` 一并反注册 |
+
+### 94.3 保留的行为
+
+- 中断时仍封装并保存已录部分（`record:auto-stopped`），不会因为 root 丢文件。
+- 真实并发保护不变：`done=false` 的会话依然拒绝第二个录制。
+- 录制与镜像互不影响（独立 `scid` / 独立端口），root 后重开录制会申请新端口。
+
+### 94.4 文件变更
+
+| 文件 | 修改类型 | 说明 |
+|---|---|---|
+| `src-tauri/src/recorder.rs` | 修改 | 新增 `discard` / `with_device_ready`；收尾顺序调整；新增 `record:failed` 事件 |
+| `src-tauri/src/lib.rs` | 修改 | `adb_record_start` 剔除已完成会话，不再被僵尸条目挡住 |
+| `src/views/device-space/DeviceSpacePage.vue` | 修改 | 订阅 `record:failed` 复位 UI 与卸载清理 |
+
+### 94.5 收尾
+
+- Rust 编译通过（由 `npm run tauri dev` 的文件监听增量编译验证：`target/debug/app_lib.dll` 与 `app.exe` 时间戳均晚于最后一次源码改动）。
+- `npx vue-tsc --noEmit` ✅
+- 真机验证清单：录屏中执行 `adb root` → 提示「录制意外结束，已保存已录部分」→ 再次点录屏能正常开始新会话；`adb remount`（同样会重启 adbd）同理。
+
