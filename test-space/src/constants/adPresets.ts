@@ -192,16 +192,39 @@ export function presetsForExt(ext?: string): MaterialPreset[] {
 
 export type LandingType = 'none' | 'video' | 'deeplink' | 'app' | 'web' | 'picture'
 
+/**
+ * 界面上可选的类型：
+ * 预设 5 种 + `custom`（后台存的是纯链接或别的结构，认不出预设时保留原文，不能再显示「无跳转」）。
+ */
+export type LandingUiType = LandingType | 'custom'
+
 export interface LandingOption {
-  key: LandingType
+  key: LandingUiType
   zh: string
   en: string
   /** 是否需要包名 */
   needPkg: boolean
   /** 是否需要 url */
   needUrl: boolean
-  /** 示例值 */
-  sample?: string
+  /** 示例 URL */
+  sampleUrl?: string
+  /** 示例包名 */
+  samplePkg?: string
+}
+
+/**
+ * 5 种链接的示例值（单一来源，选项与组件都从这里取）。
+ * 文档《4.2 广告配置方法》逐字对应，改这里即可。
+ */
+export const LANDING_SAMPLES: Record<string, { url?: string; pkg?: string }> = {
+  video: { url: 'https://staticssp.zeasn.tv/4235/1735526604677208cc92368.mp4' },
+  deeplink: {
+    url: 'https://www.youtube.com/watch?v=ZkvjSYwq0Qw',
+    pkg: 'com.google.android.youtube.tv',
+  },
+  app: { pkg: 'com.zeasn.tv.cast' },
+  web: { url: 'https://www.1688.com/zw/hamlet.html?scene=6&cosite=bingjj_pz' },
+  picture: { url: 'http://img.l.zeasn.tv/4080/6465e9cace648.jpg' },
 }
 
 export const LANDING_OPTIONS: LandingOption[] = [
@@ -212,7 +235,7 @@ export const LANDING_OPTIONS: LandingOption[] = [
     en: 'MP4 video',
     needPkg: false,
     needUrl: true,
-    sample: 'https://staticssp.zeasn.tv/4235/1735526604677208cc92368.mp4',
+    sampleUrl: LANDING_SAMPLES.video.url,
   },
   {
     key: 'deeplink',
@@ -220,26 +243,63 @@ export const LANDING_OPTIONS: LandingOption[] = [
     en: 'Video deeplink',
     needPkg: true,
     needUrl: true,
-    sample: 'https://www.youtube.com/watch?v=ZkvjSYwq0Qw',
+    sampleUrl: LANDING_SAMPLES.deeplink.url,
+    samplePkg: LANDING_SAMPLES.deeplink.pkg,
   },
-  { key: 'app', zh: '应用', en: 'App', needPkg: true, needUrl: false, sample: 'com.zeasn.tv.cast' },
-  { key: 'web', zh: '网址', en: 'Website', needPkg: false, needUrl: true, sample: 'https://www.1688.com' },
+  {
+    key: 'app',
+    zh: '应用',
+    en: 'App',
+    needPkg: true,
+    needUrl: false,
+    samplePkg: LANDING_SAMPLES.app.pkg,
+  },
+  {
+    key: 'web',
+    zh: '网址',
+    en: 'Website',
+    needPkg: false,
+    needUrl: true,
+    sampleUrl: LANDING_SAMPLES.web.url,
+  },
   {
     key: 'picture',
     zh: '图片',
     en: 'Picture',
     needPkg: false,
     needUrl: true,
-    sample: 'http://img.l.zeasn.tv/4080/6465e9cace648.jpg',
+    sampleUrl: LANDING_SAMPLES.picture.url,
   },
 ]
 
-export function landingOption(type: LandingType): LandingOption {
+/** 认不出预设结构时用的「原文」档，保证下拉框不会把已配置的链接显示成「无跳转」 */
+export const LANDING_CUSTOM_OPTION: LandingOption = {
+  key: 'custom',
+  zh: '原文',
+  en: 'Raw',
+  needPkg: false,
+  needUrl: false,
+}
+
+export function landingOption(type: LandingUiType): LandingOption {
+  if (type === 'custom') return LANDING_CUSTOM_OPTION
   return LANDING_OPTIONS.find((o) => o.key === type) || LANDING_OPTIONS[0]
 }
 
+/** 把后台返回的任意形态（字符串 / 对象 / 数组）转成可编辑的原文 */
+export function landingText(raw: unknown): string {
+  if (raw === null || raw === undefined) return ''
+  if (typeof raw === 'string') return raw.trim()
+  if (typeof raw === 'number' || typeof raw === 'boolean') return String(raw)
+  try {
+    return JSON.stringify(raw)
+  } catch {
+    return ''
+  }
+}
+
 /** 生成后台要求的 landing JSON 字符串 */
-export function buildLanding(type: LandingType, url = '', pkg = ''): string {
+export function buildLanding(type: LandingUiType, url = '', pkg = ''): string {
   const u = url.trim()
   const p = pkg.trim()
   switch (type) {
@@ -258,17 +318,198 @@ export function buildLanding(type: LandingType, url = '', pkg = ''): string {
   }
 }
 
-/** 解析已有 landing JSON，用于复制广告时回填表单 */
-export function parseLanding(raw?: string): { type: LandingType; url: string; pkg: string } | null {
-  const text = String(raw || '').trim()
-  if (!text) return null
+// ── 反解：后台的 click_url 可能不是标准 landing JSON ──────────
+//
+// 后台「Click URL」只有一个输入框，运营常常直接粘贴一条链接（甚至整段带引号/转义的文本），
+// 也见过对象、数组、二次编码等形态。这里统一做「尽力识别」，识别不出来就落到 `custom`，
+// 让界面显示原文而不是误报「无跳转」。
+
+/** 类型别名归一：`Website` / `url` / `h5` 都按网址处理 */
+const TYPE_ALIAS: Record<string, LandingType> = {
+  none: 'none',
+  '0': 'none',
+  video: 'video',
+  mp4: 'video',
+  m3u8: 'video',
+  videomp4: 'video',
+  deeplink: 'deeplink',
+  deeplinkvideo: 'deeplink',
+  deep: 'deeplink',
+  deeplink2: 'deeplink',
+  app: 'app',
+  application: 'app',
+  package: 'app',
+  pkg: 'app',
+  apk: 'app',
+  web: 'web',
+  website: 'web',
+  webpage: 'web',
+  url: 'web',
+  uri: 'web',
+  link: 'web',
+  h5: 'web',
+  browser: 'web',
+  picture: 'picture',
+  image: 'picture',
+  img: 'picture',
+  pic: 'picture',
+  photo: 'picture',
+}
+
+const URL_KEYS = ['url', 'link', 'landingurl', 'clickurl', 'targeturl', 'downloadurl', 'href', 'jumpurl']
+const PKG_KEYS = ['pkg', 'package', 'packagename', 'apppkg', 'bundle', 'bundlename', 'apk', 'packageid']
+const TYPE_KEYS = ['landingtype', 'landing', 'type', 'linktype', 'jumptype', 'clicktype']
+const DATA_KEYS = ['landingdata', 'data', 'landinginfo', 'linkdata', 'params', 'detail']
+
+function normKey(k: string) {
+  return String(k || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+function normType(v: unknown): LandingType | null {
+  const key = normKey(String(v ?? ''))
+  if (!key) return null
+  return TYPE_ALIAS[key] ?? null
+}
+
+/** 按归一化后的键名取字段，兼容 landing_type / landingType / landingtype */
+function pick(obj: any, keys: string[]): any {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return undefined
+  const map = new Map<string, any>()
+  Object.keys(obj).forEach((k) => map.set(normKey(k), obj[k]))
+  for (const k of keys) {
+    const v = map.get(normKey(k))
+    if (v !== undefined && v !== null && v !== '') return v
+  }
+  return undefined
+}
+
+/** 去掉 HTML 实体 / URL 编码等外层包裹 */
+function normalizeText(raw: string): string {
+  let text = String(raw ?? '').trim()
+  if (!text) return ''
+  if (/&quot;|&#34;|&#39;|&amp;|&lt;|&gt;/.test(text)) {
+    text = text
+      .replace(/&quot;|&#34;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      .trim()
+  }
+  if (/^%7B|^%5B/i.test(text)) {
+    try { text = decodeURIComponent(text).trim() } catch { /* 保持原样 */ }
+  }
+  return text
+}
+
+/** 解析 JSON，容忍二次编码、单引号 / 尾逗号的 PHP 风格输出 */
+function tryJson(text: string): any {
+  const t = text.trim()
+  if (!t) return undefined
+  if (!/^["'[{]|^&quot;|^%7B/i.test(t)) return undefined
+  try { return JSON.parse(t) } catch { /* 继续尝试 */ }
   try {
-    const obj = JSON.parse(text)
-    const type = String(obj?.landing_type || '') as LandingType
-    if (!LANDING_OPTIONS.some((o) => o.key === type) || type === 'none') return null
-    const data = obj?.landing_data || {}
-    return { type, url: String(data.url || ''), pkg: String(data.pkg || '') }
+    const once = JSON.parse(t)
+    if (typeof once === 'string') {
+      try { return JSON.parse(once) } catch { return once }
+    }
+    return once
+  } catch { /* 继续尝试 */ }
+  try {
+    const loose = t
+      .replace(/'/g, '"')
+      .replace(/,\s*([}\]])/g, '$1')
+      .replace(/([{,]\s*)([A-Za-z_$][\w$]*)\s*:/g, '$1"$2":')
+    return JSON.parse(loose)
   } catch {
+    return undefined
+  }
+}
+
+/** 逐层剥开字符串 / 数组包裹，拿到真正的对象 */
+function unwrap(value: any, depth = 0): any {
+  if (depth > 4) return value
+  if (typeof value === 'string') {
+    const text = normalizeText(value)
+    if (!text) return ''
+    const parsed = tryJson(text)
+    if (parsed === undefined) return text
+    return unwrap(parsed, depth + 1)
+  }
+  if (Array.isArray(value)) {
+    const first = value.find((v) => v !== null && v !== undefined && v !== '')
+    return first === undefined ? '' : unwrap(first, depth + 1)
+  }
+  return value
+}
+
+const VIDEO_EXT = /\.(mp4|m3u8|mpd|mov|webm|flv)(?:$|[?#])/i
+const IMAGE_EXT_RE = /\.(jpe?g|png|gif|webp|bmp|svg)(?:$|[?#])/i
+
+/** 有链接没类型时按内容猜：视频 / 图片 / 网址 / 自定义 scheme */
+function inferType(url: string, pkg: string): LandingType | null {
+  const u = String(url || '').trim()
+  if (u) {
+    if (VIDEO_EXT.test(u)) return 'video'
+    if (IMAGE_EXT_RE.test(u)) return 'picture'
+    if (/^https?:\/\//i.test(u)) return 'web'
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(u)) return 'deeplink'
+    if (/^www\./i.test(u)) return 'web'
+    // 域名样（含点号 + 可选的端口/路径）
+    if (/^[\w-]+(\.[\w-]+)+(?::\d+)?(?:[/?#]|$)/.test(u)) return 'web'
     return null
   }
+  return pkg.trim() ? 'app' : null
+}
+
+function looksLikePackage(text: string) {
+  const t = text.trim()
+  if (!t || /[/\s:]/.test(t)) return false
+  // 域名（www.xxx.com）优先按网址理解，不能当成包名
+  if (/^www\./i.test(t)) return false
+  return /^[A-Za-z][\w-]*(?:\.[\w-]+){2,}$/.test(t)
+}
+
+function fromPlainText(text: string): { type: LandingUiType; url: string; pkg: string } | null {
+  const t = normalizeText(text)
+  if (!t) return null
+  if (looksLikePackage(t)) return { type: 'app', url: '', pkg: t }
+  const inferred = inferType(t, '')
+  if (inferred) return { type: inferred, url: t, pkg: '' }
+  return { type: 'custom', url: '', pkg: '' }
+}
+
+/**
+ * 反解后台返回的 click_url（编辑回显 / 复制广告共用）。
+ *
+ * 返回 null 表示确实没有配置（空值）；
+ * 返回 `custom` 表示有值但不是预设结构，界面应保留原文编辑，不能显示成「无跳转」。
+ */
+export function parseLanding(raw?: unknown): { type: LandingUiType; url: string; pkg: string } | null {
+  if (raw === null || raw === undefined) return null
+  const unwrapped = unwrap(raw)
+  if (typeof unwrapped === 'string') return fromPlainText(unwrapped)
+  if (!unwrapped || typeof unwrapped !== 'object') return null
+
+  let url = landingText(pick(unwrapped, URL_KEYS))
+  let pkg = landingText(pick(unwrapped, PKG_KEYS))
+  let type = normType(pick(unwrapped, TYPE_KEYS))
+
+  const data = pick(unwrapped, DATA_KEYS)
+  if (data !== undefined) {
+    const inner = unwrap(data)
+    if (inner && typeof inner === 'object') {
+      url = url || landingText(pick(inner, URL_KEYS))
+      pkg = pkg || landingText(pick(inner, PKG_KEYS))
+      type = type || normType(pick(inner, TYPE_KEYS))
+    } else if (typeof inner === 'string') {
+      url = url || inner.trim()
+    }
+  }
+
+  if (type === 'none') return { type: 'none', url: '', pkg: '' }
+  if (type) return { type, url, pkg }
+  const inferred = inferType(url, pkg)
+  if (inferred) return { type: inferred, url, pkg }
+  return { type: 'custom', url: '', pkg: '' }
 }

@@ -102,6 +102,8 @@
               <span class="w-1.5 h-1.5 rounded-full flex-shrink-0" :class="scriptSaved ? 'bg-green-400/70' : 'bg-on-surface-variant/40 animate-pulse'" />
               {{ scriptSaved ? t('scripts.saved') : t('scripts.saving') }}
             </span>
+            <span class="text-[11px] font-mono px-1.5 py-0.5 rounded border border-white/10 text-on-surface-variant/45 cursor-help flex-shrink-0 select-none"
+              :title="packagingHint">{{ packagingBadge }}</span>
             <div class="flex-1"></div>
             <div class="flex items-center gap-1 flex-wrap justify-end min-w-0">
               <div v-for="(snp, idx) in snippets" :key="snp.label" class="relative"
@@ -242,6 +244,7 @@ import * as db from "@/services/database";
 import { useScriptRunner } from "@/composables/useScriptRunner";
 import { useI18n } from "@/composables/useI18n";
 import { save } from "@tauri-apps/plugin-dialog";
+import { packageScript, needsUtf8Codepage } from "@/utils/scriptPackaging";
 
 const { t } = useI18n();
 
@@ -257,6 +260,22 @@ const editingType = ref("bat");
 const editingContent = ref("");
 const localFilePath = ref<string | null>(null); // 本地打开文件的原始路径，用于设置工作目录
 const workingDir = ref<string>(""); // 用户手动指定的工作目录
+
+// 运行/导出会做的处理，直接显示出来，避免用户以为「应用内能跑 = 到哪都能跑」
+const packagingBadge = computed(() => {
+  if (editingType.value === "py") return "UTF-8 · LF";
+  return needsUtf8Codepage(editingContent.value)
+    ? `UTF-8 · CRLF · ${t("scripts.packNeedChcp")}`
+    : "UTF-8 · CRLF";
+});
+
+const packagingHint = computed(() => {
+  if (editingType.value === "py") return t("scripts.packHintPy");
+  return needsUtf8Codepage(editingContent.value)
+    ? t("scripts.packHintPatch")
+    : t("scripts.packHintBat");
+});
+
 const editorRef = ref<HTMLTextAreaElement | null>(null);
 const highlightRef = ref<HTMLElement | null>(null);
 const lineNumbersRef = ref<HTMLElement | null>(null);
@@ -819,13 +838,16 @@ async function openLocalFile() {
     const typeMap: Record<string, string> = { bat: "bat", cmd: "bat", py: "py" };
     editingName.value = name || fullName;
     editingType.value = typeMap[ext] || "bat";
-    editingContent.value = content;
+    // 编辑器内部统一用 LF（textarea 也会自动归一化，避免与高亮层不同步）；
+    // CRLF 由打包阶段在运行/导出时写回。
+    const lf = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    editingContent.value = lf;
     localFilePath.value = path; // 记住原始文件路径
     // 自动把文件所在目录设为工作目录
     const normalized = path.replace(/\\/g, '/');
     const lastSlash = normalized.lastIndexOf('/');
     workingDir.value = lastSlash >= 0 ? path.substring(0, lastSlash) : "";
-    currentScript.value = { id: genId(), name: editingName.value, type: editingType.value, content, createdAt: "", updatedAt: "" };
+    currentScript.value = { id: genId(), name: editingName.value, type: editingType.value, content: lf, createdAt: "", updatedAt: "" };
     scriptSaved.value = true;
     activeTabId.value = "";
     nextTick(() => editorRef.value?.focus());
@@ -872,14 +894,21 @@ async function loadScriptList() {
 
 async function exportToFile() {
   try {
-    const extMap: Record<string, string> = { bat: "bat", py: "py" };
-    const ext = extMap[editingType.value] || "bat";
+    const isPy = editingType.value === "py";
+    const ext = isPy ? "py" : "bat";
     const defaultName = editingName.value.includes(".") ? editingName.value : `${editingName.value}.${ext}`;
     const path = await save({ defaultPath: defaultName, filters: [{ name: "Script", extensions: [ext] }] });
     if (!path) return;
     const { writeTextFile } = await import("@tauri-apps/plugin-fs");
-    await writeTextFile(path, editingContent.value);
-    showToast(t("scripts.exportSuccess"), true);
+    // 与运行共用同一份产物：导出的字节就是运行时的字节，不再有第二套规则
+    const pkg = packageScript(editingContent.value, isPy ? "py" : "bat");
+    await writeTextFile(path, pkg.content);
+    showToast(
+      pkg.changes.includes("codepage") ? t("scripts.exportPacked")
+        : pkg.changes.length > 0 ? t("scripts.exportNormalized")
+        : t("scripts.exportSuccess"),
+      true
+    );
   } catch (e: any) {
     showToast(t("scripts.exportFail") + ": " + (e?.message || e), false);
   }
@@ -892,27 +921,22 @@ async function runCurrentScript() {
   isRunning = true;
   const name = editingName.value.trim() || "untitled";
   const tab = addTab(name);
-  const extMap: Record<string, string> = { bat: "bat", py: "py" };
-  const interpreterMap: Record<string, string> = { bat: "bat", py: "python" };
-  const ext = extMap[editingType.value] || "bat";
-  const interpreter = interpreterMap[editingType.value] || "shell";
+  const isPy = editingType.value === "py";
+  const ext = isPy ? "py" : "bat";
+  const interpreter = isPy ? "python" : "bat";
   try {
+    // 与导出共用同一份产物：运行通过 == 导出可运行
+    const packedContent = packageScript(editingContent.value, isPy ? "py" : "bat").content;
+
     let scriptPath: string;
     // 优先级：用户手动指定的工作目录 > localFilePath 派生的目录
     let workDir: string | null = workingDir.value.trim() || null;
 
-    // 对 Python 脚本（localFilePath 路径），如果有工作目录则注入 sys.path
-    // temp 路径分支会在后面单独处理注入逻辑
-    let finalContent = editingContent.value;
-    if (interpreter === 'python' && workDir && localFilePath.value) {
-      const sysPathInject = `import sys as _sys; _sys.path.insert(0, r"${workDir}"); del _sys\n`;
-      finalContent = sysPathInject + finalContent;
-    }
-
     if (localFilePath.value) {
-      // 有原始文件路径：直接写回原始文件后在原始目录执行
+      // 有原始文件路径：写回原始文件后在原始目录执行。
+      // 只写打包后的内容，不注入任何代码——避免污染用户的源文件。
       const { writeTextFile } = await import("@tauri-apps/plugin-fs");
-      await writeTextFile(localFilePath.value, finalContent);
+      await writeTextFile(localFilePath.value, packedContent);
       scriptPath = localFilePath.value;
       if (!workDir) {
         const normalized = localFilePath.value.replace(/\\/g, '/');
@@ -924,12 +948,12 @@ async function runCurrentScript() {
       const { appDataDir } = await import("@tauri-apps/api/path");
       const { mkdir, writeTextFile } = await import("@tauri-apps/plugin-fs");
       const dir = await appDataDir();
-      const s = dir.includes('\\') ? '\\' : '/';
-      const tmpDir = (dir.endsWith(s) ? `${dir}temp_scripts` : `${dir}${s}temp_scripts`).trimEnd();
+      const sep = dir.includes('\\') ? '\\' : '/';
+      const tmpDir = (dir.endsWith(sep) ? `${dir}temp_scripts` : `${dir}${sep}temp_scripts`).trimEnd();
       try { await mkdir(tmpDir, { recursive: true }); } catch (e) { console.warn('[ScriptSpace] mkdir failed:', e); }
 
       // 把同类型的其他脚本也写到 temp 目录，文件名用脚本名，
-      // 这样 import exporter 能找到同目录的 exporter.py
+      // 这样 import exporter / call helper.bat 能找到同目录的兄弟脚本
       const sameTypeScripts = scripts.value.filter(
         s => s.type === editingType.value && s.id !== currentScript.value?.id
       );
@@ -938,19 +962,23 @@ async function runCurrentScript() {
           const full = await db.loadScript(sibling.id);
           if (!full) continue;
           const safeName = sibling.name.replace(/[<>:"/\\|?*\s]/g, '_');
-          const siblingPath = `${tmpDir}${dir.includes('\\') ? '\\' : '/'}${safeName}.${ext}`;
-          await writeTextFile(siblingPath, full.content);
+          const siblingPath = `${tmpDir}${sep}${safeName}.${ext}`;
+          // 兄弟脚本同样打包：call helper.bat 时它的换行/代码页也要是对的
+          await writeTextFile(siblingPath, packageScript(full.content, isPy ? "py" : "bat").content);
         } catch { /* 单个失败不阻断运行 */ }
       }
 
-      // 在注入代码里把 tmpDir 加入 sys.path（覆盖前面的 workDir 注入逻辑）
-      if (interpreter === 'python') {
-        const sysPathInject = `import sys as _sys; _sys.path.insert(0, r"${tmpDir}"); del _sys\n`;
-        finalContent = sysPathInject + editingContent.value; // 重新构建，以 tmpDir 为准
+      // Python 的 sys.path[0] 已是脚本目录；这里补一次是为了让工作目录里的模块
+      // 也能 import。仅作用于临时副本，用户文件始终是干净的。
+      let tempContent = packedContent;
+      if (isPy) {
+        const sysPaths = Array.from(new Set([tmpDir, workDir].filter(Boolean) as string[]));
+        const inject = sysPaths.map(p => `_sys.path.insert(0, r"${p}")`).join('; ');
+        tempContent = `import sys as _sys; ${inject}; del _sys\n${packedContent}`;
       }
 
-      const tempPath = `${tmpDir}${dir.includes('\\') ? '\\' : '/'}__ts_run_${tab.id}.${ext}`;
-      await invoke("write_script_file", { path: tempPath, content: finalContent, interpreter });
+      const tempPath = `${tmpDir}${sep}__ts_run_${tab.id}.${ext}`;
+      await writeTextFile(tempPath, tempContent);
       scriptPath = tempPath;
       workDir = workDir || tmpDir; // 工作目录也设为 tmpDir
     }

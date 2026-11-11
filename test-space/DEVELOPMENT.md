@@ -480,6 +480,7 @@ Workspace 页面已在 Phase 9 中移除，路由 redirect 改为 `/case-space`�
 - **控件（集成在顶部控制栏）**：Level 多选（V/D/I/W/E/F，至少保留一个）、TAG 模糊过滤（含历史记录，`rawlogcat_tag_history`）、搜索框（支持正则切换、历史记录 `rawlogcat_search_history`，blur 时也保存，下拉用 `Teleport to="body"` 解决层级遮挡）、上下 X 行上下文展开（localStorage 持久化用户偏好）、书签上下导航、条数统计、导出、全屏
 - **搜索跳转**：Enter 循环跳转匹配行；新日志进来时用 `currentMatchId` 重新定位计数器
 - **行交互**：点击任意行弹出详情窗；HTTP 相关行蓝色高亮；书签悬停可见
+- **时间显示（Phase 98）**：列表行显示**本机当前时间**（设备时间 + 时钟偏移，写入即冻结、改设备时钟不回跳），悬停行可看设备原始时间；详情弹窗并列显示「当前时间」与「设备时间」，两者相差 ≥1s 时附「设备慢 2h13m」提示
 - **自动滚动**：运行时自动滚到底；用户向上翻阅时暂停，滚到底 3 行内恢复；未自动滚动时右下角浮现「回到底部」按钮（`position: absolute` 相对外层 wrapper，不随内容滚动）
 - **导出**：保存到 `Documents/TestSpace/Logs/logcat_时间戳.txt`，成功/失败均有 toast 提示，保存后自动打开文件夹
 - **全屏**：仅隐藏左侧模块列表，控制栏始终保留
@@ -6964,4 +6965,295 @@ Abort message: 'No pending exception expected: java.lang.ClassNotFoundException:
 
 **教训**：scrcpy-server 的 `cleanup` 是**跨会话、跨模块**的副作用（jar 在 `/data/local/tmp` 只有一份）。任何「先杀旧会话再推 jar」的流程都必须假定旧进程会删文件 —— 要么不启用 cleanup，要么杀完等进程真正退出，要么失败重试（本轮三者都做了，前两条是主因）。
 
+## Phase 95 — 脚本页：运行与导出统一产物（BAT 不再「应用内能跑、导出后报错」）（已完成 ✅）
 
+### 95.1 现象与根因
+
+用户反馈：同一段 BAT 粘进脚本页点 Run 能跑，按「导出」存成 .bat 双击就报错（中文乱码、`'xxx' 不是内部或外部命令`），于是认定导出功能坏了。
+
+实际是**运行和导出是两条各自写盘的链路，产物根本不是同一份字节**：
+
+| # | 应用内 Run | 导出后双击 |
+|---|---|---|
+| 1 | `write_script_file` 对 bat 强制 LF → CRLF | `exportToFile` 用 `writeTextFile` 原样写，仍是 LF |
+| 2 | `script_exec.rs` bat 分支是 `cmd /S /C "chcp 65001>nul && <path>"`，执行前先切 UTF-8 | cmd 默认 CP936，UTF-8 中文被拆成命令 token |
+| 3 | cwd = `temp_scripts`，且把库里同类型其他脚本一并写进该目录 | 只有单个文件，`call helper.bat` / 相对路径全断 |
+| 4 | `decode()` 先 UTF-8 再 GBK 兜底，控制台看起来正常 | 乱码直接暴露 |
+| 5 | 只按 `exit_code == 0` 标绿 | — |
+
+结论：脚本本身依赖了 TestSpace 的运行时沙箱，不是自包含的 .bat；但导出也确实漏了运行时做的规范化，所以用户归因到「导出」并不算冤——真正的缺陷是**两边不对等，且全程没有任何提示**。
+
+### 95.2 设计：单一产物出口
+
+新增 `src/utils/scriptPackaging.ts`，`packageScript(content, type)` 成为运行与导出**唯一**的产物出口：
+
+- BAT：LF 归一 → echo 箭头中性化 → 缺 chcp 时补一行 → CRLF
+- Python：原样（编码与换行交给解释器）
+- 返回 `{ content, changes }`，`changes` 上抛给 UI，改了什么都显示出来
+
+处理范围刻意收窄，只做「不改就不是同一个程序」的两件事：
+
+- `echo A -> B` 里的 `>` 会被 cmd 当成重定向（真的会生成垃圾文件）；
+- 含非 ASCII 却缺 `chcp 65001` 时，默认 GBK 的 cmd 会把 UTF-8 中文拆成命令。
+
+**全角标点不再替换。** Phase 37.7 的 `sanitizeBatEchoLines` 会把 14 种全角标点改成半角，那是「没有 chcp」时代的兜底；现在 chcp 由打包层保证，继续替换只会改掉用户 `echo` 出来的文案（`正在检测，请稍候` → `正在检测,请稍候`），属于过度加工。缩进、大小写、注释一律不动。
+
+### 95.3 改动清单
+
+| 位置 | 改动 |
+|---|---|
+| `src/utils/scriptPackaging.ts` | 新增。`packageScript` / `needsUtf8Codepage` / `neutralizeEchoRedirection` |
+| `ScriptSpacePage.vue::runCurrentScript` | 运行前调用 `packageScript`，写盘内容与导出完全一致；temp 路径改用 `writeTextFile`；兄弟脚本同样打包（`call helper.bat` 也能拿到正确的换行与代码页） |
+| `ScriptSpacePage.vue::exportToFile` | 改用 `packageScript`，按实际改动分档提示：补了 chcp / 仅规范 CRLF / 原样导出 |
+| `ScriptSpacePage.vue::openLocalFile` | 读入后归一化为 LF 再进编辑器（`textarea` 本身会把 CRLF 折成 LF，不归一会让 `editingContent` 与高亮层不同步）；BOM 由 Rust 侧剥离 |
+| `ScriptSpacePage.vue` 头部栏 | 新增 `UTF-8 · CRLF` 状态标记，需要补 chcp 时显示 `需补 chcp`，hover 说明运行/导出会做什么 |
+| `ScriptSpacePage.vue` Python 分支 | **不再把 `sys.path` 注入写回用户的 .py 文件**（Phase 34.2.4 的旧行为会永久污染源文件）；注入只作用于临时副本，且同时加入临时目录与工作目录 |
+| `scriptAi.ts` | 删除本地 `sanitizeBatEchoLines`，改用共享的 `neutralizeEchoRedirection`，AI 生成 / 手工编辑 / 运行 / 导出四条路径规则一致 |
+| `script_exec.rs` | bat 分支去掉 `chcp 65001>nul &&` 前缀，改为 `cmd /C <path>`，与双击等价——问题在应用内直接暴露，而不是等导出后才发现 |
+| `lib.rs::write_script_file` | 删除。CRLF 转换已前移到打包层，避免两处规则各自演化 |
+| `lib.rs::read_text_file` | UTF-8 严格校验失败后按 GBK 解码；剥离 UTF-8 BOM（BOM 在 cmd 里会被当成命令的一部分） |
+| `useI18n.ts` | 新增 `exportPacked` / `exportNormalized` / `packNeedChcp` / `packHint*` 中英双语 |
+
+第 5 条（exit code 判定）本轮未改：BAT 的语法错误不必然反映到 errorlevel 上，没有可靠替代信号，留给后续有需要时再做。
+
+### 95.4 行为变化（用户可感知）
+
+- 含中文的 BAT 导出后可直接双击运行，不必再手写 `chcp 65001`。
+- 导出成功提示会说明这次补了什么，不再是笼统的「导出成功」。
+- 编辑器头部常驻显示编码与换行，需要补 chcp 时提前标出来。
+- 打开 GBK 编码或带 BOM 的旧 .bat 不再乱码，运行时也不会写坏原文件。
+
+### 95.5 验证
+
+- `npx vue-tsc --noEmit` ✅
+- `cargo check` ✅（14.45s，无 warning）
+- `packageScript` 边界用例（esbuild 打包后 node 直跑）：
+
+| 输入 | changes | 产物 |
+|---|---|---|
+| `echo 正在检测，请稍候…`（CRLF 输入） | codepage,crlf | 全角原样保留，补一行 `chcp 65001 >nul` |
+| `echo A -> B` | arrow,crlf | `echo A  to  B` |
+| `@echo off` + 中文，已有 `chcp 65001` | crlf | 不重复注入 |
+| 纯 ASCII | crlf | 不注入 |
+| `rem a -> b` | crlf | 注释行不动 |
+| Python | none | 原样输出 |
+
+---
+
+## Phase 96 — 脚本运行的两个真实报错归因（已完成 ✅）
+
+> 用户实测 `随机按上下左右ok返回20分钟(1).bat`，前后出现两条报错，性质完全不同：一条是脚本自身的语法错误，一条是 Phase 95 改造引入的应用缺陷。**本阶段只修应用侧，用户脚本本身不处理**（按用户要求仅做归因记录）。
+
+### 96.1 报错一：`'...\随机按上下左右ok返回20分钟' 不是内部或外部命令`
+
+现象：刚用 TestSpace 打开这个本地文件点运行就报，切到别的脚本再切回来却能跑。
+原因：**文件名里的 `(` `)` 被 cmd 当成语法。**
+
+`ScriptSpacePage.vue` 走 `localFilePath` 分支时执行的是原始路径，而 `spawn_command` 用
+`c.args(["/C", script_path])` —— Rust 只在参数**含空白**时才自动加引号，`(` `)` 不含空白，
+于是命令行是 `cmd /C C:\...\随机按上下左右ok返回20分钟(1).bat`，cmd 在 `(` 处截断命令名，
+剩下的 `C:\...\20分钟` 自然「不是内部或外部命令」。
+
+「切回来就好了」的机制：切到脚本库里的脚本再切回来，走的是 `loadScript()`，它把
+`localFilePath` 置空（`ScriptSpacePage.vue:881`），运行改走 temp 副本
+`__ts_run_<id>.bat`，文件名没有括号，于是能跑 —— 但内容里的脚本缺陷照旧暴露（见 96.2）。
+这就是「换个姿势就能跑」的真相：跑的根本不是同一个文件。
+
+修复：`script_exec.rs` 新增 `cmd_with_line()`，统一构造
+`cmd /S /C ""<命令>""`。`/S` 下 cmd 会剥掉最外层一对引号，剩下的 `"<path>"` 原样执行，
+空格、括号、`&`、`^` 都不会再被当语法。参数经 `cmd_quote_arg()` 单独加引号。
+`shell` 分支保持原样 —— 它的 `script_path` 是一条命令字符串而非路径，加引号会改变语义。
+
+### 96.2 报错二：`The system cannot find the file specified.`（脚本自身问题，不改）
+
+这是 **Windows 错误 2**（ERROR_FILE_NOT_FOUND），来自该脚本第 50 行：
+
+```bat
+cscript //nologo "%temp%\sleep.vbs" >nul 2>&1 <echo WScript.Sleep !delay!> "%temp%\sleep.vbs"
+```
+
+`<echo` 是**输入重定向**，cmd 去找一个名叫 `echo` 的文件当输入，找不到 → 报错误 2。
+这是模型编出来的伪语法（想表达「把这段文本写进文件再执行」）。该行三处都错：
+`<...>` 包裹不是写文件语法、写文件和 `cscript` 在同一条命令里（重定向先于执行）、
+且 Windows 11 24H2 起 VBScript 已移除，`cscript` 未必存在。
+
+同期还确认了两个边界，后续写 BAT 时按此处理：
+
+- `timeout` 不可用 —— stdin 被重定向时直接失败，而 TestSpace 运行脚本正是管道 stdin；
+- 无需毫秒精度的延时用 `ping -n 2 127.0.0.1 >nul` 最稳；确需毫秒则
+  `powershell -NoProfile -Command "Start-Sleep -Milliseconds n"`。
+
+用户脚本不改，但这类写法必须从生成侧堵住（见 96.3），否则同一个坑会被反复生成出来。
+
+### 96.3 从源头堵：提示词补 BAT 语法约束
+
+`scriptAi.ts` 的系统提示新增两条硬约束：
+
+- 延时只许 `ping -n <秒+1> 127.0.0.1 >nul` 或
+  `powershell -NoProfile -Command "Start-Sleep -Milliseconds <n>" >nul`；
+  明示禁用 `timeout`（stdin 重定向失败）、禁用 `cscript`/VBScript（Win11 24H2 已移除）；
+- 写文件只许单行 `>"path" echo text`，明确禁止 `<echo ...>` 包裹，并写明会报
+  `The system cannot find the file specified.`，便于模型自我规避。
+
+### 96.4 改动清单
+
+| 位置 | 改动 |
+|---|---|
+| `script_exec.rs` | 新增 `cmd_with_line` / `cmd_line` / `cmd_quote_arg`；bat 分支改为 `/S /C ""<path>""`，路径中的空格、括号、`&`、`^` 不再被当语法 |
+| `scriptAi.ts` | 提示词补 BAT 延时与写文件语法约束（见 96.3） |
+
+`shell` 分支一行未动 —— 它的入参是命令字符串而非文件路径，加引号会改变语义。
+用户脚本、以及 `ScriptSpacePage.vue` 的运行/导出链路本阶段均未再改（Phase 95 已定型）。
+
+### 96.5 行为变化
+
+- 文件名带 `(` `)`（如浏览器下载出来的 `xxx(1).bat`）可直接运行，不再报「不是内部或外部命令」。
+- 「切到别的脚本再切回来就能跑」这一误导现象消失——因为它本来就是换了文件在跑。
+
+### 96.6 验证
+
+- `cargo check` ✅（30.73s，无 warning）
+- `npx vue-tsc --noEmit` ✅
+- 待真机确认：文件名带 `(` `)` 的 .bat 直接运行、以及导出件双击。
+  `cmd /S /C ""...""` 的引号剥离行为按 MS 文档实现（`/S` 下剥掉最外层一对引号），
+  本机 shell 不允许直接调 `cmd.exe` 做交叉验证；若真机仍报「不是内部或外部命令」，
+  备选方案是改为 `call "<path>"`。
+
+---
+
+## Phase 97 — 编辑广告时「点击地址」误报「无跳转」（已完成 ✅）
+
+> 用户反馈：后台配置-广告页，编辑广告时「点击地址」显示「无跳转」，但后台其实配了链接。预置的 5 种链接是方便输入的，功能本身没问题——只要后台返回了链接，就不能显示成「无跳转」。
+
+### 97.1 根因
+
+`parseLanding()` 只认**严格**的 `{"landing_type":...,"landing_data":{...}}`。而平台后台的 Click URL 只有一个输入框，历史数据与运营常见写法是：
+
+- 纯链接：`https://www.1688.com`、`http://img.l.zeasn.tv/xxx.jpg`
+- 包名：`com.zeasn.tv.cast`
+- 对象 / 数组：`[{...}]`、`{"url":"..."}`（无 `landing_type`）
+- 二次编码 / HTML 实体 / 单引号 PHP 风格输出
+
+解析失败后 `type` 保持初始值 `none` → 下拉显示「无跳转」，而真实链接只躺在下面的 JSON 原文框里，看起来就像「没配」。另外 `openEdit` 用 `String(fresh.click_url || '')`，遇到对象会变成 `[object Object]`。
+
+### 97.2 修复
+
+| 位置 | 改动 |
+|---|---|
+| `adPresets.ts` | `parseLanding()` 全形态兼容：纯链接 / 包名 / JSON 字符串 / 数组 / 二次编码 / HTML 实体 / 单引号尾逗号；类型别名归一（`Website`/`url`/`h5`→`web`，`image`→`picture` 等）；缺类型时按内容推断（`.mp4/.m3u8`→视频、图片扩展→图片、`http(s)`→网址、自定义 scheme→deeplink、反域名→应用） |
+| `adPresets.ts` | 新增 `LandingUiType = LandingType \| 'custom'` 与 `LANDING_CUSTOM_OPTION`（「原文」）：非空但认不出结构时落到 `custom`，下拉不再显示「无跳转」；新增 `landingText()` 统一把对象/数组转原文 |
+| `LandingInput.vue` | 有值即回显：`custom` 时下拉显示「原文」+ 提示「后台已配置跳转链接…已在下方原文保留」，并直接展开原文编辑；只有真正空值才显示「无跳转」 |
+| `LandingInput.vue` | 保护已有配置：`custom` 下 `rebuild()` 直接返回、切回预设类型时才重建 `buildLanding`，避免「打开就算一次空保存」把链接抹掉 |
+| `AdConfigTab.vue` | 回显改用 `landingText()`（对象/数组不再变 `[object Object]`），详情里没有时回落到列表行 `click_url` |
+| `useI18n.ts` | 新增 `backend.clickRawNotice` 中英文案 |
+
+### 97.3 回显优先级
+
+纯链接 → 按内容判定类型（网址/视频/图片/应用/deeplink），链接填进 URL 输入框，可直接改；改的是哪个就是哪个，用户不动就**原样回传**（不会把纯链接偷换成 landing JSON）。认不出结构 → 「原文」档，保存时原样提交。
+
+### 97.4 验证
+
+- 解析用例（`esbuild` 打包后在 Node 跑）：纯 URL、图片/视频链接、包名、标准 landing、`url`/`Website` 别名、数组、二次编码、HTML 实体、单引号字典、空值、`landing_type:none`、无类型 JSON，共 20 条，结果全部符合预期
+- `npx vue-tsc --noEmit` ✅
+- `npm run build` ✅
+- 待真机确认：编辑后台用单输入框配置的老广告，下拉应显示对应类型或「原文」，不再出现「无跳转」
+
+### 97.5 追加修复：切换类型时示例值不跟着换（5 种预设长得一样）
+
+用户对照文档给出 5 种链接的准确内容后指出「怎么都是一样的」。原因在 `onTypeChange` 只在输入框**为空**时才填示例：选了 MP4 之后再切「视频 / 网址」时 URL 区仍是 mp4 那条，生成出来的 JSON 自然长得一样；且「视频 Deeplink」的包名被写成了示例 URL（`sample` 一个字段同时当 URL 和包名用）。
+
+| 改动 | 说明 |
+|---|---|
+| `adPresets.ts` | `LandingOption.sample` 拆成 `sampleUrl` / `samplePkg`；「视频 Deeplink」补 `pkg: com.google.android.youtube.tv`；「网址」示例换文档那条 1688 长链 |
+| `LandingInput.vue` | `onTypeChange` 改为「当前值是空或仍是任一预设示例」就整体换成该类型的示例，用户手输过的值保持不动（编辑老广告不会被示例覆盖） |
+
+已验证 5 种类型生成的 JSON 与文档逐字一致：
+
+```
+video    {"landing_type":"video","landing_data":{"url":"https://staticssp.zeasn.tv/4235/1735526604677208cc92368.mp4"}}
+deeplink {"landing_type":"deeplink","landing_data":{"pkg":"com.google.android.youtube.tv","url":"https://www.youtube.com/watch?v=ZkvjSYwq0Qw"}}
+app      {"landing_type":"app","landing_data":{"pkg":"com.zeasn.tv.cast"}}
+web      {"landing_type":"web","landing_data":{"url":"https://www.1688.com/zw/hamlet.html?scene=6&cosite=bingjj_pz"}}
+picture  {"landing_type":"picture","landing_data":{"url":"http://img.l.zeasn.tv/4080/6465e9cace648.jpg"}}
+```
+
+`vue-tsc --noEmit` ✅ / `npm run build` ✅
+
+### 97.6 追加：五个预设“选了都是空的”
+
+现象：97.5 之后切类型，五个预设的输入框/JSON 全空。用真实 `ref` 复刻 `onTypeChange` 跑过一遍（`vue` 的 `ref` 在 Node 里可用），串联切换 video→deeplink→app→web→picture 每次都生成正确 JSON，说明逻辑本身没问题——空值来自**运行中的旧组件实例/旧常量**：`sampleUrl` 字段是 97.5 才加的，热更新只换了组件、没换常量模块时，`opt.sampleUrl` undefined → 每个类型都填空。
+
+兜底改造（无论模块新旧都能填上）：
+
+| 改动 | 说明 |
+|---|---|
+| `adPresets.ts` | 新增 `LANDING_SAMPLES`（5 种链接示例的单一来源），`LANDING_OPTIONS` 从中取 `sampleUrl` / `samplePkg` |
+| `LandingInput.vue` | 新增 `sampleOf()` 三级兜底：选项自带 → `LANDING_SAMPLES` → 旧版单字段 `sample`（「应用」档的旧 sample 是包名，单独判断） |
+| `LandingInput.vue` | `PRESET_URLS` / `PRESET_PKGS` 同时收集两处来源，判断“是否还没改过示例”不会漏 |
+
+验证（Node + 真实 ref）：串联切换 7 次全部非空；旧版选项结构（只有 `sample`）也能正确还原 url/pkg；`vue-tsc --noEmit` ✅ / `npm run build` ✅（`dist` 内已含 1688 长链）。
+
+若界面仍为空，说明跑的还是旧实例，重载窗口（`Ctrl+R`）或重启 `npm run tauri dev` 即可。
+
+## Phase 98 — 原始日志时间改显示本机当前时间（已完成 ✅）
+
+> 用户反馈：日志分析页「原始日志」里时间是设备时间（电视盒子常年不同步 NTP，经常差几小时甚至几天），排查时无法和现场真实时间对上号。要求列表按 Android Studio 那样显示「当下的时间」，点开详情时两个时间都能看到。
+
+### 98.1 思路：设备时间 + 时钟偏移
+
+logcat `threadtime` 行首只有 `MM-DD HH:MM:SS.mmm`，本身没有时区也没有年份，不能当本机时间用。做法是不改原始行，只维护一个**时钟偏移**：
+
+```
+本机时间 = 设备时间 + clockOffset
+clockOffset = Date.now() − 该批日志中最新的设备时间
+```
+
+设备时钟快 / 慢 / 时区不同，误差全部被这个偏移吸收，显示结果始终是本机的「当前时间」。
+
+### 98.2 每行的本机时间写入即冻结
+
+第一版把本机时间做成「实时用偏移换算」，结果在设备上手动改时间后**整屏时间都跟着跳**——已经显示过的日志时间不该再变。改为：
+
+- 每行解析时就写死 `hostTs = deviceTs + clockOffset`，之后不再随偏移变化；
+- 唯一例外是「开机积压还没追平实时」的那一小段：此时偏移尚未收敛（积压日志的 `newestDeviceTs` 是旧的，candidate 偏大），追平瞬间用最终偏移**回填一次**全部行（`rebaseFrom(0)`），此后不再改动任何行。
+
+追平判定：`deltaDevice <= deltaHost * 2 + 200`（设备时间不再比本机跑得快 → 积压已排空、进入实时）。追平前用「candidate 取历史最小值」逼近真实差值。
+
+### 98.3 稳态下识别「设备时钟被手动修改」
+
+定标后正常情况下 `lag = candidate − clockOffset` 只会略大于 0（投递延迟）。设备时钟一改，lag 会突跳：
+
+| 情况 | lag | 处理 |
+|---|---|---|
+| 设备时钟被调**快** | 大幅变**负**（新行时间戳跑到未来） | 立即跟随，并回填本批刚写入的行 |
+| 设备时钟被调**慢** | 大幅变**正**（> 30s） | 连续两批候选一致才认（排除暂停补发这类一次性旧数据），确认后回填待确认窗口内的行 |
+| 暂停 5 分钟后恢复 | 变正但只出现一批 | 不认，偏移保持不变 |
+
+`start()` / `clear()`（含「清空日志」触发的 `refresh()`）重置校准状态，新会话重新取样本。
+
+### 98.4 改动
+
+| 位置 | 改动 |
+|---|---|
+| `useRawLogcat.ts` | `RawLogLine.date/time` 明确为 `deviceDate/deviceTime`；新增 `deviceTs`（设备时间）与 `hostTs`（写入时定标的本机时间，冻结）；`clockOffset` / `settled` / `pendingOffset` 校准状态 + `syncClock()` / `rebaseFrom()` / `resetClock()`；导出 `formatStamp(ts)` |
+| `RawLogcatPanel.vue` | 列表时间列显示 `hostTs`，行 `title` 悬停看设备原始时间；详情弹窗头部拆出时间区，并列「当前时间 / 设备时间」，该行两者差 ≥1s 时附「（设备慢 2h13m）」 |
+
+不改的部分：导出 / 复制的仍是 `raw` 原始行（设备时间原样保留），搜索、书签、虚拟滚动逻辑不变；`RawLogcatPanel` 无需新增 props。
+
+### 98.5 验证
+
+`esbuild` 打包真实 composable 后在 Node 里跑（`listen` 用桩替换 + 伪造 `Date.now` 控制时间轴）：
+
+| 场景 | 结果 |
+|---|---|
+| 设备慢 2h 的实时流 | 每行都换算成本机时间，最新行 = 现在 ✅ |
+| 启动先灌 5 分钟积压再进实时 | 追平后积压首行回填为本机 5 分钟前 ✅ |
+| 稳态中把设备时钟**调快 3h** | 改表前的行逐字未变；改表后新行 = 本机现在 ✅ |
+| 稳态中把设备时钟**调慢 3h** | 同上（含待确认窗口内那两批的行）✅ |
+| 暂停 5 分钟后恢复 | 暂停前的行未变，补发行的本机时间正确 ✅ |
+
+- `npx vue-tsc --noEmit` ✅
+- `npm run build` ✅
+- 待真机确认：接一台时钟不准的盒子，列表时间应与电脑当前时间一致；运行中在设备上改时间，已显示的日志时间不应回跳，之后新日志仍显示电脑当前时间
+
+> 注：日志分析的其他视图（实时事件流、接口监控、模块卡片 `lastUpdated`）时间仍取自设备时间，`useLogAnalysis.ts` 未接入偏移；如需统一另开阶段。

@@ -551,7 +551,7 @@ import LandingInput from '@/components/LandingInput.vue'
 import CheckGrid from '@/components/backend/CheckGrid.vue'
 import CustomEngineDialog from '@/components/backend/CustomEngineDialog.vue'
 import type { SearchSelectOption } from '@/types/searchSelect'
-import { MATERIAL_PRESETS, presetsForExt, type MaterialPreset } from '@/constants/adPresets'
+import { MATERIAL_PRESETS, presetsForExt, landingText, type MaterialPreset } from '@/constants/adPresets'
 import {
   getOrder,
   listMedias,
@@ -1330,7 +1330,10 @@ async function openEdit(o: SspOrder) {
     editor.name = String(fresh.name || '')
     editor.adType = String(fresh.ad_type || '')
     setAdTypeChain(editor.adType)
-    editor.clickUrl = String(fresh.click_url || '')
+    // click_url 可能是字符串 / 对象 / 数组，取第一条非空的原文；详情里没有时回落到列表行
+    editor.clickUrl = [fresh.click_url, (fresh as any).clickurl, (o as any)?.click_url]
+      .map((v) => landingText(v))
+      .find((v) => v) || ''
     editor.beginDate = shortDate(fresh.begin_date) || todayStr()
     editor.endDate = shortDate(fresh.end_date) || todayStr(30)
     editor.priceMode = String(fresh.price_mode || 'CPT')

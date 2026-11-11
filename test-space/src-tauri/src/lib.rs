@@ -1020,21 +1020,19 @@ fn append_text_file(path: String, content: String) -> Result<(), String> {
     file.write_all(content.as_bytes()).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-fn write_script_file(path: String, content: String, interpreter: String) -> Result<(), String> {
-    if interpreter == "bat" {
-        // Normalize to CRLF for cmd.exe compatibility
-        let crlf = content.replace("\r\n", "\n").replace('\n', "\r\n");
-        std::fs::write(&path, &crlf).map_err(|e| e.to_string())
-    } else {
-        std::fs::write(&path, &content).map_err(|e| e.to_string())
-    }
-}
-
+/// 读取文本文件：优先按 UTF-8 解码，失败时回退 GBK（Windows 上大量 .bat/.cmd 仍是 ANSI）。
+/// 同时剥掉 UTF-8 BOM —— BOM 在 cmd.exe 里会被当成命令的一部分，双击必然报错。
 #[tauri::command]
 fn read_text_file(path: String) -> Result<String, String> {
     let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
-    Ok(String::from_utf8_lossy(&bytes).to_string())
+    let text = match String::from_utf8(bytes) {
+        Ok(s) => s,
+        Err(err) => {
+            let (cow, _, _) = encoding_rs::GBK.decode(err.as_bytes());
+            cow.to_string()
+        }
+    };
+    Ok(text.trim_start_matches('\u{feff}').to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1208,7 +1206,6 @@ pub fn run() {
             script_kill,
             write_text_file,
             append_text_file,
-            write_script_file,
             read_text_file,
             proxy::proxy_start,
             proxy::proxy_stop,

@@ -35,6 +35,44 @@ fn silent_cmd(prog: &str) -> Command {
     cmd
 }
 
+/// 单个参数按 cmd 规则加引号（仅处理空白与内嵌引号，够脚本场景用）。
+#[cfg(target_os = "windows")]
+fn cmd_quote_arg(a: &str) -> String {
+    if a.is_empty() {
+        return "\"\"".to_string();
+    }
+    if a.chars().any(|c| c == ' ' || c == '\t' || c == '"') {
+        format!("\"{}\"", a.replace('"', ""))
+    } else {
+        a.to_string()
+    }
+}
+
+/// 构造 `cmd /S /C "<整段命令>"`。
+///
+/// 为什么不能直接 `c.args(["/C", path])`：Rust 只在参数含空白时才自动加引号，
+/// 而 `(` `)` `&` `^` 这些 cmd 元字符不含空白，于是 `...\随机20分钟(1).bat`
+/// 会被 cmd 在 `(` 处截断，报 “'...随机按上下左右ok返回20分钟' 不是内部或外部命令”。
+/// `/S` 下 cmd 会剥掉最外层一对引号，剩下的内容原样执行，因此这里再包一层。
+#[cfg(target_os = "windows")]
+fn cmd_with_line(raw: &str) -> Command {
+    let mut c = silent_cmd("cmd");
+    c.arg("/S");
+    c.arg("/C");
+    c.raw_arg(format!("\"{}\"", raw));
+    c
+}
+
+#[cfg(target_os = "windows")]
+fn cmd_line(base: &str, args: &[String]) -> String {
+    let mut s = base.to_string();
+    for a in args {
+        s.push(' ');
+        s.push_str(&cmd_quote_arg(a));
+    }
+    s
+}
+
 #[derive(Serialize)]
 pub struct ScriptResult {
     pub stdout: String,
@@ -78,10 +116,19 @@ fn spawn_command(interpreter: &str, script_path: &str, args: &[String]) -> Resul
             c
         }
         "bat" => {
-            let mut c = silent_cmd("cmd");
-            c.args(["/S", "/C", &format!("chcp 65001>nul && {}", script_path)]);
-            c.args(args);
-            c
+            // 与双击 .bat 等价：代码页、换行、编码都已在打包阶段写进文件本身，
+            // 这里不再追加 chcp 前缀，避免「应用内能跑、导出后报错」的隐性差异。
+            #[cfg(target_os = "windows")]
+            {
+                cmd_with_line(&cmd_line(&format!("\"{}\"", script_path), args))
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                let mut c = silent_cmd("cmd");
+                c.args(["/C", script_path]);
+                c.args(args);
+                c
+            }
         }
         "ps1" => {
             let mut c = silent_cmd("powershell");
@@ -90,6 +137,8 @@ fn spawn_command(interpreter: &str, script_path: &str, args: &[String]) -> Resul
             c
         }
         "shell" => {
+            // 注意：这里的 script_path 实际是一条命令字符串（execute_shell），
+            // 不是文件路径，所以不能加引号，保持原样交给 cmd。
             let cmd_str = if cfg!(windows) {
                 format!("chcp 65001>nul&&{}", script_path)
             } else {

@@ -8,7 +8,7 @@
       <div class="grid select-none shrink-0 border-b border-outline-variant/15 px-2 py-1"
         style="grid-template-columns: 28px 90px 52px 52px 20px 130px 1fr">
         <div></div>
-        <span class="font-caption text-[9px] text-on-surface-variant/40 font-semibold">时间</span>
+        <span class="font-caption text-[9px] text-on-surface-variant/40 font-semibold" title="本机当前时间，悬停行可查看设备时间">时间</span>
         <span class="font-caption text-[9px] text-on-surface-variant/40 font-semibold">PID</span>
         <span class="font-caption text-[9px] text-on-surface-variant/40 font-semibold">TID</span>
         <span class="font-caption text-[9px] text-on-surface-variant/40 font-semibold">L</span>
@@ -58,8 +58,9 @@
                 </button>
               </div>
 
-              <span class="font-mono text-[10px] text-on-surface-variant/50 w-[90px] shrink-0 select-text whitespace-nowrap overflow-hidden">
-                {{ item.date }} {{ item.time.substring(0, 8) }}
+              <span class="font-mono text-[10px] text-on-surface-variant/50 w-[90px] shrink-0 select-text whitespace-nowrap overflow-hidden"
+                :title="`设备时间 ${item.deviceDate} ${item.deviceTime}`">
+                {{ hostStamp(item) }}
               </span>
               <span class="font-mono text-[10px] text-on-surface-variant/40 w-[52px] shrink-0 select-text text-right pr-2 whitespace-nowrap overflow-hidden">{{ item.pid }}</span>
               <span class="font-mono text-[10px] text-on-surface-variant/40 w-[52px] shrink-0 select-text text-right pr-2 whitespace-nowrap overflow-hidden">{{ item.tid }}</span>
@@ -122,13 +123,22 @@
             <div class="flex items-center gap-3 mb-3 shrink-0">
               <span class="font-mono text-[11px] px-2 py-0.5 rounded font-semibold shrink-0" :class="levelActiveClass(lineModal.level)">{{ lineModal.level }}</span>
               <span class="font-mono text-[12px] text-secondary font-semibold truncate flex-1 select-text">{{ lineModal.tag }}</span>
-              <span class="font-mono text-[10px] text-on-surface-variant/50 shrink-0 select-text">{{ lineModal.date }} {{ lineModal.time }}</span>
               <button class="glass-button p-1 rounded shrink-0 ml-1" @click="lineModal = null">
                 <span class="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
             <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-3">
-              <div class="flex items-center gap-4 flex-wrap px-1">
+              <!-- 时间：本机当前时间 + 设备时间 并列展示 -->
+              <div class="flex items-center gap-x-5 gap-y-2 flex-wrap px-1">
+                <span class="font-caption text-[10px] text-on-surface-variant/60 select-none">
+                  当前时间
+                  <span class="font-mono text-[11px] text-on-surface font-semibold select-text ml-1">{{ hostStamp(lineModal, true) }}</span>
+                </span>
+                <span class="font-caption text-[10px] text-on-surface-variant/60 select-none">
+                  设备时间
+                  <span class="font-mono text-[11px] text-on-surface-variant/80 select-text ml-1">{{ lineModal.deviceDate }} {{ lineModal.deviceTime }}</span>
+                  <span v-if="clockOffsetLabel(lineModal)" class="text-[9px] text-on-surface-variant/40 ml-1">（{{ clockOffsetLabel(lineModal) }}）</span>
+                </span>
                 <span class="font-caption text-[10px] text-on-surface-variant/60 select-none">PID <span class="font-mono text-on-surface select-text">{{ lineModal.pid }}</span></span>
                 <span class="font-caption text-[10px] text-on-surface-variant/60 select-none">TID <span class="font-mono text-on-surface select-text">{{ lineModal.tid }}</span></span>
               </div>
@@ -156,7 +166,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
-import type { LogLevel, LogcatStatus, RawLogLine } from '@/composables/useRawLogcat'
+import { formatStamp, type LogLevel, type LogcatStatus, type RawLogLine } from '@/composables/useRawLogcat'
 
 const props = defineProps<{
   serial: string | null | undefined
@@ -342,11 +352,31 @@ function _toast(msg: string, ok: boolean) {
 
 defineExpose({ jumpBookmark, jumpToMatch, exportLog })
 
+// ── 时间显示：行内冻结的本机时间（设备时间 + 收到时的时钟偏移） ──
+function hostStamp(line: RawLogLine, withMs = false): string {
+  const h = formatStamp(line.hostTs)
+  return `${h.date} ${withMs ? h.time : h.time.substring(0, 8)}`
+}
+
+// 该行设备时钟与本机的时差提示（≥1s 才显示，避免正常毫秒抖动打扰）
+function clockOffsetLabel(line: RawLogLine): string {
+  const offset = line.hostTs - line.deviceTs
+  if (Math.abs(offset) < 1000) return ''
+  const total = Math.round(Math.abs(offset) / 1000)
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  const parts: string[] = []
+  if (h) parts.push(`${h}h`)
+  if (m) parts.push(`${m}m`)
+  if (!h && s) parts.push(`${s}s`)
+  return `设备${offset > 0 ? '慢' : '快'} ${parts.join('')}`
+}
+
 // ── 行详情弹窗 ──
-interface LineModal { level: LogLevel; tag: string; message: string; date: string; time: string; pid: string; tid: string; raw: string }
-const lineModal = ref<LineModal | null>(null)
+const lineModal = ref<RawLogLine | null>(null)
 function openLineModal(item: RawLogLine) {
-  lineModal.value = { level: item.level, tag: item.tag, message: item.message, date: item.date, time: item.time, pid: item.pid, tid: item.tid, raw: item.raw }
+  lineModal.value = item
 }
 
 // ── 搜索高亮 ──

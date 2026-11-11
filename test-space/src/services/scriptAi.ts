@@ -4,6 +4,7 @@
  */
 import type { AiConfig } from '@/services/aiSettings'
 import { type AiChatMessage, resolveSystemRole } from '@/services/noteAi'
+import { neutralizeEchoRedirection } from '@/utils/scriptPackaging'
 
 export interface ScriptAiResult {
   /** Target script type, decided by AI based on the request */
@@ -117,6 +118,11 @@ Additional rules:
   @echo off
   chcp 65001 >nul
   This ensures UTF-8 encoding so Chinese characters in echo/rem lines display and execute correctly. Use only ASCII punctuation in echo statements — never Chinese/fullwidth punctuation (，。！？：；) or arrow symbols (->, =>) as they can still cause issues. Do not use PowerShell syntax.
+- For BAT delays, use only these forms:
+  - whole seconds: \`ping -n <seconds+1> 127.0.0.1 >nul\`
+  - sub-second: \`powershell -NoProfile -Command "Start-Sleep -Milliseconds <n>" >nul\`
+  Never use \`timeout\` (it fails when stdin is redirected), never use \`cscript\`/VBScript (removed from Windows 11 24H2), and never invent constructs like \`<echo text> "file"\`.
+- To write a line into a file in BAT, use a single line: \`>"%temp%\\x.txt" echo text\`. Never wrap the echo in \`<\` \`>\` pairs — \`<echo ...\` is parsed as input redirection from a file named "echo" and fails with "The system cannot find the file specified."
 - For Python: use only stdlib unless the user explicitly requests third-party packages. Use plain \`import <name>\` for importing other scripts in the library.
 - Reply in the same language the user writes in. Comments can use the user's language.`
 }
@@ -163,54 +169,9 @@ function extractJson(raw: string): string | null {
   return null
 }
 
-// ── BAT echo sanitizer ───────────────────────────────────────────────────────
-
-/**
- * Post-process AI-generated BAT scripts:
- * 1. Ensure chcp 65001 is present so cmd.exe uses UTF-8 (prevents Chinese chars
- *    from being misinterpreted as command tokens on GBK terminals).
- * 2. Replace fullwidth punctuation and problematic arrow sequences in echo/rem/:: lines.
- */
-function sanitizeBatEchoLines(code: string): string {
-  const FULLWIDTH_MAP: [RegExp, string][] = [
-    [/：/g, ':'],
-    [/，/g, ','],
-    [/。/g, '.'],
-    [/！/g, '!'],
-    [/？/g, '?'],
-    [/；/g, ';'],
-    [/（/g, '('],
-    [/）/g, ')'],
-    [/【/g, '['],
-    [/】/g, ']'],
-    [/「/g, '"'],
-    [/」/g, '"'],
-    [/『/g, "'"],
-    [/』/g, "'"],
-    [/->/g, ' to '],
-    [/=>/g, ' to '],
-  ]
-
-  const lines = code.split('\n').map(line => {
-    if (!/^\s*(echo\s+|rem\s|::)/i.test(line)) return line
-    let result = line
-    for (const [pattern, replacement] of FULLWIDTH_MAP) {
-      result = result.replace(pattern, replacement)
-    }
-    return result
-  })
-
-  // Inject "chcp 65001 >nul" after the first "@echo off" line if not already present
-  const hasChcp = lines.some(l => /chcp\s+65001/i.test(l))
-  if (!hasChcp) {
-    const echoOffIdx = lines.findIndex(l => /^\s*@?echo\s+off/i.test(l))
-    if (echoOffIdx !== -1) {
-      lines.splice(echoOffIdx + 1, 0, 'chcp 65001 >nul')
-    }
-  }
-
-  return lines.join('\n')
-}
+// ── BAT 清洗 ────────────────────────────────────────────────────────────────
+// 标点清洗与 chcp 补齐统一由 @/utils/scriptPackaging 负责：AI 生成、手工编辑、
+// 运行、导出四条路径共用同一套规则，避免编辑器里能跑、导出后报错。
 
 // ── Parse structured response ────────────────────────────────────────────────
 
@@ -243,7 +204,7 @@ function parseResult(raw: string, fallbackType: 'bat' | 'py'): ScriptAiResult {
     const scriptType: 'bat' | 'py' = typeMatch[1] === 'py' ? 'py' : 'bat'
     const name = nameMatch?.[1]?.trim().replace(/[<>:"/\\|?*\s]/g, '_') || 'ai_script'
     const description = descMatch?.[1]?.trim() || ''
-    const code = scriptType === 'bat' ? sanitizeBatEchoLines(fencedCode) : fencedCode
+    const code = scriptType === 'bat' ? neutralizeEchoRedirection(fencedCode) : fencedCode
     return { scriptType, name, code, description }
   }
 
@@ -260,7 +221,7 @@ function parseResult(raw: string, fallbackType: 'bat' | 'py'): ScriptAiResult {
       let code = typeof obj.code === 'string' ? obj.code.trim() : ''
       const description = typeof obj.description === 'string' ? obj.description.trim() : ''
       if (code) {
-        if (scriptType === 'bat') code = sanitizeBatEchoLines(code)
+        if (scriptType === 'bat') code = neutralizeEchoRedirection(code)
         return { scriptType, name, code, description }
       }
     } catch {}
@@ -270,7 +231,7 @@ function parseResult(raw: string, fallbackType: 'bat' | 'py'): ScriptAiResult {
   if (fencedCode) {
     const looksLikePy = /^#!.*python|^import |^def |^class /m.test(fencedCode)
     const detectedType = looksLikePy ? 'py' : fallbackType
-    const code = detectedType === 'bat' ? sanitizeBatEchoLines(fencedCode) : fencedCode
+    const code = detectedType === 'bat' ? neutralizeEchoRedirection(fencedCode) : fencedCode
     return { scriptType: detectedType, name: 'ai_script', code, description: '' }
   }
 
@@ -278,7 +239,7 @@ function parseResult(raw: string, fallbackType: 'bat' | 'py'): ScriptAiResult {
   const looksLikePy = /^#!.*python|^import |^def |^class /m.test(s)
   const looksLikeBat = /@echo\s+off|^::|\bsetlocal\b/im.test(s)
   const detectedType = looksLikePy ? 'py' : looksLikeBat ? 'bat' : fallbackType
-  const rawCode = detectedType === 'bat' ? sanitizeBatEchoLines(s) : s
+  const rawCode = detectedType === 'bat' ? neutralizeEchoRedirection(s) : s
   return { scriptType: detectedType, name: 'ai_script', code: rawCode, description: '' }
 }
 
