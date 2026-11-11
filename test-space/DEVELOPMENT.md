@@ -6457,6 +6457,7 @@ Phase 76 曾按 “per worker” 将 1024MB 除以 2 后传入 512M，导致实�
 | Assigned zone | 广告位多选（可筛选、全选、选中筛选结果），对应 `target_loc` |
 | Priority | 50 / 100 / 300 / 400（后台 `class` 字典原文） |
 | Pricing model | CPT / CPM / CPC |
+| CPT method / CPT 值 | `cpt_type`（Percentage CPT / Rotation CPT）+ `cpm_percent`：前者标签 `CPT ratio` 单位 `%`，后者标签/单位 `Rotation(s)`；后台必填，0 会导致广告取不到量（Phase 99 补齐） |
 | 指定 MAC | 规则搜索选择 + 内联新建 MAC 规则（自动大写、英文逗号归一） |
 
 复制广告：读取原记录回填，名称加 `COPY`、开始日期重置为当天，改完即可提交。
@@ -7257,3 +7258,283 @@ clockOffset = Date.now() − 该批日志中最新的设备时间
 - 待真机确认：接一台时钟不准的盒子，列表时间应与电脑当前时间一致；运行中在设备上改时间，已显示的日志时间不应回跳，之后新日志仍显示电脑当前时间
 
 > 注：日志分析的其他视图（实时事件流、接口监控、模块卡片 `lastUpdated`）时间仍取自设备时间，`useLogAnalysis.ts` 未接入偏移；如需统一另开阶段。
+
+---
+
+## Phase 99 — 广告编辑器补齐 CPT method / CPT 值（复制广告变 0 取不到量）（已完成 ✅）
+
+> 用户反馈：后台广告页有 `CPT method` 与紧随其后的一个数值输入框，两者都是必填；本工具的编辑器里没有这两项。复制广告后新建出来的广告丢成默认值，占比 / Rotation(s) 落库为 0，平台按 0 分配流量 → 广告永远取不到。
+
+### 99.1 后台表单形态（易错点）
+
+`CPT method` 是**两个选项共用一个输入框、标签与单位随选项切换**：
+
+| CPT method | 输入框标签 | 单位 | 含义 |
+|---|---|---|---|
+| `Percentage CPT`（`cpt_type=0`） | `CPT ratio` | `%` | 占比 |
+| `Rotation CPT`（`cpt_type=1`） | `Rotation(s)` | `Rotation(s)` | 轮播次数 |
+
+两个选项落库同一个字段 `cpm_percent`（`buildOrderCond` 里除 `unit_price` / `max_amount` 外唯一的数值位），所以实现上是「一份值 + 按 method 切标签 / 单位 / 取值范围 / 校验」。第一版误把第二个选项当成 `Volume CPT` 且固定 `%` 单位，已按后台截图纠正。
+
+### 99.2 根因
+
+| 路径 | 现象 | 原因 |
+|---|---|---|
+| 新建 / 复制 | 广告创建后占比 / Rotation(s) = 0 | `buildNewOrderParams()` 里既没有 `cpt_type`，`cpm_percent` 也写死成 `''` → 平台按默认 `0` 入库 |
+| 编辑 | 保存后同样可能被重置 | 编辑器没有这两个字段，无法回显与修改；`buildOrderCond()` 只能从原记录透传，记录里没有该字段时仍是 `0` / `''` |
+| UI | 无法核对、无法纠正 | 编辑器缺 `CPT method` 与配套输入框 |
+
+> 后续调整：CPT 值不再强制 >0（见 99.3 提示一条），只保留提示。
+
+### 99.3 修复
+
+**接口层（`src/services/sspApi.ts`）**
+
+- `NewOrderInput` 新增 `cptType` / `cptValue`（分别对应后台 `cpt_type` / `cpm_percent`；`cptValue` 命名见 99.1，两种 method 共用）。
+- `buildNewOrderParams()` 提交 `cpt_type`（默认 `'0'` = Percentage CPT）、`count_type: 0`、`cpm_percent`（取 `cptValue`，不再写死空串）。
+
+**编辑器（`src/views/backend-space/AdConfigTab.vue`）**
+
+- 新增 `editor.cptType` / `editor.cptValue`；常量 `CPT_PERCENTAGE` / `CPT_ROTATION` + `CPT_DEFAULT_PERCENTAGE='100'` / `CPT_DEFAULT_ROTATION='1'`。
+- 表单在「计费方式」后补两行：`CPT method`（Percentage CPT / Rotation CPT）、随选项切换的数值框——标签在 `CPT ratio` / `Rotation(s)` 间切换，后缀在 `%` / `Rotation(s)` 间切换，`min`、`max=100`、`step` 同步（占比可小数，轮播取整）。
+- 切换 method 时把值重置为该 method 的默认值（占比 100 / 轮播 1），避免把「100%」直接读成「100 次轮播」。
+- 编辑 / 复制：`openEdit()` 回填 `cpt_type` 与 `cpm_percent`；`cptValueOf(order, cptType)` 优先原样保留接口返回值，仅在字段缺失时按 method 回落默认值（复制不再丢参数）。
+- `submitEditor()`：编辑分支的 patch 与新建分支的 `createOrder()` 都带上这两个值。
+- **不校验、不告警**：用户明确要求「CPT 不要强制大于 0」，并进一步要求去掉 0 值的提示文案（「占比为 0% 会导致广告取不到量」/「Rotation(s) 为 0 会导致广告取不到量」）。因此该输入框下方只保留一行中性的「与后台保持一致」说明，值为 0 或留空都不变色、不拦截；留空提交时按 `0` 归一（后台为数字列，空串容易被当 NULL）。
+- 复制流程（`copyOrder()` → `openEdit()` → 转新建）不改动，靠 `openEdit()` 的回填即可带全参数。
+
+**文案（`src/composables/useI18n.ts`）**：新增 8 个中英文键（`backend.cptMethod` / `cptPercentage` / `cptRotation` / `cptRatio` / `cptRotationLabel` / `cptRotationUnit` / `cptRatioHint` / `cptRotationHint`）。
+
+### 99.4 验证
+
+- `npx vue-tsc --noEmit` ✅
+- `npm run build` ✅
+- 待实测：编辑某条广告 → 弹窗内 CPT method 与数值框标签 / 单位 / 原值均与后台一致，保存后不变；复制同一条 → 新广告值与原值一致（不再 0），取量正常；切换 Percentage ↔ Rotation 时标签、单位、默认值随之切换；值为 0 时无任何提示、可直接提交。
+
+---
+
+## Phase 100 — 复制广告「不生效」：整单克隆 + 列表状态列（已完成 ✅）
+
+> 用户反馈：复制一条广告后，新广告不生效。排查时先要分清是「没审核」还是「建出来就缺参数」。
+
+### 100.1 复制后不生效的四种成因（按实际概率）
+
+| # | 成因 | 判定方式 | 处理 |
+|---|---|---|---|
+| 1 | **新广告是「待审核」**：平台对新建 / 修改统一走审核，通过前不投放 | 列表状态列显示「待审核」 | 已有提示 toast（带「去审核」），Phase 100 补了状态列，一眼可见 |
+| 2 | **CPT 值 = 0**：`cpm_percent` 为 0（或 Rotation(s) 为 0）→ 平台按 0 分配流量 | 弹窗内 CPT ratio / Rotation(s) 显示 0 | Phase 99 已修（新建不再写死空串，0 也会被拦） |
+| 3 | **字段被最小字段集削掉**：复制走的是「从零新建」的参数构造，一批原广告字段被重置 | 与后台原记录逐字段比对 | 本次修复：改走整单克隆 |
+| 4 | **结束日期已过期**：复制保留原 `end_date`，原广告若已结束/临期，新广告建出来就是过期状态 | 弹窗内结束日期早于今天 | 复制时自动顺延到 30 天后 |
+
+### 100.2 字段缺口（`buildNewOrderParams` vs `buildOrderCond`）
+
+复制原本复用 `createOrder()` 的最小字段集，被重置的原字段：
+
+- 定向：`target_area` / `target_time` / `target_week` / `target_nettype` / `target_phone` / `target_audience` / `target_os` / `target_tag` 全部置空；`target_plat` 固定 `3;;`；**`target_custom` / `target_custom_type` 根本没提交**；`target_area_type` 固定 2
+- 计费：`count_type` 归 0、`unit_price` / `max_amount` / `total_budget` / `day_budget` 全部清空
+- 素材与监测：`click_monitor_url` / `pv_monitor_url` 清空
+- 投放：`dates`（排期日）清空、`weights` / `play_speed` / `monitor_order` 归 0
+- 其他：`industry` 归 0、`macro` 清空、`memo` 清空
+
+定向或计费一旦被削掉，广告在平台侧看着「建好了」，实际取不到量 —— 这是「复制后不生效」最隐蔽的一类。
+
+### 100.3 修复
+
+**`src/services/sspApi.ts`**：新增 `cloneOrder(order, patch)`——以原记录为底、把 `id` 置 0，复用 `buildOrderCond()` 整单提交，只覆盖编辑器改过的字段。新增广告仍走 `createOrder()`（本来就是从零建）。
+
+**`src/views/backend-space/AdConfigTab.vue`**
+
+- 新增 `copySource`：`copyOrder()` 保存原记录（`openEdit()` 改为返回平台最新记录），提交时命中则走 `cloneOrder()`。
+- 复制时若 `end_date < begin_date`（原广告已结束），结束日期顺延到 `today+30`。
+- 列表新增「状态」列（0 待审核 / 1 待投放 / 2 驳回 / 3 投放中 / 4 暂停 / 6 停止 / 7 结束），栅格由 `[56px_1fr_150px_170px_136px]` 改为 `[56px_1fr_78px_150px_170px_136px]`；`adStatus()` 映射徽标配色。
+- `closeEditor()` / `openNewAd()` 清空 `copySource`，避免「复制过一次之后，下一次新建也变成克隆」。
+
+**`src/composables/useI18n.ts`**：新增 7 个状态文案键（`backend.stPending` / `stReady` / `stRejected` / `stPlaying` / `stPaused` / `stStopped` / `stEnded`）。
+
+### 100.4 验证
+
+- `npx vue-tsc --noEmit` ✅
+- `npm run build` ✅
+- 待实测：复制一条定向/计费配得比较全的广告 → 到后台逐字段比对（尤其 target_plat、custom 定向、排期 dates、预算、监测链接）应与原广告一致；列表状态列显示「待审核」，审核通过后变「投放中」。
+
+---
+
+## Phase 101 — 复制广告「指定 MAC」保存后不生效：把 MAC 链路补成闭环（已完成 ✅）
+
+> 用户反馈：复制广告时做了「指定 MAC」再保存，之后广告不生效，怀疑 MAC 没提交上去。
+> 排查结论：**`target_keyword` 与 `extend_target` 本身是会提交的**（复制走 `cloneOrder` → `buildOrderCond`），但用户侧有 3 个位置会让「以为指定了 MAC，实际没指定」。
+
+### 101.1 代码链路核对
+
+| 环 | 位置 | 行为 |
+|---|---|---|
+| 规则存储 | `saveKeyword()` → `/ssp/keyword/add` | 只回 `return_code`，不回吐 id |
+| 广告绑定 | `target_keyword: keywordIds`（数组 → `target_keyword[]`） | 复制 / 编辑都提交 |
+| 定向方式 | 选规则时 `extend_target: '0'` | 平台必须为 0（Custom targeting），1 时整块忽略广告级定向 |
+
+### 101.2 真实缺口
+
+| # | 问题 | 后果 |
+|---|---|---|
+| 1 | 编辑器里的「指定 MAC」输入框只是**搜索框**：填了 MAC 不点搜索结果，`editorKeywords` 仍为空 | 保存的广告没有 `target_keyword`，完全不按 MAC 投放；界面上看不出任何异常 |
+| 2 | `Custom engine` 弹窗新建规则后只 `emit('changed')`，**不会自动挂到当前广告** | 用户以为「已经指定 MAC」，实际没选上 |
+| 3 | 弹窗 `seed-value` 传的是**左侧工具栏的 MAC 反查框**，不是编辑器里刚输入的 MAC | 从编辑器进弹窗时 MAC 预填为空/串味，容易建出错的规则 |
+| 4 | `onEngineChanged()` 用 `keywordsByIds()` 结果**直接覆盖**已选规则，而它内部 `filter(Boolean)` | 规则临时查不到（新建 / 切环境 / 缓存旧）时已选规则被静默删除，保存时 id 丢失 |
+| 5 | 保存后没有任何回读 | MAC 真被平台吞掉时（审核重写订单等）无从发现 |
+
+### 101.3 修复
+
+**`src/services/sspApi.ts`**
+- `saveKeyword()` 返回 `SspKeyword | null`：新增 `findSavedKeyword()`，保存后用值反查（`valuecode` 归一 + `keycode` 优先匹配）把规则对象带回来。
+
+**`src/components/backend/CustomEngineDialog.vue`**
+- 新增 `saved` 事件，保存成功带回规则对象。
+
+**`src/views/backend-space/AdConfigTab.vue`**
+- `ceSeed`：编辑器打开时优先用编辑器里「指定 MAC」输入框的值预填弹窗，否则回落到左侧 MAC 反查框。
+- `onEngineSaved()`：弹窗里保存的规则在编辑器打开时**自动加入已选**，并提示「已把规则「x」加到当前广告的指定 MAC」。
+- `onEngineChanged()`：改为「新数据 + 旧对象」合并，查不到的规则保留占位，不再静默丢 id。
+- `pickPendingMac()`：提交前兜底 —— 输入框有 MAC 但没选中规则时自动搜一次，唯一命中就自动挂上；多条 / 没命中则拦截提交并提示先选中。
+- `verifyKeywordLanded()`：保存成功后按广告名回读最新一条，比对 `target_keyword` 是否包含本次提交的规则 id，丢了就明确提示「已保存，但指定 MAC 没有落库」并提供「去审核」入口。
+
+**文案**：新增 `backend.cePicked` / `backend.macNotPicked` / `backend.macSaveLost`（中英各 3 条）。
+
+### 101.4 验证
+
+- `npx vue-tsc --noEmit` ✅
+- `npm run build` ✅
+- 待实测：复制一条带 MAC 的广告 → 弹窗里 `Custom engine` 新建规则 → 关掉弹窗后「指定 MAC」自动出现该 chip → 保存 → 列表出现新广告；再打开该广告，chips 与后台一致。只填 MAC 不选中保存时会被拦下。
+
+### 101.5 若仍不生效，按这个顺序看
+
+1. 广告**状态**是不是「待审核」（列表状态列）：平台审核通过前不投放。
+2. 重新打开该广告：`指定 MAC` 里是否有 chip。没有 → `target_keyword` 没落库（现在会有 toast 报出来）。
+3. 后台打开该广告的 `Custom targeting` 是否为 0；为 1 时广告级 MAC 整块不参与投放。
+4. MAC 规则本身：`keycode` 必须是 `devicemac`、匹配方式 Equal、值必须是真实设备 MAC（大写、英文逗号分隔）。
+
+---
+
+## Phase 102 — 去掉开始时间的「不早于今天」限制（已完成 ✅）
+
+> 用户反馈：开始时间被限制成今天，但平台没有这个限制（历史日期也允许起投）。
+>
+> **后续调整（Phase 104）**：确认平台后台「复制」时会把早于今天的开始时间自动改成今天，本工具按平台行为实现，因此本节「复制保留原开始时间」已调整为「早于今天→今天」。
+
+### 102.1 现状核对
+
+| 位置 | 原行为 |
+|---|---|
+| 开始日期输入框 | 本来就是原生 `type="date"`，**没有 min/max**，可以直接选过去日期 |
+| 新建 | 默认 `todayStr()`（只是初值，可改） |
+| **复制** | `editor.beginDate = todayStr()` —— **强制把开始时间改成今天**，这是唯一的「限制」 |
+| 提交 | `begin_date` 固定拼 `00:00:00`，无日期区间校验 |
+
+### 102.2 修复
+
+- `copyOrder()`：删除 `editor.beginDate = todayStr()`，**保留原广告的开始时间**；只有记录里没带回日期时才用今天兜底。
+- 结束时间处理改为：原结束时间**已过今天**才顺延到 `today+30`（并 toast 说明「开始时间保留原值」）；结束时间在未来则原样保留；若 `end < begin` 则拉齐到 `begin`。
+- `submitEditor()`：提交前只做兜底 —— 开始 / 结束留空时分别补今天 / 开始日期，`end < begin` 时把结束拉齐；**不拦截任何日期**（过去、未来都允许）。
+- 文案：新增 `backend.copyEndExtended`（中英）。
+
+### 102.3 验证
+
+- `npx vue-tsc --noEmit` ✅
+- `npm run build` ✅
+- 待实测：复制一条开始时间在过去的广告 → 弹窗内开始时间仍是原日期（不再变今天）；结束时间已过期时会顺延并提示；直接保存可成功。
+
+---
+
+## Phase 103 — 规则搜索支持名称 / 复制日期真正保留原值 / 保存后回读校验（已完成 ✅）
+
+> **后续调整（Phase 104）**：复制日期的最终口径见 Phase 104 —— 开始时间早于今天时改为今天（与平台一致），结束时间保留原投放天数。
+
+> 用户反馈两点：①「指定 MAC」搜不到 Custom engine 的**名称**；② 点复制后开始时间仍变成今天，手动选了也不生效。
+
+### 103.1 规则搜索：一个输入框搜四种字段
+
+平台 `keyword/list` 的两个搜索参数各管一半：`value` 只匹配规则值（valuecode），`name` 只匹配标签说明（keytext），**规则「名称」（valuetext）两边都可能搜不到**。原来的实现是「含冒号走 value，否则走 name」，所以输入名称经常搜不到。
+
+新增 `searchEngineRules(q, limit)`（`src/services/sspApi.ts`）：
+
+1. 并行查询 `{ value: q }` 与 `{ name: q }`，按 id 合并；
+2. 结果不足时拉全量规则缓存，本地对 `keycode` / `keytext` / `valuetext` / `name` / `valuecode` 做不区分大小写的模糊匹配补足。
+
+接入位置：
+- 编辑器「指定 MAC」的搜索（`doKeywordSearch`）、提交前兜底（`pickPendingMac`）；
+- `CustomEngineDialog` 的搜索态（有 query 时走该函数，无 query 仍走分页列表）。
+
+左侧工具栏的「MAC 反查」保持只按规则值匹配（它的语义是「用 MAC 找广告」，不是搜名称）。
+
+### 103.2 复制日期：以原记录为准，不再回落今天
+
+`openEdit()` 回填日期原来只认详情接口：`shortDate(fresh.begin_date) || todayStr()`。详情接口没带日期时会静默回落今天 —— 复用该回填的「复制」就表现为「开始时间永远变今天」。
+
+- `openEdit()`：日期按 `详情 → 列表行 → beginDate 别名 → 今天` 逐级兜底。
+- `copyOrder()`：直接以 `copySource`（原记录）的 `begin_date` / `end_date` 为准覆盖编辑器，**开始时间不再有任何改写**；只有原结束时间已过今天才顺延 `today+30`（toast 里注明「开始时间保留原值」）。
+
+### 103.3 保存后回读校验扩展到日期
+
+`verifyKeywordLanded()` → `verifyOrderLanded(name, { ids, begin, end })`：保存成功后按广告名取最新一条记录回读，
+- 日期的前 10 位与提交值不一致 → 提示「已保存，但开始时间没有生效（平台记录为 x）」；
+- 定向规则 id 缺失 → 提示「已保存，但指定 MAC 没有落库」。
+
+这样「选了也不生效」会当场报出来，而不是靠人眼比对。
+
+### 103.4 验证
+
+- `npx vue-tsc --noEmit` ✅
+- `npm run build` ✅
+- 待实测：输入规则名称能搜到并选中；复制一条开始时间在过去的广告 → 弹窗开始时间等于原值；保存后若平台改写日期会立刻提示。
+
+---
+
+## Phase 104 — 复制按平台规则改开始时间 / MAC 定向诊断（已完成 ✅）
+
+> 用户反馈两点：① 复制早于今天的广告，表单里开始时间还是原日期，平台后台会自动改成今天；② 用户反馈「指定 MAC 不填就能生效」，怀疑 MAC 提交有问题。
+
+### 104.1 复制日期：与平台后台对齐
+
+平台后台复制广告时，早于今天的开始时间会自动改成今天；结束时间按原投放天数保留。按此实现：
+
+| 场景 | 处理 |
+|---|---|
+| 原开始时间 < 今天（或缺失） | 开始时间 = 今天 |
+| 原开始时间 >= 今天 | 保持原值 |
+| 原结束时间 >= 新开始时间 | 原样保留 |
+| 原周期已结束（`end < begin`） | 结束时间 = 新开始时间 + 原来投放的天数（算不出时长时按 30 天） |
+
+新增工具：`fmtDate`（`todayStr` 复用它）、`addDays(date, n)`、`spanDays(from, to)`、`shiftDates(raw, n)`。toast 会说明「开始时间早于今天，已按平台规则改为 x」/「原周期已结束，已按原投放天数顺延到 y」。
+
+**顺带修掉一个真实的不生效来源：排期日 `dates`**。`dates` 里存的是原广告的具体日期，克隆时原样带过去，周期被你挪到今天、排期日却还在过去 → 平台按排期日判定，广告一天都不投。现在 `copyOrder()` 按开始时间的位移整体平移 `dates`（`copyDates` → 克隆 patch），保证周期与排期重合。
+
+### 104.2 MAC：为什么「不填就生效、填了不生效」
+
+这不是提交丢字段，而是两条不同的投放路径：
+
+| MAC | 提交的定向 | 结果 |
+|---|---|---|
+| 不填 | `target_keyword[]=`（空），`extend_target` 沿用原值（常见为 1 继承 Campaign） | 走 Campaign 层定向 → 全量设备可取量 |
+| 填了 | `target_keyword[]=<规则 id>`，强制 `extend_target=0`（自定义定向） | **只在这些 MAC 对应的设备上投放**，设备 MAC 不在规则里就没有曝光 |
+
+所以「填了 MAC 反而不生效」本身就是 MAC 定向的语义：它在挑设备。真正需要排查的是「规则内容对不对」，而这正是之前看不到的地方。本次把这段摊开：
+
+- **定向诊断面板**（编辑器「指定 MAC」下方）：显示 `extend_target=0`（自定义定向）、已选规则数与覆盖的 MAC 值数量、以及「MAC 定向只在这些设备上投放」的说明。
+- **原广告继承 Campaign 的告警**：`inheritDropped` —— 原广告 `extend_target=1` 时，加 MAC 会切成自定义定向，Campaign 层定向不再继承，面板转琥珀色提示核对其它定向项。这是「填了 MAC 没量」最常见的真实原因。
+- **输入值不在规则里的告警**：`macQueryNotInRule` —— 输入框里的 MAC 不在任何已选规则的值里时提示「保存后不会按它投放」，提交时直接拦下。
+- **`pickPendingMac()` 收紧**：原来「搜索只命中一条就自动挂上」，不看规则内容，可能挂到不含该 MAC 的规则上（看着配了定向、实际投到别的设备）。现在只自动挂「值里真的含这个 MAC」的规则（`ruleHasMac` 归一冒号/短横线后比较），命中时 toast 说明挂了哪条。
+
+### 104.3 之前几轮 MAC 修复的现状（已确认在代码里）
+
+| 修复 | 位置 | 状态 |
+|---|---|---|
+| 弹窗新建规则后自动挂到当前广告 | `CustomEngineDialog` `saved` 事件 → `onEngineSaved()` | ✅ |
+| 弹窗预填用编辑器里输入的 MAC | `ceSeed` | ✅ |
+| 规则刷新时不静默丢已选 id | `onEngineChanged()` 新旧合并 | ✅ |
+| 保存后回读 `target_keyword` / 日期 | `verifyOrderLanded()` | ✅ |
+| 清空 MAC 提交 `target_keyword[]=` | `keywordIds = ['']` | ✅ |
+
+### 104.4 验证
+
+- `npx vue-tsc --noEmit` ✅
+- `npm run build` ✅
+- 待实测：复制一条开始时间在过去的广告 → 开始时间变成今天、结束时间按原天数顺延、toast 有说明；勾选 MAC 后诊断面板显示「自定义定向 + 覆盖 N 个 MAC 值」；输入一个不在规则里的 MAC 保存会被拦下。

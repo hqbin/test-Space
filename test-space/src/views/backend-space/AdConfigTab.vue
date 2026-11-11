@@ -111,9 +111,10 @@
             <span class="material-symbols-outlined text-[12px]">close</span>{{ t('backend.clearResult') }}
           </button>
         </div>
-        <div class="grid grid-cols-[56px_1fr_150px_170px_136px] gap-2 px-3 py-2 text-[11px] font-semibold text-on-surface-variant border-b border-hairline/60 shrink-0">
+        <div class="grid grid-cols-[56px_1fr_78px_150px_170px_136px] gap-2 px-3 py-2 text-[11px] font-semibold text-on-surface-variant border-b border-hairline/60 shrink-0">
           <span>ID</span>
           <span>{{ t('backend.ads') }}</span>
+          <span>{{ t('backend.status') }}</span>
           <span>Campaign</span>
           <span>{{ t('backend.beginDate') }} ~ {{ t('backend.endDate') }}</span>
           <span class="text-right">{{ t('backend.operation') }}</span>
@@ -121,9 +122,16 @@
         <div class="relative flex-1 min-h-0">
           <div class="h-full overflow-y-auto custom-scrollbar">
             <div v-for="o in orders" :key="o.id"
-              class="grid grid-cols-[56px_1fr_150px_170px_136px] gap-2 px-3 py-1.5 text-[11px] items-center border-b border-hairline/40 hover:bg-secondary/5">
+              class="grid grid-cols-[56px_1fr_78px_150px_170px_136px] gap-2 px-3 py-1.5 text-[11px] items-center border-b border-hairline/40 hover:bg-secondary/5">
               <span class="font-mono text-graphite truncate">#{{ o.id }}</span>
               <button class="truncate text-left text-secondary hover:underline" :title="o.name" @click="openEdit(o)">{{ o.name }}</button>
+              <!-- 状态：新建 / 复制出来的广告是「待审核」，审核通过前不会投放 -->
+              <span class="truncate">
+                <span v-if="adStatus(o)" class="text-[10px] px-1.5 py-0.5 rounded-full whitespace-nowrap" :class="adStatus(o)!.cls">
+                  {{ t(adStatus(o)!.key) }}
+                </span>
+                <span v-else class="text-on-surface-variant">-</span>
+              </span>
               <span class="truncate text-on-surface-variant" :title="campaignName(o)">{{ campaignName(o) }}</span>
               <span class="truncate text-on-surface-variant">{{ shortDate(o.begin_date) }} ~ {{ shortDate(o.end_date) }}</span>
               <span class="flex items-center justify-end gap-0.5">
@@ -251,6 +259,39 @@
                 <select v-model="editor.priceMode" class="glass-input px-2 py-1 rounded-md text-[11px] flex-1 min-w-0">
                   <option v-for="o in priceModeOptions" :key="o.v" :value="o.v">{{ o.t }}</option>
                 </select>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-[11px] text-on-surface-variant w-[104px] shrink-0">{{ t('backend.cptMethod') }}</span>
+                <div class="flex items-center gap-3">
+                  <label class="flex items-center gap-1 text-[11px] cursor-pointer">
+                    <input type="radio" class="accent-secondary" :value="CPT_PERCENTAGE" v-model="editor.cptType"
+                      @change="onCptTypeChange" />{{ t('backend.cptPercentage') }}
+                  </label>
+                  <label class="flex items-center gap-1 text-[11px] cursor-pointer">
+                    <input type="radio" class="accent-secondary" :value="CPT_ROTATION" v-model="editor.cptType"
+                      @change="onCptTypeChange" />{{ t('backend.cptRotation') }}
+                  </label>
+                </div>
+              </div>
+              <!-- 后台同一个输入框：Percentage CPT 显示 CPT ratio(%)，Rotation CPT 显示 Rotation(s) -->
+              <div class="flex flex-col gap-0.5">
+                <div class="flex items-center gap-2">
+                  <span class="text-[11px] text-on-surface-variant w-[104px] shrink-0">
+                    {{ cptIsRotation ? t('backend.cptRotationLabel') : t('backend.cptRatio') }}
+                  </span>
+                  <div class="relative flex-1 min-w-0">
+                    <input v-model="editor.cptValue" type="number" :min="0" :max="cptIsRotation ? undefined : 100"
+                      :step="cptIsRotation ? 1 : 0.01"
+                      class="glass-input pl-2 py-1 rounded-md text-[11px] w-full select-text [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                      :class="cptIsRotation ? 'pr-[80px]' : 'pr-6'" />
+                    <span class="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-on-surface-variant pointer-events-none">
+                      {{ cptIsRotation ? t('backend.cptRotationUnit') : '%' }}
+                    </span>
+                  </div>
+                </div>
+                <div class="text-[10px] text-on-surface-variant pl-[112px]">
+                  {{ cptIsRotation ? t('backend.cptRotationHint') : t('backend.cptRatioHint') }}
+                </div>
               </div>
               <div class="flex flex-col gap-0.5">
                 <div class="flex items-center gap-2">
@@ -416,9 +457,27 @@
               <span v-if="editorCampaignKeyword" class="text-[10px] text-amber-700">
                 {{ t('backend.campaignKeywordHint', { v: editorCampaignKeyword }) }}
               </span>
-              <span v-if="editorKeywords.length" class="text-[10px] text-on-surface-variant">
-                {{ t('backend.macNeedsCustom') }}
-              </span>
+              <!-- 定向诊断：把「保存时实际提交的定向」摊开，避免「以为指定了 MAC」 -->
+              <div v-if="editorKeywords.length" class="glass-panel rounded-lg px-2.5 py-1.5 flex flex-col gap-0.5">
+                <div class="flex items-center gap-1.5 text-[10px]">
+                  <span class="material-symbols-outlined text-[12px] text-secondary">my_location</span>
+                  <span class="text-on-surface-variant">{{ t('backend.tgtModeLabel') }}</span>
+                  <span class="font-semibold">{{ t('backend.tgtCustom') }}</span>
+                  <span class="font-mono text-[9px] text-on-surface-variant">extend_target=0</span>
+                  <span class="ml-auto text-on-surface-variant tabular-nums">
+                    {{ t('backend.tgtRulesSummary', { n: String(editorKeywords.length), macs: String(macTotal) }) }}
+                  </span>
+                </div>
+                <div v-if="inheritDropped" class="text-[10px] text-amber-700 pl-[18px]">
+                  {{ t('backend.inheritDropped') }}
+                </div>
+                <div v-else class="text-[10px] text-on-surface-variant pl-[18px]">
+                  {{ t('backend.macOnlyThoseDevices') }}
+                </div>
+                <div v-if="macQueryNotInRule" class="text-[10px] text-amber-700 pl-[18px]">
+                  {{ t('backend.macQueryNotInRule', { v: keywordQuery.trim() }) }}
+                </div>
+              </div>
               <span v-else-if="editingInheritCampaign" class="text-[10px] text-amber-700">
                 {{ t('backend.macInheritNow') }}
               </span>
@@ -513,8 +572,8 @@
       </div>
     </Teleport>
 
-    <!-- Custom engine 管理 -->
-    <CustomEngineDialog v-model="ceOpen" :seed-value="mac.trim()" @changed="onEngineChanged" />
+    <!-- Custom engine 管理：编辑器打开时优先用编辑器里刚输入的 MAC 预填 -->
+    <CustomEngineDialog v-model="ceOpen" :seed-value="ceSeed" @changed="onEngineChanged" @saved="onEngineSaved" />
 
     <!-- 二次确认 -->
     <Teleport to="body">
@@ -561,7 +620,7 @@ import {
   materialPreviewUrl,
   parseMaterial,
   searchKeywords,
-  listKeywords,
+  searchEngineRules,
   keywordsByIds,
   invalidateKeywords,
   updateOrderAction,
@@ -580,6 +639,7 @@ import {
   adTypeLevel2,
   adTypeLevel3,
   createOrder,
+  cloneOrder,
   type SspAdType,
   type SspAdvertiser,
   type SspCampaign,
@@ -1014,9 +1074,41 @@ function presetLabel(p: MaterialPreset) {
 function todayStr(offset = 0) {
   const d = new Date()
   d.setDate(d.getDate() + offset)
+  return fmtDate(d)
+}
+
+function fmtDate(d: Date) {
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${d.getFullYear()}-${m}-${day}`
+}
+
+/** 在某个 yyyy-MM-dd 上加减天数（todayStr 只能相对今天，复制时要按原日期算） */
+function addDays(date: string, offset: number) {
+  const base = Date.parse(`${date}T00:00:00`)
+  if (!Number.isFinite(base)) return date
+  const d = new Date(base)
+  d.setDate(d.getDate() + offset)
+  return fmtDate(d)
+}
+
+/** 按天数平移 `dates`（yyyy-MM-dd，逗号/分号拼接）；格式不认识时原样返回 */
+function shiftDates(raw: string, offset: number) {
+  if (!raw || !offset) return raw
+  const parts = String(raw).split(/[,;]/).map((s) => s.trim()).filter(Boolean)
+  const shifted = parts.map((p) => {
+    const d = p.slice(0, 10)
+    return /^\d{4}-\d{2}-\d{2}$/.test(d) ? addDays(d, offset) + p.slice(10) : p
+  })
+  return shifted.every((v, i) => v === parts[i]) ? raw : shifted.join(',')
+}
+
+/** 两个 yyyy-MM-dd 之间的天数差（后 - 前） */
+function spanDays(from: string, to: string) {
+  const a = Date.parse(`${from}T00:00:00`)
+  const b = Date.parse(`${to}T00:00:00`)
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return 0
+  return Math.round((b - a) / 86400000)
 }
 
 /**
@@ -1039,17 +1131,56 @@ const endDatePresets = computed(() => [
 const editorOpen = ref(false)
 const editingId = ref('')
 const editingOrder = ref<SspOrder | null>(null)
+/**
+ * 复制广告时的原记录：有值表示本次「新建」其实是复制，
+ * 提交要整单克隆（保留下拉里看不见的 target_plat / dates / 预算 / 监测链接等），
+ * 不能走最小字段集的新建。
+ */
+const copySource = ref<SspOrder | null>(null)
+
+/**
+ * 复制时平移后的排期日（`dates`）。
+ * 开始时间会被平台改成今天，而 `dates` 里存的是原广告的具体日期；原样带过去就变成
+ * 「周期在未来、排期日在过去」→ 平台按排期日判定，广告一天都不投。
+ * 这里按开始时间的位移整体平移，保证投放周期和排期日仍然重合。
+ */
+const copyDates = ref('')
+
+/**
+ * 广告状态（后台字典：0 待审核 / 1 待投放 / 2 驳回 / 3 投放中 / 4 暂停 / 6 停止 / 7 结束）。
+ * 新建与复制出来的广告都是「待审核」，审核通过前不会取量 —— 列表里必须能直接看到。
+ */
+const AD_STATUS: Record<string, { key: string; cls: string }> = {
+  '0': { key: 'backend.stPending', cls: 'bg-amber-500/15 text-amber-700' },
+  '1': { key: 'backend.stReady', cls: 'bg-secondary/15 text-secondary' },
+  '2': { key: 'backend.stRejected', cls: 'bg-red-500/15 text-red-700' },
+  '3': { key: 'backend.stPlaying', cls: 'bg-emerald-500/15 text-emerald-700' },
+  '4': { key: 'backend.stPaused', cls: 'bg-black/5 text-on-surface-variant' },
+  '6': { key: 'backend.stStopped', cls: 'bg-black/5 text-on-surface-variant' },
+  '7': { key: 'backend.stEnded', cls: 'bg-black/5 text-on-surface-variant' },
+}
+
+function adStatus(o: SspOrder) {
+  return AD_STATUS[String(o.status ?? '')] || null
+}
+
+/**
+ * 编辑器对应的「平台原始记录」：编辑时是编辑目标，复制时是克隆底稿（copySource）。
+ * 复制流程会把 editingOrder 置空，只认 editingOrder 会让「继承 Campaign / Campaign 层规则」
+ * 这些提示在复制态消失。
+ */
+const baselineOrder = computed<any>(() => editingOrder.value || copySource.value)
 
 /** 广告级没有定向规则、但 Campaign 层配了规则时给出说明（这类规则只能在 Campaign 里改） */
 const editorCampaignKeyword = computed(() => {
   if (editorKeywords.value.length) return ''
-  const cam = String((editingOrder.value as any)?.cam_target_keyword || '').trim()
+  const cam = String(baselineOrder.value?.cam_target_keyword || '').trim()
   return cam ? cam.split(/[;,]/).filter(Boolean).join('; ') : ''
 })
 
 /** 平台规则：extend_target=1 表示继承 Campaign，此时广告级 Custom engine 整块不生效 */
 const editingInheritCampaign = computed(
-  () => String((editingOrder.value as any)?.extend_target ?? '') === '1',
+  () => String(baselineOrder.value?.extend_target ?? '') === '1',
 )
 const editor = reactive({
   campaignMode: 'existing' as 'existing' | 'new',
@@ -1067,6 +1198,14 @@ const editor = reactive({
   endDate: '',
   priceMode: 'CPT',
   adClass: '50',
+  /** CPT method：'0' Percentage CPT / '1' Rotation CPT */
+  cptType: '0',
+  /**
+   * CPT 值：后台是同一个输入框，随 CPT method 切换标签与单位 ——
+   * Percentage CPT → CPT ratio（%）；Rotation CPT → Rotation(s)（轮播次数）。
+   * 落库字段为 cpm_percent，0 会导致广告取不到量。
+   */
+  cptValue: '100',
   disableAdflag: '1',
   external: '0',
   adFormat: '',
@@ -1088,6 +1227,36 @@ const formBusy = ref(false)
 const formError = ref('')
 
 const editorFields = computed(() => fieldsForType(editor.adType))
+
+/** 后台 CPT method 的两种口径：占比（%）与轮播次数（Rotation(s)） */
+const CPT_PERCENTAGE = '0'
+const CPT_ROTATION = '1'
+/** 新建时的默认值：占比 100%，轮播 1 次（0 都会被平台当没量） */
+const CPT_DEFAULT_PERCENTAGE = '100'
+const CPT_DEFAULT_ROTATION = '1'
+
+const cptIsRotation = computed(() => String(editor.cptType) === CPT_ROTATION)
+
+/**
+ * 读后台 CPT 值（cpm_percent）：0 / 留空等于不占任何量 → 广告取不到。
+ * 编辑 / 复制时要把原值带回来；列表接口万一没返回该字段，按当前 method 的默认值兜底，
+ * 避免「复制出来就是 0」的历史问题。
+ */
+function cptValueOf(o: SspOrder | null, cptType: string): string {
+  const raw = (o as any)?.cpm_percent
+  if (raw !== undefined && raw !== null && String(raw).trim() !== '') return String(raw).trim()
+  return String(cptType) === CPT_ROTATION ? CPT_DEFAULT_ROTATION : CPT_DEFAULT_PERCENTAGE
+}
+
+/** 提交值：留空按 0 提交（后台是数字列，空串容易被当 NULL） */
+const cptValueParam = computed(() => String(editor.cptValue ?? '').trim() || '0')
+
+/** 切换 CPT method：输入框的标签、单位、取值范围都跟着变，这里同步换成该 method 的默认值 */
+function onCptTypeChange(e: Event) {
+  const val = String((e.target as HTMLInputElement)?.value ?? '')
+  editor.cptType = val === CPT_ROTATION ? CPT_ROTATION : CPT_PERCENTAGE
+  editor.cptValue = val === CPT_ROTATION ? CPT_DEFAULT_ROTATION : CPT_DEFAULT_PERCENTAGE
+}
 
 const selectedAdTypeHint = computed(() => {
   const f = editorFields.value[0] as any
@@ -1271,6 +1440,8 @@ function resetEditor() {
   editor.endDate = todayStr(30)
   editor.priceMode = 'CPT'
   editor.adClass = '50'
+  editor.cptType = CPT_PERCENTAGE
+  editor.cptValue = CPT_DEFAULT_PERCENTAGE
   editor.disableAdflag = '1'
   editor.external = '0'
   editor.adFormat = ''
@@ -1290,6 +1461,8 @@ function resetEditor() {
 async function openNewAd() {
   editingId.value = ''
   editingOrder.value = null
+  copySource.value = null
+  copyDates.value = ''
   resetEditor()
   editorOpen.value = true
   editorAppsBusy.value = true
@@ -1305,9 +1478,11 @@ async function openNewAd() {
   await reloadEditorApps()
 }
 
-async function openEdit(o: SspOrder) {
+async function openEdit(o: SspOrder): Promise<SspOrder | null> {
   formError.value = ''
   editingId.value = String(o.id)
+  copySource.value = null
+  copyDates.value = ''
   resetEditor()
   editorOpen.value = true
   editorAppsBusy.value = true
@@ -1334,9 +1509,19 @@ async function openEdit(o: SspOrder) {
     editor.clickUrl = [fresh.click_url, (fresh as any).clickurl, (o as any)?.click_url]
       .map((v) => landingText(v))
       .find((v) => v) || ''
-    editor.beginDate = shortDate(fresh.begin_date) || todayStr()
-    editor.endDate = shortDate(fresh.end_date) || todayStr(30)
+    // 日期：详情接口偶尔不回 begin_date / end_date，回落到列表行再兜底今天，
+    // 不能让「详情里没带日期」把复制出来的开始时间改成今天（平台没有这个限制）
+    editor.beginDate = shortDate(fresh.begin_date)
+      || shortDate((o as any)?.begin_date)
+      || shortDate((fresh as any)?.beginDate)
+      || todayStr()
+    editor.endDate = shortDate(fresh.end_date)
+      || shortDate((o as any)?.end_date)
+      || shortDate((fresh as any)?.endDate)
+      || todayStr(30)
     editor.priceMode = String(fresh.price_mode || 'CPT')
+    editor.cptType = String(fresh.cpt_type ?? CPT_PERCENTAGE)
+    editor.cptValue = cptValueOf(fresh, editor.cptType)
     editor.adClass = String(fresh.class || '50')
     editor.disableAdflag = String(fresh.disable_adflag ?? '1')
     editor.external = String(fresh.external ?? '0')
@@ -1356,12 +1541,15 @@ async function openEdit(o: SspOrder) {
     handleError(e)
   }
   await reloadEditorApps()
+  return editingOrder.value
 }
 
 function closeEditor() {
   editorOpen.value = false
   editingId.value = ''
   editingOrder.value = null
+  copySource.value = null
+  copyDates.value = ''
 }
 
 const copyBusyId = ref('')
@@ -1369,17 +1557,108 @@ const copyBusyId = ref('')
 async function copyOrder(o: SspOrder) {
   copyBusyId.value = o.id
   try {
-    await openEdit(o)
+    const fresh = await openEdit(o)
+    // 复制 = 整单克隆：原记录留着当提交底稿，提交时只覆盖编辑器里改过的字段
+    copySource.value = fresh || o
     editingId.value = ''
     editingOrder.value = null
     editor.name = `${o.name || ''} COPY`
-    editor.beginDate = todayStr()
-    showToast(t('backend.copyReady'), true)
+    // 与平台后台一致：复制时开始时间早于今天会被自动改成今天（未来的开始时间保持原值）。
+    // 结束时间保留原来的投放天数：未过期就原样保留，已过期则从新的开始时间顺延同样天数。
+    const src = copySource.value || o
+    const today = todayStr()
+    const srcBegin = shortDate((src as any)?.begin_date) || shortDate((o as any)?.begin_date)
+    const srcEnd = shortDate((src as any)?.end_date) || shortDate((o as any)?.end_date)
+    editor.beginDate = srcBegin && srcBegin > today ? srcBegin : today
+    const span = srcBegin && srcEnd ? Math.max(1, spanDays(srcBegin, srcEnd)) : 30
+    editor.endDate = srcEnd && srcEnd >= editor.beginDate ? srcEnd : addDays(editor.beginDate, span)
+    copyDates.value = shiftDates(String((src as any)?.dates ?? ''), spanDays(srcBegin, editor.beginDate))
+    let copiedHint = t('backend.copyReady')
+    if (srcBegin && srcBegin !== editor.beginDate) {
+      copiedHint = `${copiedHint} · ${t('backend.copyBeginToday', { v: editor.beginDate })}`
+    }
+    if (srcEnd && srcEnd !== editor.endDate) {
+      copiedHint = `${copiedHint} · ${t('backend.copyEndExtended', { v: editor.endDate })}`
+    }
+    showToast(copiedHint, true)
   } catch (e) {
     handleError(e)
   } finally {
     copyBusyId.value = ''
   }
+}
+
+/**
+ * 保存后回读：确认本次提交真的落在广告上。
+ * 平台会把「定向规则」整块吞掉（审核重写订单 / extend_target 回退成 1 / 规则 id 不存在），
+ * 也可能把日期改成别的值。不校验的话现象就是「明明选了、就是不生效」，
+ * 界面上完全看不出原因 —— 这里回读一次，把差异直接说清楚。
+ */
+async function verifyOrderLanded(name: string, expect: { ids: string[]; begin: string; end: string }) {
+  try {
+    const res = await listOrders({ name, page: 1, pagesize: 10 })
+    const row = (res.records || [])
+      .filter((o) => String(o.name || '') === name)
+      .sort((a, b) => Number(b.id) - Number(a.id))[0]
+    if (!row) return
+    const fresh = (await getOrder(row.id).catch(() => null)) || row
+    const goVerify = { label: t('backend.goVerify'), run: () => openVerify(), duration: 12000 }
+
+    // 1) 日期
+    const gotBegin = shortDate((fresh as any)?.begin_date)
+    const gotEnd = shortDate((fresh as any)?.end_date)
+    if (expect.begin && gotBegin && gotBegin !== expect.begin) {
+      showToast(t('backend.dateNotLanded', { label: t('backend.beginDate'), v: gotBegin }), false, goVerify)
+      return
+    }
+    if (expect.end && gotEnd && gotEnd !== expect.end) {
+      showToast(t('backend.dateNotLanded', { label: t('backend.endDate'), v: gotEnd }), false, goVerify)
+      return
+    }
+
+    // 2) 定向规则
+    if (!expect.ids.length) return
+    const raw = (fresh as any)?.target_keyword
+    const got = (Array.isArray(raw) ? raw.join(';') : String(raw ?? ''))
+      .split(/[;,]/)
+      .map((s) => s.trim())
+      .filter((s) => s && s !== '0')
+    const missing = expect.ids.filter((id) => !got.includes(String(id)))
+    if (!missing.length) return
+    showToast(t('backend.macSaveLost', { v: `#${row.id}`, ids: missing.join(', ') }), false, goVerify)
+  } catch {
+    // 回读失败不影响保存结果
+  }
+}
+
+/**
+ * 提交前兜底：「指定 MAC」输入框里填了 MAC，但没有点搜索结果选中规则。
+ * 这是最容易被忽略的一步 —— 输入框只是搜索框，不选中就不会提交 target_keyword。
+ * 唯一命中时自动挂上，多条 / 没命中就让用户自己选，绝不静默丢掉。
+ */
+async function pickPendingMac(): Promise<boolean> {
+  const q = keywordQuery.value.trim()
+  if (!q) return true
+  // 已选规则的值里已经包含这个 MAC，就不用再动
+  if (editorKeywords.value.some((k) => ruleHasMac(k, q))) return true
+  try {
+    const records = await searchEngineRules(q, 20)
+    const picked = new Set(editorKeywords.value.map((k) => String(k.id)))
+    // 只自动挂「值里真的含这个 MAC」的规则：搜索结果命中不代表规则内容对，
+    // 挂错规则会让广告看着配了定向、实际投到别的设备上
+    const hit = records.find((k) => !picked.has(String(k.id)) && ruleHasMac(k, q))
+    if (hit) {
+      editorKeywords.value = [...editorKeywords.value, hit]
+      showToast(t('backend.macAutoPicked', { v: keywordLabel(hit) }), true)
+      return true
+    }
+  } catch {
+    // 搜索失败时交给下面的提示，让用户手动确认
+  }
+  formError.value = editorKeywords.value.length
+    ? t('backend.macQueryNotInRule', { v: q })
+    : t('backend.macNotPicked')
+  return false
 }
 
 function notifyNeedVerify(created: boolean) {
@@ -1393,10 +1672,16 @@ function notifyNeedVerify(created: boolean) {
 
 async function submitEditor() {
   formError.value = ''
+  // 平台对起投时间没有限制（过去 / 未来都可以），这里不做任何日期区间限制：
+  // 只在留空时兜底成今天，并保证结束时间不早于开始时间（否则平台会报参数错）
+  if (!editor.beginDate) editor.beginDate = todayStr()
+  if (!editor.endDate) editor.endDate = editor.beginDate
+  if (editor.endDate < editor.beginDate) editor.endDate = editor.beginDate
   if (!editor.name.trim()) { formError.value = t('backend.adName') + ' ' + t('backend.required'); return }
   if (!editor.adType) { formError.value = t('backend.selectAdType'); return }
   if (!editorAppIds.value.length) { formError.value = t('backend.mediaRequired'); return }
   if (!editorZoneIds.value.length) { formError.value = t('backend.zoneRequired'); return }
+  // CPT 值不强制大于 0：平台允许填 0，输入框下方只做提示，不拦提交
   if (!editingId.value && editor.campaignMode === 'existing' && !editor.campaignId) {
     formError.value = t('backend.selectCampaign'); return
   }
@@ -1405,6 +1690,8 @@ async function submitEditor() {
   }
   formBusy.value = true
   try {
+    // 输入框里填了 MAC 却没选中规则时，先兜底关联（否则 target_keyword 是空的）
+    if (!(await pickPendingMac())) return
     const material = { ...editor.material } as Record<string, any>
     delete material.duration
     // 视频类广告需要时长：界面不展示，保留原值或按平台默认 15 秒补齐
@@ -1424,6 +1711,8 @@ async function submitEditor() {
         begin_date: `${editor.beginDate} 00:00:00`,
         end_date: `${editor.endDate} 23:59:59`,
         price_mode: editor.priceMode,
+        cpt_type: editor.cptType,
+        cpm_percent: cptValueParam.value,
         class: editor.adClass,
         disable_adflag: editor.disableAdflag,
         external: editor.external,
@@ -1448,27 +1737,67 @@ async function submitEditor() {
         })
         campaigns.value = []
       }
-      await createOrder({
-        campaignId,
-        name: editor.name.trim(),
-        adType: editor.adType,
-        material,
-        clickUrl: editor.clickUrl.trim(),
-        appIds: editorAppIds.value,
-        locIds: editorZoneIds.value,
-        beginDate: `${editor.beginDate} 00:00:00`,
-        endDate: `${editor.endDate} 23:59:59`,
-        keywordId: keywordIds,
-        priceMode: editor.priceMode,
-        adClass: editor.adClass,
-        disableAdflag: editor.disableAdflag,
-        external: editor.external,
-        adFormat: editor.adFormat,
-      })
+      if (copySource.value) {
+        // 复制：整单克隆原记录，只覆盖编辑器里改过的字段。
+        // 不能走 createOrder 的最小字段集 —— 那会把 target_plat / target_custom(_type) /
+        // dates / industry / macro / count_type / 单价与预算上限 / 监测链接等一并清空，
+        // 定向或计费被削掉后新广告看着正常却取不到量。
+        await cloneOrder(copySource.value, {
+          campaign_id: Number(campaignId || 0),
+          name: editor.name.trim(),
+          ad_type: editor.adType,
+          click_url: editor.clickUrl.trim(),
+          begin_date: `${editor.beginDate} 00:00:00`,
+          end_date: `${editor.endDate} 23:59:59`,
+          price_mode: editor.priceMode,
+          cpt_type: editor.cptType,
+          cpm_percent: cptValueParam.value,
+          class: editor.adClass,
+          disable_adflag: editor.disableAdflag,
+          external: editor.external,
+          target_app: editorAppIds.value.join(';'),
+          locids: editorZoneIds.value.join(';'),
+          target_keyword: keywordIds,
+          // 广告级配了 Custom engine 就必须是「自定义定向」，否则平台整块忽略广告级定向
+          extend_target: keywordList.length ? '0' : String((copySource.value as any).extend_target ?? '0'),
+          // 排期日跟着开始时间平移，否则周期在未来、排期日在过去，平台一天都不投
+          ...(copyDates.value ? { dates: copyDates.value } : {}),
+          material,
+        })
+      } else {
+        await createOrder({
+          campaignId,
+          name: editor.name.trim(),
+          adType: editor.adType,
+          material,
+          clickUrl: editor.clickUrl.trim(),
+          appIds: editorAppIds.value,
+          locIds: editorZoneIds.value,
+          beginDate: `${editor.beginDate} 00:00:00`,
+          endDate: `${editor.endDate} 23:59:59`,
+          keywordId: keywordIds,
+          priceMode: editor.priceMode,
+          cptType: editor.cptType,
+          cptValue: cptValueParam.value,
+          adClass: editor.adClass,
+          disableAdflag: editor.disableAdflag,
+          external: editor.external,
+          adFormat: editor.adFormat,
+        })
+      }
       notifyNeedVerify(true)
     }
+    const savedName = editor.name.trim()
+    const savedBegin = editor.beginDate
+    const savedEnd = editor.endDate
     closeEditor()
     await loadAds()
+    // 回读校验：日期与「指定 MAC」是否真的落库（否则用户只能靠现象猜）
+    void verifyOrderLanded(savedName, {
+      ids: keywordList,
+      begin: savedBegin,
+      end: savedEnd,
+    })
   } catch (e) {
     handleError(e)
   } finally {
@@ -1487,6 +1816,45 @@ function keywordValue(k: SspKeyword) {
   if (Array.isArray(vc)) return vc.join(';')
   return String(vc || '')
 }
+
+/** 规则值拆成单个值（多值用英文/中文逗号、分号、空格分隔） */
+function macValues(k: SspKeyword): string[] {
+  const raw = Array.isArray(k.valuecode) ? k.valuecode.join(',') : String(k.valuecode || '')
+  return raw.split(/[,;、\s]+/).map((s) => s.trim()).filter(Boolean)
+}
+
+const normMac = (v: string) => String(v || '').toUpperCase().replace(/[^0-9A-Z]/g, '')
+
+/**
+ * 规则值里是否真的包含这个 MAC。
+ * 平台取值可能带冒号/短横线也可能不带，统一去掉分隔符再比；只输部分 MAC 时按包含判断。
+ * 之前「搜索命中就自动挂上」不看规则内容，会把不相干的规则悄悄挂到广告上，
+ * 出现「以为指定了 A 设备的 MAC、实际挂的是别的规则」。
+ */
+function ruleHasMac(k: SspKeyword, mac: string) {
+  const want = normMac(mac)
+  if (!want) return false
+  return macValues(k).some((seg) => {
+    const got = normMac(seg)
+    return got === want || got.includes(want)
+  })
+}
+
+/** 已选规则覆盖的 MAC 值总数（诊断用） */
+const macTotal = computed(() => editorKeywords.value.reduce((n, k) => n + macValues(k).length, 0))
+
+/** 输入框里填了 MAC，但不在任何已选规则的值里 —— 保存后不会按它投放 */
+const macQueryNotInRule = computed(() => {
+  const q = keywordQuery.value.trim()
+  if (!q || !editorKeywords.value.length) return false
+  return !editorKeywords.value.some((k) => ruleHasMac(k, q))
+})
+
+/** 原广告是「继承 Campaign」：加 MAC 后切自定义定向，Campaign 层定向不再自动继承 */
+const inheritDropped = computed(() => {
+  if (!editorKeywords.value.length) return false
+  return String(baselineOrder.value?.extend_target ?? '') === '1'
+})
 
 function keywordLabel(k: SspKeyword) {
   return String(k.valuetext || k.keytext || keywordValue(k) || `#${k.id}`)
@@ -1545,9 +1913,10 @@ async function doKeywordSearch() {
   if (!q) return
   keywordBusy.value = true
   try {
-    const res = await listKeywords(q.includes(':') ? { value: q, pagesize: 30 } : { name: q, pagesize: 30 })
+    // 并行按「规则值 / 标签说明」查 + 全量本地模糊匹配，MAC、参数名、规则名称都能搜到
+    const records = await searchEngineRules(q, 30)
     const picked = new Set(editorKeywords.value.map((k) => String(k.id)))
-    keywordResults.value = res.records.filter((k) => !picked.has(String(k.id)))
+    keywordResults.value = records.filter((k) => !picked.has(String(k.id)))
     if (!keywordResults.value.length) showToast(t('backend.engineNoMatch'), false)
   } catch (e) {
     handleError(e)
@@ -1572,16 +1941,43 @@ function openEngineDialog() {
   ceOpen.value = true
 }
 
+/**
+ * 打开 Custom engine 弹窗时的预填值：
+ * 编辑器打开着就用编辑器里「指定 MAC」刚输入的那个（用户往往是先输 MAC 再去建规则），
+ * 否则回落到左侧工具栏的 MAC 反查框。
+ */
+const ceSeed = computed(() => (editorOpen.value ? keywordQuery.value.trim() || mac.value.trim() : mac.value.trim()))
+
+/**
+ * 在弹窗里保存了规则：编辑器开着就直接挂到当前广告的「指定 MAC」上。
+ * 之前只 emit changed，新建的规则不会自动选中 —— 用户以为「已经指定 MAC 了」，
+ * 实际 target_keyword 是空的，保存出来的广告自然不按 MAC 投放。
+ */
+function onEngineSaved(k: SspKeyword | null) {
+  if (!k || !editorOpen.value) return
+  const id = String(k.id ?? '')
+  if (!id) return
+  if (editorKeywords.value.some((x) => String(x.id) === id)) return
+  editorKeywords.value = [...editorKeywords.value, k]
+  showToast(t('backend.cePicked', { v: keywordLabel(k) }), true)
+}
+
 async function onEngineChanged() {
-  // 规则被改 / 删后，已选规则的文字需要重新对齐
+  // 规则被改 / 删后，已选规则的文字需要重新对齐；查不到的保留占位，不能悄悄丢掉 id
   invalidateKeywords()
   const ids = editorKeywords.value.map((k) => String(k.id))
   if (!ids.length) return
+  const prev = new Map(editorKeywords.value.map((k) => [String(k.id), k]))
+  let fetched: SspKeyword[] = []
   try {
-    editorKeywords.value = await keywordsByIds(ids)
+    fetched = await keywordsByIds(ids)
   } catch {
-    // 忽略
+    // 忽略：拉取失败时保留原对象，避免已选规则凭空消失
   }
+  const map = new Map(fetched.map((k) => [String(k.id), k]))
+  editorKeywords.value = ids
+    .map((id) => map.get(id) || prev.get(id))
+    .filter(Boolean) as SspKeyword[]
 }
 
 // ── 审核 ───────────────────────────────────────────

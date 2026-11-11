@@ -160,6 +160,7 @@ import {
   listKeywords,
   listOrders,
   saveKeyword,
+  searchEngineRules,
   type SspKeyword,
 } from '@/services/sspApi'
 
@@ -173,7 +174,10 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:modelValue', v: boolean): void
+  /** 规则被改 / 删，调用方需要重新对齐已选规则的文字 */
   (e: 'changed'): void
+  /** 保存成功：带回保存后的规则（平台不回吐 id 时可能为 null），供调用方自动挂到广告上 */
+  (e: 'saved', k: SspKeyword | null): void
 }>()
 
 const { t } = useI18n()
@@ -203,13 +207,17 @@ async function load(nextPage = page.value) {
   listBusy.value = true
   try {
     const q = query.value.trim()
-    const params: Record<string, any> = { page: nextPage, pagesize: pageSize }
     if (q) {
-      // 平台按 valuecode 搜索值、按 name 搜索参数名/说明；带冒号的 MAC 类查询走 value 更准
-      if (q.includes(':')) params.value = q
-      else params.name = q
+      // 搜索态：平台单参数覆盖不全（value 只匹配规则值、name 只匹配标签说明），
+      // 走 searchEngineRules 并上全量本地模糊匹配，MAC / 参数名 / 规则名称都能命中
+      const hits = await searchEngineRules(q, pageSize)
+      if (seq !== reqSeq) return
+      records.value = hits
+      total.value = hits.length
+      page.value = 1
+      return
     }
-    const res = await listKeywords(params)
+    const res = await listKeywords({ page: nextPage, pagesize: pageSize })
     if (seq !== reqSeq) return
     records.value = res.records
     total.value = res.total
@@ -332,7 +340,7 @@ async function submit() {
   if (!form.valuetext.trim()) { formError.value = t('backend.ruleValueText') + ' ' + t('backend.required'); return }
   formBusy.value = true
   try {
-    await saveKeyword({
+    const saved = await saveKeyword({
       id: form.id || 0,
       keycode: form.keycode,
       keytext: form.keytext,
@@ -343,7 +351,9 @@ async function submit() {
     })
     formOpen.value = false
     showToast(t('backend.ceSaved'), true)
+    // 先通知调用方刷新已选规则的文字，再把这条规则交给它（编辑器里会自动挂到当前广告）
     emit('changed')
+    emit('saved', saved)
     await load(page.value)
   } catch (e) {
     formError.value = e instanceof Error ? e.message : String(e)

@@ -439,6 +439,45 @@ export async function searchKeywords(value: string): Promise<SspKeyword[]> {
   return res.records
 }
 
+/**
+ * Custom engine 规则搜索：输入 MAC、参数名（keycode/keytext）、或规则的「名称」（valuetext）。
+ *
+ * 平台 `keyword/list` 的 `value` 只匹配规则值、`name` 只匹配标签说明，规则名称（valuetext）
+ * 两边都可能搜不到 —— 这里并行两种查询，再用全量缓存做本地模糊匹配兜底，
+ * 保证四种字段任意一种都能命中。
+ */
+export async function searchEngineRules(q: string, limit = 30): Promise<SspKeyword[]> {
+  const query = q.trim()
+  if (!query) return []
+  const lower = query.toLowerCase()
+  const [byValue, byName] = await Promise.all([
+    listKeywords({ value: query, pagesize: limit }).catch(() => ({ total: 0, records: [] as SspKeyword[] })),
+    listKeywords({ name: query, pagesize: limit }).catch(() => ({ total: 0, records: [] as SspKeyword[] })),
+  ])
+  const map = new Map<string, SspKeyword>()
+  for (const k of [...byValue.records, ...byName.records]) map.set(String(k.id), k)
+  if (map.size < limit) {
+    try {
+      const all = await listAllKeywords()
+      for (const k of all) {
+        if (map.size >= limit) break
+        if (map.has(String(k.id))) continue
+        const hay = [
+          k.keycode,
+          k.keytext,
+          k.valuetext,
+          k.name,
+          Array.isArray(k.valuecode) ? k.valuecode.join(',') : k.valuecode,
+        ].map((v) => String(v ?? '').toLowerCase())
+        if (hay.some((v) => v && v.includes(lower))) map.set(String(k.id), k)
+      }
+    } catch {
+      // 全量拉取失败时只用接口结果
+    }
+  }
+  return Array.from(map.values()).slice(0, limit)
+}
+
 /** 全量规则缓存：编辑广告时把 target_keyword 的 id 还原成可读名称 */
 let allKeywordsCache: SspKeyword[] | null = null
 
@@ -498,9 +537,10 @@ export interface NewKeywordInput {
  * 字段与后台 `/ssp/pages/keywordadd` 的 COND 结构一致，接口为 `/ssp/keyword/add`，
  * 带 id 即为修改。
  */
-export async function saveKeyword(input: NewKeywordInput): Promise<void> {
+export async function saveKeyword(input: NewKeywordInput): Promise<SspKeyword | null> {
+  const id = Number(input.id || 0)
   await apiPost('/ssp/keyword/add', {
-    id: input.id ?? 0,
+    id: id || 0,
     keycode: input.keycode.trim(),
     keytext: input.keytext.trim(),
     valuecode: input.valuecode.trim(),
@@ -510,10 +550,33 @@ export async function saveKeyword(input: NewKeywordInput): Promise<void> {
     keywordop: input.keywordop || '1',
   })
   invalidateKeywords()
+  return await findSavedKeyword(input, id)
 }
 
-export async function createKeyword(input: NewKeywordInput): Promise<void> {
-  await saveKeyword({ ...input, id: 0 })
+/**
+ * `keyword/add` 只回 `return_code`，不回吐 id。
+ * 保存后用值反查刚写入的规则：调用方（广告编辑器）拿到后可直接挂到当前广告上，
+ * 避免「在弹窗里新建了 MAC 规则，却没选进广告 → 保存后不生效」。
+ */
+async function findSavedKeyword(input: NewKeywordInput, id: number): Promise<SspKeyword | null> {
+  const norm = (v: any) => (Array.isArray(v) ? v.join(',') : String(v ?? '')).replace(/\s+/g, '').toLowerCase()
+  const wantVal = norm(input.valuecode)
+  try {
+    const list = (await listKeywords({ value: input.valuecode.trim(), page: 1, pagesize: 100 })).records || []
+    if (!list.length) return null
+    const sameCode = list.filter((k) => String(k.keycode || '').trim() === input.keycode.trim())
+    const pool = sameCode.length ? sameCode : list
+    return pool.find((k) => norm(k.valuecode) === wantVal)
+      || (id ? pool.find((k) => String(k.id) === String(id)) : undefined)
+      || pool[0]
+      || null
+  } catch {
+    return null
+  }
+}
+
+export async function createKeyword(input: NewKeywordInput): Promise<SspKeyword | null> {
+  return await saveKeyword({ ...input, id: 0 })
 }
 
 /** 删除定向规则（Custom engine） */
@@ -639,6 +702,22 @@ export async function updateOrder(order: SspOrder, patch: Record<string, any>): 
   const mat = { ...parseMaterial(order), ...(patch.material || {}) }
   if (String(merged.external ?? '0') !== '1') mat.ad_format = ''
   await apiPost('/ssp/order/add', buildOrderCond(merged, mat))
+}
+
+/**
+ * 复制广告：以原记录为底整单克隆，只把 id 置 0。
+ *
+ * 不能走 `buildNewOrderParams()`：那是给「从零新建」用的最小集，
+ * 会把原广告里的 `target_plat` / `target_custom(_type)` / `dates` / `industry` /
+ * `macro` / `count_type` / `unit_price` / `max_amount` / 上下限预算 /
+ * 点击与曝光监测链接等一概重置成空值或 0 —— 定向或计费一旦被削掉，
+ * 新广告建出来看着正常，实际取不到量（复制后「不生效」的一大来源）。
+ */
+export async function cloneOrder(order: SspOrder, patch: Record<string, any>): Promise<void> {
+  const merged: SspOrder = { ...order, ...patch, id: '0' } as SspOrder
+  const mat = { ...parseMaterial(order), ...(patch.material || {}) }
+  if (String(merged.external ?? '0') !== '1') mat.ad_format = ''
+  await apiPost('/ssp/order/add', buildOrderCond(merged, mat), true)
 }
 
 export function materialPreviewUrl(env: SspEnv, path?: string): string {
@@ -1049,6 +1128,14 @@ export interface NewOrderInput {
   extendTarget?: 0 | 1
   priceMode?: string
   adClass?: string
+  /** CPT method：'0' Percentage CPT / '1' Rotation CPT（后台 cpt_type） */
+  cptType?: string
+  /**
+   * CPT 值（后台 cpm_percent，后台表单同一个输入框，随 cpt_type 切换标签与单位）：
+   * cpt_type='0' 时为占比 %，cpt_type='1' 时为 Rotation(s) 轮播次数。
+   * 传 0 会导致广告取不到量。
+   */
+  cptValue?: string
   /** Ad icon：0 展示角标，1 不展示 */
   disableAdflag?: string
   /** Is external：'0' 否 / '1' 是 */
@@ -1071,8 +1158,12 @@ export function buildNewOrderParams(input: NewOrderInput): Record<string, any> {
     begin_date: input.beginDate,
     end_date: input.endDate,
     price_mode: input.priceMode || 'CPT',
+    // 后台 orderadd 的 CPT method / CPT 值（ratio 或 Rotation(s)）是必填项：
+    // 不提交时平台按 0 入库，广告将取不到量（复制广告后变 0% 的根因）
+    cpt_type: input.cptType ?? '0',
+    count_type: 0,
     unit_price: '',
-    cpm_percent: '',
+    cpm_percent: input.cptValue ?? '',
     max_amount: '',
     class: input.adClass ?? '',
     total_budget: '',
